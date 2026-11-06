@@ -342,7 +342,22 @@ const cliFailure = (cause: unknown) => Effect.tryPromise(() => import('effect/un
 const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effect.gen(function*() {
   const Command = yield* Effect.tryPromise(() => import('effect/unstable/cli/Command'));
   const version = yield* (yield* Installation).version;
-  return yield* command.pipe(Command.run({ version, renderErrors: !process.argv.includes('--json') }));
+  // @concord-begin
+  // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
+  const { root } = yield* Effect.tryPromise(() => import('./cli-base.js'));
+  const guard = Effect.gen(function*() {
+    const settings = yield* root;
+    const app = yield* loadApp();
+    yield* app.requireInitializedProject(settings.root._tag === 'Some' ? settings.root.value : undefined);
+  });
+  const commands = command.subcommands.flatMap(group => group.commands.map(child => {
+    if (['init', 'template', 'herdr', 'doctor', 'server'].includes(child.name)) return child;
+    if (child.name === 'view') return child.pipe(Command.withSubcommands(child.subcommands.flatMap(group => group.commands.map(nested => nested.pipe(Command.provideEffectDiscard(guard))))));
+    return child.pipe(Command.provideEffectDiscard(guard));
+  }));
+  const guarded = command.pipe(Command.withSubcommands(commands)) as typeof command;
+  // @concord-end
+  return yield* guarded.pipe(Command.run({ version, renderErrors: !process.argv.includes('--json') }));
 }).pipe(Effect.catch(cliFailure));
 export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
   runCommand(command).pipe(Effect.provide(cliLayer), NodeRuntime.runMain);

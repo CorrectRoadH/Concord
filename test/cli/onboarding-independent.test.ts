@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 import { join } from 'node:path';
 import test, { before, after } from 'node:test';
 import { Effect, Schema } from 'effect';
@@ -10,6 +11,7 @@ import { InitializationReceiptSchema } from '../../src/model/index.js';
 import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-public-onboarding-'));
+const consumers: string[] = [];
 let cli: string;
 before(() => Effect.runPromise(Effect.sync(() => {
   const install = join(scratch, 'tool'); mkdirSync(install);
@@ -17,14 +19,17 @@ before(() => Effect.runPromise(Effect.sync(() => {
   prepareSourceConsumer(install, sourceConcord());
   cli = packageBin(join(install, 'node_modules/concord-sdlc'));
 })));
-after(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));
+after(() => Effect.runPromise(Effect.sync(() => {
+  try { for (const root of consumers) stopWorkspaceServer(root, cli); }
+  finally { rmSync(scratch, { recursive: true, force: true }); }
+})));
 function run(root: string, args: readonly string[], input = '', status = 0): any {
   const result = spawnSync(process.execPath, [cli, '--root', root, '--json', '--fresh', ...args], { input, encoding: 'utf8', timeout: 30_000 });
   assert.equal(result.status, status, JSON.stringify({ args, stdout: result.stdout, stderr: result.stderr }));
   return JSON.parse(result.stdout || result.stderr);
 }
 function consumer(name: string): string {
-  const root = join(scratch, name); mkdirSync(root); execFileSync('git', ['init', '-q', root]); return root;
+  const root = join(scratch, name); mkdirSync(root); execFileSync('git', ['init', '-q', root]); consumers.push(root); return root;
 }
 const action = (root: string, input: unknown, status = 0): any => run(root, ['action', '--input', '-'], JSON.stringify(input), status);
 
@@ -40,6 +45,9 @@ test('installed CLI exposes exactly the current command inventory and rejects re
     assert.equal(help.status, 0, help.stderr);
     assert.doesNotMatch(help.stdout, /\n  (?:create|add|page|promote|retire|correct-reason|resolve|metadata)\s/u);
   }
+  run(root, ['init']);
+  execFileSync('git', ['-C', root, 'add', '--all']);
+  execFileSync('git', ['-C', root, '-c', 'user.name=Concord fixture', '-c', 'user.email=fixture@localhost', 'commit', '-qm', 'Initialize fixture']);
   assert.equal(run(root, ['workspace', 'show']).root, root);
   assert.deepEqual(run(root, ['git', 'status']).entries, []);
 })));
@@ -127,6 +135,7 @@ test('the initialized project accepts a directly written first Spec', () => {
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('installed config.set creates optional configuration and rejects retired fields and stale digests', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('config');
+  run(root, ['init']);
   const current = run(root, ['config', 'show']);
   assert.deepEqual(current.config, {});
   action(root, { action: 'config.set', config: { testRoots: [] }, expectedDigest: current.digest });
@@ -141,6 +150,7 @@ test('installed config.set creates optional configuration and rejects retired fi
 // @use-case docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
 test('installed new and relation helpers persist only current owner fields', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('owners');
+  run(root, ['init']);
   run(root, ['new', 'feature', 'cart']);
   run(root, ['new', 'use-case', 'add', '--feature', 'cart']);
   run(root, ['new', 'memory', 'choice']);
@@ -158,6 +168,7 @@ test('installed new and relation helpers persist only current owner fields', () 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
 test('installed new Design creates one directly editable tradeoff page', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('design');
+  run(root, ['init']);
   run(root, ['new', 'design', 'storage']);
   assert.equal(existsSync(join(root, 'docs/design/storage.md')), true);
   assert.equal(existsSync(join(root, 'docs/design/storage')), false);

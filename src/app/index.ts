@@ -72,6 +72,7 @@ export { codeSnippet } from './code-commands.js';
 export { captureNativeAnalysis } from './native-analysis.js';
 export { analysisView } from './analysis-view.js';
 export { doctor } from './onboarding.js';
+export { requireInitializedProject, projectInitializationRequired, uninitializedDoctor } from './project-onboarding.js';
 export { knowledgeIndex } from './knowledge.js';
 export { knowledgeSearchRecords } from './knowledge.js';
 export { knowledgeSearch } from './knowledge.js';

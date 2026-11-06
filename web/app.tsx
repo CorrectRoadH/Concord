@@ -11,6 +11,8 @@ import { useNavigationScroll } from './hooks/use-navigation-scroll';
 import { Link, Navigate, Route, Routes, useBlocker, useLocation, useNavigate } from 'react-router-dom';
 import { CloseMobileOnNavigate, DocumentNavigation } from './components/document-navigation';
 import type { WorkspaceProjection } from '../src/model/index';
+import { WritingGuideSchema, type WritingGuide } from '../src/model/index';
+import { Schema } from 'effect';
 const DocumentsListPage = lazy(() => import('./pages/documents').then(module => ({ default: module.DocumentsListPage })));
 const FeatureDetailPage = lazy(() => import('./pages/documents').then(module => ({ default: module.FeatureDetailPage })));
 const DocumentDetailPage = lazy(() => import('./pages/documents').then(module => ({ default: module.DocumentDetailPage })));
@@ -175,18 +177,34 @@ function failureDetails(details: unknown): { readonly hint?: string; readonly re
 }
 
 // @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#web
+function initializationGuide(data: WorkspaceProjection): WritingGuide | undefined {
+  const diagnostic = Schema.decodeUnknownExit(Schema.Struct({ findings: Schema.Array(Schema.Struct({
+    code: Schema.String, details: Schema.optional(Schema.Struct({ guide: WritingGuideSchema })),
+  })) }), { onExcessProperty: 'ignore' })(data.snapshot.diagnostics);
+  return diagnostic._tag === 'Success' ? diagnostic.value.findings.find(finding => finding.code === 'ProjectNotInitialized')?.details?.guide : undefined;
+}
+
+// @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md#url-与导航状态
 export function App() {
+  const navigate = useNavigate();
   const [api] = useState(() => new ConcordApi());
   const [data, setData] = useState<WorkspaceProjection | null>(null);
   const [error, setError] = useState<{ code: string; message: string; hint?: string; reason?: string } | null>(null);
   const [building, setBuilding] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [initializing, setInitializing] = useState(false);
+  const [waitingForInitialization, setWaitingForInitialization] = useState(false);
+  const [initializationError, setInitializationError] = useState('');
   useEffect(() => {
     const controller = new AbortController();
     void api.workspace(controller.signal).then(
-      value => { if (!controller.signal.aborted) { setData(value); setError(null); setBuilding(false); } },
+      value => { if (!controller.signal.aborted) {
+        if (waitingForInitialization && initializationGuide(value)) { setBuilding(true); return; }
+        setData(value); setError(null); setBuilding(false); setWaitingForInitialization(false);
+      } },
       cause => {
         if (controller.signal.aborted) return;
         const code = cause instanceof ApiError ? cause.code : 'OperationFailed';
@@ -196,7 +214,7 @@ export function App() {
       },
     );
     return () => controller.abort();
-  }, [api, attempt]);
+  }, [api, attempt, waitingForInitialization]);
   // HawdbBusy is a short read-side lock collision: retry only the cached GET,
   // keeping the unavailable state visible while each request is in flight.
   useEffect(() => {
@@ -211,6 +229,17 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [building]);
   const retryRefresh = async () => { await api.requestWorkspaceRefresh().catch(() => undefined); setAttempt(value => value + 1); };
+  const initializeProject = async () => {
+    setInitializing(true); setInitializationError('');
+    try {
+      await api.action({ action: 'init' });
+      setWaitingForInitialization(true); setData(null); setBuilding(true);
+      navigate('/docs');
+      await api.requestWorkspaceRefresh();
+      setAttempt(value => value + 1);
+    } catch (cause) { setInitializationError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setInitializing(false); }
+  };
   const recover = () => {
     setRecovering(true);
     void api.action({ action: 'recover' }).then(
@@ -243,5 +272,12 @@ export function App() {
           : <p role="status">正在读取项目工作区。</p>}
     </section></main>;
   }
+  const guide = initializationGuide(data);
+  if (guide) return <main className="startup-page"><section className="startup-card"><div className="brand-mark">C</div>
+    <h1>这个仓库还没有初始化 Concord</h1>
+    <Button disabled={initializing} onClick={() => void initializeProject()}>{initializing ? '正在初始化…' : '初始化 Concord'}</Button>
+    <p>推荐的写作指南：<code>concord --skill {guide}</code></p>
+    {initializationError && <p role="alert">{initializationError}</p>}
+  </section></main>;
   return <WorkspaceProvider initial={data} api={api}><WorkspaceGate><ThemeToggle /><Shell /></WorkspaceGate></WorkspaceProvider>;
 }

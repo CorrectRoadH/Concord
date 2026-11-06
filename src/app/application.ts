@@ -24,6 +24,7 @@ import { editKnowledge, knowledgeIndex, knowledgeSearchRecords, removeIssue } fr
 import { inspectDocuments, inspectDocumentFile, isSourcePath, readSource, setConfig, setMarkdown, setSource } from "./editing.js";
 import { annotationSnippet } from "../domain/onboarding/index.js";
 import { doctor } from "./onboarding.js";
+import { projectInitializationRequired, uninitializedDoctor } from './project-onboarding.js';
 import { ConcordError, decode, digest, failure } from "../model/index.js";
 import { discoverRoot, git, LocalRepository } from "../base/workspace/index.js";
 import { initialize } from "./initialize.js";
@@ -125,9 +126,12 @@ const directConfig = Effect.fn('view.readConfig')(function*(root: string, timing
 /** Missing or malformed project configuration remains inspectable without manufacturing identity. */
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/architecture.md
+// @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#web
 const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError, Workspace | Sources | Installation> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
+  const required = yield* sync('view.initialization', () => projectInitializationRequired(root));
+  if (required) return { root, project: null, complete: true, configDigest: null, documents: [], feedback: [], pages: [], cases: [], codes: [], edges: [], findings: [], sources: [], evidenceIds: [], templates: [], cache: { status: 'off' }, diagnostics: uninitializedDoctor(required, 'unknown') };
   const config = yield* directConfig(root, timing);
   const templates = yield* listTemplates();
   if (config.project === null) {

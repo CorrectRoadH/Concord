@@ -2,12 +2,19 @@ import { ConcordError, type Repository } from "../model/index.js";
 import { checkWriting } from "../domain/writing/index.js";
 import { buildTrace } from "../domain/trace/index.js";
 import { checkTaste } from "../domain/taste/index.js";
+import { selectWritingGuide, uninitializedDoctor } from './project-onboarding.js';
 
 
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#结果
-export function doctor(repo: Repository, trace = buildTrace(repo, 'off'), cache: 'use' | 'off' = 'off') {
+// @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
+export function doctor(repo: Repository, trace?: ReturnType<typeof buildTrace>, cache: 'use' | 'off' = 'off') {
+  if (repo.read('docs/taste.md') === undefined) {
+    const guide = selectWritingGuide(repo.root);
+    return uninitializedDoctor({ root: repo.root, guide }, repo.runtimeVersion ?? 'unknown', repo.config);
+  }
+  trace ??= buildTrace(repo, 'off');
   const { documents, annotations, codeDeclarations, findings } = trace;
   const missingTestRoots = repo.config.testRoots.filter(path => !(repo.exists?.(path) ?? repo.files(path).length > 0));
   const missingSourceRoots = (repo.config.sourceRoots ?? []).filter(path => !(repo.exists?.(path) ?? repo.files(path).length > 0));

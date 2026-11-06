@@ -25,6 +25,10 @@ export function humanOutput(value: unknown): string {
   if (typeof value === 'string') return value;
   if (!Predicate.isObject(value)) return scalar(value);
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
+  // @concord-begin
+  // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
+  if (value.error === 'ProjectNotInitialized' && Predicate.isObject(value.details)) return `ok: false\nerror: ProjectNotInitialized\nmessage: ${String(value.message)}\n\nInitialize: concord init\nWriting guide after init: concord --skill ${String(value.details.guide)}`;
+  // @concord-end
   if (value.operation === 'herdr-install') return `${value.dryRun ? 'Would install' : 'Installed'} Concord mod: ${String(value.path)}\nHerdr loads it on save; open it with the "Concord" command.`;
   if (value.operation === 'herdr-uninstall') return `${value.dryRun ? 'Would uninstall' : 'Uninstalled'} Concord mod: ${String(value.path)}`;
   if (Predicate.isObject(value.document) && Array.isArray(value.pages)) {

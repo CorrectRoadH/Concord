@@ -10,7 +10,7 @@ import { forbiddenSourcePart } from "../base/workspace/index.js";
 import { AGENT_RULE_BEGIN } from "../base/workspace/index.js";
 import { AGENT_RULE_END } from "../base/workspace/index.js";
 import { AGENT_RULE_CONTENT } from "../base/workspace/index.js";
-import { git } from "../base/workspace/index.js";
+import { selectWritingGuide } from './project-onboarding.js';
 import { planWorkflowSkills } from './workflow-skills.js';
 
 
@@ -36,10 +36,7 @@ export type InitializationReceipt = typeof InitializationReceiptSchema.Type;
 export const initialize = Effect.fn('initialize')(function*(repo: Repository, dryRun = false, options: InitializeOptions = {}, initialGuide?: WritingGuide) {
   const catalog = yield* templateCatalog();
   return yield* Effect.try({ try: (): InitializationReceipt => inRepositorySnapshot(repo, () => {
-  const guide = initialGuide ?? (git(repo.root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']).split('\0').some(path => {
-    if (!path || path.startsWith('.') || path.startsWith('docs/') || path.startsWith('memory/')) return false;
-    return path.includes('/') || !(path === 'AGENTS.md' || path === 'concord.config.ts' || path.startsWith('README') || path.startsWith('LICENSE'));
-  }) ? 'docs-from-code' : 'docs-from-scratch');
+  const guide = initialGuide ?? selectWritingGuide(repo.root);
   const config = decode(ProjectSchema, { ...(options.testRoots === undefined ? {} : { testRoots: options.testRoots }), ...(options.sourceRoots === undefined ? {} : { sourceRoots: options.sourceRoots }), ...(options.runner === undefined ? {} : { runner: options.runner }) }, 'init configuration');
   for (const root of [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])]) {
     canonicalPath(root);
