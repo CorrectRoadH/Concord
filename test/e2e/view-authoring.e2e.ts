@@ -168,7 +168,7 @@ test('browser creates a Feature, edits Markdown, preserves conflicts and opens G
   const documentTree=page.getByTestId('document-file-tree');
   await expect(documentTree).toHaveCSS('position','sticky');
   await documentTree.getByRole('button',{name:'architecture.md',exact:true}).click();
-  await expect(editor).toContainText('Entity Ownership');
+  await expect(editor).toContainText('Modules and Ownership');
   await editor.locator('p').first().fill('Architecture from browser.');
   const documentPane=page.locator('.document-workspace > .page');
   await documentPane.evaluate(element=>{element.scrollTop=500;});

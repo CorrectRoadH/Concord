@@ -4,7 +4,7 @@ import { act } from './journey.js';
 import { Effect, Schema } from 'effect';
 import { expect } from '@playwright/test';
 import { type ViewServerHandle } from './server.js';
-import { pollUntil, waitForWorkspaceProjection } from '../support/support.js';
+import { fetchFresh, pollUntil, waitForWorkspaceProjection } from '../support/support.js';
 
 const ApiResult = Schema.Struct({ ok: Schema.Boolean, value: Schema.optional(Schema.Unknown), error: Schema.optional(Schema.String) });
 
@@ -18,7 +18,7 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
     server = await workspace.ready();
     const base = `http://127.0.0.1:${server.port}`;
     async function action(input: unknown): Promise<{ readonly ok: boolean; readonly value?: unknown; readonly error?: string }> {
-      const response = await fetch(`${base}/api/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
+      const response = await fetchFresh(`${base}/api/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
       return Schema.decodeUnknownSync(ApiResult)(await response.json());
     }
     assert.equal((await action({ action: 'document.create', kind: 'issue', id: 'browser-draft', title: 'Browser draft', body: 'Local content.' })).ok, true);
@@ -55,7 +55,13 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
       await page.getByRole('link', { name: 'Browser draft' }).click();
       await page.getByRole('tab', { name: '来源与关联' }).click();
       await page.getByRole('button', { name: '删除本地草稿' }).click();
+      const removed = page.waitForResponse(response => response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/api/action' && response.request().postDataJSON()?.action === 'issue.remove');
       await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
+      const removal = await removed;
+      assert.equal(removal.status(), 200);
+      assert.equal(Schema.decodeUnknownSync(ApiResult)(await removal.json()).ok, true);
+      await expect(page.getByRole('dialog', { name: '删除本地草稿', exact: true })).toHaveCount(0);
     });
     await expect(page.getByRole('link', { name: 'Browser draft' })).toHaveCount(0, { timeout: 15_000 });
     assert.equal((await action({ action: 'issue.search', query: 'Local content' })).ok, true);

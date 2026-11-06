@@ -208,7 +208,8 @@ export async function openBrowserWorker(signal?: AbortSignal): Promise<void> {
     const fixture = await Effect.runPromise(acquireBrowserSharedFixture(signal).pipe(Scope.provide(scope)));
     current = { scope, fixture };
   } catch (cause) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
+    try { await Effect.runPromise(Scope.close(scope, Exit.void)); }
+    catch (cleanup) { throw new AggregateError([cause, cleanup], 'Browser worker startup and cleanup failed'); }
     throw cause;
   }
 }

@@ -44,7 +44,8 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   try {
     entry = options.installedBin ?? installedBrowserBin();
     options.signal?.throwIfAborted();
-    child = spawn(process.execPath, [entry, '--root', options.root, '--json', 'view', '--in-process', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    // The fixture owns the service explicitly; the View client only owns its HTTP lease.
+    child = spawn(process.execPath, [entry, '--root', options.root, '--json', 'view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
     const processHandle = child;
     let diagnostics = '';
     processHandle.stderr!.on('data', (chunk: Buffer) => { diagnostics += chunk.toString(); process.stderr.write(chunk); });
@@ -70,15 +71,15 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     let closing: Promise<void> | undefined;
     return { ...ready, process: processHandle, startupOutput, get stderr() { return diagnostics; }, close: () => closing ??= (async () => {
       try {
-        // Release the service handles before ending its CLI owner.
-        stopWorkspaceServer(options.root, entry);
-      } finally { await terminate(processHandle); }
+        // Release the View client's HTTP lease and RPC transport before stopping its service.
+        await terminate(processHandle);
+      } finally { stopWorkspaceServer(options.root, entry); }
     })().catch(cause => { closing = undefined; throw cause; }) };
   } catch (cause) {
     let cleanupFailure: unknown;
-    try { if (entry) stopWorkspaceServer(options.root, entry); }
-    catch (error) { cleanupFailure = error; }
     try { if (child) await terminate(child); }
+    catch (error) { cleanupFailure = error; }
+    try { if (entry) stopWorkspaceServer(options.root, entry); }
     catch (error) { cleanupFailure = cleanupFailure ? new AggregateError([cleanupFailure, error]) : error; }
     throw new ViewServerStartupFailed(options.root, cleanupFailure === undefined,
       cleanupFailure ? new AggregateError([cause, cleanupFailure], 'View startup and cleanup failed') : cause);
