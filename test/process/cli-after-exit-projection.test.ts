@@ -1,10 +1,11 @@
-import { createRequire, sourceCli, createConsumer, sourceRoot, prepareSourceConsumer, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, TemplatesOutput, scratch, cli, call, callString, readPage, savePage, consumer, write } from '../support/cli-fixture.ts';
+// 跨进程保证：服务与 IPC——真实CLI退出后后台投影发布并使后续CLI读到historical回执
+import { assert, spawnSync, test, Schema, pollUntil, Ack, ErrorOutput, cli, call, consumer } from '../support/cli-fixture.ts';
 
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('packed diagnostic CLI refreshes after exit and marks cached output as historical', async () => {
  const root = consumer('async-query');
- call(root, ['new', 'feature', 'cached', '--title', 'Cached'], Ack);
+ (await call(root, ['new', 'feature', 'cached', '--title', 'Cached'], Ack));
  const query = () => spawnSync(process.execPath, [cli, '--root', root, '--json', 'trace', 'gaps'], { encoding: 'utf8', timeout: 20000 });
  const first = query();
  assert.equal(first.status, 1, first.stdout + first.stderr);

@@ -114,6 +114,7 @@ export default {
       "test/support/cache-maintenance-holder.ts",
       "test/support/cache-off-probe.ts",
       "test/support/cli.ts",
+      "test/support/cli-complex-fixture.ts",
       "test/support/cli-fixture.ts",
       "test/support/cli-load-probe.ts",
       "test/support/consumer.ts",

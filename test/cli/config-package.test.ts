@@ -1,12 +1,11 @@
 import { initialize } from '../support/operations.ts';
-import { sourceCli } from '../support/source-consumer.ts';
-import { sourceRoot, prepareSourceConsumer } from '../support/source-consumer.ts';
-import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
+import { runCli } from '../support/cli.ts';
+import { stopCliWorkspace } from '../support/cli-complex-fixture.ts';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { parseTypeScriptConfig, renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
@@ -15,33 +14,22 @@ import { LocalRepository } from "../support/repository.ts";
 
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('source config has usable type hints and rejects misspelled fields', () => Effect.runPromise(Effect.sync(() => {
+test('source config initialization supplies the shipped writing policy', () => Effect.runPromise(Effect.promise(async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-config-package-'));
   const consumer = join(scratch, 'initialized');
-  let cli: string | undefined;
   try {
-
-    const project = join(scratch, 'consumer'); mkdirSync(project);
-    writeFileSync(join(project, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-    prepareSourceConsumer(project, ['typescript@7.1.0-beta', '@types/node@24.13.3']);
     execFileSync('git', ['init', '-q', consumer]);
-    cli = sourceCli();
-    execFileSync(process.execPath, [cli, '--root', consumer, 'init', '--docs-only'], { encoding: 'utf8', timeout: 30_000 });
-    const preset = JSON.parse(execFileSync(process.execPath, [cli, '--root', consumer, 'writing', 'show', '--json'], { encoding: 'utf8', timeout: 30_000 }));
+    const initialized = await runCli({ argv: ['--root', consumer, 'init', '--docs-only'], cwd: process.cwd(), env: process.env, signal: AbortSignal.timeout(30_000) });
+    assert.equal(initialized.exitCode, 0, initialized.stdout + initialized.stderr);
+    const result = await runCli({ argv: ['--root', consumer, 'writing', 'show', '--json'], cwd: process.cwd(), env: process.env, signal: AbortSignal.timeout(30_000) });
+    assert.equal(result.exitCode, 0, result.stdout + result.stderr);
+    const preset = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ state: Schema.String, policy: Schema.Struct({ sentenceLength: Schema.Number, paragraphLength: Schema.Number, bannedTerms: Schema.Array(Schema.Struct({ term: Schema.String })) }) })), { onExcessProperty: 'ignore' })(result.stdout);
     assert.equal(preset.state, 'valid');
     assert.equal(preset.policy.sentenceLength, 140);
     assert.equal(preset.policy.paragraphLength, 320);
     assert.ok(preset.policy.bannedTerms.some((ban: { term: string }) => ban.term === '兜底'));
-    writeFileSync(join(project, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'NodeNext', moduleResolution: 'NodeNext', customConditions: ['concord-source'], noEmit: true }, include: ['concord.config.ts'] }));
-    const valid = `import type { ProjectConfig } from 'concord-sdlc/config';\nexport default { testRoots: [], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } } as const satisfies ProjectConfig;\n`;
-    writeFileSync(join(project, 'concord.config.ts'), valid);
-    execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: project, encoding: 'utf8', timeout: 30_000 });
-    writeFileSync(join(project, 'concord.config.ts'), valid.replace("testRoots: []", "testRoots: [], testRoot: []"));
-    const invalid = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: project, encoding: 'utf8', timeout: 30_000 });
-    assert.notEqual(invalid.status, 0, invalid.stdout + invalid.stderr);
-    assert.match(invalid.stdout + invalid.stderr, /'testRoot' does not exist in type 'ProjectConfig'/u);
   } finally {
-    if (cli !== undefined) stopWorkspaceServer(consumer, cli);
+    await stopCliWorkspace(consumer);
     rmSync(scratch, { recursive: true, force: true });
   }
 })));

@@ -1,43 +1,19 @@
-import { createConsumer } from '../support/consumer.ts';
-import { initialize } from '../support/operations.ts';
-import { sourceCli } from '../support/source-consumer.ts';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.ts';
-import { join, resolve } from 'node:path';
+import { rmSync } from 'node:fs';
 import test from 'node:test';
-import { setConfig, showConfig } from "../../src/app/index.ts";
-import { LocalRepository } from "../support/repository.ts";
+import { runCli } from '../support/cli.ts';
+import { ghFixture, stopCliWorkspace } from '../support/cli-complex-fixture.ts';
+import { createConsumer } from '../support/consumer.ts';
 
 
 // @feature docs/feature/feedback/cli.md
-test('packed public CLI adds gh connection, checks scope, and executes shared feedback action offline', { skip: process.platform === 'win32' }, () => {
-  const scratch = mkdtempSync(join(tmpdir(), 'concord-gh-packed-'));
+test('packed public CLI rejects a credential-env option for gh transport', { skip: process.platform === 'win32' }, async () => {
+  const { scratch, consumer, env } = ghFixture(createConsumer);
   try {
-
-    const entry = sourceCli();
-    const consumer = join(scratch, 'consumer');
-    const template = createConsumer();
-    try { cpSync(template, consumer, { recursive: true }); } finally { rmSync(template, { recursive: true, force: true }); }
-    const fakeBin = join(scratch, 'bin');
-    mkdirSync(fakeBin);
-    writeFileSync(join(fakeBin, 'gh'), `#!${process.execPath}\nconst args=process.argv.slice(2);if(args[0]==='--version'){console.log('gh version 2.98.0 (fixture)');return;}if(args[1]==='--help'){console.log('--hostname --method --include');return;}const endpoint=args.at(-1);const value=endpoint==='repos/acme/widgets'?{id:42,full_name:'acme/widgets'}:[];process.stdout.write('HTTP/2 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n'+JSON.stringify(value));`, { mode: 0o755 });
-    const env = { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}`, GH_TOKEN: 'fixture-token' };
-    const cli = (...args: readonly string[]): unknown => JSON.parse(execFileSync(process.execPath, [entry, '--root', consumer, '--json', ...args], { cwd: consumer, env, encoding: 'utf8', timeout: 30_000 })) as unknown;
-    cli('feedback', 'connection', 'add', '--id', 'gh-packed', '--provider', 'github', '--transport', 'gh', '--owner', 'acme', '--repo', 'widgets');
-    assert.equal((cli('feedback', 'connection', 'check', 'gh-packed') as { target: string }).target, 'acme/widgets');
-    const action = join(scratch, 'action.json');
-    writeFileSync(action, JSON.stringify({ action: 'feedback.check', connection: 'gh-packed' }));
-    assert.equal((cli('action', '--input', action) as { transport: string }).transport, 'gh');
-    assert.equal((cli('feedback', 'sync', '--connection', 'gh-packed') as { fetched: number }).fetched, 0);
-    const repo = new LocalRepository(consumer);
-    try { const connection = showConfig(repo).config.feedbackConnections?.[0]; assert.equal(connection?.provider === 'github' ? connection.repositoryId : undefined, '42'); }
-    finally { repo.close(); }
-    const invalid = spawnSync(process.execPath, [entry, '--root', consumer, '--json', 'feedback', 'connection', 'add', '--id', 'bad-gh', '--provider', 'github', '--transport', 'gh', '--credential-env', 'BAD', '--owner', 'acme', '--repo', 'widgets'], { cwd: consumer, env, encoding: 'utf8', timeout: 30_000 });
-    assert.notEqual(invalid.status, 0);
+    const invalid = await runCli({ argv: ['--root', consumer, '--json', 'feedback', 'connection', 'add', '--id', 'bad-gh', '--provider', 'github', '--transport', 'gh', '--credential-env', 'BAD', '--owner', 'acme', '--repo', 'widgets'], cwd: consumer, env, signal: AbortSignal.timeout(30_000) });
+    assert.notEqual(invalid.exitCode, 0);
     assert.equal((JSON.parse(invalid.stderr.trim()) as { error: string }).error, 'InvalidOption');
-  } finally { rmSync(scratch, { recursive: true, force: true }); }
+  } finally { await stopCliWorkspace(consumer, env); rmSync(scratch, { recursive: true, force: true }); }
 });

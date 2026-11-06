@@ -2,16 +2,14 @@ import assert from 'node:assert/strict';
 import { NodeServices } from '@effect/platform-node';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import type { Scope} from 'effect';
-import { Effect, FileSystem, Schema, Stream } from 'effect';
+import { Effect, FileSystem, Schema } from 'effect';
 import { dirname, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { digest, SkillsInstallReceiptSchema, workflowSkillPaths } from '../../src/model/index.ts';
 import { tmpdir } from '../support/temporary.ts';
-import { installedConcordCli } from '../support/support.ts';
+import { runCli } from '../support/cli.ts';
 
 type Requirements = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
-const entry = installedConcordCli();
 const runCase = (body: (root: string) => Effect.Effect<void, unknown, Requirements>) => Effect.runPromise(
   Effect.scoped(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
@@ -21,12 +19,11 @@ const runCase = (body: (root: string) => Effect.Effect<void, unknown, Requiremen
     yield* body(root);
   })).pipe(Effect.provide(NodeServices.layer)),
 );
-const cli = Effect.fn('test.workflowSkills.cli')(function*(root: string, args: string[], status = 0, json = true, executableEntry = entry) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [executableEntry, ...(args.includes('--skill') ? [] : ['--root', root]), ...(json ? ['--json'] : []), ...args], {
-    cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+const cli = Effect.fn('test.workflowSkills.cli')(function*(root: string, args: string[], status = 0, json = true) {
+  const { stdout, stderr, exitCode: code } = yield* Effect.promise(() => runCli({
+    argv: [...(args.includes('--skill') ? [] : ['--root', root]), ...(json ? ['--json'] : []), ...args],
+    cwd: root, env: process.env,
   }));
-  const [stdout, stderr, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.stdout)), Stream.mkString(Stream.decodeText(child.stderr)), child.exitCode], { concurrency: 'unbounded' });
   assert.equal(Number(code), status, JSON.stringify({ args, stdout, stderr, code }));
   return { stdout, stderr };
 });

@@ -8,7 +8,7 @@ import { installedConcordCli } from './support.ts';
 /** Stop only the service belonging to this fixture, before removing its sources or installation. */
 export function stopWorkspaceServer(root: string, entry = installedConcordCli(), env = process.env, runtime: readonly string[] = []): void {
   if (!existsSync(root)) return;
-  const record = join(genericPrivateDirectorySync(root), 'server/current.json');
+  const record = join(genericPrivateDirectorySync(root, env), 'server/current.json');
   if (!existsSync(record)) return;
   const instance = readFileSync(record, 'utf8').trim();
   const stopped = spawnSync(process.execPath, [...(entry.endsWith('.ts') ? ['--conditions=concord-source'] : []), ...runtime, entry, '--root', root, '--json', 'server', 'stop'], { env, encoding: 'utf8', timeout: 20_000 });

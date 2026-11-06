@@ -1,8 +1,9 @@
-import { sourceCli, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, tmpdir, stopWorkspaceServer, join, test, before, after, Effect, Schema, InitializationReceiptSchema, scratch, consumers, cli, run, consumer, action } from './onboarding-independent-fixture.ts';
+import { assert, execFileSync, existsSync, mkdirSync, writeFileSync, join, test, Schema, InitializationReceiptSchema, run, consumer } from './onboarding-independent-fixture.ts';
+import { runCli } from '../support/cli.ts';
 
 
 // @use-case docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
-test('init recommends a writing guide from tracked and unignored initial files, including dry-run', () => {
+test('init recommends a writing guide from tracked and unignored initial files, including dry-run', async () => {
   const scenarios = [
     { name: 'empty', files: {}, guide: 'docs-from-scratch' },
     { name: 'untracked-source', files: { 'src/main.ts': 'export const value = 1;\n' }, guide: 'docs-from-code' },
@@ -22,12 +23,12 @@ test('init recommends a writing guide from tracked and unignored initial files, 
     }
     if ('tracked' in scenario) execFileSync('git', ['-C', root, 'add', '--force', ...scenario.tracked]);
     const before = execFileSync('git', ['-C', root, 'status', '--porcelain=v1', '-z']);
-    const preview = Schema.decodeUnknownSync(InitializationReceiptSchema, { onExcessProperty: 'error' })(run(root, ['--dry-run', 'init']));
+    const preview = Schema.decodeUnknownSync(InitializationReceiptSchema, { onExcessProperty: 'error' })(await run(root, ['--dry-run', 'init']));
     assert.equal(preview.guide, scenario.guide, scenario.name);
     assert.equal(preview.dryRun, true);
     assert.deepEqual(execFileSync('git', ['-C', root, 'status', '--porcelain=v1', '-z']), before);
     assert.equal(existsSync(join(root, '.git/concord')), false);
-    const receipt = Schema.decodeUnknownSync(InitializationReceiptSchema, { onExcessProperty: 'error' })(run(root, ['init']));
+    const receipt = Schema.decodeUnknownSync(InitializationReceiptSchema, { onExcessProperty: 'error' })(await run(root, ['init']));
     assert.equal(receipt.guide, preview.guide, scenario.name);
     assert.equal(receipt.dryRun, false);
   }
@@ -35,20 +36,20 @@ test('init recommends a writing guide from tracked and unignored initial files, 
 
 
 // @use-case docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
-test('human init ends with the recommended command and a refused init emits no guide', () => {
+test('human init ends with the recommended command and a refused init emits no guide', async () => {
   for (const code of [false, true]) {
     const root = consumer(code ? 'human-code' : 'human-scratch');
     if (code) writeFileSync(join(root, 'package.json'), '{}\n');
     const guide = code ? 'docs-from-code' : 'docs-from-scratch';
     const expected = ['Start here: docs/concord.md', `Writing guide: concord --skill ${guide}`, 'Inspect configuration: concord doctor'];
     for (const args of [['--dry-run', 'init'], ['init']]) {
-      const reply = spawnSync(process.execPath, [cli, '--root', root, ...args], { encoding: 'utf8', timeout: 30_000 });
-      assert.equal(reply.status, 0, reply.stderr);
+      const reply = await runCli({ argv: ['--root', root, ...args], cwd: process.cwd(), env: process.env });
+      assert.equal(reply.exitCode, 0, reply.stderr);
       assert.deepEqual(reply.stdout.trimEnd().split('\n').slice(-3), expected);
       assert.doesNotMatch(reply.stdout, /Next: concord new feature/u);
     }
-    const refused = spawnSync(process.execPath, [cli, '--root', root, 'init'], { encoding: 'utf8', timeout: 30_000 });
-    assert.equal(refused.status, 1);
+    const refused = await runCli({ argv: ['--root', root, 'init'], cwd: process.cwd(), env: process.env });
+    assert.equal(refused.exitCode, 1);
     assert.match(refused.stderr, /InitializationConflict/u);
     assert.equal(refused.stdout, '');
     assert.doesNotMatch(refused.stderr, /Writing guide|docs-from-(?:scratch|code)/u);
@@ -57,11 +58,11 @@ test('human init ends with the recommended command and a refused init emits no g
 
 
 // @use-case docs/feature/project-onboarding/use-case/start-writing-specs.md#write
-test('the initialized project accepts a directly written first Spec', () => {
+test('the initialized project accepts a directly written first Spec', async () => {
   const root = consumer('first-spec');
-  run(root, ['init']);
+  await run(root, ['init']);
   mkdirSync(join(root, 'docs/feature/cart/use-case'), { recursive: true });
   writeFileSync(join(root, 'docs/feature/cart/README.md'), '# Cart\n\nShoppers collect their purchases.\n\nSee [add an item](use-case/add.md).\n');
   writeFileSync(join(root, 'docs/feature/cart/use-case/add.md'), '# Add an item\n\n## Journey\n\n1. Select an item. {#select}\n2. Add it to the cart. {#add}\n');
-  assert.equal(run(root, ['check']).ok, true);
+  assert.equal((await run(root, ['check'])).ok, true);
 });

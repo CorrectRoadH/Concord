@@ -1,6 +1,7 @@
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createRequire } from 'node:module';
 import { sourceCli } from './source-consumer.ts';
+import { runCli } from './cli.ts';
 import { createConsumer } from './consumer.ts';
 import { sourceRoot, prepareSourceConsumer } from './source-consumer.ts';
 import assert from 'node:assert/strict';
@@ -39,28 +40,30 @@ export const StateOutput = Schema.Struct({ document: Schema.Struct({ metadata: S
 export const TemplatesOutput = Schema.Struct({ templates: Schema.Array(Schema.Struct({ name: Schema.String })) });
 export const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
 export let cli: string;
-before(() => Effect.runPromise(Effect.sync(() => {
+before(async () => {
  cli = sourceCli();
  const manifest = Schema.Struct({ version: Schema.String });
  const source = Schema.decodeUnknownSync(Schema.fromJsonString(manifest))(readFileSync(join(sourceRoot, 'package.json'), 'utf8'));
- assert.equal(execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim(), `concord v${source.version}`);
-})));
+ const version = await runCli({ argv: ['--version'], cwd: process.cwd(), env: process.env });
+ assert.equal(version.exitCode, 0, version.stderr);
+ assert.equal(version.stdout.trim(), `concord v${source.version}`);
+});
 after(() => Effect.runPromise(Effect.gen(function*() {
  yield* settleRefreshes(join(scratch, 'async-query')).pipe(Effect.provide(NodeServices.layer));
  yield* Effect.sync(() => rmSync(scratch, { recursive: true, force: true }));
 })));
 
-export function call<A>(root: string,args: readonly string[],schema: Schema.ConstraintDecoder<A, never>,input='Contract body.\n',status=0): A {
- const result=spawnSync(process.execPath,[cli,'--root',root,'--json','--fresh',...args],{input,encoding:'utf8',timeout:20000});
- assert.equal(result.status,status,JSON.stringify({args,signal:result.signal,stdout:result.stdout,stderr:result.stderr,error:result.error}));
+export async function call<A>(root: string,args: readonly string[],schema: Schema.ConstraintDecoder<A, never>,input='Contract body.\n',status=0): Promise<A> {
+ const result=await runCli({argv:['--root',root,'--json','--fresh',...args],cwd:process.cwd(),env:process.env,stdin:input,signal:AbortSignal.timeout(20000)});
+ assert.equal(result.exitCode,status,JSON.stringify({args,stdout:result.stdout,stderr:result.stderr}));
  return Schema.decodeUnknownSync(Schema.fromJsonString(schema), { onExcessProperty: 'ignore', errors: 'all' })(status===0||result.stdout.trim()?result.stdout:result.stderr);
 }
-export function callString(root: string,args: readonly string[],input='Contract body.\n',status=0): string {
+export function callString(root: string,args: readonly string[],input='Contract body.\n',status=0): Promise<string> {
  return call(root, args, Schema.String, input, status);
 }
 export function readPage(root: string, path: string) { const body = readFileSync(join(root, path), 'utf8'); return { body, digest: digest(body) }; }
 export function savePage(root: string, path: string, body: string, expectedDigest: string, status = 0) {
- return call(root, ['action', '--input', '-'], status === 0 ? Ack : ErrorOutput, JSON.stringify({ action: 'document.set', path, body, expectedDigest }), status) as { error?: string };
+ return call(root, ['action', '--input', '-'], status === 0 ? Ack : ErrorOutput, JSON.stringify({ action: 'document.set', path, body, expectedDigest }), status) as Promise<{ error?: string }>;
 }
 export function consumer(name: string){
  const root=join(scratch,name);cpSync(createConsumer(),root,{recursive:true});
@@ -72,6 +75,7 @@ export function write(root: string,path: string,source: string){mkdirSync(join(r
 
 export { createRequire };
 export { sourceCli };
+export { runCli };
 export { createConsumer };
 export { sourceRoot };
 export { prepareSourceConsumer };

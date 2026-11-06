@@ -427,6 +427,14 @@ export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, a
 
 export const skillCommand = (argv: readonly string[]) => Effect.scoped(Effect.gen(function*() {
   const { skillProgram } = yield* Effect.tryPromise(() => import('./skill.ts'));
-  yield* skillProgram(argv).pipe(Effect.catch(cliFailure));
+  yield* skillProgram(argv).pipe(
+    Effect.catchTags({
+      SkillArgumentsInvalid: error => cliFailure(new ConcordError(error.code, error.message)),
+      SkillTopicUnknown: error => cliFailure(new ConcordError(error.code, error.message)),
+      SkillContentUnreadable: error => cliFailure(new ConcordError(error.code, error.message)),
+      SkillContentInvalid: error => cliFailure(new ConcordError(error.code, error.message)),
+    }),
+    Effect.catch(cliFailure),
+  );
   return yield* (yield* CliInvocation).exitCode;
 })).pipe(Effect.provide(CliInvocation.layer(argv)));
