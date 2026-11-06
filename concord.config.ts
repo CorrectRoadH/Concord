@@ -107,6 +107,7 @@ export default {
       "test/support/archive-native.ts",
       "test/support/asynchronous-projections-fixture.ts",
       "test/support/benchmark-smoke.ts",
+      "test/support/browser-save.ts",
       "test/support/browser-shared-fixture.ts",
       "test/support/cache-maintenance-holder.ts",
       "test/support/cache-off-probe.ts",

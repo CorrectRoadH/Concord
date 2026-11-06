@@ -1,3 +1,4 @@
+import { browserActionReceipt } from '../support/browser-save.ts';
 import assert from 'node:assert/strict';
 import { parseWritingPolicy } from '../../src/model/index.ts';
 import { writeConceptFile, writeWritingFile } from '../support/writing-files.ts';
@@ -127,7 +128,9 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
   await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta saved');
   await expect(source).toContainText('Beta draft');
   await page.getByRole('link', { name: '写作', exact: true }).click();
+  const betaPolicySaved = browserActionReceipt(page, 'document.set', input => input.path === `${b}/writing.md` && String(input.body).includes('Beta saved'));
   await page.getByRole('button', { name: '保存规则' }).click();
+  await betaPolicySaved;
   await expect.poll(() => parseWritingPolicy(readFileSync(join(root, b, 'writing.md'), 'utf8')).bannedTerms[0]?.use).toBe('Beta saved');
   assert.equal(parseWritingPolicy(readFileSync(join(root, b, 'writing.md'), 'utf8')).roots, undefined);
   await page.getByRole('link', { name: '写作', exact: true }).click();

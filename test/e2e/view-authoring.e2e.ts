@@ -1,3 +1,4 @@
+import { browserActionReceipt } from '../support/browser-save.ts';
 import assert from 'node:assert/strict';
 import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
@@ -92,9 +93,11 @@ test('browser creates a Feature, edits Markdown, preserves conflicts and opens G
   });
   await editor.locator('p').first().fill('Browser edited paragraph. First revision.');
   await expect.poll(() => writes).toBe(1);
+  const latestFeatureSaved = browserActionReceipt(page, 'document.set', input => input.path === 'docs/feature/browser-feature/README.md' && String(input.body).includes('Latest revision.'));
   await editor.locator('p').first().fill('Browser edited paragraph. Latest revision.');
   assert.equal(writes, 1, 'later input waits behind the in-flight save');
   releaseSave?.();
+  await latestFeatureSaved;
   await expect.poll(()=>readFileSync(path,'utf8')).toContain('Latest revision.');
   assert.equal(writes, 2);
   // The next conflict starts after the preceding save has committed its readback baseline.
@@ -214,6 +217,7 @@ test('browser creates a Feature, edits Markdown, preserves conflicts and opens G
   await expect(documentTree).toHaveCSS('position','sticky');
   await documentTree.getByRole('button',{name:'architecture.md',exact:true}).click();
   await expect(editor).toContainText('Modules and Ownership');
+  const architectureSaved = browserActionReceipt(page, 'document.set', input => input.path === 'docs/feature/browser-feature/architecture.md' && String(input.body).includes('Architecture from browser.'));
   await editor.locator('p').first().fill('Architecture from browser.');
   const documentPane=page.locator('.document-workspace > .page');
   await documentPane.evaluate(element=>{element.scrollTop=500;});
@@ -227,6 +231,7 @@ test('browser creates a Feature, edits Markdown, preserves conflicts and opens G
   assert.equal(await outerPage.evaluate(element=>getComputedStyle(element).scrollbarWidth),'none');
   assert.equal(await page.getByRole('tablist',{name:'文档详情'}).evaluate(element=>getComputedStyle(element).scrollbarWidth),'none');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await architectureSaved;
   await expect.poll(()=>readFileSync(join(root,'docs/feature/browser-feature/architecture.md'),'utf8')).toContain('Architecture from browser.');
   await expect(page).toHaveURL(/file=docs%2Ffeature%2Fbrowser-feature%2Flibrary.md/);
   await page.goBack();

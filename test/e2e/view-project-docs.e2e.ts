@@ -1,3 +1,4 @@
+import { browserActionReceipt } from '../support/browser-save.ts';
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,6 +29,7 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
     const firstStatus = (await workspace).status();
     assert.ok([200, 202, 304].includes(firstStatus), `workspace response was ${firstStatus}`);
     const editor = page.getByTestId('project-doc-preview');
+    const projectSaved = browserActionReceipt(page, 'document.set', input => input.path === path && String(input.body).includes('通过浏览器保存'));
     if (path === paths[0]) {
       const text = editor.locator('[contenteditable="true"]').first();
       await expect(text).toContainText('原始正文');
@@ -39,6 +41,7 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
       assert.equal(readFileSync(join(root, path), 'utf8'), before);
       await text.fill(`${before}\n通过浏览器保存。\n`);
     }
+    await projectSaved;
     await expect.poll(() => readFileSync(join(root, path), 'utf8'), { timeout: 15000 }).toContain('通过浏览器保存');
     if (path !== paths[0]) assert.equal(readFileSync(join(root, path), 'utf8'), `${before}\n通过浏览器保存。\n`);
     await expect(editor.locator('.editor-shell')).toHaveAttribute('data-dirty', 'false');

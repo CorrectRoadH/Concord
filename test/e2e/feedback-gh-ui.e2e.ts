@@ -1,3 +1,4 @@
+import { browserActionReceipt } from '../support/browser-save.ts';
 import assert from 'node:assert/strict';
 import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
@@ -67,8 +68,10 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
 
     await existing.getByRole('button', { name: '编辑连接 existing' }).click();
     await page.getByRole('combobox', { name: 'GitHub 读取方式' }).click();
+    const ghSaved1 = browserActionReceipt(page, 'config.set', input => JSON.stringify(input.config).includes('"transport":"gh"'));
     await page.getByRole('option', { name: '复用 gh 登录' }).click();
     await page.getByRole('button', { name: '保存方式' }).click();
+    await ghSaved1;
     await expect.poll(() => savedTransport(root, 0)).toBe('gh');
     assert.deepEqual(readProjectConfig(root).feedbackConnections?.[0], { id: 'existing', provider: 'github', transport: 'gh', owner: 'acme', repo: 'demo', repositoryId: '321' });
     assert.deepEqual(checks, []);
@@ -82,15 +85,19 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await existing.getByRole('button', { name: '编辑连接 existing' }).click();
     await page.getByRole('combobox', { name: 'GitHub 读取方式' }).click();
     await page.getByRole('option', { name: 'API 环境变量' }).click();
+    const apiConnection = browserActionReceipt(page, 'config.set', input => JSON.stringify(input.config).includes('TEMP_GITHUB_TOKEN'));
     await page.getByLabel('凭据环境变量').fill('TEMP_GITHUB_TOKEN');
     await page.getByRole('button', { name: '保存方式' }).click();
     releasePendingCheck(); delayCheck = false;
+    await apiConnection;
     await expect.poll(() => readProjectConfig(root).feedbackConnections?.[0]).toMatchObject({ credentialEnv: 'TEMP_GITHUB_TOKEN' });
     await expect(existing.getByRole('status')).toHaveCount(0);
     await existing.getByRole('button', { name: '编辑连接 existing' }).click();
     await page.getByRole('combobox', { name: 'GitHub 读取方式' }).click();
+    const ghSaved2 = browserActionReceipt(page, 'config.set', input => JSON.stringify(input.config).includes('"transport":"gh"'));
     await page.getByRole('option', { name: '复用 gh 登录' }).click();
     await page.getByRole('button', { name: '保存方式' }).click();
+    await ghSaved2;
     await expect.poll(() => savedTransport(root, 0)).toBe('gh');
     assert.deepEqual(checks, ['existing', 'existing']);
 
@@ -103,10 +110,12 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await expect(page.getByRole('dialog').getByLabel('凭据环境变量')).toHaveCount(0);
     await page.getByLabel('GitHub owner').fill('other');
     await page.getByLabel('GitHub repository').fill('repo');
+    const addedConnection = browserActionReceipt(page, 'config.set', input => JSON.stringify(input.config).includes('new-gh'));
     await page.getByRole('button', { name: '添加', exact: true }).click();
     const next = page.locator('.content-record').filter({ hasText: 'other/repo' });
     await next.getByRole('button', { name: '检测连接' }).click();
     await expect(next.getByRole('status')).toContainText('连接正常');
+    await addedConnection;
     await expect.poll(() => readProjectConfig(root).feedbackConnections?.length).toBe(2);
     assert.deepEqual(readProjectConfig(root).feedbackConnections?.[1], { id: 'new-gh', provider: 'github', transport: 'gh', owner: 'other', repo: 'repo' });
     assert.deepEqual(checks, ['existing', 'existing', 'new-gh']);
@@ -114,8 +123,10 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     delayCheck = true;
     await next.getByRole('button', { name: '检测连接' }).click();
     await expect.poll(() => checks.length).toBe(4);
+    const removedConnection = browserActionReceipt(page, 'config.set', input => !JSON.stringify(input.config).includes('new-gh'));
     await next.getByRole('button', { name: '移除连接 new-gh' }).click();
     releasePendingCheck();
+    await removedConnection;
     await expect.poll(() => readProjectConfig(root).feedbackConnections?.length).toBe(1);
     await expect(page.getByText('连接正常 · other/repo')).toHaveCount(0);
     await existing.getByRole('button', { name: '编辑连接 existing' }).click();
@@ -123,8 +134,10 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await page.getByRole('option', { name: 'API 环境变量' }).click();
     await page.getByRole('button', { name: '保存方式' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
+    const updatedCredential = browserActionReceipt(page, 'config.set', input => JSON.stringify(input.config).includes('OTHER_GITHUB_TOKEN'));
     await page.getByLabel('凭据环境变量').fill('OTHER_GITHUB_TOKEN');
     await page.getByRole('button', { name: '保存方式' }).click();
+    await updatedCredential;
     await expect.poll(() => readProjectConfig(root).feedbackConnections?.[0]).toMatchObject({ credentialEnv: 'OTHER_GITHUB_TOKEN' });
     assert.deepEqual(readProjectConfig(root).feedbackConnections?.[0], { id: 'existing', provider: 'github', credentialEnv: 'OTHER_GITHUB_TOKEN', owner: 'acme', repo: 'demo', repositoryId: '321' });
     assert.deepEqual(checks, ['existing', 'existing', 'new-gh', 'new-gh']);

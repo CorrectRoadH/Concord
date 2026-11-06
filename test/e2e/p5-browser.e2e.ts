@@ -1,3 +1,4 @@
+import { browserActionReceipt } from '../support/browser-save.ts';
 import assert from 'node:assert/strict';
 import { type ViewServerHandle } from './server.ts';
 import { createDocument } from '../support/operations.ts';
@@ -136,7 +137,9 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
   await page.goto(`${address}/settings`);
   await expect(page.locator('iframe')).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: 'p5 扩展库' })).toHaveValue('p5.sound\np5.brush\n./vendor/addon.js');
+  const p5Saved = browserActionReceipt(page, 'config.set', input => JSON.stringify(input.config).includes('p5.sound') && !JSON.stringify(input.config).includes('p5.brush'));
   await page.getByRole('textbox', { name: 'p5 扩展库' }).fill('p5.sound');
+  await p5Saved;
   await expect.poll(() => readProjectConfig(root).p5?.libraries).toEqual(['p5.sound']);
   assert.deepEqual(pageErrors, []);
 

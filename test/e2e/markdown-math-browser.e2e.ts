@@ -1,3 +1,4 @@
+import { browserActionReceipt } from '../support/browser-save.ts';
 import assert from 'node:assert/strict';
 import { createDocument } from '../support/operations.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -120,8 +121,10 @@ test('real workbench math previews render locally, sanitize HTML and preserve Ma
   await page.getByText('编辑原文', { exact: true }).click();
   await expect(editor).toBeVisible();
   const changed = body.replace(inline, () => String.raw`\frac{a}{b} + x^3`);
+  const mathSaved = browserActionReceipt(page, 'document.set', input => input.path === 'docs/feature/math/README.md' && String(input.body).includes(changed));
   await editor.fill(changed);
   await expect(preview.locator('annotation').filter({ hasText: String.raw`\frac{a}{b} + x^3` })).toHaveCount(1);
+  await mathSaved;
   await expect.poll(() => readFileSync(file, 'utf8')).toBe(before.toString('utf8').replace(body, () => changed));
   await preview.getByRole('link', { name: 'Linked document', exact: true }).click();
   await expect(page).toHaveURL(/\/features\/math-target$/u);
