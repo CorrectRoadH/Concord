@@ -138,7 +138,7 @@ export function humanOutput(value: unknown): string {
           if (Array.isArray(entry.lists)) lines.push(indent(humanOutput({ lists: entry.lists }), 4));
         } else if (Predicate.isObject(entry) && typeof entry.file === 'string' && Array.isArray(entry.contracts)) {
           lines.push(`  ${String(entry.id)} — ${entry.file}:${String(entry.line)}–${String(entry.endLine)} (${String(entry.scope)})`, ...entry.contracts.map(ref => `    Implements: ${String(ref)}`));
-        } else if (Predicate.isObject(entry) && typeof entry.file === 'string') {
+        } else if (Predicate.isObject(entry) && typeof entry.file === 'string' && typeof entry.id === 'string' && typeof entry.line === 'number' && typeof entry.contract === 'string') {
           lines.push(`  ${String(entry.id)} — ${entry.file}:${String(entry.line)}`, `    Contract: ${String(entry.contract)}`, `    Declaration: ${String(entry.status)}${entry.skipped ? ', skipped/todo' : ''}`);
           if (Array.isArray(entry.issues)) for (const ref of entry.issues) lines.push(`    Issue: ${String(ref)}`);
         } else lines.push(indent(humanOutput(entry), 2));
