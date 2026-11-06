@@ -12,7 +12,7 @@ export type ContentResult<A> = { readonly ok: true; readonly value: A } | { read
 
 const EnvelopeSchema = Schema.Struct({ parser: Schema.String, sourceDigest: Schema.String, present: Schema.Boolean, value: Schema.optional(Schema.Unknown) });
 
-/** Owns only a bounded HawDB handle; caller source bytes and parser version own identity. */
+/** Borrows an entry's parse handle or owns a short-lived one; source bytes and parser version own identity. */
 export class ContentCache<A> {
   private database: HawdbDatabase | undefined;
 

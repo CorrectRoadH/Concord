@@ -8,6 +8,7 @@ import { assertLeasePath } from '../publication/index.ts';
 import { makePersistentCacheOwner } from './owner.ts';
 import { RuntimeEnvironment } from '../environment/index.ts';
 import { CacheDerivations } from './derivations.ts';
+import { ContentCacheOwner, withContentCacheOwner } from './content-cache-owner.ts';
 
 export type ReadonlyCacheSnapshot = Readonly<Partial<Record<HawdbNamespace, readonly HawdbEntry[]>> & { unavailable?: typeof CacheSnapshotUnavailable.Type }>;
 export interface CacheService {
@@ -24,6 +25,8 @@ const cacheFailure = (cause: unknown): HawdbFailure => cause instanceof HawdbFai
 
 /** In-memory handles cannot grant access to a persistent namespace. */
 export class Cache extends Context.Service<Cache, CacheService>()('concord/base/cache/Cache') {
+  static readonly parseOwner = Effect.acquireRelease(Effect.sync(() => new ContentCacheOwner()), owner => Effect.sync(() => owner.close()));
+  static readonly withParseCache = withContentCacheOwner;
   static readonly layer = Layer.effect(Cache, Effect.gen(function*() {
     const runtime = yield* RuntimeEnvironment;
     let database: HawdbDatabase | undefined;

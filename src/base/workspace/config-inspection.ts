@@ -7,6 +7,7 @@ import { assertCurrentRuntimeFormat } from './storage.ts';
 import { snapshot } from './config.ts';
 import { discoverRoot } from './storage.ts';
 import { assertLeasePath, genericPrivateDirectorySync } from '../publication/index.ts';
+import { inheritContentCacheOwner } from '../cache/index.ts';
 
 export interface ConfigurationInspection {
   readonly path: 'concord.config.ts';
@@ -39,6 +40,9 @@ function inspectNow(root: string, runtime?: RuntimeEnvironmentSnapshot): Configu
 }
 
 /** Reread the current bytes, including malformed configurations for inspection. */
-export const inspectConfiguration = Effect.fn('Workspace.inspectConfiguration')((input: string, runtime?: RuntimeEnvironmentSnapshot) => Effect.try({ try: () => inspectNow(discoverRoot(input, false, runtime), runtime), catch: failure }));
+export const inspectConfiguration = Effect.fn('Workspace.inspectConfiguration')((input: string, runtime?: RuntimeEnvironmentSnapshot) => Effect.try({ try: () => {
+  const root = discoverRoot(input, false, runtime);
+  return inspectNow(root, runtime === undefined ? undefined : inheritContentCacheOwner(runtime, runtime, root));
+}, catch: failure }));
 
 export { identifyWorkspace, locateWorkspace } from './identity.ts';

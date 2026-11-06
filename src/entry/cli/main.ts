@@ -17,7 +17,7 @@ import { OwnedProcess, OwnedProcessLive, ProcessEventsLive } from "../../base/pr
 import { Git } from '../../base/git/index.ts';
 import { Workspace } from '../../base/workspace/index.ts';
 import { Sources } from '../../base/sources/index.ts';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter, withContentCacheOwner } from '../../base/cache/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.ts';
 import { awaitCacheMaintenance } from '../../app/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
@@ -390,7 +390,7 @@ const cliFailure = (cause: unknown) => Effect.gen(function*() {
 });
 
 /** Both the real startup adapter and captured invocations await this exact program. */
-export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, argv: readonly string[]) => withContentCacheOwner(Effect.scoped(Effect.gen(function*() {
+export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, argv: readonly string[]) => Cache.withParseCache(Effect.scoped(Effect.gen(function*() {
   const Command = yield* Effect.tryPromise(() => import('effect/unstable/cli/Command'));
   yield* Layer.build(ProcessEventsLive);
   const version = yield* (yield* Installation).version;

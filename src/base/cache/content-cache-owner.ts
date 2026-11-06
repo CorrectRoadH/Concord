@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Effect } from 'effect';
 import { RuntimeEnvironment, makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { nativeArtifactRoot, nativeFileIdentity, hawdbTarget } from '../installation/index.ts';
-import { createMemoryHawdb, verifyHawdbArtifact, type HawdbDatabase } from './hawdb-native.ts';
+import { createMemoryHawdb, verifyHawdbArtifact, HawdbFailure, type HawdbDatabase } from './hawdb-native.ts';
 
 const bindings = new WeakMap<RuntimeEnvironmentSnapshot, { readonly owner: ContentCacheOwner; readonly project: string }>();
 
@@ -21,10 +21,39 @@ export class ContentCacheOwner {
 
   database(runtime: RuntimeEnvironmentSnapshot, project: string, partition: string): HawdbDatabase | undefined {
     if (this.closed) return undefined;
-    // Verification precedes lookup: a still-open binding never authorizes replaced bytes.
     const selection = join(nativeArtifactRoot(runtime), hawdbTarget());
-    try { verifyHawdbArtifact(runtime); }
-    catch (cause) {
+    const fingerprint = () => JSON.stringify([runtime.env.CONCORD_NATIVE_TEST_HOOKS === '1', ...['hawdb.node', 'artifact.json', 'THIRD-PARTY-NOTICES.txt'].map(name => nativeFileIdentity(join(selection, name)))]);
+    try {
+      // Reuse byte/Schema evidence only while every guarded input has the same identity.
+      const identity = fingerprint();
+      const key = JSON.stringify([project, selection, identity, partition]);
+      const prior = this.databases.get(key);
+      if (prior) {
+        this.databases.delete(key);
+        this.databases.set(key, prior);
+        return prior.database;
+      }
+      verifyHawdbArtifact(runtime);
+      for (const [oldKey, old] of this.databases) {
+        if (old.project === project && old.selection === selection && old.identity !== identity) {
+          this.databases.delete(oldKey);
+          old.database.close();
+        }
+      }
+      // Each parser retains its own namespace quota; config writes cannot evict document rows.
+      if (this.databases.size >= 32) {
+        const oldest = this.databases.keys().next().value!;
+        const evicted = this.databases.get(oldest)!;
+        this.databases.delete(oldest);
+        evicted.database.close();
+      }
+      const database = createMemoryHawdb(runtime);
+      try {
+        if (fingerprint() !== identity) throw new HawdbFailure('HawdbIncompatible', 'Native inputs changed while opening a parse cache');
+      } catch (cause) { database.close(); throw cause; }
+      this.databases.set(key, { project, selection, identity, database });
+      return database;
+    } catch (cause) {
       for (const [key, prior] of this.databases) {
         if (prior.project === project && prior.selection === selection) {
           this.databases.delete(key);
@@ -33,30 +62,6 @@ export class ContentCacheOwner {
       }
       throw cause;
     }
-    const identity = JSON.stringify(['hawdb.node', 'artifact.json', 'THIRD-PARTY-NOTICES.txt'].map(name => nativeFileIdentity(join(selection, name))));
-    for (const [key, prior] of this.databases) {
-      if (prior.project === project && prior.selection === selection && prior.identity !== identity) {
-        this.databases.delete(key);
-        prior.database.close();
-      }
-    }
-    const key = JSON.stringify([project, selection, identity, partition]);
-    const prior = this.databases.get(key);
-    if (prior) {
-      this.databases.delete(key);
-      this.databases.set(key, prior);
-      return prior.database;
-    }
-    // Each parser retains its own namespace quota; config writes cannot evict document rows.
-    if (this.databases.size >= 32) {
-      const oldest = this.databases.keys().next().value!;
-      const evicted = this.databases.get(oldest)!;
-      this.databases.delete(oldest);
-      evicted.database.close();
-    }
-    const database = createMemoryHawdb(runtime);
-    this.databases.set(key, { project, selection, identity, database });
-    return database;
   }
 
   close(): void {
