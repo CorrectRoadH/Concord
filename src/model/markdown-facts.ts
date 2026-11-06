@@ -11,8 +11,8 @@ export interface StepMarkerRange { readonly line: number; readonly startColumn: 
 export function markdownAnchor(line: string): string | undefined {
   const heading = /^#{1,6}\s+(.+?)\s*#*\s*$/u.exec(line)?.[1];
   if (heading === undefined) return undefined;
-  const explicit = /\s+\{#([A-Za-z][A-Za-z0-9_.:-]*)\}\s*$/u.exec(heading)?.[1];
-  if (explicit !== undefined) return explicit;
+  const explicit = /\s+\{#([^{}\s]+)\}\s*$/u.exec(heading)?.[1];
+  if (explicit !== undefined) return DOCUMENT_NAME_PATTERN.test(explicit) ? explicit : undefined;
   if (heading.includes('{#')) return undefined;
   return heading.toLocaleLowerCase().replace(/[^\p{Letter}\p{Number}\s-]/gu, '').replace(/\s/gu, '-');
 }
@@ -26,7 +26,7 @@ export function headingAnchorsFromTree(source: string, tree: Root): ReadonlySet<
       const heading = /^#{1,6}\s+(.+?)\s*#*\s*$/u.exec(raw)?.[1];
       if (heading === undefined) return;
       const explicit = /\s+\{#([^{}\s]+)\}\s*$/u.exec(heading)?.[1];
-      if (explicit !== undefined) add(explicit);
+      if (explicit !== undefined && DOCUMENT_NAME_PATTERN.test(explicit)) add(explicit);
       const slug = markdownAnchor(`## ${heading.replace(/\s+\{#[^{}\s]+\}\s*$/u, '')}`);
       if (slug !== undefined) add(slug);
     } else if ('children' in node) node.children.forEach(visit);
