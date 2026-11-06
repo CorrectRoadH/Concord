@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import test from 'node:test';
+import { hawdbTarget, installationResources } from '../../src/base/installation/index.js';
+import { packageBin, prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
+import { tmpdir } from '../support/temporary.js';
+import { Schema } from 'effect';
+
+// @feature docs/feature/local-data-engine/architecture.md#cli-查询
+test('broken installed native artifacts keep current queries local and reject server startup', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'concord-native-fallback-'));
+  try {
+    writeFileSync(join(scratch, 'package.json'), '{"private":true}');
+    prepareSourceConsumer(scratch, sourceConcord(), [], { private: true });
+    const installed = join(scratch, 'node_modules/concord-sdlc');
+    const cli = packageBin(installed), root = join(scratch, 'consumer');
+    mkdirSync(root); execFileSync('git', ['init', '-q', root]);
+    const invoke = (...args: string[]) => spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20_000, env: { ...process.env, NODE_OPTIONS: '' } });
+    const initialized = invoke('init', '--docs-only');
+    assert.equal(initialized.status, 0, initialized.stdout + initialized.stderr);
+    const binary = join(installationResources(installed).native, hawdbTarget(), 'hawdb.node');
+    const bytes = readFileSync(binary);
+    for (const damage of ['digest', 'missing']) {
+      if (damage === 'digest') { writeFileSync(`${binary}.next`, Buffer.concat([bytes, Buffer.from('invalid digest')])); renameSync(`${binary}.next`, binary); }
+      else rmSync(binary);
+      const status = invoke('cache', 'status');
+      assert.equal(status.status, 0, status.stdout + status.stderr);
+      const diagnostic = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.Literal('unavailable'), detail: Schema.String })))(status.stdout);
+      for (const mode of ['command', 'shared']) {
+        const scan = invoke(`--server=${mode}`, 'test', 'list');
+        assert.equal(scan.status, 0, scan.stdout + scan.stderr);
+        const value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ cache: Schema.Struct({ status: Schema.Literal('unavailable'), detail: Schema.String }), cases: Schema.Array(Schema.Unknown) })))(scan.stdout);
+        assert.equal(value.cache.detail, diagnostic.detail);
+      }
+      for (const args of [['trace', 'gaps'], ['server', 'start'], ['server', 'run']]) {
+        const result = invoke(...args);
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        const error = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ error: Schema.Literal('HawdbUnavailable') })))(result.stderr);
+        assert.equal(error.error, 'HawdbUnavailable');
+      }
+      assert.equal(existsSync(join(root, '.git/concord/server/current.json')), false, 'fallback must not launch a service');
+      if (damage === 'digest') { writeFileSync(`${binary}.next`, bytes); renameSync(`${binary}.next`, binary); }
+    }
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
