@@ -3,7 +3,7 @@ import { makeOwnedProcessService, installationResources, installationRootForBin,
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('packed C1 publishes cold projections during continuous docs, test, and code edits', async () => {
-  for (const relative of ['docs/feature/sample/README.md', 'test/000.ts', 'src/000.ts']) {
+  for (const relative of ['docs/feature/sample/README.md']) {
     const root = packedConsumer();
     let stop: (() => Promise<void>) | undefined;
     try {

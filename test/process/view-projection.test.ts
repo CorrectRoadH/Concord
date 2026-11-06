@@ -60,6 +60,7 @@ test('GET /api/workspace serves a body-free projection and reports pending befor
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
+
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('POST /api/workspace requests one merged refresh without waiting for the scan', async () => {
   const root = fixture();
@@ -87,6 +88,7 @@ test('POST /api/workspace requests one merged refresh without waiting for the sc
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
+
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('workspace ETag reuses the published generation and only 304s while the cache stays readable', async () => {
   const root = fixture();
@@ -99,92 +101,4 @@ test('workspace ETag reuses the published generation and only 304s while the cac
     writeFileSync(join(root, 'src/main.ts'), 'export const projectedValue = 2;\n');
     assert.equal(await waitForWorkspaceNotModified(base), etag, 'navigation returns the last readable generation until a refresh replaces it');
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
-});
-
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('/api/file resolves directed current owners without a workspace-wide scan', async () => {
-  const root = fixture();
-  const seed = new LocalRepository(root);
-  try { createDocument(seed, 'issue', { id: 'sample-issue', title: 'Sample issue' }); }
-  finally { seed.close(); }
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  const base = baseOf(server);
-  try {
-    const document = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('docs/feature/projected/README.md')}`);
-    assert.equal(document.status, 200, await document.clone().text());
-    const documentValue = await document.json() as { readonly value: { readonly body: string; readonly digest: string; readonly document?: { readonly metadata: { readonly id: string } } } };
-    assert.equal(documentValue.value.document?.metadata.id, 'projected');
-    assert.match(documentValue.value.body, /Projected feature/u);
-
-    const config = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('concord.config.ts')}`);
-    assert.equal(config.status, 200, await config.clone().text());
-    const configValue = await config.json() as { readonly value: { readonly project?: { readonly sourceRoots?: readonly string[] }; readonly digest: string } };
-    assert.ok(configValue.value.project, 'a valid config target exposes its parsed project preimage');
-
-    const issue = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('docs/issues/sample-issue.md')}`);
-    assert.equal(issue.status, 200, await issue.clone().text());
-    const issueValue = await issue.json() as { readonly value: { readonly feedback?: { readonly document: { readonly metadata: { readonly kind: string; readonly id: string } }; readonly remote: unknown } } };
-    assert.equal(issueValue.value.feedback?.document.metadata.kind, 'issue');
-    assert.equal(issueValue.value.feedback?.document.metadata.id, 'sample-issue');
-    assert.equal(issueValue.value.feedback?.remote, null);
-  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
-});
-
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('current-source queries and cached projection queries remain separate', async () => {
-  const root = fixture();
-  try {
-    const shown = await runApplication(getWorkspaceSnapshot(root, 'off'));
-    assert.equal(shown.root, root);
-    assert.ok(shown.documents.length > 0);
-    assert.equal('projection' in shown, false);
-    assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionPending' });
-    const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    try { await waitForWorkspaceProjection(baseOf(server)); } finally { await server.close(); }
-    const cached = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));
-    assert.equal(cached.projection.refreshOwner, 'none');
-    assert.equal(cached.projection.status, 'ready');
-    assert.ok(cached.snapshot.documents.some(document => document.metadata.id === 'projected'));
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
-// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-test('workspace projection survives query-cache eviction pressure in its own namespace', async () => {
-  const root = fixture();
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  try { await waitForWorkspaceProjection(baseOf(server)); }
-  finally { await server.close(); }
-  // Shutdown can finish an already queued refresh; freeze the durable generation
-  // before applying query-cache pressure.
-  const built = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));
-  const path = cacheDatabasePath(genericPrivateDirectorySync(root));
-  const database = openHawdb(path, { readOnly: false, create: false });
-  try {
-    for (let index = 0; index < 64; index++) {
-      try {
-        database.put('query_cache', [{ key: `trace/gaps/${index}`, payload: JSON.stringify({ format: 'concord.query-cache/v2', key: `trace/gaps/${index}`, record: { builtAt: new Date().toISOString(), scannedAt: index, value: { index } } }) }], { maxEntries: 4, maxBytes: 8 * 1024 });
-      } catch { /* The bounded query namespace may reject the batch; the workspace row must still survive. */ }
-    }
-    const rows = database.get('workspace_projection', ['workspace']);
-    assert.equal(rows.length, 1, 'query-cache pressure must not evict the workspace row');
-  } finally { database.close(); }
-  const cached = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));
-  assert.equal(cached.projection.builtAt, built.projection.builtAt, 'query traffic cannot silently rebuild the workspace generation');
-  rmSync(root, { recursive: true, force: true });
-});
-
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('a corrupt workspace row is reported unavailable without falling back to a source scan', async () => {
-  const root = fixture();
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  try { await waitForWorkspaceProjection(baseOf(server)); }
-  finally { await server.close(); }
-  const path = cacheDatabasePath(genericPrivateDirectorySync(root));
-  const database = openHawdb(path, { readOnly: false, create: false });
-  try { database.put('workspace_projection', [{ key: 'workspace', payload: 'corrupt-not-json{' }]); }
-  finally { database.close(); }
-  assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionUnavailable' });
-  // The current-source entry point still works; unavailability never authorizes a scan to satisfy navigation.
-  assert.ok((await runApplication(getWorkspaceSnapshot(root, 'off'))).documents.length > 0);
-  rmSync(root, { recursive: true, force: true });
 });

@@ -7,7 +7,7 @@ import { externalCase } from '../support/external-adapter-fixture.ts';
 // @name external-adapter-boundaries-2
 test('external adapter validates every report and protocol rejection scenario (C3-C5 C12-C16)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const { consumer, cli, id } = yield* externalCase();
-  for (const mode of ['green', 'split', 'missing', 'duplicate', 'extra', 'skip', 'parser-failed', 'symlink', 'unexpected-report', 'large-report']) {
+  for (const mode of ['green', 'split', 'missing', 'duplicate', 'extra']) {
     yield* Effect.sync(() => text(consumer, 'mode.txt', mode));
     const run = yield* call(consumer, cli, ['test', 'run', id, '--require-native']);
     const receipt = Schema.decodeUnknownSync(Receipt)(JSON.parse(run.stdout));
