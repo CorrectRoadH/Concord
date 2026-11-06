@@ -13,13 +13,14 @@ git push origin v0.9.0
 
 ## 发布资产
 
-一个 GitHub Release 恰好附带以下资产：
+一个 GitHub Release 恰好附带以下资产。CLI 只通过归档分发，库只通过 tgz 分发：
 
 | 资产 | 内容 |
 | --- | --- |
 | `concord-<version>-linux-x64.tar.gz` | x86_64 Linux（glibc）归档 |
 | `concord-<version>-darwin-arm64.tar.gz` | Apple Silicon macOS 归档 |
-| `SHA256SUMS` | 两个归档的 SHA-256，每行 `<sha256>  <文件名>` |
+| `concord-sdlc-<version>.tgz` | 只含库的 npm 包：`concord-sdlc/config` 等[库导出](../local-sdlc/library.md)，不含 CLI；消费者把它作为开发依赖安装，用于配置类型与解码器 |
+| `SHA256SUMS` | 以上全部资产的 SHA-256，每行 `<sha256>  <文件名>` |
 | `install.sh` | [一行安装脚本](use-case/install-with-script.md) |
 
 归档解压后的根目录：

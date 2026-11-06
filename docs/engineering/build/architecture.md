@@ -27,8 +27,9 @@
 1. 应用 JavaScript 只构建一次，各目标共用。
 2. 运行依赖按 `pnpm-lock.yaml` 冻结、`--ignore-scripts` 安装到 `app/`，平台相关的可选依赖按目标选择。
 3. `runtime/node` 按[运行时版本](README.md#运行时版本)从 nodejs.org 下载该目标的官方发行包，核对 `SHASUMS256.txt` 后只取出 `node` 可执行文件。
-4. `runtime/rg` 取自固定版本的官方 ripgrep 发行包，核对构建配置记录的 SHA-256。
-5. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。
+4. `runtime/rg` 取自固定版本的官方 ripgrep 发行包，版本与每个目标的 SHA-256 唯一记录在仓库根目录的 `runtime-deps.json`。`runtime/node` 的 SHA-256 取自 Node.js 官方的 `SHASUMS256.txt`，不另存。
+5. 发布时每个目标单独组装：`CONCORD_TARGET=<target> vp build --outDir <目录>`，运行依赖按目标平台选择可选依赖（pnpm 的 `--os` 与 `--cpu`）。本机打包与打包测试省略 `CONCORD_TARGET`，取本机目标。
+6. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。
 
 下载的发行包按摘要缓存在 `${XDG_CACHE_HOME:-~/.cache}/concord/runtime/`，校验失败不进入归档。入口不读取 `PATH` 中的 `node` 或 `rg`。
 

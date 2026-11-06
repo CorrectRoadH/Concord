@@ -34,7 +34,7 @@ tap 定期或经通知发现更新的公开发布，核验标签、归档与资�
 | 部分 | 来源 |
 | --- | --- |
 | `runtime/node` | 仓库[运行时版本](../../engineering/build/README.md#运行时版本)指定的官方 Node.js 二进制，按 nodejs.org 的 `SHASUMS256.txt` 校验后取出 |
-| `runtime/rg` | 固定版本的官方 ripgrep 二进制，按构建配置记录的 SHA-256 校验 |
+| `runtime/rg` | 固定版本的官方 ripgrep 二进制，按 `runtime-deps.json` 记录的 SHA-256 校验 |
 | `app/` 中的应用 | 一次构建得到的 JavaScript，与包根布局相同 |
 | `app/` 中的依赖 | 按 `pnpm-lock.yaml` 冻结、`--ignore-scripts` 安装的运行依赖；平台相关的可选依赖按目标平台选择 |
 | `app/` 中的原生绑定 | 该目标经身份校验的 HawDB N-API 引擎 |
