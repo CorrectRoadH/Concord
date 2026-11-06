@@ -10,7 +10,7 @@
 
 ## 完整路径
 
-1. 打开 `docs/taste.md`，写下一条品味。
+1. 打开 `docs/taste.md`，写下一条品味。 {#write}
 
    ```markdown
    ## T-1 读得懂胜过写得全 {#t-1}
@@ -21,7 +21,7 @@
    - 坏的样子：README 开头就是字段、退出码和边界条件。
    ```
 
-2. 查看品味。
+2. 查看品味。 {#show}
 
    ```sh
    concord taste
@@ -34,7 +34,7 @@
      (没有页面依据这一条)
    ```
 
-3. 检查。
+3. 检查。 {#check}
 
    ```sh
    concord check

@@ -10,17 +10,17 @@
 
 ## 完整路径
 
-1. 直接编辑 `docs/taste.md` 中的 T-1。
+1. 直接编辑 `docs/taste.md` 中的 T-1。 {#edit}
 
    例如在好的样子里加一句：“功能在不同情形下的表现各写成一个 Use Case。”
 
-2. 提交。理由写在提交说明里。
+2. 提交。理由写在提交说明里。 {#commit}
 
    ```sh
    git commit -am "taste: T-1 adds per-situation Use Cases"
    ```
 
-3. 检查。
+3. 检查。 {#check}
 
    ```sh
    concord check
