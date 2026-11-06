@@ -50,6 +50,8 @@ test("the shared lease also excludes a separate Node process", async (t) => {
 
 test("multi-file deletion journals and recovers an interrupted Unicode path without resolving an ID", async (t) => {
   const root = isolatedRepository(t);
+  mkdirSync(join(root, "docs"));
+  writeFileSync(join(root, "docs", "taste.md"), "# Project taste\n");
   writeFileSync(join(root, "中文文档.md"), "before\n");
   const before = traceDigest("before\n");
   await assert.rejects(

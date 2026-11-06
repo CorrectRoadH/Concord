@@ -34,5 +34,5 @@ test('development and CI share the Node 26 declaration included in runner eviden
       if (name === 'gate') assert.deepEqual(job.strategy?.matrix, { shard: [1, 2, 3, 4] });
     }
   }
-  assert.deepEqual(setups.sort(), ['gate/gate', 'native/native', 'release/herdr-mod', 'release/native', 'release/package']);
+  assert.deepEqual(setups.sort(), ['gate/gate', 'native/native', 'release/herdr-mod', 'release/native', 'release/package', 'release/verify']);
 }).pipe(Effect.provide(NodeServices.layer))));

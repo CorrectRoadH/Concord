@@ -172,10 +172,12 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
       writeFileSync(scenario, JSON.stringify({ hang: true }));
       const disconnected = new AbortController();
       const beforeDisconnect = readCalls().length;
-      const pendingDisconnect = post(disconnected.signal);
+      const pendingDisconnect = post(disconnected.signal).then(response => ({ kind: 'response' as const, response }), error => ({ kind: 'disconnected' as const, error }));
       await waitForCall(beforeDisconnect + 2);
       disconnected.abort();
-      await assert.rejects(pendingDisconnect);
+      const disconnectResponse = await pendingDisconnect;
+      assert.equal(disconnectResponse.kind, 'disconnected');
+      if (disconnectResponse.kind === 'disconnected') assert.equal(disconnectResponse.error, disconnected.signal.reason, 'the request must reject because of the explicit client abort');
       writeFileSync(scenario, '{}');
       await waitForSlot();
       writeFileSync(scenario, JSON.stringify({ hang: true }));
