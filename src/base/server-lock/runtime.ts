@@ -26,16 +26,29 @@ const identity = (path: string) => {
   const stat = lstatSync(path, { bigint: true });
   return { device: String(stat.dev), inode: String(stat.ino) };
 };
-const serviceLockReleased = (privateDir: string) => Effect.scoped(scopedServerLock(join(privateDir, 'server')).pipe(
-  Effect.as(true), Effect.catch(error => error._tag === 'ServerLockHeld' ? Effect.succeed(false) : Effect.fail(error)),
-));
+const serviceLockReleased = Effect.fn('serviceLockReleased')(function*(privateDir: string) {
+  const directory = join(privateDir, 'server');
+  const stat = yield* Effect.try({ try: () => lstatSync(directory, { throwIfNoEntry: false }), catch: failure });
+  if (!stat) return true;
+  return yield* Effect.scoped(scopedServerLock(directory).pipe(
+    Effect.as(true), Effect.catch(error => error._tag === 'ServerLockHeld' ? Effect.succeed(false) : Effect.fail(error)),
+  ));
+});
 export function readServerRecord(privateDir: string, requireSocket = true): ServerRecord | undefined {
   const path = join(privateDir, 'server', 'current.json');
   const stat = lstatSync(path, { throwIfNoEntry: false });
   if (!stat) return undefined;
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 16 * 1024) throw new ConcordError('WorkspaceServerUnavailable', 'Server record must be a bounded regular file');
+  let contents: string;
+  try { contents = readFileSync(path, 'utf8'); }
+  catch (cause) {
+    // The owner removes its record before releasing the service lock. Readers
+    // still use that lock to distinguish shutdown from an active owner.
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw new ConcordError('WorkspaceServerUnavailable', 'Invalid server record');
+  }
   try {
-    const record = Schema.decodeUnknownSync(Schema.fromJsonString(ServerRecord), { onExcessProperty: 'error' })(readFileSync(path, 'utf8'));
+    const record = Schema.decodeUnknownSync(Schema.fromJsonString(ServerRecord), { onExcessProperty: 'error' })(contents);
     const lock = identity(join(privateDir, 'server', 'lock'));
     if (lock.device !== record.lock.device || lock.inode !== record.lock.inode) throw new Error('Server lock identity changed');
     if (!requireSocket) return record;

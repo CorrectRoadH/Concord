@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
-import { chmodSync, linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -41,6 +41,15 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited = once(child, 'exit'); child.kill(signal); await exited;
   }
+  // @feature docs/feature/local-data-engine/README.md
+  test('an absent service directory confirms release without creating runtime files', () => Effect.runPromise(Effect.gen(function*() {
+    const f = fixture();
+    try {
+      rmSync(f.server, { recursive: true });
+      assert.equal(yield* Effect.flatMap(ServerRuntime, runtime => runtime.released(f.root)).pipe(Effect.provide(ServerRuntime.layer)), true);
+      assert.equal(existsSync(f.server), false);
+    } finally { f.cleanup(); }
+  })));
   // @feature docs/feature/local-data-engine/README.md
   test('normal record removal during a read still requires real service lock release', context => Effect.runPromise(Effect.gen(function*() {
     const f = fixture(), recordPath = join(f.server, 'current.json');

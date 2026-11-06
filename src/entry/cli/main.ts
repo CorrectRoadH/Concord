@@ -199,12 +199,14 @@ function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: S
   }));
 }
 const startWorkspaceServer = (root: string) => Effect.scoped(connectOrStartWorkspace(root).pipe(Effect.map(connection => ({ operation: 'server-start', ...connection.hello }))));
-const waitForWorkspaceStop = (runtime: ServerRuntime['Service'], privateDir: string, token: string) => Effect.gen(function*() {
+const waitForWorkspaceStop = (runtime: ServerRuntime['Service'], privateDir: string, token?: string) => Effect.gen(function*() {
       for (;;) {
         const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
         // A replacement token can only be published after the previous owner released its lock.
-        if (record && record.token !== token) return;
-        if (!record && (yield* runtime.released(privateDir))) return;
+        if (record && token !== undefined && record.token !== token) return;
+        // A dead owner can leave its record behind; only the native lock
+        // determines whether it still owns any service resources.
+        if (yield* runtime.released(privateDir)) return;
         yield* Effect.sleep('10 millis');
       }
     }).pipe(Effect.timeout('10 seconds'), Effect.mapError(() => new ConcordError('CleanupFailed', 'Workspace service shutdown could not be confirmed')));
@@ -212,12 +214,24 @@ const stopWorkspaceServer = (root: string) => Effect.scoped(Effect.gen(function*
   const runtime = yield* ServerRuntime;
   const { privateDir } = yield* (yield* Workspace).locate(root, true);
   const token = yield* Effect.scoped(Effect.gen(function*() {
-    const record = yield* Effect.try({ try: () => runtime.read(privateDir), catch: failure });
-    if (!record) return undefined;
-    const connection = yield* existingWorkspace(root, record.installation, privateDir);
-    if (!connection) return undefined;
-    yield* connection.client.shutdown({ token: connection.hello.token });
-    return connection.hello.token;
+    const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+    if (!record) { yield* waitForWorkspaceStop(runtime, privateDir); return undefined; }
+    if (yield* runtime.released(privateDir)) return undefined;
+    if (record.state === 'stopping') return record.token;
+    return yield* Effect.gen(function*() {
+      const connection = yield* existingWorkspace(root, record.installation, privateDir);
+      if (!connection) return record.token;
+      yield* connection.client.shutdown({ token: connection.hello.token });
+      return connection.hello.token;
+    }).pipe(Effect.catch(cause => Effect.gen(function*() {
+      // Shutdown can close the transport between record discovery and hello.
+      // Confirm the actual lock release or wait for the same stopping instance;
+      // an active owner with a broken transport must still report its error.
+      if (yield* runtime.released(privateDir)) return undefined;
+      const current = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+      if (!current || (current.token === record.token && current.state === 'stopping')) return record.token;
+      return yield* Effect.fail(cause);
+    })));
   }));
   // Release the shutdown transport before waiting for the service's resources.
   if (token !== undefined) yield* waitForWorkspaceStop(runtime, privateDir, token);
