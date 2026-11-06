@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { NetworkInterfaceInfo } from 'node:os';
-import { viewAddresses } from "../../src/entry/http/index.ts";
+import { formatViewAddress, viewAddresses } from "../../src/entry/http/index.ts";
 import { humanOutput } from "../../src/entry/cli/index.ts";
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -15,4 +15,11 @@ test('startup URLs respect the actual bind family and do not advertise wildcard 
     'Concord view', 'Root: /repo', 'Host: 0.0.0.0  Port: 4317', '',
     '  Local:   http://localhost:4317/', '  Network: http://192.0.2.10:4317/',
   ].join('\n'));
+});
+
+// @feature docs/feature/web-workbench/cli.md
+test('view address formatting preserves wildcard, IPv4 and IPv6 forms', () => {
+    assert.equal(formatViewAddress('0.0.0.0', 4317), 'http://localhost:4317/');
+    assert.equal(formatViewAddress('192.0.2.10', 4317), 'http://192.0.2.10:4317/');
+    assert.equal(formatViewAddress('::1', 4317), 'http://[::1]:4317/');
 });

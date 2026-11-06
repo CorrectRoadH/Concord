@@ -1,12 +1,13 @@
 // 跨进程保证：外部程序——真实Vitest、pytest、Go和Cargo收集与精确选择只运行请求测试，Node能力缺口保留命令回落。
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
-import { sourceCli, assert, existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, join, tmpdir, fileURLToPath, test, Effect, Schema, OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess, ProjectSchema, renderTypeScriptConfig, parseTypeScriptConfig, type TestAdapter, LocalRepository, closeRepositoryCache, withPersistentCache, prepareSourceConsumer, sourceRoot, text, scratch, command, requireCommand, parse, CaseList, Receipt, setup, prepare, configure, call, success, idFor, environment, builtin } from '../support/test-adapters-consumer-fixture.ts';
+import { assert, test, Effect, Schema, OwnedProcessLive, hasSuccessfulOwnedProcessResult, text, scratch, command, parse, CaseList, Receipt, setup, configure, builtin } from '../support/test-adapters-consumer-fixture.ts';
+import { prepare, call, success, idFor } from '../support/adapter-runtime-cli.ts';
 
 
 // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 // @name packed-real-adapter-frameworks-c18
 test('packed adapters collect and select real Vitest pytest Go Cargo and report Node capability gaps (C2 C4 C6 C13 C17 C18)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, t => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-  const root = yield* scratch; const { cli, tool } = yield* setup(root);
+  const root = yield* scratch; const { tool } = yield* setup(root);
   const specifications = [
     { name: 'vitest', file: 'test/example.test.ts', adapter: builtin('vt', 'test', 'vitest', '4.1.11'), source: `import { test, expect } from 'vitest';\n// @feature docs/feature/example/README.md\n// @native vitest:vt:default:test/example.test.ts:selected\ntest('selected', () => expect(1).toBe(1));\ntest('excluded', () => { throw new Error('must not execute'); });\ntest.skip('skipped', () => {});\n` },
     { name: 'pytest', file: 'test/test_example.py', adapter: builtin('py', 'test', 'pytest', '9.1.1'), source: `# @feature docs/feature/example/README.md\n# @native pytest:py:default:test/test_example.py::test_selected\ndef test_selected():\n    assert True\ndef test_excluded():\n    assert False\n` },
@@ -29,7 +30,7 @@ test('packed adapters collect and select real Vitest pytest Go Cargo and report 
       ? { ...spec.adapter, frameworkVersion: /^cargo (\d+\.\d+\.\d+)\b/u.exec(available.stdout)?.[1] ?? '' }
       : spec.adapter;
     assert.notEqual(adapter.frameworkVersion, '', 'the installed framework version must be identifiable');
-    const consumer = yield* prepare(root, spec.name, cli, tool);
+    const consumer = yield* prepare(root, spec.name, tool);
     yield* Effect.sync(() => {
       text(consumer, spec.file, spec.source);
       if (spec.name === 'go') text(consumer, 'test/go.mod', 'module example.test/adapter\n\ngo 1.26.0\n');
@@ -45,35 +46,35 @@ test('packed adapters collect and select real Vitest pytest Go Cargo and report 
         yield* Effect.promise(() => t.test('cargo compiler/linker unavailable', { skip: compiled.stderr || compiled.error }, () => Effect.runPromise(Effect.void))); continue;
       }
     }
-    const collected = yield* success(consumer, cli, ['test', 'discover', spec.file]);
+    const collected = yield* success(consumer, ['test', 'discover', spec.file]);
     t.diagnostic(`${spec.name}: collection completed; ${available.stdout.trim()}`);
     const native = parse(collected.stdout); assert.ok(native.observations);
     const collectedState = Schema.decodeUnknownSync(Schema.Struct({ observations: Schema.Array(Schema.Struct({ observation: Schema.Struct({ complete: Schema.Boolean, gaps: Schema.Array(Schema.String) }), inputScope: Schema.Struct({ members: Schema.Array(Schema.Unknown), excluded: Schema.Array(Schema.String), versions: Schema.Struct({ framework: Schema.String, runtime: Schema.String, observedFramework: Schema.String, observedRuntime: Schema.optional(Schema.String) }) }) })) }))(JSON.parse(collected.stdout)).observations[0]!;
     assert.equal(collectedState.observation.complete, false); assert.ok(collectedState.observation.gaps.includes('ExternalInputUnknown')); assert.equal(collectedState.inputScope.versions.framework, adapter.frameworkVersion);
-    const id = yield* idFor(consumer, cli);
-    const executed = yield* call(consumer, cli, ['test', 'run', id, '--require-native']);
+    const id = yield* idFor(consumer);
+    const executed = yield* call(consumer, ['test', 'run', id, '--require-native']);
     if (spec.name === 'node') {
       assert.equal(executed.exitCode, 1); assert.match(executed.stderr, /NativeSelectionUnsupported/);
-      const fallback = Schema.decodeUnknownSync(Receipt)(JSON.parse((yield* success(consumer, cli, ['test', 'run', id])).stdout));
+      const fallback = Schema.decodeUnknownSync(Receipt)(JSON.parse((yield* success(consumer, ['test', 'run', id])).stdout));
       assert.equal(fallback.scope, 'command'); assert.equal(fallback.commandOutcome, 'pass');
     }
     else { assert.equal(executed.exitCode, 0, `${spec.name}\n${executed.stderr}\n${executed.stdout}`); const receipt = Schema.decodeUnknownSync(Receipt)(JSON.parse(executed.stdout)); assert.equal(receipt.scope, 'native'); assert.equal(receipt.commandOutcome, 'green'); assert.equal(receipt.requested?.length, 1); assert.ok(receipt.gaps?.includes('ExternalInputUnknown')); assert.equal(receipt.versions?.framework, adapter.frameworkVersion); }
     if (spec.name === 'cargo') {
       yield* Effect.sync(() => text(consumer, 'test/tests/other.rs', '// @feature docs/feature/example/README.md\n// @native cargo:rs:test:test:other:test/tests/other.rs:selected\n#[test]\nfn selected() {}\n#[test]\nfn excluded() { panic!("must not execute"); }\n'));
-      const multiple = yield* success(consumer, cli, ['test', 'discover', spec.file, 'test/tests/other.rs']);
+      const multiple = yield* success(consumer, ['test', 'discover', spec.file, 'test/tests/other.rs']);
       const inventory = Schema.decodeUnknownSync(Schema.Struct({ observations: Schema.Array(Schema.Struct({ observation: Schema.Struct({ value: Schema.Struct({ cases: Schema.Array(Schema.Struct({ nativeId: Schema.String })) }) }) })) }))(JSON.parse(multiple.stdout));
       const nativeIds = inventory.observations.flatMap(item => item.observation.value.cases.map(item => item.nativeId));
       assert.equal(new Set(nativeIds).size, nativeIds.length); assert.ok(nativeIds.some(id => id.includes(':lib:'))); assert.ok(nativeIds.some(id => id.includes(':test:other:')));
-      const list = Schema.decodeUnknownSync(CaseList)(JSON.parse((yield* success(consumer, cli, ['test', 'list'])).stdout));
+      const list = Schema.decodeUnknownSync(CaseList)(JSON.parse((yield* success(consumer, ['test', 'list'])).stdout));
       for (const item of list.cases) {
-        const run = Schema.decodeUnknownSync(Receipt)(JSON.parse((yield* success(consumer, cli, ['test', 'run', item.id, '--require-native'])).stdout));
+        const run = Schema.decodeUnknownSync(Receipt)(JSON.parse((yield* success(consumer, ['test', 'run', item.id, '--require-native'])).stdout));
         assert.equal(run.commandOutcome, 'green'); assert.equal(run.requested?.length, 1);
       }
     }
     if (spec.name === 'go') {
       yield* Effect.sync(() => text(consumer, spec.file, 'package example\nimport "testing"\n// @feature docs/feature/example/README.md\n// @native go:go:test:test/example_test.go:TestDynamic\nfunc TestDynamic(t *testing.T) { t.Run("child", func(t *testing.T) {}) }\n'));
-      const dynamicId = yield* idFor(consumer, cli);
-      const dynamic = yield* call(consumer, cli, ['test', 'run', dynamicId, '--require-native']);
+      const dynamicId = yield* idFor(consumer);
+      const dynamic = yield* call(consumer, ['test', 'run', dynamicId, '--require-native']);
       const receipt = Schema.decodeUnknownSync(Receipt)(JSON.parse(dynamic.stdout));
       assert.equal(dynamic.exitCode, 1); assert.equal(receipt.commandOutcome, 'invalid'); assert.equal(receipt.requested?.length, 1);
     }

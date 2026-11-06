@@ -101,6 +101,7 @@ export default {
       "test/process/workspace-query-cli-fixture.ts",
       "test/support/application-fixture.ts",
       "test/support/adapter-cache-domain.ts",
+      "test/support/adapter-runtime-cli.ts",
       "test/support/architecture.ts",
       "test/support/archive-acceptance.ts",
       "test/support/archive-check.ts",

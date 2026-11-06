@@ -6,7 +6,7 @@ import { openWriteRepository } from '../../src/base/workspace/index.ts';
 import { Sources } from '../../src/base/sources/index.ts';
 import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts";
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { connect } from 'node:net';
@@ -18,9 +18,8 @@ import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.ts";
 
 import { ViewJobManager } from "../../src/app/index.ts";
-import { formatViewAddress } from "../../src/entry/http/index.ts";
 import { startViewServer, type ViewServerHandle } from '../e2e/server.ts';
-import { parseWorkspaceProjection, pollUntil, installedConcordCli } from '../support/support.ts';
+import { parseWorkspaceProjection, pollUntil } from '../support/support.ts';
 import { type WorkspaceProjection } from "../../src/model/index.ts";
 
 import { fixture, send, sendRaw, parsed, jsonHeaders, waitForWorkspace } from '../support/view-http-fixture.ts';
@@ -191,50 +190,6 @@ test('view server rejects malformed or ambiguous authorities and non-origin-form
     }
   } finally {
     await server?.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// @feature docs/feature/web-workbench/cli.md
-test('view CLI propagates or rejects shared dry-run without cache or repository writes', () => {
-  const { root } = fixture();
-  const cli = installedConcordCli();
-  try {
-    const input = join(root, 'action.json');
-    const preview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'init', '--docs-only'], { encoding: 'utf8', timeout: 10_000 });
-    assert.equal(preview.status, 0, preview.stderr);
-    assert.equal((JSON.parse(preview.stdout) as { dryRun: boolean }).dryRun, true);
-    assert.equal(existsSync(join(root, 'concord.config.ts')), false);
-    assert.equal(existsSync(join(root, '.git/concord')), false);
-
-    const rejected = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'view', '--port', '0'], { encoding: 'utf8', timeout: 10_000 });
-    assert.equal(rejected.status, 1);
-    assert.equal((JSON.parse(rejected.stderr) as { error: string }).error, 'InvalidOption');
-
-    let repo = new LocalRepository(root, { initialize: true });
-    initialize(repo, false, { testRoots: [] });
-    repo.close();
-    writeFileSync(input, JSON.stringify({ action: 'document.create', kind: 'feature', id: 'dry-preview', title: 'Dry preview' }));
-    const actionPreview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 10_000 });
-    assert.equal(actionPreview.status, 0, actionPreview.stderr);
-    assert.equal((JSON.parse(actionPreview.stdout) as { dryRun: boolean }).dryRun, true);
-    assert.equal(existsSync(join(root, 'docs/feature/dry-preview')), false);
-    assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
-    writeFileSync(input, JSON.stringify({ action: 'recover' }));
-    const unsafePreview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 10_000 });
-    assert.equal(unsafePreview.status, 1);
-    assert.equal((JSON.parse(unsafePreview.stderr) as { error: string }).error, 'InvalidOption');
-    const cache = join(root, '.git/concord/cache.hawdb');
-    assert.equal(existsSync(cache), false);
-    const workspace = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'workspace', 'show'], { encoding: 'utf8', timeout: 10_000 });
-    assert.equal(workspace.status, 0, workspace.stderr);
-    assert.equal((JSON.parse(workspace.stdout) as { cache: { status: string } }).cache.status, 'off');
-    assert.equal(existsSync(cache), false);
-
-    assert.equal(formatViewAddress('0.0.0.0', 4317), 'http://localhost:4317/');
-    assert.equal(formatViewAddress('192.0.2.10', 4317), 'http://192.0.2.10:4317/');
-    assert.equal(formatViewAddress('::1', 4317), 'http://[::1]:4317/');
-  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

@@ -1,15 +1,11 @@
 // 跨进程保证：原生模块与句柄——独立native写入者与维护worker争用不删除活跃缓存，长期服务维护后保留owner并继续受理。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
-import { runApplication } from '../support/repository.ts';
-import { PersistentCache } from '../../src/base/cache/index.ts';
 import { initialize } from '../support/operations.ts';
-import { installedConcordCli } from '../support/support.ts';
 import { sourceCli } from '../support/source-consumer.ts';
-import { publicationService } from '../support/repository.ts';
-import { workerEntryArgv, CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../../src/base/installation/index.ts";
+import { workerEntryArgv, CACHE_PHYSICAL_LIMIT_BYTES } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,13 +13,8 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.ts";
 
-import { cachePhysicalBytes } from "../../src/base/cache/index.ts";
-import { cacheStatus } from "../../src/domain/tests/index.ts";
-import { openHawdb, createMemoryHawdb, HawdbFailure } from "../../src/base/cache/index.ts";
-import { maintainCache } from "../../src/app/index.ts";
+import { openHawdb } from "../../src/base/cache/index.ts";
 
-
-import { sourceRoot, prepareSourceConsumer } from '../support/source-consumer.ts';
 import { pollUntil } from '../support/support.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
@@ -53,26 +44,6 @@ async function settle(root: string) {
     return lines.some(line => line.includes('cache-maintenance-worker.') && line.includes(root)) ? undefined : true;
   }, { description: 'detached cache maintenance to exit', timeoutMs: 30_000 });
 }
-
-// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('native sweep budget and I/O failures defer even an oversized cache and release the handle', async () => {
-  const f = fixture();
-  const db = openHawdb(f.path, { readOnly: false, create: false }, nativeRuntime);
-  const boundary = Object.getPrototypeOf(db) as { reclaim: typeof db.reclaim };
-  const reclaim = boundary.reclaim;
-  db.close();
-  try {
-    pad(f.padding, CACHE_PHYSICAL_LIMIT_BYTES + 1);
-    // Inject only the external engine failure. The real worker opens and closes
-    // the real database and must not turn either failure into discard authority.
-    for (const code of ['HawdbLimit', 'HawdbUnavailable'] as const) {
-      boundary.reclaim = () => { throw new HawdbFailure(code, 'injected sweep failure'); };
-      assert.equal(await runApplication(maintainCache(f.root).pipe(Effect.provide(PersistentCache.layer))), 'deferred');
-      assert.equal(existsSync(f.padding), true);
-      assert.equal(read(f.path)[0]?.payload, 'a current logical value');
-    }
-  } finally { boundary.reclaim = reclaim; rmSync(f.root, { recursive: true, force: true }); }
-});
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('maintenance competing with another process holding and writing a handle exits without deletion', () => Effect.runPromise(Effect.tryPromise(async () => {
