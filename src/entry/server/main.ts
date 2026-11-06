@@ -316,7 +316,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     }));
     const protocolReady = yield* Deferred.make<void>();
     const owned = <A, E, R>(operation: Effect.Effect<A, E, R | PersistentCache>) => operation.pipe(Effect.provideService(PersistentCache, cache.service));
-    const context = workspaceProjectionContext(root).pipe(Effect.provideService(Workspace, workspace));
+    const context = workspaceProjectionContext(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(RuntimeEnvironment, execution));
     const sources = yield* Sources;
     let watch: SourceWatch | undefined;
     const stateContext = yield* Layer.build(WorkspaceState.layer(runtime.token));
@@ -330,9 +330,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       verify: runtime.verify,
       health: cache.verify,
       context,
-      sourceDigest: workspaceSourceDigest(root).pipe(Effect.provideService(Workspace, workspace)),
+      sourceDigest: workspaceSourceDigest(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(RuntimeEnvironment, execution)),
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources), Effect.provideService(RuntimeEnvironment, execution)),
-      restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),
+      restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } })), Effect.provideService(RuntimeEnvironment, execution)),
       persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt)).pipe(Effect.provideService(RuntimeEnvironment, execution)),
       compute: operation => cacheSnapshot.pipe(Effect.flatMap(snapshot => computation.run(operation, snapshot))),
       open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open)),

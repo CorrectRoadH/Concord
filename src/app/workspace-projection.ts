@@ -32,7 +32,8 @@ export const assertWorkspacePublicationReady = Effect.fn('workspaceProjection.pu
 export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext')(function*(input: string) {
   const workspace = yield* Workspace;
   const { root, privateDir, config } = yield* workspace.identify(input, true, true);
-  const installation = yield* Effect.try({ try: workspaceInstallationIdentity, catch: failure });
+  const runtime = yield* RuntimeEnvironment;
+  const installation = yield* Effect.try({ try: () => workspaceInstallationIdentity(runtime), catch: failure });
   return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config ?? 'absent', 'workspace', installation])) } satisfies WorkspaceProjectionContext;
 }, Effect.mapError(cause => new ConcordError('WorkspaceProjectionUnavailable', 'Cannot identify the workspace cache; repair the configuration path or installation and restart View', {
   reason: cause.code, message: cause.message,
@@ -67,7 +68,8 @@ export function makeWorkspaceProjectionCandidate(snapshot: WorkspaceSnapshot, dr
 
 
 const readEnvelope = Effect.fn('workspaceProjection.readEnvelope')(function*(context: WorkspaceProjectionContext) {
-  yield* Effect.try({ try: hawdbIdentity, catch: cause => cause });
+  const runtime = yield* RuntimeEnvironment;
+  yield* Effect.try({ try: () => hawdbIdentity(runtime), catch: cause => cause });
   const cache = yield* PersistentCache;
   const rows = yield* cache.read(context.privateDir, 'workspace_projection', [key]);
   return yield* Effect.try({ try: () => {

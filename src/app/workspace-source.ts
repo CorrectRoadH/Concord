@@ -2,13 +2,15 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#刷新与推送
 import { Effect } from 'effect';
 import { Workspace } from '../base/workspace/index.ts';
+import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { workspaceInstallationIdentity } from '../base/installation/index.ts';
 import { ConcordError, digest, failure } from '../model/index.ts';
 
 /** Content identity includes input membership and the installed parsers and schemas. */
 export const workspaceSourceDigest = Effect.fn('workspaceSourceDigest')(function*(root: string) {
   const workspace = yield* Workspace;
-  const installation = yield* Effect.try({ try: workspaceInstallationIdentity, catch: failure });
+  const runtime = yield* RuntimeEnvironment;
+  const installation = yield* Effect.try({ try: () => workspaceInstallationIdentity(runtime), catch: failure });
   const config = yield* workspace.inspectConfiguration(root);
   if (!config.snapshot || !config.source) return digest(JSON.stringify([installation, config.digest]));
   return yield* Effect.scoped(Effect.gen(function*() {
