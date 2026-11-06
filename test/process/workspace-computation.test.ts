@@ -55,12 +55,14 @@ test('cancelling a queued computation preserves the active child and cancelling 
       const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
       yield* Effect.promise(() => projection(rpc, connection));
       pid = yield* Effect.promise(() => workerPid(root));
-      process.kill(pid, 'SIGSTOP');
       const acquired = yield* Deferred.make<void>();
       const events = channel('concord.workspace.computation');
       const observe = (message: unknown) => {
         const event = Schema.decodeUnknownSync(Schema.Struct({ root: Schema.String, kind: Schema.String }), { onExcessProperty: 'error' })(message);
-        if (event.root === root && event.kind === 'query') Deferred.doneUnsafe(acquired, Effect.void);
+        if (event.root === root && event.kind === 'query' && !Deferred.isDoneUnsafe(acquired)) {
+          process.kill(pid!, 'SIGSTOP');
+          Deferred.doneUnsafe(acquired, Effect.void);
+        }
       };
       yield* Effect.acquireRelease(Effect.sync(() => { events.subscribe(observe); }), () => Effect.sync(() => { events.unsubscribe(observe); }));
       const active = yield* Effect.forkScoped(rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, cwd: root, environment, cache: 'use' }));
