@@ -14,7 +14,6 @@ import { installedConcordCli, pollUntil } from '../support/support.ts';
 
 for (const mode of ['success', 'assertion-failure', 'timeout'] as const) {
   // @feature docs/engineering/testing/architecture.md#浏览器与诊断
-  // @issue docs/issues/server-stop-before-process-exit.md
   test(`shared browser service restores its frozen fixture and releases process and worktree after ${mode}`, () => Effect.runPromise(Effect.gen(function*() {
     let root: string | undefined;
     let pid: number | undefined;
@@ -69,7 +68,6 @@ for (const mode of ['success', 'assertion-failure', 'timeout'] as const) {
 }
 
 // @feature docs/feature/local-sdlc/cli.md
-// @issue docs/issues/server-stop-before-process-exit.md
 test('server stop refuses success while the recorded service is still exiting after releasing its lock', async () => {
   const root = fixture();
   const marker = join(root, 'exiting');
