@@ -2,14 +2,14 @@
 
 ## 现象
 
-[测试架构](../engineering/testing/README.md)规定了分层、fixture 与成本上限，当前测试集与之有差距。2026-10-30 最近一次完整运行（`.test-results/run-3NTz53`）：96 个 Node 测试文件的单文件耗时合计约 6644 秒，按 8 路并发约 14 分钟，上限为单机 5 分钟。
+[测试架构](../engineering/testing/README.md)按可观察的边界分层：进程层只保留[跨进程保证](../engineering/testing/README.md#跨进程保证)，CLI 层使用[进程内 CLI](../engineering/testing/architecture.md#进程内-cli)，只读的服务用例使用[共享服务](../engineering/testing/architecture.md#共享服务)。当前测试集与之有差距。2026-11-06 最后一次完整门禁 run-j4BlDg 墙钟 590 秒，上限 300 秒；各层文件耗时之和：纯函数 63 秒、仓库内 302 秒、CLI 846 秒、进程 3021 秒（123 个文件、274 个用例）、浏览器 561 秒（`/tmp/concord-closure/lead5-final-gate-evidence.json`）。
 
 ## 差距
 
-- 超过 60 秒上限的文件包括 `cli.test.ts`（457 秒）、`issue-remote.test.ts`（415 秒）与 `asynchronous-projections.test.ts`（318 秒）。`documents.test.ts` 有 23 个进程内测试，耗时 288 秒。
-- 108 个测试文件中 82 个依赖 `dist/`：75 个从 `../dist/` 导入模块，45 个直接运行 `dist/entry.js` 而不是安装后的 bin；只有 12 个从 `src/` 导入。纯函数层与仓库内层应改为从 `src/` 导入，打包 CLI 层改为运行安装后的 bin。
-- 49 个测试文件启动打包 CLI，许多领域情形在打包 CLI 层逐行测试，应下移到纯函数或仓库内层。
-- 测试源码中有 47 处手写的受管格式文本，格式改变时需要逐个修改测试。
-- 没有模板消费者，每个测试重新执行 `git init` 与初始化。
-- 测试运行没有按文件耗时与子进程启动次数的报告。
-- `concord trace gaps` 的当前缺口尚未逐项对应 Issue。
+- CLI 层每个用例启动一个源码 CLI 子进程（空闲时约 600 ms），没有进程内入口。
+- 进程层用真实进程枚举输入组合与错误矩阵，每个用例各自冷启动工作区服务（空闲时约 3.5 s）；各文件的跨进程保证与可下沉候选见 `/tmp/concord-closure/lead5-process-cost-top30.md`。
+- 门禁报告没有按新口径分列计时与 Concord 子进程计数。
+
+## 期望
+
+完整门禁与 CI 分片的墙钟满足[成本与稳定](../engineering/testing/README.md#成本与稳定)的上限。迁移按下沉时保持旧保证的规则进行，完成后以 `--reason` 关闭本 Issue，写明迁移提交与最终门禁结果。
