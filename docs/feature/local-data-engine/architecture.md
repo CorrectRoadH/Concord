@@ -218,7 +218,7 @@ clear、维护与 shutdown 串行执行。
 
 协议由固定版本 Effect 的 `unstable/rpc` 实现：每种请求是一个 Rpc，经 `unstable/socket` 在本机 socket 上传输。下文的帧、字节帧与额度是对 Rpc 消息的约束，字节帧对应 `Uint8Array` 字段。
 
-- 客户端协议以 `RpcSerialization.layerSchemaBinary` 序列化；计算进程的内部 RPC 例外，见[进程能力](../../architecture.md#进程能力)。
+- 客户端协议以 `RpcSerialization.layerSchemaBinary` 序列化；计算进程的内部 RPC 例外，见[进程能力](../../engineering/code/architecture.md#进程能力)。
 - 字节字段以原生二进制传输，不接受 Base64，由真实往返与边界大小测试验收。
 - 领域 Schema 严格解码，显式拒绝未知字段。
 - 单帧、累计、连接、在途与发送字节的准入由传输适配层执行；`maxBufferSize` 只限不完整消息。
@@ -237,7 +237,7 @@ clear、维护与 shutdown 串行执行。
 
 请求同样可以分帧：单帧不超过 1 MiB，`feedback-merge` 的批次按批量上限（1000 条或 16 MiB）累计，以 begin、append 与 commit 分块提交，commit 原子生效。每个连接未完成的输入不超过 32 MiB。超限返回具名失败，不截断。
 
-操作的定义、执行位置与 HTTP 对应见[服务操作](../../architecture.md#服务操作)，下表给出 RPC 的应答。
+操作的定义、执行位置与 HTTP 对应见[服务操作](../../engineering/code/architecture.md#服务操作)，下表给出 RPC 的应答。
 
 | 请求 | 应答 |
 | --- | --- |
