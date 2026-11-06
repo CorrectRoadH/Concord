@@ -1,6 +1,6 @@
 # 多来源反馈与本地处理
 
-维护者和 AI 把本地观察、GitHub issue 与 Linear issue 汇入同一个反馈入口，在项目里写调查笔记，用带角色的关系关联工程 Memory 与承接它的 Spec，处理完留下关闭结论。
+维护者和 AI 把本地观察、GitHub issue 与 Linear issue 汇入同一个反馈入口，在项目里写调查笔记，用带角色的[关系](../../concepts.md#relation)关联工程 Memory 与它涉及的 Spec，处理完留下关闭结论。
 
 每条反馈都是一个本地 Issue 文件。远端来源由可扩展的读取适配器提供，只读不写；产品行为仍由 Feature 声明，反馈不是另一套需求登记表。修复核验的结论写在 Issue 的关闭结论中。
 

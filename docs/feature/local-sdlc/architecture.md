@@ -119,7 +119,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ### Issue
 
-Issue 只表示还要处理的问题；`issue close` 执行需要的步骤后删除文件，fixed 先经过[修复核验](#修复核验)。`adopts` 只列当前承接的 Spec。
+Issue 只表示还要处理的问题；`issue close` 执行需要的步骤后删除文件，fixed 先经过[修复核验](#修复核验)。`spec` 关系只列这个 Issue 当前涉及的 Spec。
 
 ### Memory
 

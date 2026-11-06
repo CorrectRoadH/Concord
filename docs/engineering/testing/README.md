@@ -196,7 +196,9 @@ fake 只用于外部边界：GitHub 与其它远端服务、模型、系统浏�
 
 测试与 Spec 的关系由测试标记拥有，`concord trace gaps` 从标记派生没有测试的 Use Case。本仓库的目标是零缺口：新增或修改 Use Case 的交付同时提交对应测试。
 
-尚未实现的 Use Case 留在缺口列表中，由一个打开的 Issue 跟踪实现：该 Issue 的 `adopts` 关系指向这个 Use Case 或其所属 Feature 的 README（`concord issue link <id> --role adopts <路径>`）。自举测试 `test/domain/trace-gap-issues.test.ts` 对本仓库派生 `trace gaps` 的 `contracts`，其中 `missing` 含 `test` 的项没有这样的 Issue 即失败，失败信息列出缺少 Issue 的路径。只缺 `code` 的项如实留在列表中，不为归零补写不对应实现的代码声明；例如测试教程的示例在 `test/` 下，`install.sh` 不在代码扫描的语言范围内。已有测试能观察某个 Use Case 的结果时，给该测试加标记，不另写重复测试。测试不指向 Roadmap、Design 或已删除的行为；行为删除时，对应测试在同一次交付中删除。
+尚未实现的 Use Case 留在缺口列表中，由一个打开的 Issue 跟踪实现：该 Issue 的 `spec` 关系指向这个 Use Case 或其所属 Feature 的 README（`concord issue link <id> --role spec <路径>`）。自举测试只检查是否存在这样的打开 Issue，不检查它的正文是否足以承担这项工作；`spec` 关系也不区分缺陷与缺口，需要精确跟踪时链接具体的 Use Case。
+
+`test/domain/trace-gap-issues.test.ts` 对本仓库派生 `trace gaps` 的 `contracts`，其中 `missing` 含 `test` 的项没有这样的 Issue 即失败，失败信息列出缺少 Issue 的路径。只缺 `code` 的项如实留在列表中，不为归零补写不对应实现的代码声明；例如测试教程的示例在 `test/` 下，`install.sh` 不在代码扫描的语言范围内。已有测试能观察某个 Use Case 的结果时，给该测试加标记，不另写重复测试。测试不指向 Roadmap、Design 或已删除的行为；行为删除时，对应测试在同一次交付中删除。
 
 ## 成本与稳定
 

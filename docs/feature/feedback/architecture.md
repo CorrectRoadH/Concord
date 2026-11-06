@@ -16,10 +16,10 @@ source: {...}                    # FeedbackSource，见下文
 | 角色 | 目标 | 含义 |
 | --- | --- | --- |
 | `investigation`、`root-cause` | Memory | 调查记录与根因 |
-| `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前被这条 Spec 承接；退役即删除这一项，历史在 Git |
+| `spec` | Feature、Use Case 或 Engineering 的路径或锚点 | 这个 Issue 涉及的 Spec：缺陷违反了它，缺口等它实现，或外部请求已写进它；不再涉及时删除这一项 |
 | `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
-同一角色与目标的关系只保存一次。Issue 处理完就删除，见[关闭本地 Issue](use-case/manage-local-observations.md#close)；fixed 先按[修复核验](../local-sdlc/README.md#证据的范围)核验再删除。
+同一角色与目标的关系只保存一次。`relations` 只接受本表中的角色：不符合的文件报告 `InvalidData`，错误给出文件路径、无效字段与允许的角色，不生成 Issue 记录，Concord 不改写这个文件。全局诊断与 Issue 索引保留其它有效记录与逐文件 finding，并返回 `complete: false`，不完整的结果不用于需要完整关系图的关闭裁决；精确读取这个文件失败，精确读取其它 Issue 不受影响。`spec` 只声明 Issue 涉及的 Spec，不声明问题类型、实现状态或测试覆盖。Issue 处理完就删除，见[关闭本地 Issue](use-case/manage-local-observations.md#close)；fixed 先按[修复核验](../local-sdlc/README.md#证据的范围)核验再删除。
 
 `source` 是 FeedbackSource：GitHub 与 Linear 各一个分支，包含首次导入时的远端对象身份（见下文的去重键）、来源摘录、远端状态与时间，以及 `connectionId` 与 `importedAt`。没有 `source` 的 Issue 是 Local 来源。
 

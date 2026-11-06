@@ -16,7 +16,7 @@ source: {...}                    # 导入时写入的远端来源
 | 角色 | 目标 | 含义 |
 | --- | --- | --- |
 | `investigation`、`root-cause` | Memory | 调查记录与根因 |
-| `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前由这条 Spec 承接；不再承接时删除这一项，历史在 Git |
+| `spec` | Feature、Use Case 或 Engineering 的路径或锚点 | 这个 Issue 涉及的 Spec：缺陷违反了它，缺口等它实现，或外部请求已写进它；不再涉及时删除这一项 |
 | `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
 `source` 保存远端对象的稳定身份、去重键与首次来源摘录；同一外部对象换连接或清空缓存后仍是同一 Issue。不要按标题自动合并，也不要用远端显示编号作为对象身份。

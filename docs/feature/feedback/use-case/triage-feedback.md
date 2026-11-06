@@ -2,7 +2,7 @@
 
 ## 用户目标
 
-维护者想把 GitHub 或 Linear 上的 issue 拿进项目，在本地写调查笔记，关联 Memory 与承接它的 Spec，处理完留下关闭结论，同时不改动远端。
+维护者想把 GitHub 或 Linear 上的 issue 拿进项目，在本地写调查笔记，关联 Memory 与它涉及的 Spec，处理完留下关闭结论，同时不改动远端。
 
 ## 起始状态
 
@@ -69,14 +69,14 @@
 
    移动端使用共享内容导航抽屉，选择后关闭抽屉。切换反馈继续遵守正文保存和冲突保护。选择反馈不读取远端。
 
-5. 关联调查与承接的 Spec。 {#link}
+5. 关联调查与涉及的 Spec。 {#link}
 
    ```sh
    concord issue link feedback-github-2448391001 --role investigation memory/example.md
-   concord issue link feedback-github-2448391001 --role adopts docs/feature/example/README.md
+   concord issue link feedback-github-2448391001 --role spec docs/feature/example/README.md
    ```
 
-   按角色关联 Memory，或以 `adopts` 由 Feature、Use Case 或 Engineering 承接，角色见 [Issue 字段](../architecture.md#issue-字段)。
+   按角色关联 Memory，或以 `spec` 指向它涉及的 Feature、Use Case 或 Engineering，角色见 [Issue 字段](../architecture.md#issue-字段)。
 
 6. 处理完，关闭本地 Issue。 {#close-local}
 
@@ -107,7 +107,7 @@
 | 相同版本但内容不一致 | 保留旧值并报告冲突 |
 | 在 Web 或 CLI 中创建本地反馈、配置连接、导入、同步、关联和关闭 | 两个入口都支持；Web 普通刷新不请求外部服务 |
 | Web 反馈列表 | 保留来源与处理状态筛选，低频来源字段在详情中展开 |
-| Web 详情的「来源与关联」页签 | 展示首次来源快照、上次观察缓存和 `adopts` 关系；正文只编辑本地笔记 |
+| Web 详情的「来源与关联」页签 | 展示首次来源快照、上次观察缓存和 `spec` 关系；正文只编辑本地笔记 |
 | 切换到来源页签 | 先完成草稿保存，冲突时保留草稿 |
 | Memory 关系与关闭 | 在生命周期页签维护 |
 | 添加、移除和配置连接 | 入口在项目设置；反馈页提供设置链接，以及已配置来源的同步与导入入口 |

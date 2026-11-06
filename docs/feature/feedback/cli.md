@@ -16,7 +16,7 @@ concord feedback sync --connection product-linear
 concord feedback list --json
 concord feedback show <id> --json
 concord new issue local-observation
-concord issue link <id> --role adopts docs/feature/example/README.md
+concord issue link <id> --role spec docs/feature/example/README.md
 concord issue link <id> --role investigation memory/example.md
 concord issue close <id> --reason "调查结论"
 concord feedback connection remove product-github
@@ -28,7 +28,7 @@ concord feedback connection remove product-github
 
 gh 模式要求 GitHub CLI 2.98.0 或更新的兼容版本，以及支持进程组回收的 POSIX 环境；不自动安装工具。Windows 上继续使用 API 模式或本地反馈。CLI 默认认证优先级为 GH_TOKEN、GITHUB_TOKEN、已保存的 gh 凭据，均来自启动 Concord 的环境。
 
-Web 从侧栏「反馈」进入：按来源或本地处理状态筛选，创建本地反馈，选择连接导入 URL 或同步，进入详情编辑本地 Markdown、按角色关联 Memory 与承接的 Spec，以及关闭。在「项目设置 → 反馈来源」维护连接，表单保存名称与范围，用同一份配置摘要保护外部并发修改。正常工作台刷新只读取本地数据。
+Web 从侧栏「反馈」进入：按来源或本地处理状态筛选，创建本地反馈，选择连接导入 URL 或同步，进入详情编辑本地 Markdown、按角色关联 Memory 与涉及的 Spec，以及关闭。在「项目设置 → 反馈来源」维护连接，表单保存名称与范围，用同一份配置摘要保护外部并发修改。正常工作台刷新只读取本地数据。
 
 GitHub 连接的读取方式可在项目设置中明确切换；切换保留仓库绑定和已导入对象身份。gh 模式不显示凭据变量输入，API 模式要求变量名。「检测连接」先保存当前设置，保存冲突时保留草稿并停止检测；检测结果只属于本次运行，不写回配置。普通刷新和保存设置不会检测账号或访问远端。
 
@@ -63,6 +63,6 @@ Issue 文件可以直接编辑与删除；删除后 `check` 报告指向它的�
 
 ## 命令分工
 
-`concord issue` 是执行必要步骤的本地 Issue 助手：`close`（删除 Issue，fixed 时先核验）、`link`、`unlink`，见[本地 Issue](use-case/manage-local-observations.md)。远端写入只经 [remote preview 与 remote apply](../neutral-project-governance/use-case/mutate-remote-issue.md)。`concord feedback` 只负责外部来源与反馈列表：`connection`、`sync`、`import <url>`、`list`、`show`。help 描述本地 owner 时统一使用 Issue 一词。action 提供 `issue.close`、`issue.link` 与 `issue.unlink`，参数与 CLI 相同。
+`concord issue` 是执行必要步骤的本地 Issue 助手：`close`（删除 Issue，fixed 时先核验）、`link`、`unlink`，见[本地 Issue](use-case/manage-local-observations.md)。远端写入只经 [remote preview 与 remote apply](../neutral-project-governance/use-case/mutate-remote-issue.md)。`concord feedback` 只负责外部来源与反馈列表：`connection`、`sync`、`import <url>`、`list`、`show`。help 描述本地 owner 时统一使用 Issue 一词。action 提供 `issue.close`、`issue.link` 与 `issue.unlink`。`issue.link` 与 `issue.unlink` 接收 `id`、`memory`（关系目标的路径，也可以是 Spec）、可选的 `role` 与 `dryRun`；省略 `role` 时为 `investigation`，关联 Spec 用 `role: spec`。CLI 对应的目标位置参数名为 `target`，其余参数与 action 相同。
 
 全部 Issue 文件可以直接编辑，命令写入同样的内容，`check` 检查字段是否完整。

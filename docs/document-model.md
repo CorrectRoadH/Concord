@@ -22,7 +22,7 @@ canonical 仓库相对路径是唯一身份。目录名与文件名是同类别�
 
 ## Issue
 
-Issue 只表示还要处理的问题。处理完就删除文件：`issue close` 先执行需要的步骤，例如 fixed 时核验回归测试，再删除 Issue，并输出可写进提交说明的结论。`relations` 带角色：`investigation` 与 `root-cause` 指向 Memory，`adopts` 指向承接它的 Spec，`related` 指向另一个 Issue。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。
+Issue 只表示还要处理的问题。处理完就删除文件：`issue close` 先执行需要的步骤，例如 fixed 时核验回归测试，再删除 Issue，并输出可写进提交说明的结论。[关系](concepts.md#relation)带角色：`spec` 指向这个 Issue 涉及的 Spec，`investigation` 与 `root-cause` 指向 Memory，`related` 指向另一个 Issue。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。
 
 ## Memory
 

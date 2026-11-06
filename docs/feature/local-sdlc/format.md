@@ -27,7 +27,7 @@ source: {...}
 | 角色 | 目标 | 含义 |
 | --- | --- | --- |
 | `investigation`、`root-cause` | Memory | 调查记录与根因 |
-| `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前被这条 Spec 承接；不再承接时删除这一项 |
+| `spec` | Feature、Use Case 或 Engineering 的路径或锚点 | 这个 Issue 涉及的 Spec：缺陷违反了它，缺口等它实现，或外部请求已写进它；不再涉及时删除这一项 |
 | `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
 缺陷只在 Issue 中跟踪。`source` 是远端来源的稳定身份，字段见[反馈来源](../feedback/architecture.md)。Issue 处理完就删除，见[本地 Issue](../feedback/use-case/manage-local-observations.md#close)与[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。

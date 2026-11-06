@@ -76,6 +76,10 @@ README 告诉第一次读的人能做什么、怎么开始；字段、错误码�
 
 从标记和代码声明推导出的关系图，连接 Spec、测试与实现。它不另存登记表，每次从源码重新推导。
 
+## 关系 {#relation}
+
+Issue 或 Memory 指向另一个文档的一条带角色的链接，写在 frontmatter 的 `relations` 中。角色说明这条链接的意思；Issue 的角色见 [Issue 字段](feature/feedback/architecture.md#issue-字段)，Memory 的角色见[文档模型](document-model.md#memory)。
+
 ## 修复核验 {#fix-verification}
 
 把缺陷 Issue 关为已修复之前的核验：回归测试在缺陷提交上失败、在修复提交上通过；通过后删除 Issue，结论输出给提交说明。它只证明这一条命令的结果，不证明测试覆盖。
