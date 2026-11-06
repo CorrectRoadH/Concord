@@ -1,6 +1,6 @@
 # 在 Herdr 里使用 Concord
 
-在 Herdr 里一边监督 coding agent，一边读写 Spec。Concord 的 Herdr mod 是一块原生界面，放在 agent 旁边：在空仓库里初始化 Concord、阅读全部文档、看每个 Use Case 由哪些测试和代码守护、改一页文档并立刻检查，都在 Herdr 里完成，不需要打开浏览器。
+在 Herdr 里一边监督 coding agent，一边读写 Spec。Concord mod 是 Herdr 中的一块原生界面，放在 agent 旁边：在空仓库里初始化 Concord、阅读全部文档、看每个 Use Case 由哪些测试和代码守护、改一页文档并立刻检查，都在 Herdr 里完成，不需要打开浏览器。
 
 ## 你可以做什么
 
@@ -59,7 +59,7 @@ mod 不保存任何事实。它用 `concord --json` 取得文档列表、关系�
 
 ## 在真实主机上验收
 
-在装有 Herdr 的机器上，用 `herdr-app check <mod 目录>` 加载随包 mod，用 `herdr-app shot` 截图核对界面。
+在装有 Herdr 的机器上，用 `herdr-app check <mod 目录>` 加载归档中的 Concord mod，用 `herdr-app shot` 截图核对界面。
 
 ## 依据的品味
 

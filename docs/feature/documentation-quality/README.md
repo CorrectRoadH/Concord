@@ -45,17 +45,17 @@ Policy: project
 
 ## 检查怎样工作
 
-检查读取正文，在当前目录生效的术语和禁词里查找匹配，再报告位置和建议写法。它只报告，不改正文。
+检查读取正文，在当前目录生效的概念和不用的词里查找匹配，再报告位置和建议写法。它只报告，不改正文。
 
 ```p5
 import type P5 from 'p5';
 export default function (p: P5) {
-  const stages = ['正文', '术语与禁词', '检查报告'];
-  const notes = ['顾客确认单子后，系统锁定库存。', '订单（弃用名：单子）', 'README.md:27 单子 → 订单'];
+  const stages = ['正文', '概念与不用的词', '检查报告'];
+  const notes = ['顾客确认单子后，系统锁定库存。', '订单（旧写法：单子）', 'README.md:27 单子 → 订单'];
   let elapsed = 0;
   p.setup = () => {
     p.createCanvas(600, 210);
-    p.describe('正文、术语与禁词、检查报告三个方框依次突出显示，旧名字被匹配后报告为应改成正式名称，然后循环');
+    p.describe('正文、概念与不用的词、检查报告三个方框依次突出显示，旧写法被匹配后报告为应改成概念的写法，然后循环');
     p.textAlign(p.CENTER, p.CENTER);
   };
   p.draw = () => {
@@ -88,7 +88,7 @@ export default function (p: P5) {
     p.noStroke();
     p.fill('#203b33');
     p.textSize(13);
-    const captions = ['读取所选目录下的 Markdown 正文', '按目录合成生效的概念、弃用名和禁词', '报告位置与正式名称，正文保持不变'];
+    const captions = ['读取所选目录下的 Markdown 正文', '按目录合成生效的概念、旧写法和不用的词', '报告位置与概念的写法，正文保持不变'];
     p.text(captions[step]!, 300, 170);
   };
 }

@@ -21,7 +21,7 @@ flowchart LR
   CLI[CLI 命令] -->|写入、发布与恢复| Local[同一套应用与领域服务]
   CLI -->|查询自动启动或复用：本机 socket / RPC| Server[工作区服务主进程]
   Local -->|缓存快照与派生行| Server
-  Herdr[Herdr mod] -->|公开 CLI 查询| CLI
+  Herdr[Concord mod] -->|公开 CLI 查询| CLI
   View[concord view] -->|启动或复用，取得 HTTP 租约| Server
   Browser[浏览器工作台] -->|HTTP 操作与 SSE 订阅| Server
   Server -->|调度只读计算| Compute[长期计算进程]
@@ -78,7 +78,7 @@ CI 可以使用 `concord --server=command check`：服务属于本次命令，�
 
 | 层 | 内容 | 依赖 |
 | --- | --- | --- |
-| 入口 | CLI 命令（`effect/unstable/cli`，`--version` 与各层 `--help` 由构建时从命令定义生成的静态数据输出）、HTTP 路由（`unstable/http`）、RPC 处理（`unstable/rpc`）、Herdr mod | 应用端口 |
+| 入口 | CLI 命令（`effect/unstable/cli`，`--version` 与各层 `--help` 由构建时从命令定义生成的静态数据输出）、HTTP 路由（`unstable/http`）、RPC 处理（`unstable/rpc`）、Concord mod | 应用端口 |
 | 应用 | 每个用户操作一个 `Effect.fn`，输入、结果与错误由 Schema 定义；CLI、HTTP、action 与 RPC 调用同一个操作。应用端口包括 Queries | 领域服务与基础服务 |
 | 领域服务 | Documents、Trace、Writing、Concepts、Issues、Memory、Designs、Tests、Code、Feedback；可以依赖其它领域服务，依赖关系无环，例如 Trace 依赖 Documents、Code 与 Tests | 领域服务、基础服务与模型 |
 | 基础服务 | Workspace、Sources、Publication、Cache、Git、OwnedProcess，以及 `effect` 的 FileSystem、Path 与 Clock（Node 实现来自 `@effect/platform-node`） | 平台 |
@@ -121,7 +121,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | [local-data-engine](feature/local-data-engine/README.md) | `base/cache`、`native/hawdb`、`entry/server` |
 | [portable-coordination](feature/portable-coordination/README.md) | `base/publication` |
 | [web-workbench](feature/web-workbench/README.md) | `entry/http`、`web/` |
-| [herdr-mod](feature/herdr-mod/README.md) | `entry/herdr-mod`（随包 mod） |
+| [herdr-mod](feature/herdr-mod/README.md) | `entry/herdr-mod`（Concord mod） |
 | [cross-platform-release](feature/cross-platform-release/README.md) | `base/installation`、`scripts/` 与 `native/hawdb` 的发行构建 |
 
 同一职责只有一个实现：一个关系编译器、一个文档解码器、一个 publication 协议。
@@ -212,7 +212,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | 工作区服务主进程 | Workspace、Git、Cache 的持久独占写入、工作区投影、RPC 与 HTTP 服务、计算与操作进程的监督；Publication 只在清理作用域中、关闭持久库之后提供 | 领域计算 |
 | 计算进程 | Workspace、Sources、Cache（内存解析、主进程交来的只读快照与 `CacheDerivations`）、Queries.Local；RPC 经标准输入输出，结构以 JSON 编码、入口按计算请求 Schema 严格解码，来源原文以二进制字节帧传输；日志只写标准错误 | Publication、持久 Cache、OwnedProcess 之外的子进程 |
 | 操作进程 | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存）、远端读取；发布后经 `feedback-merge` 更新远端观察 | 持久 Cache |
-| Herdr mod | 原生界面、公开 CLI 查询、正文读写与文件监听，见[mod 数据访问](feature/herdr-mod/architecture.md#数据) | 领域计算、持久 Cache |
+| Concord mod | 原生界面、公开 CLI 查询、正文读写与文件监听，见[mod 数据访问](feature/herdr-mod/architecture.md#数据) | 领域计算、持久 Cache |
 
 每个入口的 Layer 构建在测试中验证：缺少能力时编译或构建失败，不在运行时才发现。
 
@@ -378,9 +378,9 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 测试执行归项目：Concord 只通过配置的 runner 与可选 adapter 运行测试并做修复核验，所有权见[治理边界](feature/neutral-project-governance/architecture.md)，接入边界见[项目测试接入边界](feature/local-sdlc/README.md#测试的边界)。消费者拥有 runner、执行副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
 
-## Web 工作台与 Herdr mod
+## Web 工作台与 Concord mod
 
-`concord view` 提供随包分发的 React 工作台，是工作区服务的客户端。[Herdr mod](feature/herdr-mod/README.md) 在 Herdr 中提供完整的阅读、初始化与编辑，通过公开 CLI 查询结构化数据，正文读写与文件监听由 mod 负责。
+`concord view` 提供随包分发的 React 工作台，是工作区服务的客户端。[Concord mod](feature/herdr-mod/README.md) 在 Herdr 中提供完整的阅读、初始化与编辑，通过公开 CLI 查询结构化数据，正文读写与文件监听由 mod 负责。
 
 Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见[工作台视觉规范](feature/web-workbench/ui.md)。
 

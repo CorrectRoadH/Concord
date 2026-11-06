@@ -85,7 +85,7 @@
    {"operation":"list","documents":[{"path":"docs/issues/slow-check.md","id":"slow-check","title":"大仓库里检查变慢","digest":"sha256:…","provider":"local"}],"complete":false,"findings":[{"code":"InvalidData","path":"docs/issues/broken.md","message":"docs/issues/broken.md: expected exactly one single-line level-one heading (at most 1024 characters)"}]}
    ```
 
-   命令以 0 退出：清单本身读到了，`complete: false` 与 `findings` 说明哪篇没有读成。所有文档都读成时 `complete` 为 `true`、`findings` 为 `[]`。按类别列出时只扫描该类别的位置，写错的 Issue 不使 `concord list memory` 不完整。`issue index` 与 `memory index`（Web 的 Issue 与 Memory 列表使用它们）给出同样的 `complete` 与 `findings`，各自的 `operation` 与条目字段不变。
+   命令以 0 退出：清单本身读到了，`complete: false` 与 `findings` 说明哪篇没有读成。所有文档都读成时 `complete` 为 `true`、`findings` 为 `[]`。按文档类别列出时只扫描该文档类别的位置，写错的 Issue 不使 `concord list memory` 不完整。`issue index` 与 `memory index`（Web 的 Issue 与 Memory 列表使用它们）给出同样的 `complete` 与 `findings`，各自的 `operation` 与条目字段不变。
 
 ## 结果
 
@@ -96,6 +96,6 @@
 | 列表中有一篇文档格式无效 | 其余文档照常列出，`complete: false`，`findings` 给出 `InvalidData` 或 `InvalidPlacement` 与路径，退出 0 |
 | 文件无法读取、路径不安全或有未完成的写入需要恢复 | 整个命令以对应错误失败，不给出部分清单 |
 | `memory search`、`issue search`、按短 ID 选择文档的命令遇到写错的文档 | 行为不变：仍以错误失败，避免在不完整的集合上选错目标 |
-| 包内页面的文件名不是已知种类 | 照常发现，种类为 `unknown`；`check` 报告 `UnknownPageKind`，结果仍完整 |
+| 附页的文件名不是已知的页面种类 | 照常发现，种类为 `unknown`；`check` 报告 `UnknownPageKind`，结果仍完整 |
 | owner 目录嵌套在另一个 owner 之内 | 嵌套 owner 截断祖先的归属，其中的材料仍可从目录树访问 |
 | 运行结构检查 | 只检查文档结构，不产生测试执行证据 |

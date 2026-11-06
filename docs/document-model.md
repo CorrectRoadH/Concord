@@ -45,7 +45,7 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 每项事实只由自己的来源维护（[一件事只写一次，其余推导](taste.md#t-3)）。
 
 1. 每项事实只有一个 owner。Spec 正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作规则由同目录的 `writing.md` 拥有；测试定义与正向关系由测试源码拥有。Issue 拥有还要处理的问题的正文与关系，Memory 拥有经验的正文与关系；历史在 Git。
-2. 目录确定术语与政策的局部作用域，docs 根拥有全局定义。术语的定义与解释写在同一 `concepts.md`；其它 Markdown 链接到定义，不重复维护。
+2. 目录确定概念与写作规则的生效范围，docs 根拥有全局定义。术语的定义与解释写在同一 `concepts.md`；其它 Markdown 链接到定义，不重复维护。
 3. 反向关系、聚合索引与引用反查从来源派生，不维护第二份登记表。
 4. 人与 Agent 直接编辑 `docs/` 与 `memory/` 下的文件，包括 Memory 与 Issue；索引、检索与反向关系由 Concord 从文件派生，不维护人工 INDEX。关系由 `concord check` 检查，Concord 命令是执行需要运行的步骤的助手。
 

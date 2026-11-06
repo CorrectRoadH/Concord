@@ -74,7 +74,7 @@ Design 只允许一次裁决，裁决方式见[逐项比较方案并明确裁决
 - Feature、Roadmap 与 Engineering 位于各自分类下的单层目录，入口是 `README.md`；Design 是 `docs/design/` 下的单个文件。Use Case 位于所属文档包的 `use-case/` 目录，一个文件是一个旅程，不嵌套；`use-case/README.md` 是导航页。Issue 是 `docs/issues/` 下的 `.md` 文件，Memory 是 `memory/` 下的 `.md` 文件。
 - 文档包内其它页面按[路径与识别](../../../document-model.md#路径与识别)归入页面种类。种类目录不产生新的 Feature 或 Engineering，其中的页面仍以精确路径引用。命令不会自动把一页拆成种类目录，也不会自动移动无法归类的页面。
 - 采用、关系与修复核验都使用实际路径，发布和恢复不会按名称重新猜路径（[文档身份](../architecture.md#文档身份)）。
-- 包内页面可以按精确路径或 anchor 归到所属 Feature，相邻目录不会因目录名前缀相似而混入。
+- 文档包内的页面可以按精确路径或 anchor 归到所属 Feature，相邻目录不会因目录名前缀相似而混入。
 
 ## 名称
 

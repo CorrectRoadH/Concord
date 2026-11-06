@@ -27,7 +27,7 @@
    docs/feature/cart/README.md
    ```
 
-   实现按 Feature 与各个 Use Case 分组，汇总 Feature 自身、支持页面与所属 Use Case 的关联。条目的排版见[实现与测试](../ui.md#实现与测试)。
+   实现按 Feature 与各个 Use Case 分组，汇总 Feature 自身、附页与所属 Use Case 的关联。条目的排版见[实现与测试](../ui.md#实现与测试)。
 
 2. 打开源码位置。 {#source}
 

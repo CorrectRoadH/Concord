@@ -35,13 +35,13 @@
 
 3. 原生任务分别构建固定版本的 `linux-x64` 与 `darwin-arm64` HawDB 引擎；macOS 任务给 HawDB 绑定与 `runtime/rg` 做 ad-hoc 签名。 {#native}
 
-4. 一台 Ubuntu 24.04 runner 打包全部候选资产，同一标签 commit 执行完整检查。 {#package}
+4. 一台 Ubuntu 24.04 CI 机器打包全部候选归档与库包，同一标签 commit 执行完整检查。 {#package}
 
-   runner 从标签派生版本，构建并类型检查应用一次，为两个目标各组装一个候选归档，打出库包 `concord-sdlc-<version>.tgz`，计算全部资产的 SHA-256。
+   这台 CI 机器从标签派生版本，构建并类型检查应用一次，为两个目标各组装一个候选归档，打出库包 `concord-sdlc-<version>.tgz`，计算全部资产的 SHA-256。
 
-5. 在 `ubuntu-24.04` 与 `macos-15` arm64 runner 上各验证本目标的候选归档。 {#verify}
+5. 在 `ubuntu-24.04` 与 `macos-15` arm64 的 CI 机器上各验证本目标的候选归档。 {#verify}
 
-   验证任务下载第 4 步产出的同一份候选与摘要，不重新构建，校验摘要后解压，在只含系统基础命令与 Git 的 `PATH`（没有 `node`、`pnpm`、`rg`）中运行：
+   验证任务下载第 4 步产出的同一份候选归档与摘要，不重新构建，校验摘要后解压，在只含系统基础命令与 Git 的 `PATH`（没有 `node`、`pnpm`、`rg`）中运行：
 
    | 核对 | 通过条件 |
    | --- | --- |
@@ -93,7 +93,7 @@
 
    安装脚本与文档中的 Nix flake 得到同一版本。需要配置类型或解码器的项目按[库接口](../../local-sdlc/library.md)安装同版本库包。
 
-9. 随本次发版更新同版本的 Herdr mod。 {#herdr-mod}
+9. 随本次发版更新同版本的 Concord mod。 {#herdr-mod}
 
    源码 Release 成功后，发版 workflow 把归档中构建好的 mod、`RECIPE.md` 与截图 `preview.png` 写到本仓库顶层的 `concord/` 目录，以一个提交推到 master。
 

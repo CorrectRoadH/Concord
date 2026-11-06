@@ -52,10 +52,10 @@ vp run bench --changed --compare
 | `--consumer` | 来源 | 用途 |
 | --- | --- | --- |
 | `self`（默认） | 本仓库 `--commit`（默认 `HEAD`）的独立 clone；未提交改动不进入消费者 | 自举预算与回退对照 |
-| `scale` | 候选产物通过公开 CLI 初始化的合成仓库，按 `--scale` 生成源码、测试与支持页面后提交冻结 | 大仓库规模与刷新上限 |
+| `scale` | 候选产物通过公开 CLI 初始化的合成仓库，按 `--scale` 生成源码、测试与附页后提交冻结 | 大仓库规模与刷新上限 |
 | 路径 | 已有的干净 Git consumer，原地测量 | 复现外部仓库问题 |
 
-`scale` 默认 3600 个源码文件、600 个测试文件、1000 个支持页面，对应已接入的大型游戏仓库规模。源码文件带 `@concord-file` 与 `@concord-implements`，测试文件带 `@use-case`，支持页面链接到所属 Feature，使扫描覆盖文档、测试与代码归属三类来源。
+`scale` 默认 3600 个源码文件、600 个测试文件、1000 个附页，对应已接入的大型游戏仓库规模。源码文件带 `@concord-file` 与 `@concord-implements`，测试文件带 `@use-case`，附页链接到所属 Feature，使扫描覆盖文档、测试与代码归属三类来源。
 
 `self` 与 `scale` 消费者准备完成后执行一次 `concord cache rebuild`，并以 `cache status` 确认为 `ready`，记录中 `consumer.cache` 为 `ready`；否则测量失败，因为没有有效缓存时 warm 样本实际是 cold。
 

@@ -28,6 +28,6 @@ Spec 没人看得懂，就没人认真审阅，也就没人维护。
 
 ## 链接
 
-`docs/` 下除 `docs/_template/` 与品味文件本身外的 Markdown 正文都可以链接条目，只计入行内链接。链接相对所在文件解析，结果为 `docs/taste.md` 才是品味链接；不读取网络，不跟随 symlink。不带 fragment 的链接不建立关系。
+`docs/` 下除 `docs/_template/` 与品味文件本身外的 Markdown 正文都可以链接条目，只计入行内链接。链接相对所在文件解析，结果为 `docs/taste.md` 的链接才是依据；不读取网络，不跟随 symlink。不带 fragment 的链接不建立关系。
 
 Design 页与其它页面一样只写现在，其中指向不存在的条目的链接同样报告 `AnchorNotFound`。

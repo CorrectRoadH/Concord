@@ -4,7 +4,7 @@
 
 维护者在已推送的 commit 上创建并推送附注标签 `v<version>` 来发版，工作流以标签中的版本作为发版版本。工作流同样接受 `concord-v<version>`。无效标签，或已有身份不同的同名标签与 Release，都会被拒绝。
 
-工作流在自己的 runner 中把版本写入应用与库包的包元数据，安装后的 CLI 从包内元数据读取版本，库包 `concord-sdlc` 的版本与它相同。手动触发且不带标签时只做校验，不发版。
+工作流在自己的 CI 机器中把版本写入应用与库包的包元数据，安装后的 CLI 从包内元数据读取版本，库包 `concord-sdlc` 的版本与它相同。手动触发且不带标签时只做校验，不发版。
 
 ```sh
 git tag -a v0.9.0 -m 'Concord 0.9.0'
@@ -21,7 +21,7 @@ git push origin v0.9.0
 | `concord-<version>-darwin-arm64.tar.gz` | Apple Silicon macOS 归档 |
 | `concord-sdlc-<version>.tgz` | 只含库的 npm 包 `concord-sdlc`：四个[库导出](../local-sdlc/library.md)，不含 `bin`、原生绑定或 CLI 资源；运行 CLI 不需要它 |
 | `SHA256SUMS` | 两个归档、库包与 `install.sh` 的 SHA-256，每行 `<sha256>  <资产文件名>`，不含自身 |
-| `install.sh` | [一行安装脚本](use-case/install-with-script.md) |
+| `install.sh` | [安装脚本](use-case/install-with-script.md) |
 
 归档解压后的根目录：
 
@@ -32,7 +32,7 @@ git push origin v0.9.0
 | `runtime/rg` | 固定版本的 ripgrep |
 | `runtime/lib/` | 仅 Linux：归档内 ELF 需要的 glibc 之外的运行库（libatomic、libstdc++） |
 | `licenses/` | Node.js、ripgrep、Linux 运行库与运行依赖的许可证文本 |
-| `app/` | 构建好的应用、运行依赖、该目标的 HawDB 原生绑定与随包资源（Web、Preview、skills、templates） |
+| `app/` | 构建好的应用、运行依赖、该目标的 HawDB 原生绑定与随附资源（Web、Preview、skills、templates） |
 
 tap 随后包含同版本的 Formula 与 Linux Nix 表达式，引用相同归档与 SHA-256。从任一渠道安装后，`concord --version` 输出标签中的版本。
 

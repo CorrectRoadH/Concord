@@ -9,7 +9,7 @@
 | 规则 | 要求 | Oxlint 规则 |
 | --- | --- | --- |
 | 文件与目录名 | 小写单词以 `-` 连接，可带数字与 `.test`、`.e2e`、`.bench` 这类角色后缀 | `unicorn/filename-case`（kebabCase） |
-| 默认导出 | 不使用默认导出；例外是宿主要求的入口：Herdr mod 的 `main.ts`、`bench/*.bench.ts` 与工具配置文件 | `import/no-default-export` |
+| 默认导出 | 不使用默认导出；例外是宿主要求的入口：Concord mod 的 `main.ts`、`bench/*.bench.ts` 与工具配置文件 | `import/no-default-export` |
 | 只用作类型的导入 | 写成 `import type` 或内联 `type` | `typescript/consistent-type-imports` |
 | 可擦除语法 | 不用 `enum`、`namespace` 与构造函数参数属性 | TypeScript 的 `erasableSyntaxOnly` |
 | 相对导入 | 写出真实扩展名 `.ts` 或 `.tsx` | 类型检查与[从源码运行](../build/architecture.md#从源码运行) |

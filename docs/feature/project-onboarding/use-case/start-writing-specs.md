@@ -31,7 +31,7 @@
    Inspect configuration: concord doctor
    ```
 
-   `--json` 输出在 `guide` 字段给出同一个 [skill 主题](../../../concepts.md#skill-topic)，字段定义见 [CLI](../../local-sdlc/cli.md#接入)。Herdr mod 在新建文件的数量下方显示同一条命令。
+   `--json` 输出在 `guide` 字段给出同一个 [skill 主题](../../../concepts.md#skill-topic)，字段定义见 [CLI](../../local-sdlc/cli.md#接入)。Concord mod 在新建文件的数量下方显示同一条命令。
 
 3. 让 agent 读指南。 {#read-guide}
 

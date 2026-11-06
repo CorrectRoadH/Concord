@@ -52,7 +52,7 @@ findings: none
 - init 在根 `AGENTS.md` 中维护带托管标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
 - init 结束时按仓库有没有项目文件推荐一份写作指南：新项目读 `docs-from-scratch`，已有代码的项目读 `docs-from-code`。
 - init 与 `concord skills install` 在项目中安装四个工作流 skill（`concord-spec`、`concord-implement`、`concord-review`、`concord-fix`），Claude Code 与 Codex 共用同一份文件。
-- 还没有初始化的仓库里，CLI、Web 工作台与 Herdr mod 都提示先初始化，不给出空的通过结果。
+- 还没有初始化的仓库里，CLI、Web 工作台与 Concord mod 都提示先初始化，不给出空的通过结果。
 - Memory 固定位于 worktree 根的 `memory/`。
 
 ## 用户路径

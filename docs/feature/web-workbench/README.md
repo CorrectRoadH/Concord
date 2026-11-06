@@ -10,7 +10,7 @@
 - 在表单里处理 Issue、Memory 与 Roadmap 的生命周期，在「反馈」里查看各来源的反馈，在「项目设置」里修改配置。
 - 在 Markdown 里写数学公式、Mermaid 结构图和会动的 p5 图解。
 - 把一个 PR 的变更导出成静态只读页面，交给 CI 托管给审阅者。
-- 在 Herdr 里打开工作台，见 [Herdr mod](../herdr-mod/README.md)。
+- 在 Herdr 里打开工作台，见 [Concord mod](../herdr-mod/README.md)。
 
 ## 上手
 
@@ -53,7 +53,7 @@ test
 
 ### 文档阅读与编辑
 
-支持页面从所属 Spec 的文件树进入。「文档」汇总 `docs/` 下不属于 Feature、Roadmap、Design、Engineering 或 Issue 的 Markdown，包括架构、品味、概念、索引、指南与 `_template` 参考模板；已有分类入口的 Spec 不在这里重复。点击条目只切换右侧预览。
+附页从所属 Spec 的文件树进入。「文档」汇总 `docs/` 下不属于 Feature、Roadmap、Design、Engineering 或 Issue 的 Markdown，包括架构、品味、概念、索引、指南与 `_template` 参考模板；已有分类入口的 Spec 不在这里重复。点击条目只切换右侧预览。
 
 所有项目 Markdown 都可以编辑，不按文件名、frontmatter 或解析结果设置只读。品味 `docs/taste.md` 也在「文档」里用同一个原文编辑器编辑。
 

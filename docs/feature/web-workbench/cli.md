@@ -19,7 +19,7 @@
 | 检查与恢复 | `check`、`doctor`、`cache`、`recover` | 检查与设置 |
 | 审阅 | `review` | 审阅 |
 
-结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新执行同一领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。`document.set` 拒绝的内容见[自动保存](ui.md#自动保存)。
+结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新执行同一领域校验；保存冲突需要重新读取并合并，不提供强制覆盖选项。`document.set` 拒绝的内容见[自动保存](ui.md#自动保存)。
 
 ## 工作区投影
 

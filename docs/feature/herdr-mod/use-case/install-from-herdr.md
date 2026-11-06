@@ -29,7 +29,7 @@ Herdr 用户在 herdr.dev/mods 看到 Concord，想在自己的 Herdr 里用它�
    安装后点“重新检测”。
    ```
 
-   这是[一行安装脚本](../../cross-platform-release/use-case/install-with-script.md)；也可以用项目 README「Install」一节中的 Homebrew 或 Nix。
+   这是[安装脚本](../../cross-platform-release/use-case/install-with-script.md)；也可以用项目 README「Install」一节中的 Homebrew 或 Nix。
 
 3. 安装 Concord 后点“重新检测”。 {#recheck}
 
