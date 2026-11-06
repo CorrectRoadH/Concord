@@ -9,7 +9,6 @@ import { gitCommand } from '../support/fix-consumer.ts';
 import { readProjectConfig, writeProjectConfig, waitForWorkspaceProjection } from '../support/support.ts';
 
 // @use-case docs/feature/web-workbench/use-case/inspect-implementation-and-tests.md#run
-// @issue docs/issues/web-test-run-controls.md
 test('browser cancels a real runner and runs the same declaration again without persisting a result', async ({ page, workspace }) => {
   const root = workspace.root;
   const repo = new LocalRepository(root);

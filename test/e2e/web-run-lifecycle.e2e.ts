@@ -9,7 +9,6 @@ import { readProjectConfig, writeProjectConfig, waitForWorkspaceProjection } fro
 import type { ViewJob } from '../../src/model/index.ts';
 
 // @use-case docs/feature/web-workbench/use-case/inspect-implementation-and-tests.md#run
-// @issue docs/issues/web-test-run-controls.md
 test('test entries run and cancel their latest job and keep status and diagnostics inside the matching entry', async ({ page, workspace }) => {
   const root = workspace.root;
   const repo = new LocalRepository(root);
@@ -64,7 +63,6 @@ test('test entries run and cancel their latest job and keep status and diagnosti
 });
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md
-// @issue docs/issues/web-lifecycle-entries.md
 test('Design and inactive Roadmap show lifecycle state without empty actions while other owners fall back to metadata', async ({ page, workspace }) => {
   const repo = new LocalRepository(workspace.root);
   try {

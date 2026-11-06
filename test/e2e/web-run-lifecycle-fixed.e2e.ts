@@ -9,7 +9,6 @@ import { gitCommand, gitCommit } from '../support/fix-consumer.ts';
 import { readProjectConfig, writeProjectConfig, waitForWorkspaceProjection } from '../support/support.ts';
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md#close
-// @issue docs/issues/web-lifecycle-entries.md
 test('Issue fixed form runs the frozen defect and fix before deleting the Issue and refuses a green defect', async ({ page, workspace }) => {
   const root = workspace.privateRoot();
   gitCommand(root, 'init', '-q');

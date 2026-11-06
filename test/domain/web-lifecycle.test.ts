@@ -7,7 +7,6 @@ import { createFixConsumer } from '../support/fix-consumer.ts';
 import { runApplication } from '../support/repository.ts';
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md#close
-// @issue docs/issues/web-lifecycle-entries.md
 test('Issue fixed actions decode CLI inputs and reject caller-provided verification', () => {
   const action = { action: 'issue.close', id: 'sku', fixed: true, defect: 'HEAD~1', fix: 'HEAD', reason: 'Fix' };
   assert.deepEqual(decodeViewAction(action), action);
@@ -15,7 +14,6 @@ test('Issue fixed actions decode CLI inputs and reject caller-provided verificat
 });
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md#close
-// @issue docs/issues/web-lifecycle-entries.md
 test('Issue actions preserve reason closure and reject invalid fixed options before mutation', async () => {
   const fixture = createFixConsumer();
   const issue = join(fixture.root, 'docs/issues/sku.md');
@@ -30,7 +28,6 @@ test('Issue actions preserve reason closure and reject invalid fixed options bef
 });
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md#close
-// @issue docs/issues/web-lifecycle-entries.md
 test('fixed action verifies real frozen red and green commands before deleting the Issue', async () => {
   const fixture = createFixConsumer();
   try {
@@ -46,7 +43,6 @@ test('fixed action verifies real frozen red and green commands before deleting t
 });
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md#close
-// @issue docs/issues/web-lifecycle-entries.md
 test('fixed action leaves the Issue untouched when the real defect runner is green', async () => {
   const fixture = createFixConsumer({ greenAtDefect: true });
   const path = join(fixture.root, 'docs/issues/sku.md');
