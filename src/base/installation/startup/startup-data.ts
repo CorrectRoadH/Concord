@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import type { StartupData } from "../../../model/index.ts";
 import { enableCompileCache } from 'node:module';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 /** Cache compiled files across source commands, workers and gate invocations. */
@@ -15,6 +16,7 @@ export function initializeNodeCompileCache(): string {
 
 const source = import.meta.url.endsWith('.ts');
 const installation = new URL('../../../../', import.meta.url);
+export const resourcePath = (path: string): string => join(fileURLToPath(installation), path);
 const entry = new URL(source ? 'src/entry/cli/' : 'dist/entry/cli/', installation);
 const digest = (url: URL): string => createHash('sha256').update(readFileSync(url)).digest('hex');
 

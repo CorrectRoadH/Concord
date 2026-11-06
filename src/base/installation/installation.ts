@@ -8,12 +8,13 @@ import { ConcordError, digest } from "../../model/index.ts";
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { installationIdentity } from './identity-cache.ts';
 import { sourceInstallation, runtimeDirectory, runtimeLoader } from './runtime.ts';
+import { resourcePath as installedResourcePath } from './startup/index.ts';
 
 const directory = runtimeDirectory;
 const defaultRuntime = makeRuntimeEnvironment(packageRoot, {});
 const distribution = join(packageRoot, 'dist');
 import { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.ts";
-export const resourcePath = (path: string): string => join(packageRoot, path);
+export const resourcePath: typeof installedResourcePath = path => installedResourcePath(path);
 export const helpManifestPath = join(distribution, 'startup-data.js');
 
 /** Resolve the loader at the installation, independently of a consumer's cwd. */

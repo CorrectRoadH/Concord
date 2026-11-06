@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
+import type { Effect as EffectType, FileSystem, Stdio, Terminal } from 'effect';
 import type { fullProgram } from './entry-full.ts';
 import type { loadCommand } from './cli.ts';
 import { startupData, initializeNodeCompileCache } from "../../app/startup/index.ts";
@@ -14,15 +15,19 @@ const args = process.argv.slice(2);
 const cwd = process.cwd(), env = Object.freeze({ ...process.env });
 async function start(program: ReturnType<typeof fullProgram>): Promise<void> {
   const Effect = await import('effect/Effect');
+  const { cliEnvironmentLayer } = await import('./main.ts');
+  await launch(program.pipe(Effect.provide(cliEnvironmentLayer(cwd, env))));
+}
+
+async function launch(program: EffectType.Effect<number, unknown, FileSystem.FileSystem | Stdio.Stdio | Terminal.Terminal>): Promise<void> {
+  const Effect = await import('effect/Effect');
   const NodeRuntime = await import('@effect/platform-node/NodeRuntime');
   const NodeServices = await import('@effect/platform-node/NodeServices');
-  const { cliEnvironmentLayer } = await import('./main.ts');
   NodeRuntime.runMain(program.pipe(
     Effect.tap(code => Effect.sync(() => { process.exitCode = code; })),
     // The real startup owns this descriptor. Stdio deliberately leaves it open,
     // while a completed command (including LSP failure) must let Node terminate.
     Effect.ensuring(Effect.sync(() => { process.stdin.destroy(); })),
-    Effect.provide(cliEnvironmentLayer(cwd, env)),
     Effect.provide(NodeServices.layer),
   ));
 }
@@ -43,7 +48,7 @@ function selectedGroup(data: StartupData): string | undefined {
 
 try {
   if (args.includes('--skill')) {
-    await start((await import("./entry-full.ts")).fullProgram(args));
+    await launch((await import("./skill.ts")).skillCommand(args));
   } else {
     const data = await startupData();
     // Effect's pinned formatter uses no colors for non-TTY output. Restrict the

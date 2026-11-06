@@ -21,7 +21,8 @@ import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheW
 import { awaitCacheMaintenance } from '../../app/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
-import { CliInvocation, setExitCode, writeStderr } from './invocation.ts';
+import { CliInvocation, writeStderr } from './invocation.ts';
+import { cliFailure } from './cli-failure.ts';
 
 export const cliPlatformLayer = NodeChildProcessSpawner.layer.pipe(Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)));
 /** Real startup captures input; this composition root binds its services. */
@@ -378,17 +379,6 @@ return launchers.pipe(Layer.merge(querySelection), Layer.merge(feedbackSelection
 }
 export const cliLayer = /*#__PURE__*/ makeCliLayer();
 
-const cliFailure = (cause: unknown) => Effect.gen(function*() {
-  const CliError = yield* Effect.tryPromise(() => import('effect/unstable/cli/CliError'));
-  const error = CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
-    ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))
-    : failure(cause);
-  const result = { ok: false, error: error.code, message: error.message, ...(error.code === 'WritingBudgetExceeded' ? { complete: false } : {}), ...(error.details === undefined ? {} : { details: error.details }) };
-  const invocation = yield* CliInvocation;
-  yield* writeStderr(`${invocation.argv.includes('--json') || invocation.argv.includes('--skill') ? JSON.stringify(result) : humanOutput(result)}\n`);
-  yield* setExitCode(1);
-});
-
 /** Both the real startup adapter and captured invocations await this exact program. */
 export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, argv: readonly string[]) => Cache.withParseCache(Effect.scoped(Effect.gen(function*() {
   const Command = yield* Effect.tryPromise(() => import('effect/unstable/cli/Command'));
@@ -424,17 +414,3 @@ export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, a
   } else yield* program.pipe(Effect.catch(cliFailure));
   return yield* (yield* CliInvocation).exitCode;
 })).pipe(Effect.provide(cliLayer), Effect.provide(CliInvocation.layer(argv)), Effect.ensuring(Effect.flatMap(RuntimeEnvironment, runtime => Effect.promise(() => awaitCacheMaintenance(runtime))))));
-
-export const skillCommand = (argv: readonly string[]) => Effect.scoped(Effect.gen(function*() {
-  const { skillProgram } = yield* Effect.tryPromise(() => import('./skill.ts'));
-  yield* skillProgram(argv).pipe(
-    Effect.catchTags({
-      SkillArgumentsInvalid: error => cliFailure(new ConcordError(error.code, error.message)),
-      SkillTopicUnknown: error => cliFailure(new ConcordError(error.code, error.message)),
-      SkillContentUnreadable: error => cliFailure(new ConcordError(error.code, error.message)),
-      SkillContentInvalid: error => cliFailure(new ConcordError(error.code, error.message)),
-    }),
-    Effect.catch(cliFailure),
-  );
-  return yield* (yield* CliInvocation).exitCode;
-})).pipe(Effect.provide(CliInvocation.layer(argv)));

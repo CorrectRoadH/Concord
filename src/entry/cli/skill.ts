@@ -3,7 +3,10 @@
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#follow
 import { Effect, FileSystem, Schema } from "effect";
-import { resourcePath } from "../../app/index.ts";
+import { resourcePath } from "../../app/startup/index.ts";
+import { ConcordError } from "../../model/index.ts";
+import { CliInvocation } from "./invocation.ts";
+import { cliFailure } from "./cli-failure.ts";
 import { writeStdout } from './invocation.ts';
 
 const TOPICS = ['init', 'docs-from-scratch', 'docs-from-code', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback', 'spec', 'implement', 'review', 'fix'] as const;
@@ -84,3 +87,16 @@ export const skillProgram = Effect.fn('skillProgram')(function*(argv: unknown) {
   const sections = yield* Effect.forEach(topics, readTopic, { concurrency: 1 });
   yield* writeStdout(`${sections.map(section => section.trimEnd()).join('\n\n---\n\n')}\n`);
 });
+
+export const skillCommand = (argv: readonly string[]) => Effect.scoped(Effect.gen(function*() {
+  yield* skillProgram(argv).pipe(
+    Effect.catchTags({
+      SkillArgumentsInvalid: error => cliFailure(new ConcordError(error.code, error.message)),
+      SkillTopicUnknown: error => cliFailure(new ConcordError(error.code, error.message)),
+      SkillContentUnreadable: error => cliFailure(new ConcordError(error.code, error.message)),
+      SkillContentInvalid: error => cliFailure(new ConcordError(error.code, error.message)),
+    }),
+    Effect.catch(cliFailure),
+  );
+  return yield* (yield* CliInvocation).exitCode;
+})).pipe(Effect.provide(CliInvocation.layer(argv)));

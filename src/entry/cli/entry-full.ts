@@ -3,7 +3,8 @@
 import { Effect, type FileSystem, type Stdio, type Terminal } from 'effect';
 import type { applicationRuntime } from '../../app/index.ts';
 import type { fullCommand } from './cli-fallback.ts';
-import { runCommand, skillCommand } from './main.ts';
+import { runCommand } from './main.ts';
+import { skillCommand } from './skill.ts';
 
 /** Loading command definitions has no startup or invocation side effects. */
 export function fullProgram(argv: readonly string[]): Effect.Effect<number, unknown, Effect.Services<typeof applicationRuntime> | FileSystem.FileSystem | Stdio.Stdio | Terminal.Terminal> {
