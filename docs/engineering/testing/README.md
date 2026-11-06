@@ -18,7 +18,7 @@
 
 ### 打包测试
 
-打包测试从[共享构建缓存](../build/architecture.md#共享构建缓存)取得本机目标的[发布归档](../../feature/cross-platform-release/cli.md#发布资产)，解压到临时目录。它在只含系统基础命令与 Git 的 `PATH` 中运行 `bin/concord`：没有真实的 `node`、`pnpm` 与 `rg`，另放以非零退出的 `node` 与 `rg` 探针，确认应用不回退到 `PATH`。主机必须能运行通用的 glibc 二进制：NixOS 需要启用 nix-ld，否则打包测试以 `PackagedRuntimeUnavailable` 失败并给出启用方法，不跳过。核对以下结果：
+打包测试从[共享构建缓存](../build/architecture.md#共享构建缓存)取得本机目标的[发布归档](../../feature/cross-platform-release/cli.md#发布资产)，解压到临时目录。它在只含系统基础命令与 Git 的 `PATH` 中运行 `bin/concord`：没有真实的 `node`、`pnpm` 与 `rg`，另放以非零退出的 `node` 与 `rg` 探针，确认应用不回退到 `PATH`。选中打包测试时，门禁一开始就与静态检查并行准备归档；共享构建缓存未命中时的构建是准备阶段，耗时单独报告，计入完整门禁的耗时上限，不计入打包测试文件的单文件上限，后者从归档就绪开始计时。主机必须能运行通用的 glibc 二进制：NixOS 需要启用 nix-ld，否则打包测试以 `PackagedRuntimeUnavailable` 失败并给出启用方法，不跳过。核对以下结果：
 
 | 核对 | 通过条件 |
 | --- | --- |

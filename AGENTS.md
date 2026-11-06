@@ -11,7 +11,7 @@ Contract prose declares intended behavior, constraints, and acceptance; product 
 
 Structured terminology and writing policy are owned by directory-scoped `concepts.md` and `writing.md` under docs. Edit them directly and let `concord check` validate structure, scope and references; derive the project glossary and references instead of duplicating definitions in Markdown or a second index. Each concept has one term, with its definition and explanation together in concepts.md. Only deprecated names generate terminology bans.
 
-Effect dependencies stay on the exact pinned revision. Read the installed `effect/AGENTS.md` before using its APIs. Use strict Schema decoding at untrusted boundaries and named failures.
+Follow the [TypeScript code conventions](docs/engineering/code/README.md) for naming, modules and errors; the gate lints what it can. Effect dependencies stay on the exact pinned revision. Read the installed `effect/AGENTS.md` before using its APIs. Use strict Schema decoding at untrusted boundaries and named failures.
 
 Maintain implementation, tests, and build scripts in strict TypeScript with Effect for execution and side effects. Do not add hand-maintained JavaScript scripts or bypass type checking. JavaScript build output and explicit JavaScript-consumer compatibility fixtures are distinct from maintained implementation sources.
 

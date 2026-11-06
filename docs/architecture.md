@@ -90,7 +90,7 @@ CI 可以使用 `concord --server=command check`：服务属于本次命令，�
 
 直接调用 Node API 只用于入口读取启动参数、环境与信号，以及 Effect 缺少所需保证的基础适配，例如防符号链接的描述符读取、文件身份复核、IPC 和进程组清理确认。适配在所属基础服务内封装，并说明缺少的保证、失败语义和资源释放方式；放进 `base` 本身不构成保留理由。
 
-模型保持纯计算；摘要计算的 `node:crypto` 例外见下表。架构规则约束能力与所有权，具体 AST 检查方式由[架构守护](engineering/testing/architecture.md#架构守护)维护（[规则少而硬](taste.md#t-8)）。
+模型保持纯计算；摘要计算的 `node:crypto` 例外见下表。模块内怎样命名与写错误见[代码规范](engineering/code/README.md)。架构规则约束能力与所有权，具体 AST 检查方式由[架构守护](engineering/testing/architecture.md#架构守护)维护（[规则少而硬](taste.md#t-8)）。
 
 ### 模块布局
 
