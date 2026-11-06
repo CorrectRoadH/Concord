@@ -4,7 +4,11 @@
 
 Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致（[为什么需要 Concord](../README.md)）。它是可安装到任意 Git 仓库的本地 CLI。
 
-文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](taste.md)，Web 界面设计见[工作台视觉规范](feature/web-workbench/ui.md)。
+文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。
+
+全部文件都可以直接编辑。Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。
+
+跨功能规则见[品味](taste.md)，Web 界面设计见[工作台视觉规范](feature/web-workbench/ui.md)。
 
 ## 运行形态
 
@@ -32,28 +36,40 @@ flowchart LR
   Operation -->|校验后发布| Sources
 ```
 
-服务让解析缓存与投影保持热，并为 Web 提供长期连接。CLI 查询自动启动或复用服务，每次请求绑定调用者环境；安装或协议不匹配时报告冲突并保留已有实例。CLI 写入、发布与恢复按各自入口执行，有服务时通过快照与派生行使用其缓存；浏览器操作由服务调度。
+服务让解析缓存与投影保持热，并为 Web 提供长期连接。三类调用这样使用它：
+
+- CLI 查询自动启动或复用服务，每次请求绑定调用者环境。安装或协议不匹配时报告冲突，保留已有实例。
+- CLI 写入、发布与恢复按各自入口执行；有服务时，通过快照与派生行使用服务的缓存。
+- 浏览器操作由服务调度。
 
 ### 应用生命周期
 
-| 阶段 | 行为与归属 |
+| 阶段 | 行为 |
 | --- | --- |
-| 执行命令 | CLI 定位项目目录，组合本次操作需要的 Effect 服务；操作结束后释放快照、连接与本进程资源 |
-| 启动服务 | CLI 查询、`concord view` 与 `concord server start` 连接已有实例；没有可用实例时启动服务进程，由服务锁决定唯一所有者 |
-| 准备服务 | 主进程先绑定 socket 并进入 `opening`，再打开持久缓存、恢复投影并启动计算能力；缓存打开失败时报告降级原因 |
-| 持续运行 | 主进程接收请求、监督子进程并保存派生结果；来源监听触发刷新，计算进程读取当前文件，主进程核验后接受结果 |
-| 维护缓存 | 清理先停止受理相关新工作，等待在途操作、关闭持久句柄，再独占清理；服务锁一直保留，完成后重新打开并刷新 |
-| 停止服务 | 显式停止、项目目录消失，或无客户端且十分钟无请求时退出；先通知订阅者，再收拢在途工作与子进程，最后释放句柄、socket、记录与服务锁 |
+| 执行命令 | CLI 定位项目目录，组合本次操作需要的 Effect 服务；结束后释放快照、连接与本进程资源 |
+| 启动服务 | 连接已有实例；没有可用实例时启动服务进程，由服务锁决定唯一所有者 |
+| 准备服务 | 主进程先绑定 socket 并进入 `opening`，再打开持久缓存、恢复投影并启动计算能力 |
+| 持续运行 | 主进程接收请求、监督子进程并保存派生结果 |
+| 维护缓存 | 停止受理相关新工作、关闭持久句柄后独占清理，完成后重新打开并刷新 |
+| 停止服务 | 先通知订阅者，再收拢在途工作与子进程，最后释放资源 |
 
-完整状态机、超时与异常退出规则见[启动与裁决](feature/local-data-engine/architecture.md#启动与裁决)及[状态](feature/local-data-engine/architecture.md#状态)。子进程的超时或中断必须确认进程组清理；无法确认写入结果时保留 journal，不自动重跑写入。
+各阶段的补充规则：
+
+- 启动服务的入口是 CLI 查询、`concord view` 与 `concord server start`。
+- 准备服务时缓存打开失败，服务报告降级原因。
+- 持续运行时，来源监听触发刷新；计算进程读取当前文件，主进程核验后接受结果。
+- 维护缓存前等待在途操作完成；服务锁全程保留。
+- 服务在显式停止、项目目录消失，或无客户端且十分钟无请求时停止。最后释放的是句柄、socket、运行记录与服务锁。
+
+完整状态机、超时与异常退出规则见[启动与裁决](feature/local-data-engine/architecture.md#启动与裁决)及[状态](feature/local-data-engine/architecture.md#状态)。子进程超时或被中断时，必须确认进程组已清理。无法确认写入结果时保留 journal，不自动重跑写入。
 
 ### Web 连接与退出
 
-`concord view` 为选定项目目录的服务申请 HTTP 监听租约，默认地址为 `127.0.0.1:4317`。同一服务的相同地址共用监听；不同服务同时监听同一主机地址时要使用不同端口。浏览器通过 HTTP 读写，通过 SSE 接收投影与任务变化；它不连接数据库。
+`concord view` 为选定项目目录的服务申请 HTTP 监听租约，默认地址为 `127.0.0.1:4317`。同一服务的相同地址共用监听；不同服务同时监听同一主机地址时要使用不同端口。浏览器通过 HTTP 读写，通过 SSE 接收投影与任务变化，不连接数据库。
 
-HTTP 监听与工作区服务分别管理生命周期。退出 `view` 释放它自己的租约；仍有租约或浏览器 SSE 连接时，监听继续存在。最后一个租约与连接结束后关闭监听，服务再按自身的空闲条件退出。关闭浏览器不取消已启动的测试任务。规则见[服务托管](feature/web-workbench/architecture.md#服务托管)。
+HTTP 监听与工作区服务分别管理生命周期。退出 `view` 只释放它自己的租约；仍有租约或浏览器 SSE 连接时，监听继续存在。最后一个租约与连接结束后关闭监听，服务再按自身的空闲条件退出。关闭浏览器不取消已启动的测试任务。规则见[服务托管](feature/web-workbench/architecture.md#服务托管)。
 
-默认启动的服务可以在启动它的命令结束后继续运行。`view --in-process` 在需要新服务时把服务子进程纳入当前命令的作用域，命令退出时回收；已有可用服务仍按复用规则处理。`concord server run` 在前台运行服务，`server status` 与 `server stop` 操作选定项目目录的实例。
+默认启动的服务可以在启动它的命令结束后继续运行。`view --in-process` 需要新服务时，把服务子进程纳入当前命令的作用域，命令退出时回收；已有可用服务仍按复用规则处理。`concord server run` 在前台运行服务，`server status` 与 `server stop` 操作选定项目目录的实例。
 
 CI 可以使用 `concord --server=command check`：服务属于本次命令，返回结果前完成回收。已有实例时拒绝接管；继承的作用域只允许同一项目目录，不能开启 HTTP。具体规则见[命令作用域查询](feature/local-data-engine/architecture.md#命令作用域查询)。
 
@@ -63,38 +79,58 @@ CI 可以使用 `concord --server=command check`：服务属于本次命令，�
 | --- | --- |
 | Spec、代码、测试、配置与 Memory | worktree 中的文件是事实来源，由人、agent 与受校验的操作修改；Git 保存历史 |
 | 发布租约、journal 与 runner 状态 | 项目目录对应的 Git-private 目录保存协调与恢复材料，不能作为缓存删除 |
-| 持久解析缓存、远端观察与诊断投影 | 主进程持有 HawDB；无服务时由当前命令按[打开模式](feature/local-data-engine/architecture.md#句柄与打开模式)使用。计算进程只接收快照并交回派生行 |
-| 当前查询与历史投影 | 当前查询读取并复核来源；导航与诊断可以读取明确标注的历史投影，历史结果不授权写入或修复核验 |
+| 持久解析缓存、远端观察与诊断投影 | 主进程持有 HawDB；计算进程只接收快照并交回派生行 |
+| 当前查询与历史投影 | 当前查询读取并复核来源；导航与诊断可以读取明确标注的历史投影 |
 
-领域结果跨 CLI、RPC 与 HTTP 共用 Schema 和应用操作。传输适配负责严格解码、请求预算与取消；来源访问负责路径安全和前后核验；发布负责前像校验与短期独占，详见[发布协调](#发布协调)。
+没有服务时，当前命令按[打开模式](feature/local-data-engine/architecture.md#句柄与打开模式)使用 HawDB。历史投影的结果不授权写入或修复核验。
 
-工作台面向可信的本地使用者。HTTP 默认只监听回环地址，没有身份认证；显式开放到其它网络地址即向可连接者授予仓库读写与测试执行能力。Host/Origin 检查及浏览器沙箱由[Web 工作台架构](feature/web-workbench/architecture.md)定义。
+领域结果跨 CLI、RPC 与 HTTP 共用 Schema 和应用操作。各部分分别负责：
+
+- 传输适配负责严格解码、请求预算与取消。
+- 来源访问负责路径安全和前后核验。
+- 发布负责前像校验与短期独占，见[发布协调](#发布协调)。
+
+工作台面向可信的本地使用者。HTTP 默认只监听回环地址，没有身份认证；显式开放到其它网络地址，就是向可连接者授予仓库读写与测试执行能力。Host/Origin 检查及浏览器沙箱由[Web 工作台架构](feature/web-workbench/architecture.md)定义。
 
 ## 代码结构
 
-代码由 Effect 服务组成（[技术栈](engineering/build/README.md#技术栈)）。领域逻辑只依赖端口，文件、进程、时间、网络与缓存等副作用由基础服务提供；每种进程用一组 Layer 组合出自己被允许的能力。固定版本 Effect 已等价提供的能力直接使用，不重复实现；库未提供的保证（例如进程组清理确认、字节预算）由 Concord 的适配层补齐。
+代码由 Effect 服务组成（[技术栈](engineering/build/README.md#技术栈)）。领域逻辑只依赖端口；文件、进程、时间、网络与缓存等副作用由基础服务提供。每种进程用一组 Layer 组合出自己被允许的能力。
+
+固定版本 Effect 已等价提供的能力直接使用，不重复实现。库未提供的保证（例如进程组清理确认、字节预算）由 Concord 的适配层补齐。
 
 ### 分层
 
 | 层 | 内容 | 依赖 |
 | --- | --- | --- |
-| 入口 | CLI 命令（`effect/unstable/cli`，`--version` 与各层 `--help` 由构建时从命令定义生成的静态数据输出）、HTTP 路由（`unstable/http`）、RPC 处理（`unstable/rpc`）、Concord mod | 应用端口 |
-| 应用 | 每个用户操作一个 `Effect.fn`，输入、结果与错误由 Schema 定义；CLI、HTTP、action 与 RPC 调用同一个操作。应用端口包括 Queries | 领域服务与基础服务 |
-| 领域服务 | Documents、Trace、Writing、Concepts、Issues、Memory、Designs、Tests、Code、Feedback；可以依赖其它领域服务，依赖关系无环，例如 Trace 依赖 Documents、Code 与 Tests | 领域服务、基础服务与模型 |
-| 基础服务 | Workspace、Sources、Publication、Cache、Git、OwnedProcess，以及 `effect` 的 FileSystem、Path 与 Clock（Node 实现来自 `@effect/platform-node`） | 平台 |
+| 入口 | CLI 命令（`effect/unstable/cli`）、HTTP 路由（`unstable/http`）、RPC 处理（`unstable/rpc`）、Concord mod | 应用端口 |
+| 应用 | 每个用户操作一个 `Effect.fn`，CLI、HTTP、action 与 RPC 调用同一个操作 | 领域服务与基础服务 |
+| 领域服务 | Documents、Trace、Writing、Concepts、Issues、Memory、Designs、Tests、Code、Feedback | 领域服务、基础服务与模型 |
+| 基础服务 | Workspace、Sources、Publication、Cache、Git、OwnedProcess，以及 `effect` 的 FileSystem、Path 与 Clock | 平台 |
 | 模型 | Schema、纯函数与算法（解析、关系推导、写作规则），不依赖任何服务 | 无 |
+
+- `--version` 与各层 `--help` 输出构建时从命令定义生成的静态数据，见[入口与命令加载](feature/local-sdlc/architecture.md#入口与命令加载)。
+- 应用操作的输入、结果与错误由 Schema 定义。应用端口包括 [Queries](#应用端口-queries)。
+- 领域服务之间可以互相依赖，依赖关系无环，例如 Trace 依赖 Documents、Code 与 Tests。层级见[依赖规则](#依赖规则)。
+- 基础服务的 Node 实现来自 `@effect/platform-node`。
 
 ### 平台能力边界
 
 普通文件读写、命令执行、网络与标准流通过 Effect 的 FileSystem、ChildProcessSpawner、Socket、HTTP 与 Stdio 提供。领域与应用声明需要的服务，入口组合 Layer；领域逻辑不直接读取进程环境或操作平台资源。
 
-直接调用 Node API 只用于入口读取启动参数、环境与信号，以及 Effect 缺少所需保证的基础适配，例如防符号链接的描述符读取、文件身份复核、IPC 和进程组清理确认。适配在所属基础服务内封装，并说明缺少的保证、失败语义和资源释放方式；放进 `base` 本身不构成保留理由。
+直接调用 Node API 只用于两种场合：
 
-模型保持纯计算；摘要计算的 `node:crypto` 例外见下表。模块内怎样命名与写错误见[代码规范](engineering/code/README.md)。架构规则约束能力与所有权，具体 AST 检查方式由[架构守护](engineering/testing/architecture.md#架构守护)维护（[规则少而硬](taste.md#t-8)）。
+1. 入口读取启动参数、环境与信号。
+2. Effect 缺少所需保证的基础适配，例如防符号链接的描述符读取、文件身份复核、IPC 和进程组清理确认。
+
+适配封装在所属基础服务内，并说明缺少的保证、失败语义和资源释放方式。放进 `base` 本身不构成保留理由。
+
+模型保持纯计算，只有摘要计算可以使用 `node:crypto`（见[依赖规则](#依赖规则)）。模块内怎样命名与写错误见[代码规范](engineering/code/README.md)。架构规则约束能力与所有权，具体 AST 检查方式由[架构守护](engineering/testing/architecture.md#架构守护)维护（[规则少而硬](taste.md#t-8)）。
 
 ### 模块布局
 
-源码按层分目录，每个目录是一个模块，入口文件 `index.ts` 是模块对外的唯一出口，只导出本模块的接口，不转出其它模块的实现；模块之间只通过出口导入。产品运行时代码位于 `src/`、`web/`（浏览器前端）与 `native/hawdb/`（原生绑定）；`test/`、`bench/` 与 `scripts/` 是维护的 TypeScript 源码，分别拥有验证、性能场景与构建编排。
+源码按层分目录，每个目录是一个模块。入口文件 `index.ts` 是模块对外的唯一出口，只导出本模块的接口，不转出其它模块的实现；模块之间只通过出口导入。
+
+产品运行时代码位于 `src/`、`web/`（浏览器前端）与 `native/hawdb/`（原生绑定）。`test/`、`bench/` 与 `scripts/` 是维护的 TypeScript 源码，分别拥有验证、性能场景与构建编排。
 
 ```text
 src/
@@ -107,7 +143,7 @@ web/            浏览器前端，只调用 HTTP 接口
 native/hawdb/   HawDB 的 N-API 绑定
 ```
 
-下表说明每个 Feature 的架构职责边界；同一模块被多个 Feature 使用是正常的交叉职责。实际的实现归属由源码声明派生，不维护第二份登记：
+下表说明每个 Feature 的架构职责边界。同一模块被多个 Feature 使用是正常的交叉职责；实际的实现归属由源码声明派生，不维护第二份登记。
 
 | Feature | 模块 |
 | --- | --- |
@@ -130,24 +166,30 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 | 模块 | 可以导入 |
 | --- | --- |
-| `model` | `effect`、纯解析依赖白名单（`yaml`、`mdast-util-*` 与 `micromark-*`、`mdast` 类型）、`node:crypto` 的摘要函数，以及其它 `model` 模块；不做文件读取、动态加载、时间、随机数、进程状态或缓存实例 |
-| `base` | `model`、平台层与 `native/hawdb` 的 TypeScript 绑定；不导入领域或应用 |
-| `domain` | `model`、`base` 与下表中排在它之前的 `domain` 模块 |
+| `model` | `effect`、纯解析依赖白名单、`node:crypto` 的摘要函数，以及其它 `model` 模块 |
+| `base` | `model`、平台层与 `native/hawdb` 的 TypeScript 绑定 |
+| `domain` | `model`、`base` 与下文层级中排在它之前的 `domain` 模块 |
 | `app` | `domain`、`base`、`model` |
-| `entry` | `app` 与 `model`；只有各入口的组合根 `entry/<入口>/main.ts` 与同一入口下各进程的组合根 `entry/<入口>/<进程>/main.ts`（例如工作区服务的计算进程与操作进程）可以导入 `domain` 与 `base` 的 Layer 以及其它入口模块的出口；入口的其它文件互不导入 |
+| `entry` | `app` 与 `model`；组合根另可导入 Layer 与其它入口的出口 |
 
-领域之间的依赖按以下层级，只能依赖排在前面层级的模块；同一层级的领域互不依赖，需要同层能力时由 `app` 编排或提取共享的纯模型：
+- `model` 的纯解析依赖白名单是 `yaml`、`mdast-util-*` 与 `micromark-*`、`mdast` 类型。`model` 不做文件读取、动态加载、时间、随机数、进程状态或缓存实例。
+- `base` 不导入领域或应用。
+- `entry` 的组合根是各入口的 `entry/<入口>/main.ts`，以及同一入口下各进程的 `entry/<入口>/<进程>/main.ts`（例如工作区服务的计算进程与操作进程）。只有组合根可以导入 `domain` 与 `base` 的 Layer 以及其它入口模块的出口；入口的其它文件互不导入。
+
+领域之间的依赖按以下层级，只能依赖排在前面层级的模块。同一层级的领域互不依赖，需要同层能力时由 `app` 编排，或提取共享的纯模型。
 
 1. `documents`：owner 读取、inventory 与精确引用解析；
 2. `concepts`、`taste`、`designs`、`issues`、`memory`、`docs-work`：各自拥有生命周期与采用操作，`issues` 拥有远端写入与 IssueProject 端口，`docs-work` 拥有写集规划与 scoped-clean 规则；
 3. `writing`（依赖 `concepts`）、`code`、`tests`；
 4. `trace`（依赖 `documents`、`code`、`tests`、`taste`）、`feedback`（依赖 `issues`）、`onboarding`（模板、配置与初始化规则，依赖 `documents`、`concepts`、`taste`、`writing`）。
 
-一个入口需要启动另一个入口时（`concord view` 启动 HTTP 服务、`concord lsp` 启动语言服务），由该入口自己定义启动端口，组合根用对方入口的实现提供；协议实现留在对方入口，`app` 不感知传输。
+一个入口需要启动另一个入口时（`concord view` 启动 HTTP 服务、`concord lsp` 启动语言服务），由该入口自己定义启动端口，组合根用对方入口的实现提供。协议实现留在对方入口，`app` 不感知传输。
 
 跨领域的编排在 `app`：分析观察对关系结果的补充、初始化与配置治理、步骤改写、docs work 的检查与收尾。`code` 不回调 `trace`，`concepts` 不依赖 `writing`，共享的作用域与路径算法在 `model`。
 
-模块边界与领域依赖方向同时约束值引用和类型引用，领域依赖层级保证运行时依赖无环。类型引用表达编译期耦合，不代表运行时执行。内部动态加载仍遵守同一边界；消费项目的可执行模块只在受控进程入口加载，避免把项目代码带入检查与主服务进程。
+模块边界与领域依赖方向同时约束值引用和类型引用。类型引用表达编译期耦合，不代表运行时执行；领域依赖层级保证运行时依赖无环。
+
+内部动态加载遵守同一边界。消费项目的可执行模块只在受控进程入口加载，避免把项目代码带入检查与主服务进程。
 
 ### 公开接口
 
@@ -168,22 +210,50 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 | 服务 | 职责 |
 | --- | --- |
-| RuntimeEnvironment | 一次调用或一个进程的 cwd 与完整环境变量。每个入口提供自己的值；其余代码从它取得路径、环境与子进程的设置，不直接读取宿主进程，缺少的变量不回落到宿主。规则见[进程内 CLI](engineering/testing/architecture.md#进程内-cli) |
-| Installation | 安装目录根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自安装目录）、模板与 skill 资源、工作进程入口，以及安装身份。安装身份是安装目录全部 JS 与原生产物的内容摘要，按各文件的 device、inode、大小、mtime、ctime 与目录成员组成的元数据指纹缓存在用户缓存目录；指纹任一变化时重新计算内容摘要，因此产物被替换时仍能发现 |
-| Workspace | 项目目录、对应的 Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
+| RuntimeEnvironment | 一次调用或一个进程的 cwd 与完整环境变量 |
+| Installation | 安装目录、运行资源的定位与安装身份 |
+| Workspace | 项目目录、对应的 Git-private 目录与安装身份 |
 | Sources | 路径安全的读取、来源快照与返回前核验 |
-| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作规则、概念目录、步骤重命名与 Issue 关闭的规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
-| Cache | 解析缓存（内存或持久）、只读快照（`CacheSnapshot`，进程内不可写的行，不经内存 HawDB）、持久命名空间的独占写入，三种能力分开提供；计算进程另有 `CacheDerivations`，只在请求内收集新产生的派生行，随结果交回主进程写入，不持有句柄或写入能力 |
+| Publication | 租约、journal、原子替换与恢复 |
+| Cache | 解析缓存、只读快照与持久命名空间的独占写入 |
 | Git | 状态、diff、提交与 worktree 操作 |
-| OwnedProcess | 子进程使用当前 RuntimeEnvironment 的环境；用 `unstable/process` 的 ChildProcess 启动与发送信号；Concord 负责后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出也核对后代 |
+| OwnedProcess | 子进程的启动、信号、后代清理确认与输出预算 |
+
+**RuntimeEnvironment**：每个入口提供自己的值。其余代码从它取得路径、环境与子进程的设置，不直接读取宿主进程，缺少的变量不回落到宿主。规则见[进程内 CLI](engineering/testing/architecture.md#进程内-cli)。
+
+**Installation** 定位安装目录根、源码运行时的根、原生产物、模板与 skill 资源，以及工作进程入口。原生产物在源码运行时取自经身份校验的共享缓存，安装后取自安装目录。
+
+安装身份是安装目录全部 JS 与原生产物的内容摘要。它按元数据指纹缓存在用户缓存目录，指纹由各文件的 device、inode、大小、mtime、ctime 与目录成员组成。指纹任一变化时重新计算内容摘要，因此产物被替换时仍能发现。
+
+**Workspace** 的配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存。
+
+**Publication** 的租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要领域校验（写作规则、概念目录、步骤重命名与 Issue 关闭的规划），经 `PublicationValidation` 端口取得。端口定义在 `base`，实现在 `app`，由入口的组合根提供；缺少时 Layer 无法构建。
+
+**Cache** 的三种能力分开提供：
+
+- 解析缓存，内存或持久；
+- 只读快照 `CacheSnapshot`：进程内不可写的行，不经内存 HawDB；
+- 持久命名空间的独占写入。
+
+计算进程另有 `CacheDerivations`：只在请求内收集新产生的派生行，随结果交回主进程写入；它不持有句柄或写入能力。
+
+**OwnedProcess** 让子进程使用当前 RuntimeEnvironment 的环境，用 `unstable/process` 的 ChildProcess 启动与发送信号。Concord 补齐后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出时也核对后代。
 
 ### 应用端口 Queries
 
-Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Local` 调用同一应用查询，`Queries.Remote` 是工作区服务的 RPC 客户端。CLI 默认使用 Remote，计算进程使用 Local；`--dry-run` 与 cache-off 在本进程执行同一查询，保持无持久状态约束。生命周期由[工作区服务](feature/local-data-engine/architecture.md#cli-查询)拥有。两者实现同一份完整的操作定义：输入模式、领域结果与错误 Schema，以及从结果到退出码的同一映射；公开输出只在入口生成一次。Remote 在适配层区分可重试的传输失败与领域错误；只读请求断线最多重新连接并重试一次，不在客户端计算。
+Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Local` 调用同一应用查询，`Queries.Remote` 是工作区服务的 RPC 客户端。CLI 默认使用 Remote，计算进程使用 Local。
+
+两个实现共用同一份完整的操作定义：输入模式、领域结果与错误 Schema，以及从结果到退出码的映射。公开输出只在入口生成一次。
+
+Remote 在适配层区分可重试的传输失败与领域错误，不在客户端计算。断线重试，以及 `--dry-run` 与 cache-off 在本进程执行的规则，由[CLI 查询](feature/local-data-engine/architecture.md#cli-查询)拥有。
 
 ### 服务操作
 
-工作区服务的每个应用操作只定义一次：名称、输入、结果与错误 Schema、准入与取消、执行位置、当前或历史语义，以及发布后是否申请刷新。RPC 与 HTTP 是适配层：RPC 负责二进制序列化与帧准入，HTTP 负责 Host/Origin 校验、请求体上限、状态码、ETag 与安全头；SSE 是 `subscribe` 的 HTTP 编码，保留慢消费者合并与 `stopping` 事件。静态资源、p5 frame 与 SPA 页面只属于 HTTP。
+工作区服务的每个应用操作只定义一次：名称、输入、结果与错误 Schema、准入与取消、执行位置、当前或历史语义，以及发布后是否申请刷新。RPC 与 HTTP 是适配层：
+
+- RPC 负责二进制序列化与帧准入。
+- HTTP 负责 Host/Origin 校验、请求体上限、状态码、ETag 与安全头。SSE 是 `subscribe` 的 HTTP 编码，保留慢消费者合并与 `stopping` 事件。
+- 静态资源、p5 frame 与 SPA 页面只属于 HTTP。
 
 | 操作 | 执行位置 | 语义 | HTTP | RPC |
 | --- | --- | --- | --- | --- |
@@ -195,12 +265,14 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | `query` | 计算进程 | 白名单当前查询，见[CLI 查询](feature/local-data-engine/architecture.md#cli-查询) | — | 是 |
 | `git-status`、`git-diff` | 计算进程 | 当前 Git 状态与定向 diff | `GET /api/git`、`GET /api/git/diff` | 是 |
 | `p5-compile` | 计算进程 | 当前来源捕获与编译，编译器经 `OwnedProcess` | `POST /api/p5/compile` | — |
-| `action` | 操作进程（写入、恢复与反馈）；`cache.*` 转给主进程维护 | 现行 ViewAction；写入后申请刷新 | `POST /api/action` | — |
-| `job-start`、`job-list`、`job-cancel` | 主进程监督，runner 经 `OwnedProcess` | 单槽任务；浏览器断开不取消，取消确认子进程组退出后才释放 | `POST /api/jobs`、`GET /api/jobs`、`DELETE /api/jobs/:id` | — |
+| `action` | 操作进程（写入、恢复与反馈）；`cache.*` 转给主进程 | ViewAction；写入后申请刷新 | `POST /api/action` | — |
+| `job-start`、`job-list`、`job-cancel` | 主进程监督，runner 经 `OwnedProcess` | 单槽任务 | `POST /api/jobs`、`GET /api/jobs`、`DELETE /api/jobs/:id` | — |
 | `cache-clear` | 主进程 | 见[清理](feature/local-data-engine/architecture.md#清理) | 经 `action` | 是 |
 | `cache-status`、`cache-rebuild` | 主进程；重建计算交给计算进程 | 持有者读取状态并保存重建结果 | 经 `action` | 是 |
 | `cache-snapshot`、`cache-derived` | 主进程 | 本地 CLI 操作读取快照与分块提交派生行 | — | 是 |
 | `feedback-merge` | 主进程 | begin、append、commit，commit 原子生效 | — | 是 |
+
+测试任务只有一个槽位。浏览器断开不取消任务；取消要确认子进程组退出后才释放槽位。
 
 `feedback.sync` 与 `feedback.check` 的 HTTP 请求断开时取消外部操作，任务不随连接取消。`view export` 只在 CLI 本进程执行。
 
@@ -208,11 +280,17 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 
 | 进程 | 提供 | 不提供 |
 | --- | --- | --- |
-| CLI | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存；有服务时使用快照和派生行，无服务时持久）、Queries.Remote | — |
-| 工作区服务主进程 | Workspace、Git、Cache 的持久独占写入、工作区投影、RPC 与 HTTP 服务、计算与操作进程的监督；Publication 只在清理作用域中、关闭持久库之后提供 | 领域计算 |
-| 计算进程 | Workspace、Sources、Cache（内存解析、主进程交来的只读快照与 `CacheDerivations`）、Queries.Local；RPC 经标准输入输出，结构以 JSON 编码、入口按计算请求 Schema 严格解码，来源原文以二进制字节帧传输；日志只写标准错误 | Publication、持久 Cache、OwnedProcess 之外的子进程 |
-| 操作进程 | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存）、远端读取；发布后经 `feedback-merge` 更新远端观察 | 持久 Cache |
+| CLI | Workspace、Sources、Publication、Git、OwnedProcess、Cache、Queries.Remote | — |
+| 工作区服务主进程 | Workspace、Git、Cache 的持久独占写入、工作区投影、RPC 与 HTTP 服务、计算与操作进程的监督 | 领域计算 |
+| 计算进程 | Workspace、Sources、Cache（内存解析、主进程交来的只读快照与 `CacheDerivations`）、Queries.Local | Publication、持久 Cache、OwnedProcess 之外的子进程 |
+| 操作进程 | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存）、远端读取 | 持久 Cache |
 | Concord mod | 原生界面、公开 CLI 查询、正文读写与文件监听，见[mod 数据访问](feature/herdr-mod/architecture.md#数据) | 领域计算、持久 Cache |
+
+- CLI 的 Cache 是内存缓存；有服务时使用服务的快照和派生行，无服务时使用持久缓存。
+- 工作区服务主进程只在清理作用域中、关闭持久库之后获得 Publication。
+- 计算进程经标准输入输出接收 RPC：结构以 JSON 编码，入口按计算请求 Schema 严格解码；来源原文以二进制字节帧传输。计算进程的日志只写标准错误。
+- 计算进程的结构不用 SchemaBinary，因为固定版本的 SchemaBinary 无法编译含共享字面量前缀的元组联合。
+- 操作进程发布后，经 `feedback-merge` 更新远端观察。
 
 每个入口的 Layer 构建在测试中验证：缺少能力时编译或构建失败，不在运行时才发现。
 
@@ -221,45 +299,49 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | 需要 | Effect 能力 | Concord 补齐 |
 | --- | --- | --- |
 | 资源生命周期 | Scope、`Effect.acquireRelease`、`Layer.effect` | — |
-| 工作区服务协议 | `unstable/rpc`（请求关联、具名错误、取消、结果流）经 `unstable/socket` | 客户端协议的序列化采用 `RpcSerialization.layerSchemaBinary`（计算进程的内部 RPC 除外：固定版本的 SchemaBinary 无法编译含共享字面量前缀的元组联合，结构改用 JSON），字节字段以原生二进制传输，由真实往返与边界大小测试验收，不接受 Base64；领域 Schema 显式拒绝额外字段；单帧、累计、连接、在途与发送字节的准入由传输适配层执行，`maxBufferSize` 只限不完整消息；`feedback-merge` 以 begin、append 与 commit 分块提交，commit 原子生效 |
-| 当前状态与订阅 | SubscriptionRef | 每个订阅只保留最新状态，慢订阅的旧状态被替换，计入发送预算 |
-| 合并监听事件与补偿刷新 | Stream 与 Schedule | 去抖有最长等待（两秒），扫描期间只合并一次后续刷新 |
+| 工作区服务协议 | `unstable/rpc`（请求关联、具名错误、取消、结果流）经 `unstable/socket` | 二进制序列化与传输准入，见[协议](feature/local-data-engine/architecture.md#协议) |
+| 当前状态与订阅 | SubscriptionRef | 每个订阅只保留最新状态；慢订阅的旧状态被替换，计入发送预算 |
+| 合并监听事件与补偿刷新 | Stream 与 Schedule | 去抖最长等待两秒，扫描期间只合并一次后续刷新 |
 | 串行维护 | Semaphore | 只在进程内互斥；服务锁、publication 与超时各自裁决 |
 | 在途请求与取消 | FiberMap、FiberSet | 键为实例、连接与请求身份；中断不替代进程组回收与 60 秒超时 |
 | 启动就绪 | Deferred | — |
-| HTTP 与静态资源 | HttpRouter、HttpStaticServer | Host/Origin 校验沿用现行规则 |
-| 测试中的时间与协议 | TestClock；RpcTest | 服务的状态机与计时在测试进程内以 Layer 加 TestClock 验证；TestClock 不抢占同步计算，也不产生文件或进程事件，计算与操作进程、服务锁、进程退出与清理确认用真实进程验证。RpcTest 只验证逻辑；公开输出等价用真实序列化验收 |
+| HTTP 与静态资源 | HttpRouter、HttpStaticServer | Host/Origin 校验，见[Web 工作台架构](feature/web-workbench/architecture.md) |
+| 测试中的时间与协议 | TestClock；RpcTest | 见下文 |
 | 性能剖析 | `Effect.fn` 的 span，按需经 `unstable/observability` 导出 | — |
+
+服务的状态机与计时在测试进程内以 Layer 加 TestClock 验证。TestClock 不抢占同步计算，也不产生文件或进程事件；计算与操作进程、服务锁、进程退出与清理确认用真实进程验证。RpcTest 只验证逻辑，公开输出等价用真实序列化验收。
 
 ## 初始化与项目治理
 
 `concord.config.ts` 可以不存在；存在时运行时只读取这一个静态 TS 配置文件，不执行模块。配置项与默认值见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#配置项)，journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)。配置快照拥有原文前像、路径与摘要，写入与恢复使用同一协议。
 
-Memory 固定位于项目目录的 `memory/`。`docs/taste.md` 存在即生效，没有状态字段；docs 下的页面在依据规则的句子旁链接品味条目或款的 ID，`check` 校验这些链接，反向引用由 `taste` 派生。品味不充当测试 Spec 或自动合规证据。设计说明按[文档模型](document-model.md#页面职责)放在所属 Spec 中。
+Memory 固定位于项目目录的 `memory/`。`docs/taste.md` 存在即生效，没有状态字段。
+
+docs 下的页面在依据规则的句子旁链接品味条目或款的 ID，`check` 校验这些链接，反向引用由 `taste` 派生。品味不充当测试 Spec 或自动合规证据。设计说明按[文档模型](document-model.md#页面职责)放在所属 Spec 中。
 
 ## 领域与 CLI
 
-`concord --root <目录>` 指定项目目录，省略时从当前目录定位。命令面、调用、输出、退出码与错误由 [local SDLC 的 CLI 页](feature/local-sdlc/cli.md)拥有；命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用。`--skill [topic]` 在任意 cwd 读取随包 Agent 指引，不加载 host、不写文件。
+`concord --root <目录>` 指定项目目录，省略时从当前目录定位。命令面、调用、输出、退出码与错误由 [local SDLC 的 CLI 页](feature/local-sdlc/cli.md)拥有。
 
-只有 `test run`、`test verify` 与 `issue close --fixed` 启动仓库命令；`check` 不执行测试。`review` 生成本地审阅材料，不写 GitHub。`docs work` 见[并行切分文档工作](feature/neutral-project-governance/use-case/coordinate-docs-work.md)。
+命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用。`--skill [topic]` 在任意 cwd 读取随包 Agent 指引，不加载 host、不写文件。
+
+哪些命令启动仓库命令见[执行管线](feature/local-sdlc/architecture.md#执行管线)；`check` 不执行测试。`review` 生成本地审阅材料，不写 GitHub。`docs work` 见[并行切分文档工作](feature/neutral-project-governance/use-case/coordinate-docs-work.md)。
 
 ## 存储 Spec
 
-文档的位置、身份与字段由[文档模型](document-model.md)与[文档与标记格式](feature/local-sdlc/format.md#owner)拥有。模板随工具包安装，由严格 manifest 校验；`new` 与 init 用模板创建文件，模板是作者提示，不是完成状态或验收证据。init 生成布局、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md` 与 `docs/architecture.md`；根 `AGENTS.md` 保留既有正文，追加或刷新一个带边界的托管区块。
+文档的位置、身份与字段由[文档模型](document-model.md)与[文档与标记格式](feature/local-sdlc/format.md#owner)拥有。
+
+模板随工具包安装，由严格 manifest 校验。`new` 与 init 用模板创建文件；模板是作者提示，不是完成状态或验收证据。
+
+init 生成布局、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md` 与 `docs/architecture.md`。根 `AGENTS.md` 保留既有正文，追加或刷新一个带边界的托管区块。
 
 测试关联是测试源码中的 Concord 标记：`@feature <path>` 或 `@use-case <path>`，可附 `@issue <path>`、`@status retired` 与 `@name`。测试身份由文件和标记派生为 `neref_...`，反向关系由当前源码派生，不写回 Spec。标记语法与发现范围见[发现测试](feature/local-sdlc/use-case/discover-annotated-tests.md)。
 
 HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对路径集合、内容摘要与解析器和 schema 身份，命中仍严格解码。损坏、schema 不符或写入失败时回源编译，不返回陈旧结果。
 
-缓存只保存解析结果和投影，不缓存授权或修复核验的判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有。
+缓存只保存解析结果和投影，不缓存授权或修复核验的判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有，句柄的所有权与打开模式见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。
 
-HawDB 句柄的所有权、只读与可写打开、dry-run 与 cache-off 的行为见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。每个项目目录最多一个[工作区服务](feature/local-data-engine/architecture.md#工作区服务)长期持有持久缓存、刷新工作区投影并向 Web 与 CLI 提供领域结果；持久缓存被占用时，可重建的解析缓存改用内存缓存，命令照常完成。
-
-文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。每篇文档每个进程最多解析一次，元数据、标题锚点、steps 与链接事实取自同一棵语法树。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
-
-CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验。集合解析按批读取和写入缓存，逐文件保留解析失败；大批键查询使用有界命名空间扫描后选择请求的键，单键查询保持定向读取。当前来源查询的临时结果只属于当前调用。Web 工作区导航独立读取[工作区投影](feature/web-workbench/concepts.md#workspace-projection)，不把历史结果用于当前事实授权。缓存命中仍核对原文摘要、解析器身份和 Schema，来源前后核验保留。
-
-同次关系图编译复用相同引用与目标类型的解析结果。读取的目标及 README 边界在返回前逐一复核字节和安全路径；变化或复核失败保留 finding，不能返回完整图。临时引用结果随本次编译结束释放，不跨请求保存。
+CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验，解析结果怎样使用缓存见[缓存的使用与维护](feature/local-data-engine/architecture.md#缓存的使用与维护)。Web 工作区导航独立读取[工作区投影](feature/web-workbench/concepts.md#workspace-projection)，不把历史结果用于当前事实授权。
 
 ```mermaid
 flowchart TD
@@ -286,51 +368,27 @@ flowchart TD
 
 cache clear 在独占发布租约下执行，锁、删除阶段与保留规则见[数据引擎架构](feature/local-data-engine/architecture.md#清理)。clear 只删除 cache.hawdb 内的缓存数据，不删除源 owner、journal 和 Memory。
 
-init 作用于 Git worktree 顶层，子目录项目与 bare repo 明确拒绝。
-
-Roadmap 采用把目录移入 `docs/feature/`，集合内的相对链接改写，集合外链接保持原目标；规则见[采用 Roadmap](feature/local-sdlc/use-case/plan-and-adopt-contracts.md)。
-
-Trace 与定向 Review 按 owner 汇总 Feature supporting page 与 Use Case 的测试关系，保留 exact path 与 anchor，不用目录前缀混入相邻 Feature。默认输出供人阅读，`--json` 输出结构化结果。
-
 读写路径拒绝绝对路径、traversal、symlink 组件和超出仓库的 realpath。扫描只读取 Concord 所属目录和格式，错误的受管格式明确报错。
 
 ## 发布协调
 
-Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个项目目录独立；journal 绑定 root 与 privateDir。基础适配提供文件租约、身份复核与原子替换，见[可移植协调架构](feature/portable-coordination/architecture.md)。
+发布协调让多个命令与 agent 在同一项目目录读写而互不覆盖：读取不持锁、返回前核验，写入只在提交时短期独占，中断后按 journal 恢复。读取、写入与恢复的协议、错误和恢复结果由[可移植协调架构](feature/portable-coordination/architecture.md)拥有，支持范围见[跨平台标签发版](feature/cross-platform-release/README.md)。
 
-支持同主机、同 PID 命名空间内的 Linux 与 macOS 本地 worktree，不保证网络多机协调与 Windows 执行。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
+Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个项目目录独立；journal 绑定 root 与 privateDir。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
 
-普通来源查询不取得发布租约。读取记录文件前像、缺失路径和目录集合，返回前重新核对读过的每个文件摘要与目录集合，并确认没有未完成的 journal，变化返回 SourceChanged。未完成 journal 仍阻断当前事实结果。缓存快照查询不加载来源 Repository。
+发布协调不持有持久缓存句柄。写入、发布与恢复不依赖工作区服务。
 
-普通文档写入的规划采用乐观读取，提交阶段才取得独占发布租约，复核配置、全部观察与完整前像，写入 journal 后逐文件原子 rename。冲突拒绝覆盖；恢复与 Issue 关闭保持独占协调。显式低层写快照可保护必须串行化的状态转换，不能用于普通来源查询。
+### runner 租约
 
-publication owner 通过临时目录 fsync 与 rename 公布，正常释放与死亡恢复只删除准确 token，不按年龄抢占，不递归删除租约目录。发布协调不持有持久缓存句柄；写入、发布与恢复不依赖工作区服务。不同协调协议的程序不得同时访问同一项目目录。
+CLI 与 Web 的测试共用独立的 `runner.lease`，长时间执行不占文档租约。
 
-trace show、trace gaps 与 review 默认读取 HawDB 中已完成的诊断投影，并请求后台刷新。输出明确标记历史性、构建时间及刷新错误；首次无缓存返回 QueryPending。--fresh 等待当前来源结果。完整 Spec 见[异步诊断投影](feature/local-data-engine/use-case/query-asynchronous-projections.md)。check、trace check、当前来源检索及证据裁决不使用历史投影授权成功。
+1. run 状态区分 running、finalizing 与 quarantined。只有同主机活进程的 running 允许发布。
+2. 发布前持久标记该 run 失效。A→B→A 的编辑与回滚不撤销失效标记。
+3. run 结束时，在新快照中核对起止 candidate、配置、定义、Spec、失效与清理结果，再写入结果。
+4. 父进程死亡不授权回收 runner；清理未知时保持阻断。
+5. 最终快照无法取得时，留下只收紧权限的 token-bound quarantine 标记。
 
-`concord recover` 先回收已死 token，再在独占保护下选择唯一的普通或 Trace journal。多 journal 冲突先于 runner 具名拒绝并保留现场。恢复入口获锁后重查类型和现场，只在内容符合前像或 planned digest 时恢复。
-
-恢复完成后重新取得短独占快照，核验协调路径上的 journal 与 runner。init 回滚后不要求配置文件仍在。并发发布可使核验 Busy，此时 journal 结果不能称为恢复完成。返回值保留 `journalStatus` 并附带 coordination。
-
-runner 为 blocked 时 CLI 失败退出，初次检查已 blocked 时不开始 journal 恢复。dry-run 执行同一规划校验，不发布 owner、journal 或缓存。短协调可能创建 Git-private 目录。`recover` 不接受 dry-run。
-
-CLI 与 Web 测试共用独立 `runner.lease`，长执行不占文档租约。run 状态区分 running、finalizing、quarantined；只有同主机活进程的 running 允许发布，且发布前持久标记该 run 失效，A→B→A 与回滚不撤销失效标记。
-
-run 结束时在新快照中核对起止 candidate、配置、定义、Spec、失效与清理结果，再写入结果。父进程死亡不授权回收 runner，清理未知时保持阻断。最终快照无法取得时留下只收紧权限的 token-bound quarantine 标记。此协议不观察不合作编辑器的每次瞬时修改。
-
-## 操作依赖与资源边界
-
-各命令的读取范围、完整性诊断与需要完整图的结论见 [local SDLC 架构](feature/local-sdlc/architecture.md#操作依赖)，访问模式见[可移植协调架构](feature/portable-coordination/architecture.md#access-modes)，跨功能规则见 [操作依赖与发布协调](#操作依赖与发布协调)。
-
-来源读者不创建 publication token。返回当前结果前，重新核对读过的每个文件摘要与目录集合，并确认没有未完成的 journal。完整发布即使发生在一次读取之内，也会因文件摘要变化被发现。普通提交只删除自身 owner。
-
-未知文件、其它 exclusive token 或身份改变时保留现场并拒绝。任一活着的持有者、host 不匹配、EPERM、PID 复用或未知持有者都保留现场。fsync 或核验失败时保留具名错误和可恢复现场。
-
-recover 返回 operation、journal 结果、changedPaths 和 coordination；publication 列出 reclaimedTokens。runner 状态为 absent、running 或 blocked，blocked 带具名原因。无事务且 runner 为 absent 或健康 running 时返回 clean。
-
-runner 不确定时返回 blocked，并保留 journal 的实际处理结果。初次检查已 blocked 时，journalStatus 为 pending 或 clean，changedPaths 为空。journal 恢复后 runner 变为 blocked 时，保留 journalStatus，总 status 为 blocked。recover 不删除 `runner.lease`、run state、证据或未知文件。
-
-未完成的多文件 journal 阻断普通快照。来源扫描按当前配置和安全目录读取，文件名不推导作者 ID。协调细节见[可移植协调架构](feature/portable-coordination/architecture.md)，文档读取职责见[本地 SDLC 架构](feature/local-sdlc/architecture.md)，随包步骤由 `concord --skill recovery` 提供。
+此协议不观察不合作编辑器的每次瞬时修改。
 
 ## Design
 
@@ -338,45 +396,21 @@ Design 是一页还没定下来的取舍，见[记下一个还没定的取舍](f
 
 ## 测试执行与修复核验
 
-项目配置中的 runner 命令是用户声明的验收单元。Concord 报告命令的退出结果与可观察到的执行数量，不声称收集或证明 runner 的每个子 case，不构成正式 E2E、可靠性证书或覆盖证明（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。runner 在消费者 cwd 下以 shell=false 执行，有 timeout；取消或超时清理进程组，信号或启动失败不记为通过。命令由项目作者信任与维护。
+项目配置中的 runner 命令是用户声明的验收单元，由项目作者信任与维护。Concord 报告命令的退出结果与可观察到的执行数量。它不声称收集或证明 runner 的每个子 case，也不构成正式 E2E、可靠性证书或覆盖证明（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。runner 怎样执行见[执行管线](feature/local-sdlc/architecture.md#执行管线)。
 
-Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷提交上以非零结果结束、在修复提交上通过；通过后删除 Issue，结论输出给提交说明，可在声明的输入与环境下重放（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。
-
-## 测试标记与缓存身份
-
-测试标记的身份只保证当前扫描集合唯一，测试演进由 Git 保存。开发者直接编辑标记并以 Git 审阅；Web 的源码保存只替换配置范围内既有的 JS/TS 文件，使用完整文件摘要与受限恢复日志。scan 与 check 不改写源文件。
-
-测试标记不核对 runner import，不把函数名 `test` 当成测试声明。`@status retired` 的标记不能用于修复核验；命令结果的执行数量为 unknown，或由默认 Node TAP 计数观察为 nonzero、zero、skipped，零执行或全跳过的运行不计为修复核验的 red 或 green。
-
-缓存身份包含项目目录的 root 与 privateDir、测试与源码目录、runner 配置、完整路径集合、每文件字节摘要和解析器身份。关系验证始终使用当前 Markdown；修复核验从当前源码重新构建，不信任缓存的状态判断。
+修复核验证明同一冻结命令在缺陷提交上失败、在修复提交上通过，之后 Issue 以 fixed 关闭。可观察行为见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)，实现见[修复核验](feature/local-sdlc/architecture.md#修复核验)。
 
 ## 代码归属声明
 
-Code Declaration 是维护者对实现与 Spec 关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或修复核验的依据。查询引用的派生规则见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)。
+Code Declaration 是维护者对实现与 Spec 关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或修复核验的依据。
 
-`sourceIgnore` 按[发现 Spec](feature/local-sdlc/use-case/discover-annotated-tests.md)缩小源码与测试自动发现范围；配置参与快照身份，扫描、复核与监听共用同一匹配规则。
-
-`sourceRoots` 默认为存在的 `src/`，配置后替换默认值，沿用安全路径验证。只扫描显式根内的 JS/TS，允许与 testRoots 重叠。代码声明解析按文件缓存在 HawDB 中，键包含项目目录、解析器身份、路径和字节摘要；命中仍严格解码，摘要不符、损坏或写失败时回源。
-
-当前事实门禁的归属、关系和 fixed 判断从当前来源计算。诊断展示可缓存带构建时间的历史关系与缺口，不授权当前裁决。扫描核对前后文件集合及摘要。未改动的配置解析可命中同一库，使后续命令不加载 TypeScript 编译器。
-
-三种 scope：文件头 `@concord-file`；紧邻完整 AST 节点的 `@concord-code`；同一 statement-list 内连续语句的 `@concord-begin/end`。范围标记无参数，一个 scope 最多一份声明，多目标通过相邻 implements 表达。
-
-node 白名单为有 body 的函数声明与方法、类声明，以及单 identifier 且直接 arrow 或 function initializer 的变量语句。region 不嵌套、不截断表达式、不跨语句列表，可以包含完整函数。查询返回全部包含关系，不推断覆盖或继承。
-
-绑定与孤立标记诊断消费真实 TS comment ranges，不从纯文本行认领字符串、模板、正则或 JSX 中的伪标记。含真实代码标记且有语法错误的文件不产生有效声明。起始块内 implements 必须连续相邻，语法与位置规则见[使用指引](../skills/concord/references/code.md)。
-
-目标支持 Feature、Use Case 与 Engineering，沿用 owner、supporting page 与 anchor 解析，只拒绝重复 exactRef。Feature 反查汇总自身与 Use Case；Engineering 汇总自身与附页。反查按自动引用去重，保留匹配的 exactRefs。
-
-引用由 canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用。文件移动、改名、作用域和顺序变化可能使引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list 或 locate。派生算法见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)。
-
-`code marker` 与对应 action 不接收或返回 ID，在来源快照中验证指定 canonical reference、归属链、类型和 anchor。`code list` 与 `code at` 提供声明查询。Web 以符号、位置和显式关联呈现实现。无效 begin 仍参与边界检查，普通扫描不写源码。
-
-代码错误阻断 code、check、trace、review 与 doctor。test list、show、run 与 verify 不包含代码投影，保留全部文档与测试关系校验；修复核验的输入不包含 code 引用。
+标记的作用域、绑定、目标、引用与查询规则见[代码声明](feature/local-sdlc/architecture.md#代码声明)，引用的派生算法见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)，书写方法见[使用指引](../skills/concord/references/code.md)。
 
 ## 测试接入边界
 
-测试执行归项目：Concord 只通过配置的 runner 与可选 adapter 运行测试并做修复核验，所有权见[治理边界](feature/neutral-project-governance/architecture.md)，接入边界见[项目测试接入边界](feature/local-sdlc/README.md#测试的边界)。消费者拥有 runner、执行副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
+测试执行归项目：Concord 只通过配置的 runner 与可选 adapter 运行测试并做修复核验。所有权见[治理边界](feature/neutral-project-governance/architecture.md)，接入边界见[项目测试接入边界](feature/local-sdlc/README.md#测试的边界)。
+
+消费者拥有 runner、执行副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
 
 ## Web 工作台与 Concord mod
 
@@ -390,15 +424,19 @@ Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文�
 
 ## 工程知识与本地观察
 
-Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察 Spec](feature/feedback/use-case/manage-local-observations.md)拥有，读取范围见上文“操作依赖与资源边界”。
+Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察 Spec](feature/feedback/use-case/manage-local-observations.md)拥有，读取范围见[操作依赖](feature/local-sdlc/architecture.md#操作依赖)。
 
 ## 验收
 
-发版归档自带 Node.js 运行时与 ripgrep，不含 `workspace:*`、外部仓库路径或运行时 import；解压后在没有系统 Node.js 的 `PATH` 中运行 `bin/concord`，见[打包测试](engineering/testing/README.md#打包测试)。
+发版归档自带 Node.js 运行时与 ripgrep，不含 `workspace:*`、外部仓库路径或运行时 import。解压后在没有系统 Node.js 的 `PATH` 中运行 `bin/concord`，见[打包测试](engineering/testing/README.md#打包测试)。
 
-真实闭环：init → 写 Feature 与 Use Case → 写 Issue → 提交带 `@issue` 的失败回归测试并配置 runner → 提交修复 → `issue close --fixed` → trace 与 review。另覆盖错误引用、未核验的 fixed、伪造的 verification、测试源码变化、重开、退役、缓存删除与损坏、注释变化后的缓存失效、悬空与重复标注、跨 cwd 与 root、路径穿越、写冲突、并发写、journal 恢复、超时清理和独立安装。
+真实闭环：init → 写 Feature 与 Use Case → 写 Issue → 提交带 `@issue` 的失败回归测试并配置 runner → 提交修复 → `issue close --fixed` → trace 与 review。
 
-构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，由 Node 自带的类型擦除直接运行 TS，并纳入 typecheck。每个目标的发版归档携带该目标的原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一组装候选归档，在每个目标的真实系统上运行同一份候选，通过后才发版，见[跨平台标签发版](feature/cross-platform-release/README.md)。
+闭环之外还覆盖：错误引用、未核验的 fixed、伪造的 verification、测试源码变化、重开、退役、缓存删除与损坏、注释变化后的缓存失效、悬空与重复标注、跨 cwd 与 root、路径穿越、写冲突、并发写、journal 恢复、超时清理和独立安装。
+
+构建脚本使用 Effect FileSystem 和 ChildProcessSpawner。测试通过 Node test adapter 执行 Effect，由 Node 自带的类型擦除直接运行 TS，并纳入 typecheck。
+
+每个目标的发版归档携带该目标的原生产物，绑定源码、ABI、revision 和摘要。平台构建完成后统一组装候选归档，在每个目标的真实系统上运行同一份候选，通过后才发版，见[跨平台标签发版](feature/cross-platform-release/README.md)。
 
 交付通过 `pnpm gate`，检查流程由[构建与检查入口](engineering/testing/README.md#检查入口)定义。性能预算由 `pnpm bench` 按[性能验收](engineering/performance/README.md)的测量路径单独判定，不进入 `pnpm gate`。
 
@@ -413,11 +451,11 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 ## 操作依赖与发布协调
 
-操作依赖、发布协调和证据裁决分别定义。
+操作依赖、发布协调和证据裁决分别定义。各命令的读取范围、完整性诊断与需要完整图的结论见 [local SDLC 架构](feature/local-sdlc/architecture.md#操作依赖)，访问模式见[可移植协调架构](feature/portable-coordination/architecture.md#access-modes)。
 
 1. 每个操作按目标与不变量声明所需输入。局部读取与精确引用验证不以无关 owner、代码或测试全部有效为前提；目标身份、来源、归属与路径安全仍须严格校验。
 2. 全局诊断保留可读取记录和全部已发现错误。完整性随投影与关系输出传播，不完整输入不能授权依赖完整图的裁决。
-3. 只读来源访问使用[来源快照](feature/portable-coordination/concepts.md#source-snapshot)，返回前核对观察到的文件摘要、目录集合与未完成的 journal；普通写入规划不持锁，提交使用短期独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
+3. 只读来源访问使用[来源快照](feature/portable-coordination/concepts.md#source-snapshot)，返回前核对观察到的文件摘要、目录集合与未完成的 journal。普通写入规划不持锁，提交使用短期独占协调与前像核验。dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
 4. 恢复区分 journal 结果、实际回收 token 与 runner 状态，返回成功前核验恢复后的协调状态，不用无 journal 推断仓库整体可写。
 
 ## 凭据

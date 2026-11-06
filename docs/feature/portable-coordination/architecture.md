@@ -2,7 +2,7 @@
 
 Concord 用 Node 文件租约协调一个 worktree 的写入，HawDB 只是可丢弃的缓存。本页负责乐观的来源访问、独占提交与恢复结果。用户路径见[协调本地发布](use-case/coordinate-local-publications.md)。
 
-每种操作的依赖矩阵见[本地 SDLC 架构](../local-sdlc/architecture.md#操作依赖)。runner 租约与证据定稿，以及按操作声明依赖的理由，见[项目架构](../../architecture.md#发布协调)。
+每种操作的依赖矩阵见[本地 SDLC 架构](../local-sdlc/architecture.md#操作依赖)。runner 租约与证据定稿见[项目架构的发布协调](../../architecture.md#发布协调)，按操作声明依赖的理由见[操作依赖与发布协调](../../architecture.md#操作依赖与发布协调)。
 
 ## 实体归属 {#entity-ownership}
 
@@ -20,7 +20,7 @@ runner 状态与数据库目录所有权各自保持边界。持久句柄在来�
 
 `LocalRepository` 接受显式的 `access: 'read' | 'write'`。read 使用乐观的来源快照，拒绝真实发布。普通 write 乐观地制定计划，只在提交时取得独占租约。
 
-dry-run 决定计划是否发布，与 access 无关；它复用来源快照，从不授权发布。已有的 `dryRun` 调用方保持预览语义。
+dry-run 决定计划是否发布，与 access 无关；它复用来源快照，从不授权发布，`dryRun` 调用方得到预览语义。dry-run 执行与真实写入相同的规划校验，不发布 owner、journal 或缓存；短协调可能创建 Git-private 目录。`recover` 不接受 dry-run。
 
 每个普通 CLI 查询都声明 read，CLI 动作与 Web 共用一套动作分类。只有外部执行、恢复、缓存重建或清除，以及文档写入使用 write。
 
@@ -28,15 +28,17 @@ dry-run 决定计划是否发布，与 access 无关；它复用来源快照，�
 
 ## 数据流 {#data-flow}
 
-申领时，在租约旁的唯一临时目录中写入带新 token 的完整持有者文件并 fsync。随后把该目录 rename 到租约路径，并在受保护的工作开始前 fsync 父目录。已被占用的租约不能被替换。未知元数据、symlink、多余文件、持久化失败或身份不确定时 fail closed。
+申领时，在租约旁的唯一临时目录中写入带新 token 的完整持有者文件并 fsync。随后把该目录 rename 到租约路径，并在受保护的工作开始前 fsync 父目录。已被占用的租约不能被替换。未知元数据、symlink、多余文件、持久化失败或身份不确定时 fail closed；fsync 或核验失败时保留具名错误和可恢复现场。
 
 释放与失效持有者回收只 unlink 观察到的那个 token 文件。只有 unlink 成功后才可以尝试非递归 rmdir；`ENOTEMPTY` 时保留新的持有者。
 
 租约目录从不被递归删除，也不因存在时间长而被夺取。关闭是幂等的。普通写入准入可以回收一组观察到的、全部失效的持有者并重试一次，不处理 journal 或 runner 所有权。未知主机、存活或被复用的 PID、`EPERM` 和未知记录都保留现场。
 
+当前协议合法的加入过渡状态，只在每个[持有者](../../concepts.md#holder)都确认 ESRCH 后回收。回收一个已死亡的发布 token 只证明这个 token 的 ESRCH，不能用来识别一个未复现的 macOS 现场。
+
 来源查询不回收存活或失效的发布 token。写入者与恢复串行修改，来源读者检测漂移。缓存引擎可用时，来源发布期间历史缓存的命中仍可读取。
 
-恢复先记录并回收观察到的失效发布 token，再在独占保护下选出唯一的 journal。之后的引擎阶段不再回收。
+恢复先记录并回收观察到的失效发布 token，再在独占保护下选出唯一的 journal。之后的引擎阶段不再回收。恢复入口取得租约后重新检查 journal 类型与现场，只在内容符合前像或 planned digest 时恢复。
 
 新的持有者出现时，即使它随后失效，本次调用也返回 `Busy`；之后的显式恢复会记录对它的回收。普通恢复或 Trace 恢复取一个新的短独占快照，随后做最终的 journal 与 runner 核对。
 
@@ -45,7 +47,7 @@ dry-run 决定计划是否发布，与 access 无关；它复用来源快照，�
 ## 不变量 {#invariants}
 
 - read 访问拒绝发布。dry-run 表示预览，从不发布来源改动，也不启动后台刷新。
-- 来源读取不取得共享所有权，而是核对观察记录与发布修订号。只解析部分来源的读取也按这条规则核对。
+- 来源读取不取得共享所有权，而是核对观察记录与发布修订号。只解析部分来源的读取也按这条规则核对。完整发布即使发生在一次读取之内，也会因文件摘要变化被发现。
 - 处于 prepared 与 committed 的 journal 保持可恢复；未知编辑不能被覆盖。
 - HawDB 目录所有权与 runner 清理不依赖查询投影。
 - 恢复成功描述的是经过核对的协调状态，而不只是没有 journal。
@@ -54,13 +56,15 @@ dry-run 决定计划是否发布，与 access 无关；它复用来源快照，�
 
 相互竞争的写入者报告 `Busy`。多个 journal 是一个具名冲突；该冲突先于 runner 结果报告，并保留现场。既不匹配前像也不匹配 planned digest 的内容保留下来，由人判断。
 
-恢复结果保留 `operation`、journal 结果和 `changedPaths`，另加 `coordination`。发布部分列出 `reclaimedTokens`。runner 状态为 `absent`、`running` 或 `blocked`，`blocked` 带具名原因。
+恢复结果保留 `operation`、journal 结果（`journalStatus`）和 `changedPaths`，另加 `coordination`。发布部分列出 `reclaimedTokens`。runner 状态为 `absent`、`running` 或 `blocked`，`blocked` 带具名原因。
 
 没有事务时，`absent` 或健康的 `running` 可以返回 `clean`。runner 状态不确定时返回 `blocked`，并保留实际产生的 journal 结果。
 
 如果第一次独占核对已经发现 runner 为 `blocked`，不开始 journal 恢复。此时存在 journal 则 journal 状态为 `pending`，不存在则为 `clean`；changed paths 为空。
 
 如果 runner 在 journal 处理之后变为 `blocked`，已完成的 journal 状态保留，整体状态变为 `blocked`。CLI 在 `blocked` 时失败，Web 与动作返回相同的状态字段。
+
+恢复不删除 `runner.lease`、run state、证据或未知文件。维护者处理恢复的随包步骤由 `concord --skill recovery` 提供。
 
 ## 身份与复用 {#identity-and-reuse}
 

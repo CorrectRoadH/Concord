@@ -8,7 +8,7 @@
 
 - **先写 Spec 再动手。** 用 Feature 描述能力，用 Use Case 一步一步写出使用者的路径；方案有争议时，先比较候选方案再裁决。
 - **把测试和代码连到 Spec。** 在测试或实现文件里写一行标记，Concord 从源码反查出某个 Use Case 由哪些测试守护、由哪些代码实现。
-- **找出没有关联 Use Case 的测试。** 每个测试标注它验证的 Use Case 或其中一步；`concord test discover` 收集测试框架认识的全部测试后，`concord trace gaps` 列出没有关联任何 Use Case 的测试。缺少关联不表示测试没有价值，维护者需要结合测试目的决定如何处理（[只声称证明过的](../../taste.md#t-5)）。
+- **找出没有关联 Use Case 的测试。** 每个测试标注它验证的 Use Case 或其中一步。`concord test discover` 收集测试框架认识的全部测试后，`concord trace gaps` 列出没有关联任何 Use Case 的测试。缺少关联不表示测试没有价值，维护者结合测试目的决定如何处理（[只声称证明过的](../../taste.md#t-5)）。
 - **让 check 守住一致性。** Spec 被删除、改名或标记写错时，`concord check` 指出出错的文件和行。
 - **用证据关闭缺陷。** 缺陷记为 Issue。回归测试在缺陷提交上失败、在修复提交上通过，Concord 核验这两点后才把 Issue 关为已修复。
 - **积累工程知识。** 调查结论、根因和裁决写成 Memory，之后可以按关键词检索。
@@ -213,8 +213,9 @@ export default function (p: P5) {
 
 证据只表达实际证明的范围（[只声称证明过的](../../taste.md#t-5)）。
 
-- 源码声明不等于执行，命令成功不等于逐 case 覆盖或正式 E2E 可靠性。Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal E2E。
-- Issue 标记为 fixed 时，同一冻结命令必须在缺陷提交上以非零结果结束、在修复提交上通过，两者之间测试、runner 输入与所指 Spec 不变。通过后删除 Issue，结论输出给提交说明，可用 `test verify` 在声明的输入与环境下重放；command 结果不证明逐 case 执行。完整路径见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
+- 源码声明不等于执行，命令成功不等于逐 case 覆盖或正式 E2E 可靠性。修复核验也不描述成原生 runner 的逐 case 覆盖率。
+- Issue 标记为 fixed 时，同一冻结命令必须在缺陷提交上以非零结果结束、在修复提交上通过，两者之间测试、runner 输入与所指 Spec 不变。
+- 核验通过后删除 Issue，结论输出给提交说明，可用 `test verify` 在声明的输入与环境下重放。command 结果不证明逐 case 执行。完整路径见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 - 文档、品味结构或关系检查不得被展示为实现合规、功能完成或测试覆盖的证明。
 
 ### 测试的边界
