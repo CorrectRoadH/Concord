@@ -13,8 +13,9 @@ initializeNodeCompileCache();
 const args = process.argv.slice(2);
 const cwd = process.cwd(), env = Object.freeze({ ...process.env });
 async function start(program: ReturnType<typeof fullProgram>): Promise<void> {
-  const { Effect } = await import('effect');
-  const { NodeRuntime, NodeServices } = await import('@effect/platform-node');
+  const Effect = await import('effect/Effect');
+  const NodeRuntime = await import('@effect/platform-node/NodeRuntime');
+  const NodeServices = await import('@effect/platform-node/NodeServices');
   const { cliEnvironmentLayer } = await import('./main.ts');
   NodeRuntime.runMain(program.pipe(
     Effect.tap(code => Effect.sync(() => { process.exitCode = code; })),
