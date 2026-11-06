@@ -7,11 +7,15 @@
 ## 起始状态
 
 - 项目已初始化，没有 `concord.config.ts`；测试在 `spec/`，实现在 `src/`。
-- 文件语法与全部配置项见[项目配置文件](../format.md)。
+- 文件语法见[项目配置文件](../format.md)。
+
+### 配置项
+
+没有 `concord.config.ts` 时全部配置项取默认值。每一项的默认值与何时需要配置见[配置项](../format.md#配置项)。
 
 ## 完整路径
 
-1. 看实际生效的配置，决定要不要写。 {#配置项}
+1. 看实际生效的配置，决定要不要写。 {#effective}
 
    ```sh
    concord doctor
@@ -21,15 +25,14 @@
 
    ```text
    configuration:
-     testRoots: 
-       test
+     testRoots: none
      sourceRoots: 
        src
    missingTestRoots: none
    missingSourceRoots: none
    ```
 
-   没有配置文件时全部配置项取[默认值](../format.md#配置项)。默认值够用就不写配置；本例测试不在 `test/`，需要覆盖 `testRoots`。
+   默认值够用就不写配置。本例没有 `test/` 或 `tests/`，`testRoots` 为空，`spec/` 中的测试不会被发现，需要覆盖 `testRoots`。
 
 2. 直接创建 `concord.config.ts`。 {#write}
 
