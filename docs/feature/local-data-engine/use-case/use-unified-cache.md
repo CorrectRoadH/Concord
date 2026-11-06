@@ -42,7 +42,15 @@
 
    `ready` 表示投影可读，不表示某次扫描命中。`physicalBytes` 与 `physicalLimitBytes` 是物理体积与上限。
 
-   工作区服务运行时，结果还报告服务的 pid、安装身份与当前结果的 `sourceDigest`；没有服务时报告由当前进程持有。状态检查同时验证安装包的原生产物，缓存目录缺失不掩盖安装故障。
+   结果还说明缓存由谁持有。`owner` 为 `service` 时由工作区服务持有，`pid` 与 `installation` 是服务的进程号与安装身份（与 `concord server status` 的 `installation` 相同），`sourceDigest` 是服务当前结果的摘要；没有服务时 `owner` 为 `process`，`pid` 与 `installation` 是当前 CLI 进程的。人读输出多出三行，例如：
+
+   ```text
+   owner: service
+   pid: 48211
+   installation: sha256:7baa718a…
+   ```
+
+   `--json` 在顶层给出同名字段 `owner`、`pid`（整数）与 `installation`（字符串）。状态检查同时验证安装包的原生产物，缓存目录缺失不掩盖安装故障。
 
 4. 预览清理。 {#preview}
 
