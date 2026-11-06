@@ -1,25 +1,18 @@
-import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { createDocument } from '../support/operations.js';
+import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
 import { Schema } from 'effect';
-
-import { LocalRepository } from "../support/repository.js";
-
-import { startViewServer } from './server.js';
+import { LocalRepository } from '../support/repository.js';
 import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('URL navigation saves the latest draft and restores nested drawers without local selection state', async ({ page }) => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-url-navigation-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
+test('URL navigation saves the latest draft and restores nested drawers without local selection state', async ({ page, workspace }) => {
+  const root = workspace.root;
+  const repo = new LocalRepository(root);
   try {
-    initialize(repo, false, { testRoots: [] });
     const body = '# Navigation\n\n' + 'A paragraph for restoring the reading position.\n\n'.repeat(60);
     createDocument(repo, 'feature', { id: 'navigation', title: 'Navigation', body });
     renameSync(join(root, 'docs/feature/navigation'), join(root, 'docs/feature/中文导航'));
@@ -28,7 +21,7 @@ test('URL navigation saves the latest draft and restores nested drawers without 
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src/navigation.ts'), '// @concord-file\n// @concord-implements docs/feature/中文导航/use-case/history.md\nexport const navigation = true;\n');
   writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'] });
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const server = await workspace.ready();
 
   let release = () => {};
   try {
@@ -139,7 +132,5 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     assert.deepEqual(errors, []);
   } finally {
     release();
-    await server.close();
-    rmSync(root, { recursive: true, force: true });
   }
 });

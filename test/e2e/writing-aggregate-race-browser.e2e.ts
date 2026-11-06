@@ -1,35 +1,31 @@
-import { writeConceptFile } from '../support/writing-files.js';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { writeConceptFile } from '../support/writing-files.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
 import { test } from './fixtures.js';
-import { startViewServer, type ViewServerHandle } from './server.js';
-import { initialize } from '../support/operations.js';
+import { type ViewServerHandle } from './server.js';
+
 import { LocalRepository } from '../support/repository.js';
-import { tmpdir } from '../support/temporary.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 import { showConcepts } from '../../src/domain/concepts/index.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
-test('a late successful concepts index preserves the newer writing report', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-writing-aggregate-race-'));
+test('a late successful concepts index preserves the newer writing report', ({ page, workspace }) => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = workspace.root;
   let server: ViewServerHandle | undefined;
   let release: (() => void) | undefined;
   try {
-    execFileSync('git', ['init', '-q', root]);
     const scope = 'docs/feature/beta';
-    const repo = new LocalRepository(root, { initialize: true });
+    const repo = new LocalRepository(root);
     try {
-      initialize(repo, false, { testRoots: [] });
       writeConceptFile(repo, '# Terms\n\n## Initial {#initial}\n\nInitial definition\n', showConcepts(repo).digest);
       mkdirSync(join(root, scope), { recursive: true });
       writeConceptFile(repo, '# Terms\n\n## Beta {#beta}\n\nBeta definition\n', null, false, `${scope}/concepts.md`);
       writeFileSync(join(root, scope, 'sample.md'), '# Beta\n\nBeta.\n');
     } finally { repo.close(); }
-    server = await startViewServer({ root, port: 0 });
+    server = await workspace.ready();
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     const initialIndex = page.waitForResponse(response => new URL(response.url()).pathname === '/api/action' && response.request().postDataJSON().action === 'concepts.index');
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
@@ -70,7 +66,5 @@ test('a late successful concepts index preserves the newer writing report', ({ p
     await expect(page.getByText(/术语来源已变化/u)).toHaveCount(0);
   } finally {
     release?.();
-    await server?.close();
-    rmSync(root, { recursive: true, force: true });
   }
 })));

@@ -1,56 +1,47 @@
-import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { createDocument } from '../support/operations.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
+import { type BrowserSharedFixture } from '../support/browser-shared-fixture.js';
 import { Effect } from 'effect';
 import { expect, type Page } from '@playwright/test';
-
-import { LocalRepository } from "../support/repository.js";
-
+import { LocalRepository } from '../support/repository.js';
 import { type ViewServerHandle } from './server.js';
-import { startViewServer } from './server.js';
-import { type WorkspaceProjection } from "../../src/model/index.js";
+import { type WorkspaceProjection } from '../../src/model/index.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 
-const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((page: Page, incomplete: boolean, run: (page: Page, origin: string, value: WorkspaceProjection) => Promise<void>) => Effect.tryPromise(async () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-workspace-watch-'));
+const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((workspace: BrowserSharedFixture, page: Page, incomplete: boolean, run: (page: Page, origin: string, value: WorkspaceProjection) => Promise<void>) => Effect.tryPromise(async () => {
+  const root = workspace.root;
 
   let server: ViewServerHandle | undefined;
-  try {
-    execFileSync('git', ['init', '-q', root]);
-    const repo = new LocalRepository(root, { initialize: true });
-    try {
-      initialize(repo, false, { testRoots: [] });
-      createDocument(repo, 'feature', { id: 'watch', title: 'Watch fixture', body: '# Watch fixture\n\nOriginal body.\n' });
-    } finally { repo.close(); }
-    if (incomplete) {
-      mkdirSync(join(root, 'docs/feature/broken'));
-      writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Invalid owner\n');
-    }
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const origin = `http://127.0.0.1:${server.port}`;
-    const value = await waitForWorkspaceProjection(origin);
 
-    await page.setViewportSize({ width: 1440, height: 900 });
-    page.setDefaultTimeout(15_000);
-    const errors: string[] = [];
-    page.on('pageerror', error => errors.push(error.message));
-    // These HTTP-boundary fixtures verify polling while the push transport is unavailable.
-    await page.route('**/api/events', route => route.abort());
-    await run(page, origin, value);
-    assert.deepEqual(errors, []);
-  } finally {
-    await server?.close();
-    rmSync(root, { recursive: true, force: true });
+  const repo = new LocalRepository(root);
+  try {
+    createDocument(repo, 'feature', { id: 'watch', title: 'Watch fixture', body: '# Watch fixture\n\nOriginal body.\n' });
+  } finally { repo.close(); }
+  if (incomplete) {
+    mkdirSync(join(root, 'docs/feature/broken'));
+    writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Invalid owner\n');
   }
+  server = await workspace.ready();
+  const origin = `http://127.0.0.1:${server.port}`;
+  const value = await waitForWorkspaceProjection(origin);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  page.setDefaultTimeout(15_000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  // These HTTP-boundary fixtures verify polling while the push transport is unavailable.
+  await page.route('**/api/events', route => route.abort());
+  await run(page, origin, value);
+  assert.deepEqual(errors, []);
+
 }));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-watch-drift-and-failures
-test('ordinary pages show incomplete scans and refresh failures while keeping real diagnostics visible', ({ page }) => Effect.runPromise(withWorkspaceBrowser(page, true, async (page, origin, actual) => {
+test('ordinary pages show incomplete scans and refresh failures while keeping real diagnostics visible', ({ page, workspace }) => Effect.runPromise(withWorkspaceBrowser(workspace, page, true, async (page, origin, actual) => {
   assert.equal(actual.projection.complete, false);
   assert.ok(actual.snapshot.findings.some(finding => finding.code === 'InvalidData'));
   const changedPath = 'docs/feature/watch/README.md';
@@ -78,7 +69,7 @@ test('ordinary pages show incomplete scans and refresh failures while keeping re
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-watch-polling
-test('cached workspace polls every four seconds with independent Git cadence and serialized pending retries', ({ page }) => Effect.runPromise(withWorkspaceBrowser(page, false, async (page, origin, actual) => {
+test('cached workspace polls every four seconds with independent Git cadence and serialized pending retries', ({ page, workspace }) => Effect.runPromise(withWorkspaceBrowser(workspace, page, false, async (page, origin, actual) => {
   const now = new Date();
   await page.clock.install({ time: new Date(now.getTime() - 1000) });
   await page.clock.pauseAt(now);
@@ -158,7 +149,7 @@ test('cached workspace polls every four seconds with independent Git cadence and
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-watch-preserves-draft
-test('navigation polling preserves drafts and a completed write reads after an older poll', ({ page }) => Effect.runPromise(withWorkspaceBrowser(page, false, async (page, origin, actual) => {
+test('navigation polling preserves drafts and a completed write reads after an older poll', ({ page, workspace }) => Effect.runPromise(withWorkspaceBrowser(workspace, page, false, async (page, origin, actual) => {
   const now = new Date();
   await page.clock.install({ time: new Date(now.getTime() - 1000) });
   await page.clock.pauseAt(now);

@@ -1,18 +1,13 @@
-import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { createDocument } from '../support/operations.js';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-
-import { tracePrivateDirectorySync } from "../../src/base/publication/index.js";
-import { LocalRepository } from "../support/repository.js";
-
+import { LocalRepository } from '../support/repository.js';
 import { type ViewServerHandle } from './server.js';
-import { startViewServer } from './server.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 
 async function hold(root: string): Promise<ChildProcess> {
@@ -28,21 +23,19 @@ async function release(child: ChildProcess): Promise<void> {
 }
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('file reads and navigation remain available with live or dead publication owners', async ({ page }) => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-read-contention-'));
+test('file reads and navigation remain available with live or dead publication owners', async ({ page, workspace }) => {
+  const root = workspace.root;
   let server: ViewServerHandle | undefined;
 
   let holder: ChildProcess | undefined;
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const repo = new LocalRepository(root, { initialize: true });
+    const repo = new LocalRepository(root);
     try {
-      initialize(repo, false, { testRoots: [] });
       createDocument(repo, 'feature', { id: 'lease', title: 'Lease', pages: ['architecture'], body: '# Lease content' });
     } finally { repo.close(); }
     mkdirSync(join(root, 'docs/feature/lease/pages'), { recursive: true });
     writeFileSync(join(root, 'docs/feature/lease/pages/nested.md'), '# Nested supporting page\n');
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    server = await workspace.ready();
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -91,7 +84,5 @@ test('file reads and navigation remain available with live or dead publication o
     await expect(recover).toHaveCount(0);
   } finally {
     if (holder) await release(holder);
-    await server?.close();
-    rmSync(root, { recursive: true, force: true });
   }
 });

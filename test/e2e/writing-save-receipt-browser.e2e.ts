@@ -1,29 +1,22 @@
-import { parseWritingPolicy } from '../../src/model/index.js';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { parseWritingPolicy } from '../../src/model/index.js';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
 import { test } from './fixtures.js';
-import { startViewServer, type ViewServerHandle } from './server.js';
-import { initialize } from '../support/operations.js';
-import { LocalRepository } from '../support/repository.js';
-import { tmpdir } from '../support/temporary.js';
+import { type ViewServerHandle } from './server.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 import { waitForWritingSave } from '../support/writing-save.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
-test('writing save wait keeps reload behind the successful HTTP receipt', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-writing-save-receipt-'));
+test('writing save wait keeps reload behind the successful HTTP receipt', ({ page, workspace }) => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = workspace.root;
   let server: ViewServerHandle | undefined;
   let release: (() => void) | undefined;
   let waiting: Promise<void> | undefined;
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const repo = new LocalRepository(root, { initialize: true });
-    try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
-    server = await startViewServer({ root, port: 0 });
+    server = await workspace.ready();
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
     const input = page.getByLabel(/^替换建议 \d+$/u).last();
@@ -58,7 +51,5 @@ test('writing save wait keeps reload behind the successful HTTP receipt', ({ pag
   } finally {
     release?.();
     await waiting?.catch(() => undefined);
-    await server?.close();
-    rmSync(root, { recursive: true, force: true });
   }
 })));

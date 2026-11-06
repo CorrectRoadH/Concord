@@ -1,25 +1,20 @@
-import { initialize, createDocument } from '../support/operations.js';
 import assert from 'node:assert/strict';
+import { initialize, createDocument } from '../support/operations.js';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { LocalRepository } from "../support/repository.js";
-
-import { loadDocuments } from "../../src/domain/documents/index.js";
-
-import { renderDocument } from "../../src/model/index.js";
-import { mergeFeedbackCache, openHawdb, cacheDatabasePath } from "../../src/base/cache/index.js";
+import { LocalRepository } from '../support/repository.js';
+import { loadDocuments } from '../../src/domain/documents/index.js';
+import { renderDocument, type FeedbackSource } from '../../src/model/index.js';
+import { mergeFeedbackCache, openHawdb, cacheDatabasePath } from '../../src/base/cache/index.js';
 import { type ViewServerHandle } from './server.js';
-import { startViewServer } from './server.js';
-import { type FeedbackSource } from "../../src/model/index.js";
 import { projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
-test('feedback browser separates remote observations from local editing and protects connection drafts', async ({ page }) => {
-  const root=mkdtempSync(join(tmpdir(),'concord-feedback-browser-'));
+test('feedback browser separates remote observations from local editing and protects connection drafts', async ({ page, workspace }) => {
+  const root=workspace.privateRoot();
   let server:ViewServerHandle|undefined;
 
   const previousCredential=process.env.CONCORD_BROWSER_MISSING_TOKEN;
@@ -39,7 +34,7 @@ test('feedback browser separates remote observations from local editing and prot
       const {connectionId: _connectionId,importedAt: _importedAt,...remote}=source;
       mergeFeedbackCache(repo,'fixture',[{...remote,title:'Updated remote title',body:'Updated remote body',state:'closed',updatedAt:'2026-09-14T00:00:00.000Z'}]);
     } finally {repo.close();}
-    server=await startViewServer({root,host:'127.0.0.1',port:0});
+    server=await workspace.privateServer({root,host:'127.0.0.1',port:0});
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({width:1440,height:1000});
@@ -146,22 +141,17 @@ test('feedback browser separates remote observations from local editing and prot
 });
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
-test('empty feedback keeps creation and settings visible without filters', async ({ page }) => {
-  const root=mkdtempSync(join(tmpdir(),'concord-empty-feedback-browser-'));
+test('empty feedback keeps creation and settings visible without filters', async ({ page, workspace }) => {
+  const root=workspace.root;
   let server:ViewServerHandle|undefined;
 
-  try {
-    execFileSync('git',['init','-q',root]);
-    const repo=new LocalRepository(root,{initialize:true});
-    try { initialize(repo,false,{testRoots:[]}); } finally { repo.close(); }
-    server=await startViewServer({root,host:'127.0.0.1',port:0});
+  server=await workspace.ready();
 
+  await page.goto(`http://127.0.0.1:${server.port}/feedback`);
+  await expect(page.getByRole('button',{name:'新建本地反馈'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'管理反馈来源'})).toBeVisible();
+  await expect(page.getByRole('textbox',{name:'搜索反馈'})).toHaveCount(0);
+  await expect(page.getByRole('combobox',{name:'按来源筛选'})).toHaveCount(0);
+  await expect(page.getByText('还没有反馈')).toBeVisible();
 
-    await page.goto(`http://127.0.0.1:${server.port}/feedback`);
-    await expect(page.getByRole('button',{name:'新建本地反馈'})).toBeVisible();
-    await expect(page.getByRole('link',{name:'管理反馈来源'})).toBeVisible();
-    await expect(page.getByRole('textbox',{name:'搜索反馈'})).toHaveCount(0);
-    await expect(page.getByRole('combobox',{name:'按来源筛选'})).toHaveCount(0);
-    await expect(page.getByText('还没有反馈')).toBeVisible();
-  } finally { await server?.close(); rmSync(root,{recursive:true,force:true}); }
 });

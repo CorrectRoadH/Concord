@@ -1,17 +1,12 @@
-import { createDocument, initialize } from '../support/operations.js';
-import { packageBin } from '../support/installed-package.js';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
-import { dirname, join, resolve } from 'node:path';
+import { type ViewServerHandle } from './server.js';
+import { createDocument } from '../support/operations.js';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { Effect, Schema } from 'effect';
-
-import { LocalRepository } from "../support/repository.js";
-
+import { Effect } from 'effect';
+import { LocalRepository } from '../support/repository.js';
 import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 const inline = `let label: import('p5').default.Element;
@@ -37,132 +32,112 @@ export default function(p) {
 }`;
 
 // @use-case docs/feature/web-workbench/use-case/embed-p5-sketch.md
-test('packed CLI runs isolated p5 sketches with project libraries, resources, CSS and project Markdown', { timeout: 180000 }, ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
-  const scratch = mkdtempSync(join(tmpdir(), 'concord-p5-browser-'));
-  let server: ChildProcess | undefined;
+test('packed CLI runs isolated p5 sketches with project libraries, resources, CSS and project Markdown', { timeout: 180000 }, ({ page, workspace }) => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = workspace.root;
+  let server: ViewServerHandle | undefined;
 
-  let exited: Promise<void> | undefined;
+  const write = (path: string, value: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), value); };
+  const repo = new LocalRepository(root);
+  const body = '# Interactive sketches\n\n```p5 css="./demo/style.css"\n' + inline + '\n```\n\n```p5 mode="global"\nfunction setup() { createCanvas(40, 40, WEBGL); background(0, 255, 0); noLoop(); createSpan("global ready"); }\n```\n';
   try {
-    const pack = sourceConcord();
-    const tool = join(scratch, 'tool'); mkdirSync(tool);
-    writeFileSync(join(tool, 'package.json'), '{"private":true}');
-    prepareSourceConsumer(tool, pack);
-    const root = join(scratch, 'consumer'); mkdirSync(root);
-    execFileSync('git', ['init', '-q', root]);
-    const write = (path: string, value: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), value); };
-    const repo = new LocalRepository(root, { initialize: true });
-    const body = '# Interactive sketches\n\n```p5 css="./demo/style.css"\n' + inline + '\n```\n\n```p5 mode="global"\nfunction setup() { createCanvas(40, 40, WEBGL); background(0, 255, 0); noLoop(); createSpan("global ready"); }\n```\n';
-    try {
-      initialize(repo, false, { testRoots: [] });
-      createDocument(repo, 'feature', { id: 'sketch', title: 'Interactive sketches', body });
-      createDocument(repo, 'feature', { id: 'sketch-webgl', title: 'Brush sketch', body: '# Brush sketch\n\n```p5 src="../sketch/demo/main.js"\n```\n' });
-    }
-    finally { repo.close(); }
-    writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound'] } });
-    write('vendor/addon.js', 'window.localAddon = "local extension ready";');
-    write('docs/feature/sketch/demo/main.js', external);
-    write('docs/feature/sketch/demo/style.css', '.restart { background: rgb(1, 2, 3); color: white; padding: 12px; border-radius: 8px; }');
-    write('docs/feature/sketch/demo/pixel.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>');
-    const constitution = readFileSync(join(root, 'docs/taste.md'), 'utf8');
-    write('docs/taste.md', constitution + '\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n\n<pre><code class="language-p5">spoofed p5 source</code></pre>\n');
-    const projectSketch = '# Project sketch\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n';
-    write('docs/sketch.md', projectSketch);
-    const before = readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8');
-    const cli = packageBin(join(tool, 'node_modules/concord-sdlc'));
-    server = spawn(process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
-    exited = new Promise(done => server!.once('exit', () => done()));
-    let output = ''; let errors = '';
-    server.stdout!.on('data', chunk => { output += String(chunk); });
-    server.stderr!.on('data', chunk => { errors += String(chunk); });
-    await expect.poll(() => /"port"\s*:\s*(\d+)/u.exec(output)?.[1], { timeout: 20000, message: 'packed CLI starts view server' }).toBeTruthy();
-    const address = `http://127.0.0.1:${/"port"\s*:\s*(\d+)/u.exec(output)![1]}`;
-
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    const pageErrors: string[] = [];
-    const consoleErrors: string[] = [];
-    page.on('pageerror', error => pageErrors.push(error.message));
-    page.on('console', message => { if (message.type() === 'error' && !message.text().includes("font-src 'self'")) consoleErrors.push(message.text().slice(0, 500)); });
-    await page.addInitScript(() => window.addEventListener('securitypolicyviolation', event => {
-      const target = window as unknown as { __p5Violations?: string[] };
-      (target.__p5Violations ??= []).push(`${event.violatedDirective}: ${event.blockedURI}: ${event.sourceFile}:${event.lineNumber}`);
-    }));
-    await page.goto(`${address}/features/sketch`);
-    const blocks = page.getByTestId('p5-sketch');
-    await expect(blocks).toHaveCount(2, { timeout: 20000 });
-    await expect(blocks.nth(0).getByRole('button', { name: '运行 p5', exact: true })).toHaveCount(0);
-    await expect.poll(async () => {
-      const block = blocks.nth(0);
-      const status = await block.getByRole('status').textContent();
-      if (status === '运行失败') {
-        const frame = page.frames().find(candidate => candidate.url().endsWith('/p5-frame'));
-        const violations = await frame?.evaluate(() => (window as unknown as { __p5Violations?: string[] }).__p5Violations);
-        throw new Error(`p5 startup failed: ${await block.getByRole('alert').textContent()}; policy violations: ${violations?.join('; ')}; browser errors: ${pageErrors.join('; ')}; console errors: ${consoleErrors.join('; ')}; server stderr: ${errors.slice(-1000)}`);
-      }
-      return status;
-    }, { timeout: 20000 }).toBe('运行中');
-    const first = blocks.nth(0).frameLocator('iframe');
-    await expect(first.locator('canvas')).toBeVisible();
-    assert.equal(await first.locator('canvas').evaluate(() => (window as unknown as { p5: { VERSION: string } }).p5.VERSION), '2.3.4');
-    await expect(first.locator('.restart')).toHaveCSS('background-color', 'rgb(1, 2, 3)');
-    await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(1);
-    assert.deepEqual(await first.locator('canvas').evaluate(canvas => Array.from((canvas as HTMLCanvasElement).getContext('2d')!.getImageData(5, 5, 1, 1).data)), [255, 0, 0, 255]);
-    await blocks.nth(0).evaluate(element => { element.style.transform = 'translateX(-10000px)'; });
-    await page.waitForTimeout(100);
-    const paused = await first.locator('#ticks').textContent();
-    await page.waitForTimeout(150);
-    assert.equal(await first.locator('#ticks').textContent(), paused);
-    await blocks.nth(0).evaluate(element => { element.style.transform = ''; });
-    await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(Number(paused));
-    await first.getByRole('button', { name: '关闭循环' }).click();
-    await page.waitForTimeout(100);
-    const stoppedBySketch = await first.locator('#ticks').textContent();
-    await blocks.nth(0).evaluate(element => { element.style.transform = 'translateX(-10000px)'; });
-    await page.waitForTimeout(100);
-    await blocks.nth(0).evaluate(element => { element.style.transform = ''; });
-    await page.waitForTimeout(250);
-    assert.equal(await first.locator('#ticks').textContent(), stoppedBySketch);
-    await first.getByRole('button', { name: '重新绘制' }).click();
-    await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(Number(stoppedBySketch));
-    await page.reload();
-    await expect(blocks.nth(0).frameLocator('iframe').locator('#ticks')).toHaveText(/[1-9]\d*/, { timeout: 20000 });
-    await expect(blocks.nth(1).frameLocator('iframe').getByText('global ready')).toBeVisible({ timeout: 20000 });
-    writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound', 'p5.brush', './vendor/addon.js'] } });
-    await page.goto(`${address}/features/sketch-webgl`);
-    // A changed config invalidates navigation until its asynchronous projection is rebuilt.
-    await expect(blocks).toHaveCount(1, { timeout: 60000 });
-    const second = blocks.nth(0).frameLocator('iframe');
-    await expect(second.locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
-    await expect(second.locator('canvas')).toBeVisible();
-    assert.equal(await second.locator('canvas').evaluate(canvas => (canvas as HTMLCanvasElement).getContext('webgl2') !== null), true);
-    await expect(second.getByRole('img', { name: 'local pixel' })).toBeVisible();
-    await second.getByRole('button', { name: '启动声音' }).click();
-    await expect(second.locator('#audio-result')).toHaveText(/audio:running:[1-9]\d*/, { timeout: 10000 });
-    const sandboxFrame = page.frames().find(frame => frame.url().endsWith('/p5-frame'))!;
-    assert.equal(await sandboxFrame.evaluate(() => { try { void parent.document.body; return false; } catch { return true; } }), true);
-    assert.equal(await sandboxFrame.evaluate(async address => { try { await fetch(address + '/api/workspace'); return false; } catch { return true; } }, address), true);
-    const directFrame = await page.request.get(address + '/api/workspace', { headers: { 'sec-fetch-dest': 'iframe' } });
-    assert.equal(directFrame.status(), 403);
-    assert.equal(readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8'), before);
-    await page.goto(`${address}/docs?file=docs%2Ftaste.md`);
-    // Frontmatter documents preserve their raw source in the project Markdown editor.
-    await expect(page.getByRole('textbox', { name: 'Markdown 原文', exact: true })).toHaveValue(readFileSync(join(root, 'docs/taste.md'), 'utf8'));
-    await expect(blocks).toHaveCount(0);
-    await page.goto(`${address}/docs?file=docs%2Fsketch.md`);
-    await expect(blocks).toHaveCount(1, { timeout: 20000 });
-    await expect(blocks.frameLocator('iframe').locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
-    assert.equal(readFileSync(join(root, 'docs/sketch.md'), 'utf8'), projectSketch);
-    await page.goto(`${address}/settings`);
-    await expect(page.locator('iframe')).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: 'p5 扩展库' })).toHaveValue('p5.sound\np5.brush\n./vendor/addon.js');
-    await page.getByRole('textbox', { name: 'p5 扩展库' }).fill('p5.sound');
-    await expect.poll(() => readProjectConfig(root).p5?.libraries).toEqual(['p5.sound']);
-    assert.deepEqual(pageErrors, []);
-  } finally {
-    if (server && server.exitCode === null) {
-      server.kill('SIGTERM');
-      const kill = setTimeout(() => { server?.kill('SIGKILL'); }, 5000);
-      try { await exited; } finally { clearTimeout(kill); }
-    }
-    rmSync(scratch, { recursive: true, force: true });
+    createDocument(repo, 'feature', { id: 'sketch', title: 'Interactive sketches', body });
+    createDocument(repo, 'feature', { id: 'sketch-webgl', title: 'Brush sketch', body: '# Brush sketch\n\n```p5 src="../sketch/demo/main.js"\n```\n' });
   }
+  finally { repo.close(); }
+  writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound'] } });
+  write('vendor/addon.js', 'window.localAddon = "local extension ready";');
+  write('docs/feature/sketch/demo/main.js', external);
+  write('docs/feature/sketch/demo/style.css', '.restart { background: rgb(1, 2, 3); color: white; padding: 12px; border-radius: 8px; }');
+  write('docs/feature/sketch/demo/pixel.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>');
+  const constitution = readFileSync(join(root, 'docs/taste.md'), 'utf8');
+  write('docs/taste.md', constitution + '\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n\n<pre><code class="language-p5">spoofed p5 source</code></pre>\n');
+  const projectSketch = '# Project sketch\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n';
+  write('docs/sketch.md', projectSketch);
+  const before = readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8');
+  server = await workspace.ready();
+  const output = server.startupOutput;
+  await expect.poll(() => /"port"\s*:\s*(\d+)/u.exec(output)?.[1], { timeout: 20000, message: 'packed CLI starts view server' }).toBeTruthy();
+  const address = `http://127.0.0.1:${/"port"\s*:\s*(\d+)/u.exec(output)![1]}`;
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error' && !message.text().includes("font-src 'self'")) consoleErrors.push(message.text().slice(0, 500)); });
+  await page.addInitScript(() => window.addEventListener('securitypolicyviolation', event => {
+    const target = window as unknown as { __p5Violations?: string[] };
+    (target.__p5Violations ??= []).push(`${event.violatedDirective}: ${event.blockedURI}: ${event.sourceFile}:${event.lineNumber}`);
+  }));
+  await page.goto(`${address}/features/sketch`);
+  const blocks = page.getByTestId('p5-sketch');
+  await expect(blocks).toHaveCount(2, { timeout: 20000 });
+  await expect(blocks.nth(0).getByRole('button', { name: '运行 p5', exact: true })).toHaveCount(0);
+  await expect.poll(async () => {
+    const block = blocks.nth(0);
+    const status = await block.getByRole('status').textContent();
+    if (status === '运行失败') {
+      const frame = page.frames().find(candidate => candidate.url().endsWith('/p5-frame'));
+      const violations = await frame?.evaluate(() => (window as unknown as { __p5Violations?: string[] }).__p5Violations);
+      throw new Error(`p5 startup failed: ${await block.getByRole('alert').textContent()}; policy violations: ${violations?.join('; ')}; browser errors: ${pageErrors.join('; ')}; console errors: ${consoleErrors.join('; ')}; server stderr: ${server!.stderr.slice(-1000)}`);
+    }
+    return status;
+  }, { timeout: 20000 }).toBe('运行中');
+  const first = blocks.nth(0).frameLocator('iframe');
+  await expect(first.locator('canvas')).toBeVisible();
+  assert.equal(await first.locator('canvas').evaluate(() => (window as unknown as { p5: { VERSION: string } }).p5.VERSION), '2.3.4');
+  await expect(first.locator('.restart')).toHaveCSS('background-color', 'rgb(1, 2, 3)');
+  await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(1);
+  assert.deepEqual(await first.locator('canvas').evaluate(canvas => Array.from((canvas as HTMLCanvasElement).getContext('2d')!.getImageData(5, 5, 1, 1).data)), [255, 0, 0, 255]);
+  await blocks.nth(0).evaluate(element => { element.style.transform = 'translateX(-10000px)'; });
+  await page.waitForTimeout(100);
+  const paused = await first.locator('#ticks').textContent();
+  await page.waitForTimeout(150);
+  assert.equal(await first.locator('#ticks').textContent(), paused);
+  await blocks.nth(0).evaluate(element => { element.style.transform = ''; });
+  await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(Number(paused));
+  await first.getByRole('button', { name: '关闭循环' }).click();
+  await page.waitForTimeout(100);
+  const stoppedBySketch = await first.locator('#ticks').textContent();
+  await blocks.nth(0).evaluate(element => { element.style.transform = 'translateX(-10000px)'; });
+  await page.waitForTimeout(100);
+  await blocks.nth(0).evaluate(element => { element.style.transform = ''; });
+  await page.waitForTimeout(250);
+  assert.equal(await first.locator('#ticks').textContent(), stoppedBySketch);
+  await first.getByRole('button', { name: '重新绘制' }).click();
+  await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(Number(stoppedBySketch));
+  await page.reload();
+  await expect(blocks.nth(0).frameLocator('iframe').locator('#ticks')).toHaveText(/[1-9]\d*/, { timeout: 20000 });
+  await expect(blocks.nth(1).frameLocator('iframe').getByText('global ready')).toBeVisible({ timeout: 20000 });
+  writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound', 'p5.brush', './vendor/addon.js'] } });
+  await page.goto(`${address}/features/sketch-webgl`);
+  // A changed config invalidates navigation until its asynchronous projection is rebuilt.
+  await expect(blocks).toHaveCount(1, { timeout: 60000 });
+  const second = blocks.nth(0).frameLocator('iframe');
+  await expect(second.locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
+  await expect(second.locator('canvas')).toBeVisible();
+  assert.equal(await second.locator('canvas').evaluate(canvas => (canvas as HTMLCanvasElement).getContext('webgl2') !== null), true);
+  await expect(second.getByRole('img', { name: 'local pixel' })).toBeVisible();
+  await second.getByRole('button', { name: '启动声音' }).click();
+  await expect(second.locator('#audio-result')).toHaveText(/audio:running:[1-9]\d*/, { timeout: 10000 });
+  const sandboxFrame = page.frames().find(frame => frame.url().endsWith('/p5-frame'))!;
+  assert.equal(await sandboxFrame.evaluate(() => { try { void parent.document.body; return false; } catch { return true; } }), true);
+  assert.equal(await sandboxFrame.evaluate(async address => { try { await fetch(address + '/api/workspace'); return false; } catch { return true; } }, address), true);
+  const directFrame = await page.request.get(address + '/api/workspace', { headers: { 'sec-fetch-dest': 'iframe' } });
+  assert.equal(directFrame.status(), 403);
+  assert.equal(readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8'), before);
+  await page.goto(`${address}/docs?file=docs%2Ftaste.md`);
+  // Frontmatter documents preserve their raw source in the project Markdown editor.
+  await expect(page.getByRole('textbox', { name: 'Markdown 原文', exact: true })).toHaveValue(readFileSync(join(root, 'docs/taste.md'), 'utf8'));
+  await expect(blocks).toHaveCount(0);
+  await page.goto(`${address}/docs?file=docs%2Fsketch.md`);
+  await expect(blocks).toHaveCount(1, { timeout: 20000 });
+  await expect(blocks.frameLocator('iframe').locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
+  assert.equal(readFileSync(join(root, 'docs/sketch.md'), 'utf8'), projectSketch);
+  await page.goto(`${address}/settings`);
+  await expect(page.locator('iframe')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'p5 扩展库' })).toHaveValue('p5.sound\np5.brush\n./vendor/addon.js');
+  await page.getByRole('textbox', { name: 'p5 扩展库' }).fill('p5.sound');
+  await expect.poll(() => readProjectConfig(root).p5?.libraries).toEqual(['p5.sound']);
+  assert.deepEqual(pageErrors, []);
+
 })));

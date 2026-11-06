@@ -1,57 +1,46 @@
-import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { createDocument } from '../support/operations.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { act } from './journey.js';
 import { expect } from '@playwright/test';
-
-import { LocalRepository } from "../support/repository.js";
-
-import { startViewServer } from './server.js';
+import { LocalRepository } from '../support/repository.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name dismissible-workspace-health-navigation
 test('incomplete workspace notice opens health diagnostics and dismisses without hiding findings', { tags: ['journey'] }, async fixtures => {
-  const { page } = fixtures;
-  const root = mkdtempSync(join(tmpdir(), 'concord-health-notice-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
+  const { page, workspace } = fixtures;
+  const root = workspace.root;
+  const repo = new LocalRepository(root);
   try {
-    initialize(repo, false, { testRoots: [] });
     createDocument(repo, 'engineering', { id: 'health', title: 'Health example' });
   } finally { repo.close(); }
   mkdirSync(join(root, 'docs/feature/broken'));
   writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\nid: broken\n---\n');
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const server = await workspace.ready();
 
-  try {
+  await page.goto(`http://127.0.0.1:${server.port}/engineering/health`);
+  const notice = page.getByRole('link', { name: /查看工作区健康/ });
+  await expect(notice).toBeVisible({ timeout: 15000 });
+  await act(fixtures, '通过当前页面的工作区健康提示，打开健康诊断。', () => notice.click());
+  await expect(page).toHaveURL(/\/overview#workspace-health$/);
+  await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
+  await act(fixtures, '关闭工作区健康提示条，保留当前健康诊断页面。', () => page.getByRole('button', { name: '关闭工作区健康提示' }).click());
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
 
-    await page.goto(`http://127.0.0.1:${server.port}/engineering/health`);
-    const notice = page.getByRole('link', { name: /查看工作区健康/ });
-    await expect(notice).toBeVisible({ timeout: 15000 });
-    await act(fixtures, '通过当前页面的工作区健康提示，打开健康诊断。', () => notice.click());
-    await expect(page).toHaveURL(/\/overview#workspace-health$/);
-    await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
-    await act(fixtures, '关闭工作区健康提示条，保留当前健康诊断页面。', () => page.getByRole('button', { name: '关闭工作区健康提示' }).click());
-    await expect(notice).toHaveCount(0);
-    await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
-  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('polling reads the workspace cache with jobs and serializes slow reads', async ({ page }) => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-polling-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
+test('polling reads the workspace cache with jobs and serializes slow reads', async ({ page, workspace }) => {
+  const root = workspace.root;
+  const repo = new LocalRepository(root);
   try {
-    initialize(repo, false, { testRoots: [] });
     createDocument(repo, 'engineering', { id: 'polling', title: 'Polling study' });
   } finally { repo.close(); }
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const server = await workspace.ready();
 
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -90,5 +79,5 @@ test('polling reads the workspace cache with jobs and serializes slow reads', as
     const completed = page.waitForResponse(response => response.url().endsWith('/api/workspace'));
     release();
     await completed;
-  } finally { release(); await server.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { release(); }
 });

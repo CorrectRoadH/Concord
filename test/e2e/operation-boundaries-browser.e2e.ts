@@ -1,22 +1,19 @@
-import { initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
+import { initialize } from '../support/operations.js';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { LocalRepository } from "../support/repository.js";
-
-import { beginRun, finalizeRun } from "../../src/base/publication/index.js";
+import { LocalRepository } from '../support/repository.js';
+import { beginRun, finalizeRun } from '../../src/base/publication/index.js';
 import { type ViewServerHandle } from './server.js';
-import { startViewServer } from './server.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name browser-recovery-and-incomplete-inventory
-test('browser preserves blocked recovery and labels incomplete workspace relations', async ({ page }) => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-boundaries-browser-'));
+test('browser preserves blocked recovery and labels incomplete workspace relations', async ({ page, workspace }) => {
+  const root = workspace.privateRoot();
   let server: ViewServerHandle | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -28,9 +25,8 @@ test('browser preserves blocked recovery and labels incomplete workspace relatio
     } finally { repo.close(); }
     mkdirSync(join(root, 'docs/feature/broken'), { recursive: true });
     writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    server = await workspace.privateServer({ root, host: '127.0.0.1', port: 0 });
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
-
 
     // Simulate only the initial HTTP read failure. Recovery and subsequent
     // workspace reads go through the real server and repository implementation.
