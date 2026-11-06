@@ -22,6 +22,10 @@ export default {
       "{file}"
     ],
     "sourceFiles": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "tsconfig.test.json",
       "bench/documentation-quality.bench.ts",
       "bench/feedback.bench.ts",
       "bench/fixtures/index.ts",

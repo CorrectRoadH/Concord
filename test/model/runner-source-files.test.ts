@@ -81,7 +81,10 @@ test('runner sourceFiles equals the static closure of test and runner entrypoint
       pending.push(...targets);
     }
     assert.deepEqual(invalid, [], 'Every module load must have a statically enumerable target');
-    const expected = [...reachable].filter(file => !tests.has(file)).sort();
+    const expected = [...new Set([
+      ...[...reachable].filter(file => !tests.has(file)),
+      '.node-version', 'package.json', 'pnpm-lock.yaml', 'tsconfig.test.json',
+    ])].sort();
     assert.deepEqual([...project.runner!.sourceFiles].sort(), expected);
   } finally { api.close(); }
 })));

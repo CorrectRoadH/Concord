@@ -11,7 +11,7 @@ test('development and CI share the Node 26 declaration included in runner eviden
   const declaration = yield* fs.readFileString('.node-version');
   assert.match(declaration, /^26\.\d+\.\d+\n$/u);
   assert.equal(process.versions.node, declaration.trim(), 'run acceptance with the declared Node version');
-  assert.deepEqual(config.runner.sourceFiles.filter((path: string) => ['.node-version', 'package.json', 'pnpm-lock.yaml', 'tsconfig.test.json'].includes(path)), []);
+  assert.deepEqual(config.runner.sourceFiles.filter((path: string) => ['.node-version', 'package.json', 'pnpm-lock.yaml', 'tsconfig.test.json'].includes(path)).sort(), ['.node-version', 'package.json', 'pnpm-lock.yaml', 'tsconfig.test.json']);
   const Workflow = Schema.Struct({
     jobs: Schema.Record(Schema.String, Schema.Struct({
       steps: Schema.optional(Schema.Array(Schema.Struct({
