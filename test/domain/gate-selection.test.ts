@@ -30,6 +30,14 @@ test('changed gate derives old and current declarations, changed tests and share
   const initial = yield* selectGateTests(['--changed=HEAD'], root);
   assert.deepEqual(initial.files, []);
   assert.equal(initial.allFiles.length, 5);
+  yield* write('concord/package.json', '{"version":"1.0.0"}');
+  yield* write('concord/mods/concord/main.js', source);
+  yield* write('concord/RECIPE.md', '# Published mod\n');
+  const published = yield* selectGateTests(['--changed=HEAD'], root);
+  assert.deepEqual(published.files, []);
+  assert.deepEqual(published.selection.changedFiles, []);
+  assert.deepEqual(published.selection.affectedContracts, []);
+  assert.deepEqual(published.selection.ignoredFiles, ['concord/RECIPE.md', 'concord/mods/concord/main.js', 'concord/package.json']);
   yield* write('src/alpha.ts', 'export const f = () => 2;\n');
   const removed = yield* selectGateTests(['--changed=HEAD'], root);
   assert.deepEqual(removed.files, ['test/model/a.test.ts', 'test/model/whole.test.ts']);

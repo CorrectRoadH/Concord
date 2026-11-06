@@ -72,14 +72,16 @@ export const selectGateTests = Effect.fn('gate.selectTests')(function*(argv: rea
     return stdout;
   }, Effect.scoped, Effect.mapError(cause => cause instanceof GateSelectionInvalid ? cause : new GateSelectionInvalid({ detail: String(cause) })));
   let base: string | null = null;
-  let changedFiles: string[] = [], affectedContracts: string[] = [];
+  let changedFiles: string[] = [], ignoredFiles: string[] = [], affectedContracts: string[] = [];
   let fullSuiteReason: string | null = null;
   let selected = new Set(allFiles);
   if (parsed.changed !== undefined) {
     base = (yield* git(parsed.changed ? ['rev-parse', '--verify', `${parsed.changed}^{commit}`] : ['merge-base', 'origin/master', 'HEAD'])).trim();
     const tracked = yield* git(['diff', '--no-renames', '--name-only', '-z', base, '--']);
     const untracked = yield* git(['ls-files', '--others', '--exclude-standard', '-z']);
-    changedFiles = [...new Set((tracked + untracked).split('\0').filter(Boolean))].sort();
+    const differences = [...new Set((tracked + untracked).split('\0').filter(Boolean))].sort();
+    ignoredFiles = differences.filter(file => file.startsWith('concord/'));
+    changedFiles = differences.filter(file => !file.startsWith('concord/'));
     const broad = changedFiles.find(allTestsDependency);
     if (broad !== undefined) fullSuiteReason = `shared input changed: ${broad}`;
     else {
@@ -110,7 +112,7 @@ export const selectGateTests = Effect.fn('gate.selectTests')(function*(argv: rea
   }
   const files = allFiles.filter(file => selected.has(file) && (requested.length === 0 || requested.includes(file)));
   const selection = { mode: parsed.changed === undefined ? requested.length ? 'files' : 'all' : 'changed', base,
-    changedFiles, affectedContracts, fullSuiteReason, requestedFiles: requested, selectedFiles: files, totalFiles: allFiles.length };
+    changedFiles, ignoredFiles, affectedContracts, fullSuiteReason, requestedFiles: requested, selectedFiles: files, totalFiles: allFiles.length };
   if (output !== undefined) {
     yield* fs.makeDirectory(output, { recursive: true });
     yield* fs.writeFileString(join(output, 'selection.json'), `${JSON.stringify(selection, null, 2)}\n`);

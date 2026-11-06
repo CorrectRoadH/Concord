@@ -7,6 +7,7 @@ export default {
     "scripts"
   ],
   "testRoots": ["test"],
+  "sourceIgnore": ["concord"],
   "runner": {
     "kind": "command",
     "prepare": [

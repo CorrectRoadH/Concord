@@ -17,5 +17,10 @@
   },
   "include": [
     "src/**/*.ts"
+  ],
+  "exclude": [
+    "concord/**",
+    "node_modules",
+    "dist"
   ]
 }
