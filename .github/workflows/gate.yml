@@ -46,7 +46,7 @@ jobs:
           export XDG_CACHE_HOME="$RUNNER_TEMP/hawdb-hooks-cache"
           node scripts/build-native.ts --test-hooks
           node --test test/process/hawdb-native.test.ts
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep patchelf binutils
       - run: pnpm exec vp exec playwright install --with-deps chromium
       - run: pnpm exec vp run build:native
       - name: Run the complete gate for this shard

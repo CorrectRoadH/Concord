@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { NodeServices } from '@effect/platform-node';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { Deferred, Duration, Effect, Fiber, FileSystem, Schema, Scope, Stream } from 'effect';
+import type { Scope} from 'effect';
+import { Deferred, Duration, Effect, Fiber, FileSystem, Schema, Stream } from 'effect';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { tmpdir } from '../support/temporary.ts';
+import { selectsPackagingTest } from '../../scripts/gate-package.ts';
 
 type Requirements = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
 const runnerTest = (name: string, body: (root: string) => Effect.Effect<void, unknown, Requirements>) =>
@@ -69,6 +71,41 @@ test('source uses native type erasure', () => {
   assert.equal(yield* fs.readFileString(sentinel), 'shared cache survives runner lifetime');
 }));
 
+// @feature docs/engineering/testing/README.md#打包测试
+runnerTest('archive preparation gates only packaging and preserves official shard and case reports', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const source = join(root, 'test/model/source.test.ts'), packaging = join(root, 'test/process/release-package.test.ts');
+  const receipt = join(root, 'preparation.json'), sourceDone = join(root, 'source-done'), packageDone = join(root, 'package-done');
+  yield* fs.makeDirectory(join(root, 'test/model'), { recursive: true });
+  yield* fs.makeDirectory(join(root, 'test/process'), { recursive: true });
+  yield* fs.writeFileString(receipt, JSON.stringify({ state: 'pending' }));
+  yield* fs.writeFileString(source, `import test from 'node:test'; import assert from 'node:assert/strict'; import {writeFileSync} from 'node:fs';
+test('ordinary source starts before archive readiness', () => { assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, undefined); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined); writeFileSync(${JSON.stringify(sourceDone)}, 'done'); });\n`);
+  yield* fs.writeFileString(packaging, `import test from 'node:test'; import assert from 'node:assert/strict'; import {existsSync,writeFileSync} from 'node:fs';
+test('packaging receives ready archive only', () => { assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, ${JSON.stringify(join(root, 'archive'))}); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined); assert.ok(existsSync(${JSON.stringify(sourceDone)})); writeFileSync(${JSON.stringify(packageDone)}, 'done'); });\n`);
+  assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=1/2'], root), false);
+  assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=2/2'], root), true);
+  assert.equal(selectsPackagingTest([source, packaging], ['--suite=e2e'], root), false);
+  const running = yield* run(['--suite=node', source, packaging], {
+    CONCORD_GATE_PACKAGE_PREPARATION: receipt, CONCORD_TEST_PACKAGE_ROOT: undefined, CONCORD_TEST_CONCURRENCY: '2',
+  }, root).pipe(Effect.forkScoped);
+  yield* Effect.gen(function*() {
+    while (!(yield* fs.exists(sourceDone))) yield* Effect.sleep('10 millis');
+  }).pipe(Effect.timeout('20 seconds'));
+  assert.equal(yield* fs.exists(packageDone), false, 'pending archive must not start the packaging test process');
+  const temporary = `${receipt}.ready`;
+  yield* fs.writeFileString(temporary, JSON.stringify({ state: 'ready', code: 0, packageRoot: join(root, 'archive'), duration_ms: 12_345, digest: 'fixture', cache: 'hit' }));
+  yield* fs.rename(temporary, receipt);
+  const result = yield* Fiber.join(running);
+  assert.equal(result.code, 0, result.text);
+  assert.match(result.text, /# Packaging Node tests:/u);
+  assert.equal(yield* fs.exists(packageDone), true);
+  const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String, cases: Schema.Number }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
+  assert.deepEqual(timings.map(row => row.file).sort(), [source, packaging].sort());
+  assert.equal(timings.reduce((sum, row) => sum + row.cases, 0), 2);
+  for (const group of ['node-source', 'node-package']) assert.equal(yield* fs.exists(join(result.output, group, 'node-timings.jsonl')), true);
+}));
+
 // @feature docs/engineering/build/architecture.md#脚本只写项目特有的规则
 runnerTest('cancelling gate reaps static task groups and fixture scratch while preserving its shared cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -93,7 +130,7 @@ setInterval(() => {}, 1000);
       yield* fs.remove(cache, { recursive: true, force: true });
     }
   }).pipe(Effect.orDie));
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/gate.ts')], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/gate.ts'), 'test/model/test-reporter.test.ts'], {
     env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined, XDG_CACHE_HOME: join(root, 'shared-cache'), PATH: `${root}:${process.env.PATH}` },
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
   }));
@@ -101,11 +138,11 @@ setInterval(() => {}, 1000);
   let output = '';
   const drain = yield* Stream.runForEach(Stream.decodeText(child.all), text => Effect.gen(function*() {
     output += text;
-    if (output.split('TASK_READY').length === 7) yield* Deferred.succeed(ready, undefined);
+    if (output.split('TASK_READY').length === 8) yield* Deferred.succeed(ready, undefined);
   })).pipe(Effect.forkScoped);
   yield* Deferred.await(ready).pipe(Effect.timeout(Duration.seconds(20)), Effect.catch(() => Effect.sync(() => assert.fail(`Gate tasks did not become ready:\n${output}`))));
   const processes = yield* Effect.forEach((yield* fs.readDirectory(root)).filter(file => file.endsWith('.json')), file => fs.readFileString(join(root, file)).pipe(Effect.map(Schema.decodeUnknownSync(record))));
-  assert.equal(processes.length, 6);
+  assert.equal(processes.length, 7);
   assert.equal(processes.filter(process => process.task === 'build').length, 0);
   for (const process of processes) assert.equal(process.packageRoot, undefined);
   const resourcePath = /# Gate resource report: ([^\n]+)/u.exec(output)?.[1];

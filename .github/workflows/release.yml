@@ -103,6 +103,8 @@ jobs:
           merge-multiple: true
       - name: Typecheck maintained build scripts
         run: pnpm exec vp exec tsc -p tsconfig.scripts.json
+      - name: Prepare Linux archive relocation tools
+        run: sudo apt-get update && sudo apt-get install -y patchelf binutils
       - name: Assemble both target archives and the library from one application build
         run: node scripts/assemble-release.ts release "$RUNNER_TEMP/concord-package" native-artifacts
       - uses: actions/upload-artifact@v4
