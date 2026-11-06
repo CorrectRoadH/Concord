@@ -12,15 +12,16 @@ export function selectWritingGuide(root: string): WritingGuide {
   }) ? 'docs-from-code' : 'docs-from-scratch';
 }
 
-export function projectInitializationRequired(input?: string): { root: string; guide: WritingGuide } | undefined {
-  const root = discoverRoot(input);
-  if (git(root, ['rev-parse', '--show-toplevel']) !== root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
+export function projectInitializationRequired(input?: string, fromSubdirectory = false): { root: string; guide: WritingGuide } | undefined {
+  const discovered = discoverRoot(input);
+  const root = git(discovered, ['rev-parse', '--show-toplevel']);
+  if (!fromSubdirectory && root !== discovered) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
   return readRepositoryFileSync(root, 'docs/taste.md') === undefined ? { root, guide: selectWritingGuide(root) } : undefined;
 }
 
-export const requireInitializedProject = Effect.fn('requireInitializedProject')((input?: string) => Effect.try({
+export const requireInitializedProject = Effect.fn('requireInitializedProject')((input?: string, fromSubdirectory = false) => Effect.try({
   try: () => {
-    const required = projectInitializationRequired(input);
+    const required = projectInitializationRequired(input, fromSubdirectory);
     if (required) throw new ConcordError('ProjectNotInitialized', 'This repository has not been initialized for Concord.', required);
   }, catch: failure,
 }));

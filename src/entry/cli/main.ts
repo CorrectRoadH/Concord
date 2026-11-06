@@ -345,15 +345,15 @@ const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effec
   // @concord-begin
   // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
   const { root } = yield* Effect.tryPromise(() => import('./cli-base.js'));
-  const guard = Effect.gen(function*() {
+  const guard = (fromSubdirectory = false) => Effect.gen(function*() {
     const settings = yield* root;
     const app = yield* loadApp();
-    yield* app.requireInitializedProject(settings.root._tag === 'Some' ? settings.root.value : undefined);
+    yield* app.requireInitializedProject(settings.root._tag === 'Some' ? settings.root.value : undefined, fromSubdirectory);
   });
   const commands = command.subcommands.flatMap(group => group.commands.map(child => {
     if (['init', 'template', 'herdr', 'doctor', 'server'].includes(child.name)) return child;
-    if (child.name === 'view') return child.pipe(Command.withSubcommands(child.subcommands.flatMap(group => group.commands.map(nested => nested.pipe(Command.provideEffectDiscard(guard))))));
-    return child.pipe(Command.provideEffectDiscard(guard));
+    if (child.name === 'view') return child.pipe(Command.withSubcommands(child.subcommands.flatMap(group => group.commands.map(nested => nested.pipe(Command.provideEffectDiscard(guard(true)))))));
+    return child.pipe(Command.provideEffectDiscard(guard()));
   }));
   const guarded = command.pipe(Command.withSubcommands(commands)) as typeof command;
   // @concord-end

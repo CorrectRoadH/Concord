@@ -33,3 +33,18 @@ test('initialization requires taste and derives the writing guide from tracked a
     Effect.runSync(requireInitializedProject(root));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// @use-case docs/feature/web-workbench/use-case/review-pull-request.md
+test('preview initialization checks use the Git top for a nested root without relaxing project command roots', () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-initialization-preview-'));
+  const nested = join(root, 'docs/nested');
+  try {
+    execFileSync('git', ['init', '-q', root]);
+    mkdirSync(nested, { recursive: true });
+    assert.deepEqual(projectInitializationRequired(nested, true), { root, guide: 'docs-from-scratch' });
+    assert.throws(() => projectInitializationRequired(nested), error => error instanceof Error && 'code' in error && error.code === 'ProjectRootInvalid');
+    writeFileSync(join(root, 'docs/taste.md'), '');
+    assert.equal(projectInitializationRequired(nested, true), undefined);
+    Effect.runSync(requireInitializedProject(nested, true));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
