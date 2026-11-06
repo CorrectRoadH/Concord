@@ -2,7 +2,7 @@
 // @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { Duration, Effect, Fiber, FileSystem, Schema } from 'effect';
+import { Deferred, Duration, Effect, Fiber, FileSystem, Schema } from 'effect';
 import { join, resolve } from 'node:path';
 import { availableParallelism, loadavg } from 'node:os';
 import { parseArgs } from 'node:util';
@@ -125,11 +125,12 @@ const main = Effect.scoped(Effect.gen(function* () {
   const directPreparation = packageFiles.length > 0 && packagePreparation === undefined && process.env.CONCORD_TEST_PACKAGE_ROOT === undefined
     ? yield* preparePackagingFixture(process.cwd(), join(output, 'archive-preparation.json')).pipe(Effect.forkScoped)
     : undefined;
-  const sourceTests = sourceFiles.length > 0
+  const sourceCompleted = yield* Deferred.make<void>();
+  const sourceTests = (sourceFiles.length > 0
     ? suite('Source Node', process.execPath, [fileURLToPath(import.meta.url), '--node-worker', '--suite=node', ...nameFlags, ...sourceFiles], {
-      ...env, CONCORD_NODE_OUTPUT: sourceOutput, CONCORD_TEST_CONCURRENCY: String(packageFiles.length > 0 ? Math.max(1, concurrency - 1) : concurrency),
+      ...env, CONCORD_NODE_OUTPUT: sourceOutput, CONCORD_TEST_CONCURRENCY: String(concurrency),
       CONCORD_TEST_PACKAGE_ROOT: undefined, CONCORD_TEST_PACKAGE_BUILD_STATUS: undefined,
-    }) : Effect.succeed(false);
+    }) : Effect.succeed(false)).pipe(Effect.ensuring(Deferred.succeed(sourceCompleted, undefined)));
   const packageTests = packageFiles.length > 0 ? Effect.gen(function*() {
     const prepared = packagePreparation !== undefined ? yield* waitForPackagePreparation(packagePreparation)
       : directPreparation !== undefined ? yield* Fiber.join(directPreparation) : undefined;
@@ -137,6 +138,10 @@ const main = Effect.scoped(Effect.gen(function* () {
       yield* Effect.sync(() => console.error(`# Packaging preparation failed: ${prepared.message}`));
       return true;
     }
+    // The archive's installed copies and independent acceptance processes share
+    // the same memory boundary as source tests. Preparation remains parallel.
+    if (sourceFiles.length > 0) yield* Effect.sync(() => console.error('# Packaging waits for Source Node completion'));
+    yield* Deferred.await(sourceCompleted);
     return yield* suite('Packaging Node', process.execPath, [fileURLToPath(import.meta.url), '--node-worker', '--suite=node', ...nameFlags, ...packageFiles], {
       ...env, CONCORD_NODE_OUTPUT: packageOutput, CONCORD_TEST_CONCURRENCY: '1',
       CONCORD_TEST_PACKAGE_ROOT: prepared?.packageRoot ?? process.env.CONCORD_TEST_PACKAGE_ROOT,
