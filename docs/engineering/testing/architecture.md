@@ -4,7 +4,7 @@
 
 ## Runner 适配
 
-`pnpm gate` 的测试阶段统一调度 Node 测试与浏览器测试。纯函数层与仓库内层导入当前检出的源码，原生产物取自共享缓存；CLI、进程与浏览器层运行本次门禁构建到临时目录的安装包，通过它的 bin 与公开入口启动子进程。打包测试安装同一份产物，不另行构建。
+`pnpm gate` 的测试阶段统一调度 Node 测试与浏览器测试，全部运行当前检出的源码：子进程以[从源码运行](../build/architecture.md#从源码运行)的方式启动，Web 页面来自共享的 Web 产物，原生产物来自共享缓存。只有打包测试使用安装包。
 
 同步测试体使用 `Effect.sync`，Node adapter 回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
 
