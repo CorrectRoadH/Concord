@@ -4,7 +4,7 @@
 
 ## Runner 适配
 
-`pnpm gate` 的测试阶段统一调度 Node 测试与浏览器测试，两类测试都运行当前检出的源码。CLI 层与进程层以源码入口启动子进程，与 `pnpm concord` 相同；原生产物取自共享缓存。只有打包测试构建到自己的临时目录。
+`pnpm gate` 的测试阶段统一调度 Node 测试与浏览器测试。纯函数层与仓库内层导入当前检出的源码，原生产物取自共享缓存；CLI、进程与浏览器层运行本次门禁构建到临时目录的安装包，通过它的 bin 与公开入口启动子进程。打包测试安装同一份产物，不另行构建。
 
 同步测试体使用 `Effect.sync`，Node adapter 回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
 
@@ -28,9 +28,9 @@
 
 ## 浏览器与诊断
 
-浏览器由 e2e Web engine 拥有，每次尝试使用独立 context。精确时钟、网络边界和 DOM 检查通过 engine 的公开 `surfaceOf` 访问当前 Page；浏览器只由 engine 关闭。
+浏览器由 e2e Web engine 拥有，每个 worker 一个浏览器，每次尝试使用独立 context。精确时钟、网络边界和 DOM 检查通过 engine 的公开 `surfaceOf` 访问当前 Page；浏览器只由 engine 关闭。
 
-测试拥有其临时 Git 仓库与 View 服务，在 finally 中关闭服务后删除仓库。测试服务停止时回收包含浏览器预连接在内的 HTTP 连接，保留页面供 runner 截图。成功、断言失败与超时均须进入资源回收。
+每个浏览器 worker 拥有一个临时 Git 仓库与它的 View 服务，worker 结束时关闭服务后删除仓库。测试开始前把仓库恢复到 fixture 的冻结提交，等服务刷新到该提交；测试结束时关闭本测试的 context 并回收它的 HTTP 连接，保留页面供 runner 截图。需要独占服务状态的测试（例如服务停止与重启）自己另起仓库与服务，并在 finally 中回收。成功、断言失败与超时均须进入资源回收。
 
 系统 Chromium 适配须有启动超时、取消响应、退出等待与强制终止后备路径；启动失败也须回收临时 profile。
 
