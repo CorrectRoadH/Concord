@@ -94,3 +94,4 @@ export type { TemplateResources } from './service.ts';
 export type { HerdrModReceipt } from './herdr-mod.ts';
 export { projectLibraryVersions } from './library-version.ts';
 
+export { installationUseMarker } from './use-marker.ts';

@@ -74,14 +74,14 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
   }));
   if (current && current.hello.installation === installation && current.hello.protocol === PROTOCOL) return current;
   if (current) {
-    return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol; stop it explicitly before starting this version'));
+    return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'A workspace server from another Concord installation is running for this project. Stop it with: concord server stop'));
   }
   if (foreground) {
     const owner = yield* OwnedProcess, installed = yield* Installation;
     yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], { cwd: installed.cwd, stream: { ready: () => {}, stdout: () => {}, stderr: chunk => { process.stderr.write(chunk); } } })));
   } else yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
   const connection = yield* waitForServerHandshake(existingWorkspace(root, installation));
-  if (connection.hello.installation !== installation || connection.hello.protocol !== PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol'));
+  if (connection.hello.installation !== installation || connection.hello.protocol !== PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'A workspace server from another Concord installation is running for this project. Stop it with: concord server stop'));
   return connection;
 });
 
@@ -102,7 +102,7 @@ const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceReco
     return true;
   }
   if (yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure))) return false;
-  return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol; stop it with its matching installation'));
+  return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'A workspace server from another Concord installation is running for this project. Stop it with: concord server stop'));
 });
 
 const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root: string, privateDir: string) {
@@ -116,7 +116,7 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
     yield* assertCompatibleWorkspaceRecord(privateDir, installation);
     const connection = yield* existingWorkspace(root, installation, privateDir, scope.key).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeExpired', 'The inherited command service is unavailable')));
     if (!connection) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeExpired', 'The inherited command service has ended'));
-    if (connection.hello.installation !== installation || connection.hello.protocol !== client.PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The inherited service uses another installation or protocol'));
+    if (connection.hello.installation !== installation || connection.hello.protocol !== client.PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'A workspace server from another Concord installation is running for this project. Stop it with: concord server stop'));
     return connection;
   }
   // Query selection has already verified the same installation for fallback.
@@ -168,7 +168,7 @@ const existingCompatibleWorkspace = Effect.fn('existingCompatibleWorkspace')(fun
     return yield* Effect.fail(workspaceServerFailure(cause));
   }))) : undefined;
   if (!connection && key !== undefined) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeExpired', 'The inherited command service has ended'));
-  if (connection && (connection.hello.installation !== runtime.installation() || connection.hello.protocol !== client.PROTOCOL)) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol'));
+  if (connection && (connection.hello.installation !== runtime.installation() || connection.hello.protocol !== client.PROTOCOL)) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'A workspace server from another Concord installation is running for this project. Stop it with: concord server stop'));
   if (connection) yield* awaitQueryReady(connection).pipe(Effect.mapError(workspaceServerFailure));
   return connection;
 });
@@ -209,7 +209,9 @@ const stopWorkspaceServer = (root: string) => Effect.scoped(Effect.gen(function*
   const runtime = yield* ServerRuntime;
   const { privateDir } = yield* (yield* Workspace).locate(root, true);
   const token = yield* Effect.scoped(Effect.gen(function*() {
-    const connection = yield* existingWorkspace(root);
+    const record = yield* Effect.try({ try: () => runtime.read(privateDir), catch: failure });
+    if (!record) return undefined;
+    const connection = yield* existingWorkspace(root, record.installation, privateDir);
     if (!connection) return undefined;
     yield* connection.client.shutdown({ token: connection.hello.token });
     return connection.hello.token;

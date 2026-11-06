@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Effect, Schema } from 'effect';
-import { distributionRoot, installedPackageRoot } from './installed-package.ts';
+import { Effect } from 'effect';
 
-export const installer = join(distributionRoot, 'install.sh');
-const Manifest = Schema.fromJsonString(Schema.Struct({ bin: Schema.Struct({ concord: Schema.String }) }));
+export const installer = fileURLToPath(new URL('../../install.sh', import.meta.url));
 export const command = (name: string): string => {
   const result = spawnSync('which', [name], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
@@ -20,34 +18,46 @@ export const run = (args: string[], env: NodeJS.ProcessEnv, cwd: string) => spaw
 const createFixture = (scratch: string) => {
   const home = join(scratch, 'home with spaces'), release = join(scratch, 'release'), adapters = join(scratch, 'adapters');
   mkdirSync(home); mkdirSync(adapters); mkdirSync(release);
-  const manifest = Schema.decodeUnknownSync(Manifest)(readFileSync(join(installedPackageRoot(), 'package.json'), 'utf8'));
-  const store = spawnSync('pnpm', ['store', 'path'], { encoding: 'utf8' });
-  assert.equal(store.status, 0, store.stderr);
-  symlinkSync(command('node'), join(adapters, 'node'));
   const adapter = fileURLToPath(new URL('./install-script-download.ts', import.meta.url));
   writeFileSync(join(adapters, 'curl'), `#!${process.execPath}\n${readFileSync(adapter, 'utf8').split('\n').slice(1).join('\n')}`);
   chmodSync(join(adapters, 'curl'), 0o755);
-  const env = { ...process.env, HOME: home, PATH: `${adapters}:${process.env.PATH}`, NODE_OPTIONS: '', INSTALL_FIXTURE_RELEASE: release, INSTALL_FIXTURE_CURL: command('curl'), npm_config_offline: 'true', npm_config_store_dir: store.stdout.trim(), COREPACK_HOME: process.env.COREPACK_HOME ?? join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'node/corepack'), COREPACK_ENABLE_NETWORK: '0', CI: 'true' };
-  const source = join(scratch, 'candidate'); mkdirSync(source);
-  for (const path of ['dist', 'docs', 'templates', 'skills', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', ...readdirSync(installedPackageRoot()).filter(name => /^README(?:\..+)?\.md$/u.test(name))]) cpSync(join(installedPackageRoot(), path), join(source, path), { recursive: true });
-  const archives = new Map<string, Buffer>();
-  const publish = (version: string, options: { corrupt?: boolean; brokenLock?: boolean; missing?: boolean } = {}) => {
+  // A forbidden PATH runtime proves that the installer does not use Node or pnpm.
+  for (const name of ['node', 'npm', 'pnpm', 'rg']) {
+    writeFileSync(join(adapters, name), '#!/bin/sh\nexit 97\n'); chmodSync(join(adapters, name), 0o755);
+  }
+  const env = { ...process.env, HOME: home, PATH: `${adapters}:${process.env.PATH}`, NODE_OPTIONS: '', INSTALL_FIXTURE_RELEASE: release, INSTALL_FIXTURE_CURL: command('curl'), CI: 'true' };
+  const source = join(scratch, 'candidate');
+  mkdirSync(join(source, 'bin'), { recursive: true }); mkdirSync(join(source, 'runtime')); mkdirSync(join(source, 'app'));
+  symlinkSync(command('sh'), join(source, 'runtime/node'));
+  const publishArchive = (version: string, archiveRoot: string) => {
     const target = join(release, 'download', `v${version}`); mkdirSync(target, { recursive: true });
-    const archive = `concord-sdlc-${version}.tgz`, archivePath = join(target, archive);
+    const platform = process.platform === 'darwin' ? 'darwin-arm64' : 'linux-x64';
+    const archive = `concord-${version}-${platform}.tar.gz`, archivePath = join(target, archive);
+    const packed = run(['tar', '-czf', archivePath, '-C', archiveRoot, '.'], env, scratch);
+    assert.equal(packed.status, 0, packed.stdout + packed.stderr);
+    const hash = createHash('sha256').update(readFileSync(archivePath)).digest('hex');
+    writeFileSync(join(target, 'SHA256SUMS'), `${hash}  ${archive}\n`);
+  };
+  const archives = new Map<string, Buffer>();
+  const publish = (version: string, options: { corrupt?: boolean; brokenArchive?: boolean; missing?: boolean; checksumRows?: string } = {}) => {
+    const target = join(release, 'download', `v${version}`); mkdirSync(target, { recursive: true });
+    const platform = process.platform === 'darwin' ? 'darwin-arm64' : 'linux-x64';
+    const archive = `concord-${version}-${platform}.tar.gz`, archivePath = join(target, archive);
     const existing = archives.get(version);
-    if (existing && !options.brokenLock) writeFileSync(archivePath, existing);
+    if (existing && !options.brokenArchive) writeFileSync(archivePath, existing);
     else {
-      const metadata = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(readFileSync(join(source, 'package.json'), 'utf8'));
-      writeFileSync(join(source, 'package.json'), JSON.stringify({ ...metadata, version }));
-      const lock = readFileSync(join(installedPackageRoot(), 'pnpm-lock.yaml'), 'utf8');
-      writeFileSync(join(source, 'pnpm-lock.yaml'), options.brokenLock ? lock.replace('4.0.0-rc.112', '0.0.0-install-script-missing') : lock);
-      // Use the exact release packer, including its manifest/lock byte checks.
-      const packed = run(['node', '--import', 'tsx', join(distributionRoot, 'scripts/release-package.ts'), target, source], env, distributionRoot);
+      // Minimal executable archive tests only the installation protocol. Actual
+      // product behaviour is separately revalidated with the parent's real archive.
+      writeFileSync(join(source, 'bin/concord'), `#!/bin/sh\ncase "$1" in --version) printf 'concord v${version}\\n';; --help) printf 'concord help\\n';; *) exit 2;; esac\n`);
+      chmodSync(join(source, 'bin/concord'), 0o755);
+      writeFileSync(join(source, 'app/package.json'), JSON.stringify({ name: 'concord-sdlc', version }));
+      const packed = run(['tar', '-czhf', archivePath, '-C', source, '.'], env, scratch);
       assert.equal(packed.status, 0, packed.stdout + packed.stderr);
-      if (!options.brokenLock) archives.set(version, readFileSync(archivePath));
+      if (options.brokenArchive) writeFileSync(archivePath, 'not an archive');
+      else archives.set(version, readFileSync(archivePath));
     }
     const hash = createHash('sha256').update(readFileSync(archivePath)).digest('hex');
-    writeFileSync(join(target, 'SHA256SUMS'), `${options.corrupt ? '0'.repeat(64) : hash}  release/${archive}\n${createHash('sha256').update(readFileSync(installer)).digest('hex')}  release/install.sh\n`);
+    writeFileSync(join(target, 'SHA256SUMS'), options.checksumRows ?? `${options.corrupt ? '0'.repeat(64) : hash}  release/${archive}\n${createHash('sha256').update(readFileSync(installer)).digest('hex')}  release/install.sh\n`);
     if (options.missing) rmSync(archivePath);
   };
   const install = (version?: string, extra: NodeJS.ProcessEnv = {}) => run(['sh', installer], { ...env, CONCORD_VERSION: version ?? '', ...extra }, scratch);
@@ -56,7 +66,7 @@ const createFixture = (scratch: string) => {
   };
   const root = join(home, '.local/share/concord'), bin = join(home, '.local/bin/concord');
   const cli = (args: string[]) => run([bin, ...args], env, scratch);
-  return { scratch, home, release, env, manifest, root, bin, publish, install, succeed, cli };
+  return { scratch, home, release, env, adapters, manifest: { bin: { concord: 'bin/concord' } }, root, bin, publish, publishArchive, install, succeed, cli };
 };
 
 export const withInstaller = (body: (fixture: ReturnType<typeof createFixture>) => void): void => Effect.runSync(Effect.sync(() => {
@@ -64,3 +74,9 @@ export const withInstaller = (body: (fixture: ReturnType<typeof createFixture>) 
   try { body(createFixture(scratch)); }
   finally { rmSync(scratch, { recursive: true, force: true }); }
 }));
+
+export const withInstallerAsync = async (body: (fixture: ReturnType<typeof createFixture>) => Promise<void>): Promise<void> => {
+  const scratch = mkdtempSync(join(tmpdir(), 'concord-install-script-'));
+  try { await body(createFixture(scratch)); }
+  finally { rmSync(scratch, { recursive: true, force: true }); }
+};

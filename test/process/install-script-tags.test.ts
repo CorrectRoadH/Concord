@@ -16,5 +16,5 @@ test('latest and explicit versions install releases using the supported concord-
   assert.equal(f.cli(['--version']).stdout.trim(), 'concord v0.9.3');
   const requests = readFileSync(join(f.release, 'requests'), 'utf8');
   assert.match(requests, /download\/concord-v0\.9\.3\/SHA256SUMS/u);
-  assert.match(requests, /download\/concord-v0\.9\.3\/concord-sdlc-0\.9\.3\.tgz/u);
+  assert.match(requests, /download\/concord-v0\.9\.3\/concord-0\.9\.3-(linux-x64|darwin-arm64)\.tar\.gz/u);
 }));

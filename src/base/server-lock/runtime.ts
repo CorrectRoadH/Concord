@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { ConcordError, digest, failure } from '../../model/index.ts';
-import { workspaceInstallationIdentity, packageRoot, sourceInstallation } from '../installation/index.ts';
+import { workspaceInstallationIdentity, packageRoot, sourceInstallation, installationUseMarker } from '../installation/index.ts';
 import { ensureGenericPrivateDirectorySync } from '../publication/index.ts';
 import { scopedServerLock } from './index.ts';
 
@@ -55,6 +55,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
   }, catch: failure });
   const directory = join(privateDir, 'server');
   const lock = yield* scopedServerLock(directory);
+  yield* installationUseMarker();
   const recordPath = join(directory, 'current.json');
   const socketPath = yield* Effect.try({ try: () => {
     const runtime = realpathSync(process.env.XDG_RUNTIME_DIR ?? tmpdir());
