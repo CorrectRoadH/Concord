@@ -10,6 +10,9 @@ import { humanOutput } from '../../src/entry/cli/index.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 import { createDocument } from '../support/operations.ts';
 import { createConsumer } from '../support/consumer.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 const Output = Schema.Struct({ operation: Schema.optional(Schema.String), query: Schema.optional(Schema.String), error: Schema.optional(Schema.String), documents: Schema.optional(Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String, title: Schema.String, type: Schema.optional(Schema.String), body: Schema.optional(Schema.String), provider: Schema.optional(Schema.String) }))) });
 function result(root: string, operation: (repo: LocalRepository) => unknown, status = 0) {
  const repo = new LocalRepository(root);
@@ -26,8 +29,8 @@ async function recover(root: string, status = 0) {
  if (value._tag === 'Failure') { assert.equal(status, 1); assert.ok(value.failure instanceof ConcordError); return Schema.decodeUnknownSync(Output)({ error: value.failure.code }); }
  assert.equal(status, 0); return Schema.decodeUnknownSync(Output)(value.success);
 }
-function digestFor(root: string, path: string): string { const record = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8')); assert.ok(record); return record.digest; }
-function saveBody(root: string, path: string, body: string, expectedDigest: string, status = 0) { const record = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8'))!; return result(root, repo => setMarkdown(repo, path, renderDocument(record.metadata, body), expectedDigest), status); }
+function digestFor(root: string, path: string): string { const record = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8'), parserRuntime); assert.ok(record); return record.digest; }
+function saveBody(root: string, path: string, body: string, expectedDigest: string, status = 0) { const record = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8'), parserRuntime)!; return result(root, repo => setMarkdown(repo, path, renderDocument(record.metadata, body), expectedDigest), status); }
 
 // @use-case docs/feature/local-data-engine/use-case/query-current-projections.md#edit
 test('packed Memory index and recall return current owner text and digest; edit enforces CAS', () => Effect.runPromise(Effect.sync(() => {

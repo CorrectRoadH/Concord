@@ -1,3 +1,4 @@
+import { RuntimeEnvironment } from '../base/environment/index.ts';
 import type * as WorkspaceTypes from '../base/workspace/index.ts';
 import { Effect } from "effect";
 import type { Publication } from "../base/publication/index.ts";
@@ -15,9 +16,10 @@ export const cacheMaintenanceNeeded = (privateDir: string) => Effect.try({
 });
 
 /** Best effort: reclaim first, then release every native lock before publication. */
-export const maintainCache = Effect.fn('maintainCache')(function*(root: string): Effect.fn.Return<'below-threshold' | 'reclaimed' | 'cleared' | 'deferred', never, WorkspaceTypes.Workspace | Publication | PersistentCache> {
+export const maintainCache = Effect.fn('maintainCache')(function*(root: string): Effect.fn.Return<'below-threshold' | 'reclaimed' | 'cleared' | 'deferred', never, WorkspaceTypes.Workspace | Publication | PersistentCache | RuntimeEnvironment> {
+  const runtime = yield* RuntimeEnvironment;
   try {
-    const privateDir = genericPrivateDirectorySync(root), path = cacheDatabasePath(privateDir);
+    const privateDir = genericPrivateDirectorySync(root, runtime.env), path = cacheDatabasePath(privateDir);
     if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) || cachePhysicalBytes(privateDir) <= CACHE_MAINTENANCE_THRESHOLD_BYTES) return 'below-threshold';
     const cache = yield* PersistentCache;
     const deferred = yield* Effect.scoped(Effect.gen(function*() {
@@ -32,7 +34,7 @@ export const maintainCache = Effect.fn('maintainCache')(function*(root: string):
       const repo = yield* openWriteRepository(root, { persistentCache: 'off', reclaimPublication: false });
       return yield* Effect.try({ try: () => repo.snapshot(() => {
         if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed' as const;
-        return clearCache(repo, CACHE_PHYSICAL_LIMIT_BYTES).status === 'cleared' ? 'cleared' as const : 'reclaimed' as const;
+        return clearCache(repo, CACHE_PHYSICAL_LIMIT_BYTES, runtime).status === 'cleared' ? 'cleared' as const : 'reclaimed' as const;
       }), catch: cause => cause });
     })).pipe(Effect.catch(() => Effect.succeed('deferred' as const)));
   } catch { return 'deferred'; }

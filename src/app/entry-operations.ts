@@ -15,8 +15,14 @@ import * as Module12 from "../domain/onboarding/index.ts";
 import * as Module13 from "../base/publication/index.ts";
 import * as Module14 from "../base/installation/index.ts";
 import * as Module15 from "../base/process/index.ts";
+import * as Module16 from '../base/cache/index.ts';
 import { Sources } from '../base/sources/index.ts';
+import { RuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
 import { Effect } from 'effect';
+/** Transport operations read the snapshot supplied by their composition root. */
+export const applicationRuntime = Effect.gen(function*() { return yield* RuntimeEnvironment; });
+export type ApplicationRuntime = RuntimeEnvironmentSnapshot;
+export const locateProjectRoot = (input?: string) => Effect.flatMap(Module0.Workspace, workspace => workspace.locate(input, true)).pipe(Effect.map(location => location.root));
 export const withSourceSnapshot = <A, E, R>(repo: Module0.LocalRepository, operation: Effect.Effect<A, E, R>) => Effect.flatMap(Sources, sources => sources.snapshot(repo, operation));
 export const discoverRoot: typeof Module0.discoverRoot = (...args) => Module0.discoverRoot(...args);
 export const cacheStatus: typeof Module1.cacheStatus = (...args) => Module1.cacheStatus(...args);
@@ -67,6 +73,8 @@ export function uriPath(repo: ModelTypes.Repository, uri: string, allowExternal 
   return allowExternal ? Module15.uriPath(repo, uri, true) : Module15.uriPath(repo, uri);
 }
 export const makeOwnedProcessService: typeof Module15.makeOwnedProcessService = (...args) => Module15.makeOwnedProcessService(...args);
+export const recordProcessEvent: typeof Module15.recordProcessEvent = (...args) => Module15.recordProcessEvent(...args);
+export const awaitCacheMaintenance: typeof Module16.awaitCacheMaintenance = (...args) => Module16.awaitCacheMaintenance(...args);
 
 export function createReadRepository(root: string | undefined, options: WorkspaceTypes.ReadRepositoryOptions) {
   return new Module0.LocalRepository(root, options);

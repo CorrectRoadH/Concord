@@ -44,8 +44,8 @@ const feedbackConnection = Command.make('connection').pipe(Command.withDescripti
   Command.make('check', { id }, args => Effect.gen(function* () {
     const settings = yield* root;
     if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'feedback connection check does not accept --dry-run'));
-    const result = yield* executeViewAction(viewRoot(settings), { action: 'feedback.check', connection: args.id });
-    yield* Effect.sync(() => emit(result, settings.json));
+    const result = yield* executeViewAction((yield* viewRoot(settings)), { action: 'feedback.check', connection: args.id });
+    yield* emit(result, settings.json);
   })),
   Command.make('remove', { id }, args => withRepo((local, settings) => sync(() => {
     const current = showConfig(local);
@@ -57,14 +57,14 @@ const feedbackConnection = Command.make('connection').pipe(Command.withDescripti
 
 const feedbackSync = Command.make('sync', { connection: text('connection') }, args => Effect.gen(function*() {
   const settings = yield* root;
-  const receipt = yield* syncFeedback(viewRoot(settings), args.connection, { dryRun: settings.dryRun });
-  yield* Effect.sync(() => emit(receipt, settings.json));
+  const receipt = yield* syncFeedback((yield* viewRoot(settings)), args.connection, { dryRun: settings.dryRun });
+  yield* emit(receipt, settings.json);
 }));
 
 const feedbackImport = Command.make('import', { url: Argument.string('url'), connection: text('connection') }, args => Effect.gen(function*() {
   const settings = yield* root;
-  const receipt = yield* syncFeedback(viewRoot(settings), args.connection, { url: args.url, dryRun: settings.dryRun });
-  yield* Effect.sync(() => emit(receipt, settings.json));
+  const receipt = yield* syncFeedback((yield* viewRoot(settings)), args.connection, { url: args.url, dryRun: settings.dryRun });
+  yield* emit(receipt, settings.json);
 }));
 
 const feedback = Command.make('feedback').pipe(Command.withDescription('Connect external feedback sources and import observations as local Issues.'), Command.withSubcommands([

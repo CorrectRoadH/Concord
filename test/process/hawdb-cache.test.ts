@@ -1,4 +1,7 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { initialize, runApplication, installedConcordCli, assert, createHash, execFileSync, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, resolve, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, ScanReport, freshConsumer, cli, cacheDiskSnapshot } from './hawdb-cache-fixture.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
@@ -43,7 +46,7 @@ test('clear unlinks internal aliases before native locks and can retry after det
     const data = join(path, 'left/data'); const alias = join(path, 'right/alias');
     const nestedLock = join(path, 'right/owner.hawdb.lock'); const outside = join(root, 'outside');
     writeFileSync(data, 'retained bytes'); linkSync(data, alias); writeFileSync(nestedLock, '');
-    const guard = acquireHawdbClearGuard(path);
+    const guard = acquireHawdbClearGuard(path, nativeRuntime);
     const rootInode = statSync(path).ino; const lockInode = statSync(join(path, 'owner.hawdb.lock')).ino;
     const siblingInode = statSync(`${path}.concord.lock`).ino;
     try {

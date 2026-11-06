@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';
 import { createConsumer } from '../support/consumer.ts';
@@ -25,6 +26,8 @@ import { LocalRepository } from "../support/repository.ts";
 
 import { humanOutput } from "../../src/entry/cli/index.ts";
 import { projectConfigPath } from '../support/support.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const issue = (overrides: Record<string, unknown> = {}) => ({
   id: 9001,
@@ -84,14 +87,14 @@ test('directed feedback reads recover from a brief cache writer and keep source 
       mergeFeedbackCache(repo, 'github-main', [remote]);
     });
     const cache = join(root, '.git/concord/cache.hawdb');
-    writer = openHawdb(cache, { readOnly: false, create: false });
+    writer = openHawdb(cache, { readOnly: false, create: false }, nativeRuntime);
     const reading = runApplication(getViewFile(root, path));
     await runApplication(Effect.sleep('50 millis'));
     writer.close(); writer = undefined;
     const readable = await reading;
     assert.equal(readable.feedback?.remote?.body, 'Cached remote body');
 
-    writer = openHawdb(cache, { readOnly: false, create: false });
+    writer = openHawdb(cache, { readOnly: false, create: false }, nativeRuntime);
     const unavailable = await runApplication(getViewFile(root, path));
     assert.equal(unavailable.feedback?.remote, null);
     assert.equal(unavailable.feedback?.document.metadata.source?.body, 'First source body');
@@ -121,7 +124,7 @@ test('feedback workspace stays tolerant and readonly when its cache table or unr
     const before = readdirSync(cache).sort();
     open(root, repo => assert.deepEqual(listFeedback(repo).map(item => item.document.metadata.id), ['local-note']));
     assert.deepEqual(readdirSync(cache).sort(), before, 'reading a database without feedback_cache must stay readonly');
-    const database = openHawdb(cache, { readOnly: true, create: false });
+    const database = openHawdb(cache, { readOnly: true, create: false }, nativeRuntime);
     try { assert.deepEqual(database.scan('feedback_cache'), []); }
     finally { database.close(); }
   } finally {
@@ -140,7 +143,7 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
     open(root, repo => {
       const config = showConfig(repo).config.feedbackConnections?.[0];
       assert.equal(config?.provider === 'github' ? config.repositoryId : undefined, '42');
-      assert.match(cacheStatus(repo).detail ?? '', /feedback_cache/u);
+      assert.match(cacheStatus(repo, nativeRuntime).detail ?? '', /feedback_cache/u);
       const document = loadDocuments(repo).find(item => item.metadata.id === 'feedback-github-9001')!;
       assert.equal(document.metadata.kind === 'issue' ? document.metadata.source?.body : undefined, '');
       setAuthor(repo, document.path, document.body.replace(/^# .+/mu, '# Local title'), document.digest);
@@ -163,7 +166,7 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
       linkIssue(repo, item.document.metadata.id, 'docs/feature/feedback-home/README.md', false, 'spec');
       assert.equal(listFeedback(repo)[0]?.triage, 'linked');
       closeIssue(repo, item.document.metadata.id, 'Triaged');
-      clearCache(repo);
+      clearCache(repo, undefined, nativeRuntime);
       assert.deepEqual(listFeedback(repo), []);
     });
     const afterClear = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue({ state: 'open', updated_at: '2026-09-14T02:00:00Z' })]), credential: 'test-token' }));
@@ -236,7 +239,7 @@ test('cache compares real instants, rejects unsafe paths, and duplicate source i
     });
     await assert.rejects(runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' })), error => errorCode(error, 'FeedbackIdentityConflict'));
     rmSync(join(root, 'docs/issues/duplicate-feedback.md'));
-    open(root, repo => clearCache(repo));
+    open(root, repo => clearCache(repo, undefined, nativeRuntime));
     const dangling = join(root, '.git/concord/cache.hawdb');
     rmSync(dangling, { recursive: true });
     symlinkSync(join(root, 'missing-cache-target'), dangling);
@@ -258,7 +261,7 @@ test('one feedback fetch merges repeated identities against earlier entries in t
       ]);
       assert.equal(warnings.length, 1);
       assert.equal([...readFeedbackCache(repo).items.values()][0]?.remote.title, 'Newer');
-      const database = openHawdb(join(repo.privateDir, 'cache.hawdb'), { readOnly: true, create: false });
+      const database = openHawdb(join(repo.privateDir, 'cache.hawdb'), { readOnly: true, create: false }, nativeRuntime);
       try { assert.equal(database.scan('feedback_cache').length, 1, 'the merged entry was published to HawDB'); }
       finally { database.close(); }
     });
@@ -273,11 +276,11 @@ test('feedback cache rejects a damaged HawDB payload and never partially publish
     open(root, repo => {
       assert.throws(() => mergeFeedbackCache(repo, 'github-main', Array.from({ length: 1001 }, (_, index) => ({ ...remote, id: String(index + 1) }))), error => errorCode(error, 'HawdbLimit'));
       const path = join(repo.privateDir, 'cache.hawdb');
-      const database = openHawdb(path, { readOnly: true, create: false });
+      const database = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
       try { assert.deepEqual(database.scan('feedback_cache'), []); }
       finally { database.close(); }
       mergeFeedbackCache(repo, 'github-main', [remote]);
-      const writer = openHawdb(path, { readOnly: false, create: false });
+      const writer = openHawdb(path, { readOnly: false, create: false }, nativeRuntime);
       try {
         const row = writer.scan('feedback_cache')[0]!;
         writer.put('feedback_cache', [{ key: row.key, payload: '{' }]);

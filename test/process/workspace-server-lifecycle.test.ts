@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -15,6 +16,8 @@ import { privateSourceInstallation } from '../support/private-source.ts';
 import { scopedServerLock } from '../../src/base/server-lock/index.ts';
 
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @feature docs/feature/web-workbench/README.md
 test('disconnecting a view client releases its HTTP lease while the service remains available', { timeout: 20_000 }, async () => {
@@ -65,7 +68,7 @@ test('server stop confirms a dead owner through its lock despite a stale record 
     process.kill(running.pid, 'SIGKILL');
     staleSocket = running.socket.path;
     await pollUntil(async () => {
-      const acquired = await Effect.runPromise(Effect.result(Effect.scoped(scopedServerLock(dirname(recordPath(root))))));
+      const acquired = await Effect.runPromise(Effect.result(Effect.scoped(scopedServerLock(dirname(recordPath(root))).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)))));
       return acquired._tag === 'Success' ? true : undefined;
     }, { description: 'the operating system releases the killed service lock', timeoutMs: 5000 });
     assert.equal(record(root).token, running.token, 'the stale record is still present at the public stop boundary');

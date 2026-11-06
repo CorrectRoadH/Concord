@@ -1,3 +1,4 @@
+import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { join } from "node:path";
 import { Effect, Result } from "effect";
 import { acquireFileLease, CoordinationError, recoverFileLease, releaseFileLease } from "../base/publication/index.ts";
@@ -67,9 +68,10 @@ export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | 
   const previous = yield* readQuery(context);
   if (queryRequestSatisfied(previous, requestedAt)) return;
   const scannedAt = Date.now();
-  const service = makeOwnedProcessService();
+  const runtime = yield* RuntimeEnvironment;
+  const service = makeOwnedProcessService({ environment: runtime });
   const outcome = yield* Effect.result(service.run([process.execPath, ...workerEntryArgv('query-scan-worker'), context.root, JSON.stringify(query)],
-    { cwd: context.root, timeoutMs: Math.max(1, deadline - Date.now()), outputLimitBytes: 4 * 1024 * 1024 }));
+    { cwd: runtime.cwd, timeoutMs: Math.max(1, deadline - Date.now()), outputLimitBytes: 4 * 1024 * 1024 }));
   const after = yield* queryContext(context.root, query);
   const update = Result.isSuccess(outcome) ? classifyQueryRefresh(context.key, after.key, outcome.success, scannedAt, Date.now() - started, limitMs)
     : after.key !== context.key ? { kind: 'identity-changed' as const } : { kind: 'failure' as const, error: { failedAt: new Date().toISOString(), scannedAt, code: 'QueryRefreshFailed', message: outcome.failure.message.slice(0, 4096) } };

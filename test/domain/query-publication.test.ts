@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,6 +12,8 @@ import { LocalRepository, runApplication } from '../support/repository.ts';
 import { createDocument } from '../support/operations.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { writeProjectConfig } from '../support/support.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
 const candidate = (marker = 'original', scannedAt = Date.now()) => ({ kind: 'candidate' as const, message: { format: 'concord.query-scan/v1' as const, ok: true as const, scannedAt, finishedAt: Date.now(), value: gaps(marker), complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } } });
 function consumer() { const root = createConsumer(); writeProjectConfig(root, { testRoots: [], sourceRoots: ['src'] }); const repo = new LocalRepository(root); try { createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); } finally { repo.close(); } return root; }
@@ -35,9 +38,9 @@ test('failed refresh retains a full oldest snapshot at namespace capacity and su
         assert.deepEqual(succeeded.record?.value, gaps('refreshed'));
         assert.equal(succeeded.error, undefined);
       }).pipe(Effect.provideService(PersistentCache, owner.service));
-    })).pipe(Effect.provide(PersistentCache.layer)));
+    })).pipe(Effect.provide(PersistentCache.layer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }
-})));
+}).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('source reads do not own a lease and detect a concurrent successful publication', () => Effect.runPromise(Effect.sync(() => {
@@ -54,7 +57,7 @@ test('source reads do not own a lease and detect a concurrent successful publica
     assert.match(readFileSync(join(root, path), 'utf8'), /Changed/);
     assert.throws(() => reader.verifySnapshot(), { code: 'SourceChanged' });
   } finally { reader.close(); rmSync(root, { recursive: true, force: true }); }
-})));
+}).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('a complete A-B-A publication preserves the same source result', () => Effect.runPromise(Effect.sync(() => {
@@ -72,4 +75,4 @@ test('a complete A-B-A publication preserves the same source result', () => Effe
     assert.doesNotThrow(() => reader.verifySnapshot());
     assert.ok(existsSync(join(root, '.git/concord/trace/publication.lease')));
   } finally { reader.close(); writer.close(); rmSync(root, { recursive: true, force: true }); }
-})));
+}).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));

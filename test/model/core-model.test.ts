@@ -18,6 +18,9 @@ import { LocalRepository } from "../support/repository.ts";
 
 import { type DocumentMeta } from "../../src/model/index.ts";
 import { withConsumer as consumer } from '../support/consumer.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 const base = { format: 'concord.document/v1' as const, id: 'sample', title: '样例' };
 const issue = { ...base, kind: 'issue' as const, relations: [] };
@@ -30,7 +33,7 @@ const write = (root: string, path: string, source: string): void => { mkdirSync(
 test('identity comes from canonical paths and the unique Markdown H1, preserving Unicode', () => {
   const identity = base;
   const source = renderDocument({ ...identity, kind: 'use-case', feature: 'docs/feature/ignored/README.md' }, '# café **标题**\n\n```md\n# 代码不是名称\n```\n');
-  const record = decodeDocumentSource('docs/feature/实际/use-case/创建.md', source)!;
+  const record = decodeDocumentSource('docs/feature/实际/use-case/创建.md', source, parserRuntime)!;
   assert.equal(record.metadata.id, '创建'); assert.equal(record.metadata.title, 'café 标题');
   assert.equal(record.metadata.kind, 'use-case');
   if (record.metadata.kind === 'use-case') assert.equal(record.metadata.feature, 'docs/feature/实际/README.md');
@@ -53,7 +56,7 @@ test('malformed owners and obsolete metadata are named invalid inputs', () => {
     ['docs/issues/a.md', '---\nstatus: open\nrelations:\n  - role: related\n    target: memory/a.md\n---\n# Issue\n'],
     ['docs/issues/a.md', '---\nstatus: open\nrelations:\n  - role: delivery\n    target: memory/a.md\n---\n# Issue\n'],
   ] as const;
-  for (const [path, source] of invalid) assert.throws(() => decodeDocumentSource(path, source), code('InvalidData'), `${path}: ${source}`);
+  for (const [path, source] of invalid) assert.throws(() => decodeDocumentSource(path, source, parserRuntime), code('InvalidData'), `${path}: ${source}`);
 });
 
 
@@ -68,7 +71,7 @@ test('Memory serializes only nonempty supports relations', () => {
 // @use-case docs/feature/taste/use-case/cite-taste.md
 test('taste Memory rendering uses the same AST heading validation as other Memory writers', () => {
   const source = renderDocument(memory, '```md\n# Example heading\n```\n');
-  assert.equal(decodeDocumentSource('memory/sample.md', source)?.metadata.title, '样例');
+  assert.equal(decodeDocumentSource('memory/sample.md', source, parserRuntime)?.metadata.title, '样例');
   assert.throws(() => renderDocument(memory, '# First\n\n# Second\n'), code('InvalidData'));
 });
 

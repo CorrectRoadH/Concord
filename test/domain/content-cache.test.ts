@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Schema } from 'effect';
@@ -5,10 +6,12 @@ import { ContentCache } from "../../src/base/cache/index.ts";
 import { createMemoryHawdb, hawdbIdentity, type HawdbDatabase } from "../../src/base/cache/index.ts";
 import { readCachePayloads, writeCachePayloads } from "../../src/base/cache/index.ts";
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('document parse entries use real bounded HawDB and preserve undefined and caller isolation', () => {
-  assert.equal(hawdbIdentity().engine, 'hawdb');
-  const cache = new ContentCache<{ readonly labels: readonly string[] } | undefined>('document_parse', 'test-parser/v1', Schema.Union([Schema.Struct({ labels: Schema.Array(Schema.String) }), Schema.Undefined]));
+  assert.equal(hawdbIdentity(nativeRuntime).engine, 'hawdb');
+  const cache = new ContentCache<{ readonly labels: readonly string[] } | undefined>('document_parse', 'test-parser/v1', Schema.Union([Schema.Struct({ labels: Schema.Array(Schema.String) }), Schema.Undefined]), undefined, nativeRuntime);
   try {
     let parses = 0;
     const inputs = [{ path: 'a.md', source: 'alpha' }, { path: 'b.md', source: 'none' }];
@@ -26,7 +29,7 @@ test('document parse entries use real bounded HawDB and preserve undefined and c
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('batched diagnostic parsing isolates failures, preserves order, and invalidates repaired sources', () => {
-  const cache = new ContentCache<string>('document_parse', 'diagnostic-test/v1', Schema.String);
+  const cache = new ContentCache<string>('document_parse', 'diagnostic-test/v1', Schema.String, undefined, nativeRuntime);
   const inputs = Array.from({ length: 80 }, (_, index) => ({ path: `${index}.md`, source: index === 40 ? 'broken' : `source ${index}` }));
   let parses = 0;
   const parse = (input: { source: string }) => { parses++; if (input.source === 'broken') throw new Error('broken owner'); return input.source; };
@@ -46,7 +49,7 @@ test('batched diagnostic parsing isolates failures, preserves order, and invalid
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('collection queries select current keys from real HawDB without returning stale entries', () => {
-  const db = createMemoryHawdb();
+  const db = createMemoryHawdb(nativeRuntime);
   try {
     const rows = Array.from({ length: 90 }, (_, index) => ({ key: `key-${index}`, payload: `value-${index}` }));
     db.put('code_parse', rows);
@@ -62,7 +65,7 @@ test('collection queries select current keys from real HawDB without returning s
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('batch writes honor UTF-8 byte quotas and preserve bounded insertion-order eviction', () => {
-  const db = createMemoryHawdb();
+  const db = createMemoryHawdb(nativeRuntime);
   try {
     const rows = ['a', 'b', 'c', 'd'].map(key => ({ key, payload: '界'.repeat(50) }));
     writeCachePayloads(db, 'code_parse', rows, { maxEntries: 10, maxBytes: 500 });
@@ -72,7 +75,7 @@ test('batch writes honor UTF-8 byte quotas and preserve bounded insertion-order 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('a corrupt absent envelope cannot bypass a required cache value schema', () => {
-  const cache = new ContentCache<string>('document_parse', 'required-value-test/v1', Schema.String);
+  const cache = new ContentCache<string>('document_parse', 'required-value-test/v1', Schema.String, undefined, nativeRuntime);
   let parses = 0;
   const parse = () => { parses++; return 'valid'; };
   try {

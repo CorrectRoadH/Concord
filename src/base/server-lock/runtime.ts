@@ -2,12 +2,12 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#启动与裁决
 import { randomUUID } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { ConcordError, digest, failure } from '../../model/index.ts';
 import { workspaceInstallationIdentity, packageRoot, sourceInstallation, installationUseMarker } from '../installation/index.ts';
 import { ensureGenericPrivateDirectorySync } from '../publication/index.ts';
+import { RuntimeEnvironment, makeRuntimeEnvironment, runtimePath, runtimeTemporaryDirectory, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { scopedServerLock } from './index.ts';
 
 const Identity = Schema.Struct({ device: Schema.String, inode: Schema.String });
@@ -19,8 +19,8 @@ export const ServerRecord = Schema.Struct({
   socket: Schema.Struct({ path: Schema.String, device: Schema.String, inode: Schema.String }),
 });
 export type ServerRecord = typeof ServerRecord.Type;
-export function serverInstallation() { return sourceInstallation ? digest(`source:${realpathSync(packageRoot)}`) : workspaceInstallationIdentity(); }
-export function serverSourceDigest() { return sourceInstallation ? workspaceInstallationIdentity() : undefined; }
+export function serverInstallation(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? digest(`source:${realpathSync(packageRoot)}`) : workspaceInstallationIdentity(runtime); }
+export function serverSourceDigest(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? workspaceInstallationIdentity(runtime) : undefined; }
 export const serverCwd = packageRoot;
 const identity = (path: string) => {
   const stat = lstatSync(path, { bigint: true });
@@ -73,8 +73,9 @@ export function readServerRecord(privateDir: string, requireSocket = true): Serv
   catch { throw new ConcordError('WorkspaceServerUnavailable', 'Invalid server record'); }
 }
 export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(root: string, privateDir: string) {
+  const runtime = yield* RuntimeEnvironment;
   yield* Effect.try({ try: () => {
-    ensureGenericPrivateDirectorySync(root, privateDir);
+    ensureGenericPrivateDirectorySync(root, privateDir, runtime.env);
     const directory = join(privateDir, 'server');
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     const stat = lstatSync(directory);
@@ -82,11 +83,11 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
   }, catch: failure });
   const directory = join(privateDir, 'server');
   const lock = yield* scopedServerLock(directory);
-  yield* installationUseMarker();
+  yield* installationUseMarker(packageRoot, sourceInstallation, runtime);
   const recordPath = join(directory, 'current.json');
   const socketPath = yield* Effect.try({ try: () => {
-    const runtime = realpathSync(process.env.XDG_RUNTIME_DIR ?? tmpdir());
-    const parent = join(runtime, `concord-${process.getuid?.() ?? 'user'}`);
+    const runtimeDirectory = realpathSync(runtime.env.XDG_RUNTIME_DIR === undefined ? runtimeTemporaryDirectory(runtime) : runtimePath(runtime, runtime.env.XDG_RUNTIME_DIR));
+    const parent = join(runtimeDirectory, `concord-${process.getuid?.() ?? 'user'}`);
     try { mkdirSync(parent, { mode: 0o700 }); }
     catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'EEXIST') throw cause; }
     return parent;
@@ -103,8 +104,8 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
     return path;
   }, catch: failure })));
   const token = randomUUID();
-  const installation = serverInstallation();
-  const sourceDigest = serverSourceDigest();
+  const installation = serverInstallation(runtime);
+  const sourceDigest = serverSourceDigest(runtime);
   let current: ServerRecord | undefined;
   const publish = (state: ServerRecord['state']) => Effect.gen(function*() {
     yield* lock.verify;
@@ -132,13 +133,21 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
   return { token, socketPath, publish, verify: lock.verify };
 });
 export class ServerRuntime extends Context.Service<ServerRuntime, {
-  readonly acquire: typeof acquireServerRuntime;
+  readonly acquire: (root: string, privateDir: string) => Effect.Effect<Effect.Success<ReturnType<typeof acquireServerRuntime>>, Effect.Error<ReturnType<typeof acquireServerRuntime>>, Exclude<Effect.Services<ReturnType<typeof acquireServerRuntime>>, RuntimeEnvironment>>;
   readonly read: typeof readServerRecord;
-  readonly installation: typeof serverInstallation;
-  readonly sourceDigest: typeof serverSourceDigest;
-  readonly released: typeof serviceLockReleased;
+  readonly installation: () => string;
+  readonly sourceDigest: () => string | undefined;
+  readonly released: (privateDir: string) => Effect.Effect<boolean, Effect.Error<ReturnType<typeof serviceLockReleased>>>;
   readonly processExited: typeof serviceProcessExited;
   readonly cwd: string;
 }>()('concord/base/server-lock/ServerRuntime') {
-  static readonly layer = Layer.succeed(ServerRuntime, { acquire: acquireServerRuntime, read: readServerRecord, installation: serverInstallation, sourceDigest: serverSourceDigest, released: serviceLockReleased, processExited: serviceProcessExited, cwd: serverCwd });
+  static readonly layer = Layer.effect(ServerRuntime, Effect.gen(function*() {
+    const runtime = yield* RuntimeEnvironment;
+    return ServerRuntime.of({
+      acquire: (root, privateDir) => acquireServerRuntime(root, privateDir).pipe(Effect.provideService(RuntimeEnvironment, runtime)),
+      read: readServerRecord, installation: () => serverInstallation(runtime), sourceDigest: () => serverSourceDigest(runtime),
+      released: privateDir => serviceLockReleased(privateDir).pipe(Effect.provideService(RuntimeEnvironment, runtime)),
+      processExited: serviceProcessExited, cwd: serverCwd,
+    });
+  }));
 }

@@ -2,9 +2,9 @@
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#follow
-import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Schema } from "effect";
 import { resourcePath } from "../../app/index.ts";
+import { writeStdout } from './invocation.ts';
 
 const TOPICS = ['init', 'docs-from-scratch', 'docs-from-code', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback', 'spec', 'implement', 'review', 'fix'] as const;
 const TopicSchema = Schema.Literals(TOPICS);
@@ -82,9 +82,5 @@ export const skillProgram = Effect.fn('skillProgram')(function*(argv: unknown) {
   });
   const topics: readonly (Topic | 'main')[] = request === 'all' ? ['main', ...TOPICS] : [request];
   const sections = yield* Effect.forEach(topics, readTopic, { concurrency: 1 });
-  yield* Effect.sync(() => process.stdout.write(`${sections.map(section => section.trimEnd()).join('\n\n---\n\n')}\n`));
+  yield* writeStdout(`${sections.map(section => section.trimEnd()).join('\n\n---\n\n')}\n`);
 });
-
-export const runSkillMain = (argv: unknown): Promise<void> => Effect.runPromise(
-  skillProgram(argv).pipe(Effect.provide(NodeServices.layer)),
-);

@@ -4,15 +4,15 @@ import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
 import { Query, QueryRequest } from '../../app/index.ts';
 import { CacheDerivationBatch } from '../../model/index.ts';
-import { Packet, QueryEnvironment, strict, WorkspaceServerError } from './protocol.ts';
+import { CallerCwd, Packet, QueryEnvironment, strict, WorkspaceServerError } from './protocol.ts';
 
 export { Snapshot } from './operation-protocol.ts';
 export const ComputationReply = strict(Schema.Struct({ value: Schema.Json, derived: Schema.Array(CacheDerivationBatch) }));
 export const Computation = Schema.Union([
   strict(Schema.Struct({ kind: Schema.Literal('scan') })),
   strict(Schema.Struct({ kind: Schema.Literal('cache-rebuild') })),
-  strict(Schema.Struct({ kind: Schema.Literal('query-scan'), query: Query })),
-  strict(Schema.Struct({ kind: Schema.Literal('query'), request: QueryRequest, environment: Schema.optional(QueryEnvironment), cache: Schema.optional(Schema.Literals(['use', 'off'])) })),
+  strict(Schema.Struct({ kind: Schema.Literal('query-scan'), query: Query, cwd: CallerCwd, environment: QueryEnvironment })),
+  strict(Schema.Struct({ kind: Schema.Literal('query'), request: QueryRequest, cwd: CallerCwd, environment: QueryEnvironment, cache: Schema.optional(Schema.Literals(['use', 'off'])) })),
   strict(Schema.Struct({ kind: Schema.Literal('read'), path: Schema.String })),
   strict(Schema.Struct({ kind: Schema.Literal('read-bytes'), path: Schema.String })),
   strict(Schema.Struct({ kind: Schema.Literal('git-status') })),

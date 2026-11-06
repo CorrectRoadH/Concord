@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md#文件与资源边界
 import { Effect } from "effect";
-import { readerLayer } from './main.ts';
+import { runReaderMain } from './main.ts';
 import { Job, editorLimits } from "../../model/editor/index.ts";
 import { computeEditor } from "../../app/index.ts";
 import { ConcordError, decode, failure } from "../../model/index.ts";
@@ -22,4 +22,4 @@ const program = Effect.tryPromise({ try: async () => {
   Effect.match({ onSuccess: result => ({ ok: true as const, result }), onFailure: error => ({ ok: false as const, code: error.code, message: error.message }) }),
   Effect.flatMap(reply => Effect.sync(() => process.stdout.write(JSON.stringify(reply)))),
 );
-await Effect.runPromise(program.pipe(Effect.provide(readerLayer)));
+runReaderMain(program, process.argv[2]);

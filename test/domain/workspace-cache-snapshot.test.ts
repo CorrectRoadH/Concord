@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect, Layer } from 'effect';
@@ -6,6 +7,8 @@ import { Workspace } from '../../src/base/workspace/index.ts';
 import { NodeServices } from '@effect/platform-node';
 import { createConsumer } from '../support/consumer.ts';
 import { rmSync } from 'node:fs';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @feature docs/feature/local-data-engine/README.md
 test('an unavailable owner snapshot reports persistent data unavailable while collecting detached derivations', async () => {
@@ -22,6 +25,6 @@ test('an unavailable owner snapshot reports persistent data unavailable while co
       cache.put('annotation_cache', [{ key: 'parser', payload: 'rebuilt' }]);
       assert.deepEqual(derived.batches(), [{ namespace: 'annotation_cache', entries: [{ key: 'parser', payload: 'rebuilt' }] }]);
       assert.throws(() => cache.get('annotation_cache', ['parser']), { code: 'HawdbUnavailable' });
-    })).pipe(Effect.provideService(CacheDerivations, derived), Effect.provide(live)));
+    })).pipe(Effect.provideService(CacheDerivations, derived), Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

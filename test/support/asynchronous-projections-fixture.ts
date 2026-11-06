@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { stopWorkspaceServer } from './stop-workspace-server.ts';
 import { record, recordPath } from './workspace-server-fixture.ts';
 import { connectWorkspaceSocket, requestWorkspace, Snapshot } from '../../src/entry/server/index.ts';
@@ -36,6 +37,8 @@ import { renderDocument } from "../../src/model/index.ts";
 import { ConcordError, digest } from "../../src/model/index.ts";
 import { QueryCacheEnvelope, queryContext as identifyQuery, type Query } from "../../src/app/index.ts";
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 export const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
 export const candidate = (marker = 'original', scannedAt = Date.now()) => ({ kind: 'candidate' as const, message: { format: 'concord.query-scan/v1' as const, ok: true as const, scannedAt, finishedAt: Date.now(), value: gaps(marker), complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } } });
 export function consumer(): string {
@@ -53,7 +56,7 @@ export async function historicalCall(root: string) {
     const result = call(root, 'trace', 'gaps');
     if (result.status === 0 || Date.now() >= deadline) return result;
     assert.equal(JSON.parse(result.stderr).error, 'HawdbBusy', result.stderr);
-    await Effect.runPromise(Effect.sleep('100 millis'));
+    await Effect.runPromise(Effect.sleep('100 millis').pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   }
 }
 
@@ -64,10 +67,10 @@ export async function waitForRefreshExit(root: string): Promise<void> {
   const active = () => execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n')
     .filter(line => line.includes(root) && /query-(refresh|scan)-worker\.(?:js|ts)/u.test(line)).map(line => Number(line.trim().split(/\s/u)[0]));
   const deadline = Date.now() + 125_000;
-  while (active().length && Date.now() < deadline) await Effect.runPromise(Effect.sleep('100 millis'));
+  while (active().length && Date.now() < deadline) await Effect.runPromise(Effect.sleep('100 millis').pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   for (const pid of active()) { try { process.kill(pid, 'SIGTERM'); } catch { /* Already exited. */ } }
   const cleanupDeadline = Date.now() + 5_000;
-  while (active().length && Date.now() < cleanupDeadline) await Effect.runPromise(Effect.sleep('100 millis'));
+  while (active().length && Date.now() < cleanupDeadline) await Effect.runPromise(Effect.sleep('100 millis').pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   assert.deepEqual(active(), [], 'Owned refresh processes must exit before deleting their consumer');
 }
 
@@ -76,8 +79,8 @@ before(() => Effect.runPromise(Effect.sync(() => {
   packageScratch = mkdtempSync(join(tmpdir(), 'concord-drift-installed-'));
 
   installedCli = sourceCli();
-})));
-after(() => Effect.runPromise(Effect.sync(() => { if (packageScratch) rmSync(packageScratch, { recursive: true, force: true }); })));
+}).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
+after(() => Effect.runPromise(Effect.sync(() => { if (packageScratch) rmSync(packageScratch, { recursive: true, force: true }); }).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
 export const installedCall = (root: string, ...args: string[]) => spawnSync(process.execPath, [installedCli, '--root', root, ...args], { encoding: 'utf8', timeout: 30_000 });
 export function packedConsumer(workload = true): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-drift-consumer-'));
@@ -105,10 +108,10 @@ export async function packedEnvelope(root: string, query: readonly string[]): Pr
       const snapshot = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
         const connection = yield* connectWorkspaceSocket(current.socket.path, current.installation, current.token);
         return yield* requestWorkspace(connection, 'cache-snapshot', {});
-      })));
+      })).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
       entries = Schema.decodeUnknownSync(Snapshot, { onExcessProperty: 'error' })(snapshot).query_cache ?? [];
     } else {
-      db = openHawdb(path, { readOnly: true, create: false });
+      db = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
       entries = db.scan('query_cache');
     }
     const rows = entries.filter(row => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ format: Schema.optional(Schema.String) })), { onExcessProperty: 'ignore' })(row.payload).format === 'concord.query-cache/v3').map(row => Schema.decodeUnknownSync(Schema.fromJsonString(QueryCacheEnvelope), { onExcessProperty: 'error' })(row.payload));
@@ -186,7 +189,7 @@ export { renderDocument };
 export { ConcordError };
 export { digest };
 export { QueryCacheEnvelope };
-export const queryContext = (...args: Parameters<typeof identifyQuery>) => Effect.runSync(identifyQuery(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)));
+export const queryContext = (...args: Parameters<typeof identifyQuery>) => Effect.runSync(identifyQuery(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
 
 export { readQuery };
 export { storeQuery };

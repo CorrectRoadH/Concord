@@ -1,3 +1,4 @@
+import type { ApplicationRuntime } from '../../app/index.ts';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
@@ -126,14 +127,14 @@ function statusFor(error: ConcordError, workspace: boolean): number {
   return 400;
 }
 
-function failed(request: IncomingMessage, response: ServerResponse, cause: unknown): void {
+function failed(request: IncomingMessage, response: ServerResponse, cause: unknown, write: (line: string) => boolean): void {
   const error = failure(cause);
   const value: ViewFailure = { ok: false, ...(error.code === 'WritingBudgetExceeded' ? { complete: false as const } : {}), error: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) };
   const status = statusFor(error, request.url?.split('?')[0] === '/api/workspace');
   // Error details are returned to the caller, not copied into request logs.
   // Pending builds and short cache lock collisions are retried by the client; they are not server errors.
   const transient = error.code === 'WorkspaceProjectionPending' || error.code === 'WorkspaceProjectionUnavailable' && typeof error.details === 'object' && error.details !== null && (error.details as { reason?: unknown }).reason === 'HawdbBusy';
-  if (!transient) process.stderr.write(`Concord view error ${JSON.stringify({ status, code: error.code })}\n`);
+  if (!transient) write(`Concord view error ${JSON.stringify({ status, code: error.code })}\n`);
   if (!response.destroyed) json(response, status, value);
 }
 // @concord-end
@@ -412,16 +413,16 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 // @concord-implements docs/feature/web-workbench/architecture.md
-async function startViewServer(options: ViewServerOptions, scans: ProjectionPort, hosted: HostedViewPorts): Promise<ViewServerHandle> {
-  const root = validateViewRoot(options.root);
+async function startViewServer(options: ViewServerOptions, scans: ProjectionPort, hosted: HostedViewPorts, runtime: ApplicationRuntime, write: (line: string) => boolean): Promise<ViewServerHandle> {
+  const root = validateViewRoot(options.root, runtime);
   const host = options.host ?? '127.0.0.1';
   const requestedPort = options.port ?? 4317;
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? builtAssetRoot('web');
-  const sourceWeb = sourceInstallation && options.webRoot === undefined ? await sourceWebServer() : undefined;
+  const sourceWeb = sourceInstallation && options.webRoot === undefined ? await sourceWebServer(runtime) : undefined;
   let p5Runtime: Promise<string> | undefined;
   const jobs = hosted.jobs;
-  const requestLog = new ViewRequestLog();
+  const requestLog = new ViewRequestLog(write);
   let stopping = false;
   const feedbackControllers = new Set<AbortController>();
   const feedbackTasks = new Set<Promise<unknown>>();
@@ -449,7 +450,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
         if (['iframe', 'frame'].includes(request.headers['sec-fetch-dest'] as string) && url.pathname !== '/p5-frame') throw new ConcordError('ForbiddenAuthority', 'Only the p5 runtime may be loaded in a frame');
         if (request.method === 'GET' && url.pathname === '/p5-frame') {
           exactQuery(url, []);
-          serveP5Frame(request, response, webRoot, sourceWeb === undefined ? undefined : await (p5Runtime ??= sourceP5Runtime()));
+          serveP5Frame(request, response, webRoot, sourceWeb === undefined ? undefined : await (p5Runtime ??= sourceP5Runtime(runtime)));
         } else if (url.pathname.startsWith('/api/')) {
           await api(request, response, url, root, jobs, scans, runAction, timing, hosted);
         } else if (request.method === 'GET') {
@@ -458,7 +459,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
         } else {
           throw new ConcordError('MethodNotAllowed', 'Only GET is available for the static application');
         }
-      } catch (cause) { failed(request, response, cause); }
+      } catch (cause) { failed(request, response, cause, write); }
     })();
   });
   server.requestTimeout = 15_000;
@@ -498,6 +499,6 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
   return handle;
 }
 
-export const startHostedViewServer = (options: ViewServerOptions, ports: HostedViewPorts) => startViewServer(options, {
+export const startHostedViewServer = (options: ViewServerOptions, ports: HostedViewPorts, runtime: ApplicationRuntime, write: (line: string) => boolean) => startViewServer(options, {
   read: ports.workspace, request: ports.refresh, retry: ports.refresh, start: () => {}, close: async () => {},
-}, ports);
+}, ports, runtime, write);

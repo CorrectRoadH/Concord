@@ -11,6 +11,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
+
+const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const checkout = fileURLToPath(new URL('../../', import.meta.url));
 const Output = Schema.Struct({ ok: Schema.optional(Schema.Boolean), error: Schema.optional(Schema.String), message: Schema.optional(Schema.String),
@@ -26,8 +29,8 @@ function installation() {
   for (const name of ['src', 'web', 'scripts', 'templates', 'skills', 'package.json', 'vite.config.ts', 'vite.source.config.ts', 'vite.preview.config.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) cpSync(join(checkout, name), join(tool, name), { recursive: true });
   for (const file of [...nativeSourceFiles.filter(file => file.startsWith('native/')), 'native/hawdb/Cargo.lock']) { mkdirSync(dirname(join(tool, file)), { recursive: true }); cpSync(join(checkout, file), join(tool, file)); }
   const cache = join(scratch, 'cache');
-  const native = join(cache, 'concord/native', basename(nativeArtifactRoot));
-  cpSync(nativeArtifactRoot, native, { recursive: true });
+  const native = join(cache, 'concord/native', basename(nativeArtifactRoot(runtime)));
+  cpSync(nativeArtifactRoot(runtime), native, { recursive: true });
   symlinkSync(join(checkout, 'node_modules'), join(tool, 'node_modules'), 'dir');
   execFileSync('git', ['init', '-q', consumer]);
   const call = (...args: string[]) => spawnSync(process.execPath,

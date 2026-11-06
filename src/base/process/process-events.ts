@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { channel } from 'node:diagnostics_channel';
-import { Effect, Schema } from 'effect';
+import { Effect, Layer, Schema } from 'effect';
 
 export const ProcessRole = Schema.Literals(['cli', 'worker', 'service', 'compute', 'operation']);
 export type ProcessRole = typeof ProcessRole.Type;
@@ -17,7 +17,6 @@ export const ProcessEvent = Schema.Struct({
   healthy: Schema.optional(Schema.Boolean),
 });
 export type ProcessEvent = typeof ProcessEvent.Type;
-const eventKeys = ['CONCORD_TEST_EVENT_DIRECTORY', 'CONCORD_TEST_RUN_ID', 'CONCORD_TEST_FILE_ID', 'CONCORD_TEST_EVENT_SCOPE', 'CONCORD_TEST_WORKER_ID'] as const;
 let healthy = true;
 let writerId: string | undefined;
 let writtenBytes = 0;
@@ -26,7 +25,7 @@ export const PROCESS_EVENT_FILE_LIMIT = 8 * 1024 * 1024;
 export const processEventsHealthy = () => healthy;
 
 /** No argv or environment values are persisted. A failed diagnostic never changes a command result. */
-export function recordProcessEvent(event: Pick<ProcessEvent, 'kind'> & Partial<Pick<ProcessEvent, 'id' | 'role' | 'childPid' | 'instance' | 'healthy'>>, env: NodeJS.ProcessEnv = process.env): void {
+export function recordProcessEvent(event: Pick<ProcessEvent, 'kind'> & Partial<Pick<ProcessEvent, 'id' | 'role' | 'childPid' | 'instance' | 'healthy'>>, env: Readonly<NodeJS.ProcessEnv> = {}): void {
   const directory = env.CONCORD_TEST_EVENT_DIRECTORY, run = env.CONCORD_TEST_RUN_ID, file = env.CONCORD_TEST_FILE_ID;
   if (!directory || !run || !file) return;
   Effect.runSync(Effect.try({ try: () => {
@@ -56,10 +55,9 @@ export function classifyConcordProcess(command: readonly string[]): ProcessRole 
   return undefined;
 }
 
-export function processEventEnvironment(command: readonly string[], input: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  if (!process.env.CONCORD_TEST_EVENT_DIRECTORY || !process.env.CONCORD_TEST_RUN_ID || !process.env.CONCORD_TEST_FILE_ID) return input;
+export function processEventEnvironment(command: readonly string[], input: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  if (!input.CONCORD_TEST_EVENT_DIRECTORY || !input.CONCORD_TEST_RUN_ID || !input.CONCORD_TEST_FILE_ID) return input;
   const env = { ...input };
-  for (const key of eventKeys) env[key] ??= process.env[key];
   const role = classifyConcordProcess(command);
   if (role === undefined) return env;
   env.CONCORD_TEST_PROCESS_EVENT_ID = randomUUID();
@@ -71,16 +69,35 @@ export function recordProcessSpawn(command: readonly string[], env: NodeJS.Proce
   if (role !== undefined && pid !== undefined && id !== undefined) recordProcessEvent({ kind: 'spawn', role, childPid: pid, id: `${id}:spawn` }, env);
 }
 
-let observingConnections = false;
-/** The transport emits connections; the process adapter owns optional test diagnostics. */
-export function observeProcessEvents(): void {
-  if (observingConnections || !process.env.CONCORD_TEST_EVENT_DIRECTORY) return;
-  observingConnections = true;
-  const ConnectionEvent = Schema.Struct({ kind: Schema.Literal('service-reuse') });
-  channel('concord.test.process-event').subscribe(value => {
-    const decoded = Schema.decodeUnknownExit(ConnectionEvent, { onExcessProperty: 'error' })(value);
-    if (decoded._tag === 'Success') recordProcessEvent({ kind: decoded.value.kind, role: 'service' });
-    else recordProcessEvent({ kind: 'unknown' });
-  });
+let connectionObservers = 0;
+let stopObservingConnections: (() => void) | undefined;
+/** Explicit owners share one subscription, while each message owns its diagnostic environment. */
+export function observeProcessEvents(): () => void {
+  if (stopObservingConnections === undefined) {
+    const events = channel('concord.test.process-event');
+    const ConnectionEnvironment = Schema.Struct({ environment: Schema.Record(Schema.String, Schema.UndefinedOr(Schema.String)) });
+    const ConnectionEvent = Schema.Struct({ ...ConnectionEnvironment.fields, kind: Schema.Literal('service-reuse') });
+    const observer = (value: unknown) => {
+      const routed = Schema.decodeUnknownExit(ConnectionEnvironment, { onExcessProperty: 'ignore' })(value);
+      if (routed._tag === 'Failure') return;
+      const decoded = Schema.decodeUnknownExit(ConnectionEvent, { onExcessProperty: 'error' })(value);
+      if (decoded._tag === 'Success') recordProcessEvent({ kind: decoded.value.kind, role: 'service' }, routed.value.environment);
+      else recordProcessEvent({ kind: 'unknown' }, routed.value.environment);
+    };
+    events.subscribe(observer);
+    stopObservingConnections = () => { events.unsubscribe(observer); };
+  }
+  connectionObservers++;
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    if (--connectionObservers === 0) {
+      stopObservingConnections?.();
+      stopObservingConnections = undefined;
+    }
+  };
 }
-if (process.env.CONCORD_TEST_EVENT_DIRECTORY) observeProcessEvents();
+
+/** A composition root owns the shared diagnostics subscription for its Scope. */
+export const ProcessEventsLive = Layer.effectDiscard(Effect.acquireRelease(Effect.sync(observeProcessEvents), release => Effect.sync(release)));

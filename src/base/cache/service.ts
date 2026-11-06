@@ -6,6 +6,7 @@ import type { CacheSnapshotUnavailable} from '../../model/index.ts';
 import { ConcordError, type Repository } from '../../model/index.ts';
 import { assertLeasePath } from '../publication/index.ts';
 import { makePersistentCacheOwner } from './owner.ts';
+import { RuntimeEnvironment } from '../environment/index.ts';
 import { CacheDerivations } from './derivations.ts';
 
 export type ReadonlyCacheSnapshot = Readonly<Partial<Record<HawdbNamespace, readonly HawdbEntry[]>> & { unavailable?: typeof CacheSnapshotUnavailable.Type }>;
@@ -24,9 +25,10 @@ const cacheFailure = (cause: unknown): HawdbFailure => cause instanceof HawdbFai
 /** In-memory handles cannot grant access to a persistent namespace. */
 export class Cache extends Context.Service<Cache, CacheService>()('concord/base/cache/Cache') {
   static readonly layer = Layer.effect(Cache, Effect.gen(function*() {
+    const runtime = yield* RuntimeEnvironment;
     let database: HawdbDatabase | undefined;
     yield* Effect.addFinalizer(() => Effect.sync(() => database?.close()));
-    return Cache.of({ memory: Effect.try({ try: () => database ??= createMemoryHawdb(), catch: cacheFailure }) });
+    return Cache.of({ memory: Effect.try({ try: () => database ??= createMemoryHawdb(runtime), catch: cacheFailure }) });
   }));
 }
 
@@ -71,41 +73,44 @@ export class PersistentCache extends Context.Service<PersistentCache, Persistent
     const release = bindRepositoryCache(view, repositoryCache(owner));
     try { return use(); } finally { release(); }
   }
-  static readonly layer = Layer.succeed(PersistentCache, PersistentCache.of({
-    verifyArtifact: Effect.try({ try: verifyHawdbArtifact, catch: cacheFailure }),
-    attach: repo => Effect.gen(function*() {
-      const cache = yield* Effect.serviceOption(Cache);
-      const memory = cache._tag === 'Some' ? yield* cache.value.memory.pipe(Effect.catch(() => Effect.succeed(undefined))) : undefined;
-      yield* Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, nodeRepositoryCache(repo, memory)), catch: cacheFailure }), release => Effect.sync(release));
-    }),
-    read: (privateDir, namespace, keys) => Effect.scoped(Effect.gen(function*() {
-      const database = yield* Effect.acquireRelease(Effect.try({ try: () => {
-        const path = cacheDatabasePath(privateDir);
-        assertLeasePath(path);
-        return !assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) ? undefined : openHawdb(path, { readOnly: true, create: false });
-      }, catch: cacheFailure }), database => Effect.sync(() => database?.close()));
-      return yield* Effect.try({ try: () => database === undefined ? [] : keys === undefined ? database.scan(namespace) : database.get(namespace, keys), catch: cacheFailure });
-    })),
-    update: (privateDir, namespace, key, update) => Effect.scoped(Effect.gen(function*() {
-      const database = yield* Effect.acquireRelease(Effect.try({ try: () => {
-        const path = cacheDatabasePath(privateDir);
-        assertLeasePath(path); assertCacheDatabaseSafe(path);
-        return openHawdb(path, { readOnly: false, create: true });
-      }, catch: cacheFailure }), database => Effect.sync(() => database.close()));
-      yield* Effect.try({ try: () => {
-        const payload = update(database.get(namespace, [key])[0]?.payload);
-        database.put(namespace, [{ key, payload }]);
-      }, catch: cause => cause instanceof ConcordError ? cause : cacheFailure(cause) });
-    })),
-    open: Effect.fn('PersistentCache.open')(function*(privateDir: string) {
-      return yield* Effect.acquireRelease(Effect.try({
-        try: () => {
+  static readonly layer = Layer.effect(PersistentCache, Effect.gen(function*() {
+    const runtime = yield* RuntimeEnvironment;
+    return PersistentCache.of({
+      verifyArtifact: Effect.try({ try: () => verifyHawdbArtifact(runtime), catch: cacheFailure }),
+      attach: repo => Effect.gen(function*() {
+        const cache = yield* Effect.serviceOption(Cache);
+        const memory = cache._tag === 'Some' ? yield* cache.value.memory.pipe(Effect.catch(() => Effect.succeed(undefined))) : undefined;
+        yield* Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, nodeRepositoryCache(repo, memory, runtime)), catch: cacheFailure }), release => Effect.sync(release));
+      }),
+      read: (privateDir, namespace, keys) => Effect.scoped(Effect.gen(function*() {
+        const database = yield* Effect.acquireRelease(Effect.try({ try: () => {
           const path = cacheDatabasePath(privateDir);
-          assertCacheDatabaseSafe(path);
-          try { return openHawdb(path, { readOnly: false, create: true }); }
-          catch (cause) { if (cause instanceof HawdbFailure && cause.code === 'HawdbBusy') return undefined; throw cause; }
-        }, catch: cacheFailure,
-      }), database => Effect.sync(() => database?.close()));
-    }),
+          assertLeasePath(path);
+          return !assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) ? undefined : openHawdb(path, { readOnly: true, create: false }, runtime);
+        }, catch: cacheFailure }), database => Effect.sync(() => database?.close()));
+        return yield* Effect.try({ try: () => database === undefined ? [] : keys === undefined ? database.scan(namespace) : database.get(namespace, keys), catch: cacheFailure });
+      })),
+      update: (privateDir, namespace, key, update) => Effect.scoped(Effect.gen(function*() {
+        const database = yield* Effect.acquireRelease(Effect.try({ try: () => {
+          const path = cacheDatabasePath(privateDir);
+          assertLeasePath(path); assertCacheDatabaseSafe(path);
+          return openHawdb(path, { readOnly: false, create: true }, runtime);
+        }, catch: cacheFailure }), database => Effect.sync(() => database.close()));
+        yield* Effect.try({ try: () => {
+          const payload = update(database.get(namespace, [key])[0]?.payload);
+          database.put(namespace, [{ key, payload }]);
+        }, catch: cause => cause instanceof ConcordError ? cause : cacheFailure(cause) });
+      })),
+      open: Effect.fn('PersistentCache.open')(function*(privateDir: string) {
+        return yield* Effect.acquireRelease(Effect.try({
+          try: () => {
+            const path = cacheDatabasePath(privateDir);
+            assertCacheDatabaseSafe(path);
+            try { return openHawdb(path, { readOnly: false, create: true }, runtime); }
+            catch (cause) { if (cause instanceof HawdbFailure && cause.code === 'HawdbBusy') return undefined; throw cause; }
+          }, catch: cacheFailure,
+        }), database => Effect.sync(() => database?.close()));
+      }),
+    });
   }));
 }

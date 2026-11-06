@@ -1,3 +1,4 @@
+import { RuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
 import { workspaceSourceDigest } from './workspace-source.ts';
 import type { Installation } from '../base/installation/index.ts';
 import type { Publication } from "../base/publication/index.ts";
@@ -49,9 +50,9 @@ const measuredSync = (timing?: RequestTiming) => <A>(name: string, evaluate: () 
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md
-export function validateViewRoot(input: string): string {
-  const root = discoverRoot(input, true);
-  if (git(root, ['rev-parse', '--show-toplevel']) !== root) {
+export function validateViewRoot(input: string, runtime?: RuntimeEnvironmentSnapshot): string {
+  const root = discoverRoot(input, true, runtime);
+  if (git(root, ['rev-parse', '--show-toplevel'], runtime?.env) !== root) {
     throw new ConcordError('ProjectRootInvalid', 'The view root must be the Git worktree top-level directory');
   }
   return root;
@@ -128,10 +129,11 @@ const directConfig = Effect.fn('view.readConfig')(function*(root: string, timing
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/architecture.md
 // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#web
-const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError, Workspace | Sources | Installation> {
+const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError, Workspace | Sources | Installation | RuntimeEnvironment> {
   const sync = measuredSync(timing);
-  const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
-  const required = yield* sync('view.initialization', () => projectInitializationRequired(root));
+  const environment = yield* RuntimeEnvironment;
+  const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput, environment));
+  const required = yield* sync('view.initialization', () => projectInitializationRequired(root, false, environment));
   if (required) return { root, project: null, complete: true, configDigest: null, documents: [], feedback: [], pages: [], cases: [], codes: [], edges: [], findings: [], sources: [], evidenceIds: [], templates: [], cache: { status: 'off' }, diagnostics: uninitializedDoctor(required, 'unknown') };
   const config = yield* directConfig(root, timing);
   const templates = yield* listTemplates();
@@ -174,7 +176,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       codeFiles = trace.codeFiles;
       edges = trace.edges;
       findings = [...trace.findings];
-      diagnostics = doctor(repo, trace, cache);
+      diagnostics = doctor(repo, trace, cache, environment.env);
     } catch (cause) {
       if (observe !== undefined && cause instanceof ConcordError && ['UnsafePath', 'RecoveryRequired', 'InvalidFile'].includes(cause.code)) throw cause;
       cases = scanAnnotations(repo, { cache });
@@ -227,7 +229,8 @@ export const observeWorkspaceProjection = Effect.fn('view.observeWorkspaceProjec
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/use-case/review-local-changes.md
 export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(rootInput: string, baselineCache?: GitBaselineCache) {
-  const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
+  const environment = yield* RuntimeEnvironment;
+  const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput, environment));
   const config = yield* directConfig(root);
   const testRoots = config.project === null ? [] : yield* withRepository(root,
     repo => Effect.succeed(repo.config.testRoots), { access: 'read' });
@@ -237,9 +240,10 @@ export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(roo
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
-export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string, timing?: RequestTiming): Effect.fn.Return<ViewFile, ConcordError, Workspace | Sources | Installation> {
+export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string, timing?: RequestTiming): Effect.fn.Return<ViewFile, ConcordError, Workspace | Sources | Installation | RuntimeEnvironment> {
   const sync = measuredSync(timing);
-  const validatedRoot = yield* sync('view.validateRoot', () => validateViewRoot(root));
+  const environment = yield* RuntimeEnvironment;
+  const validatedRoot = yield* sync('view.validateRoot', () => validateViewRoot(root, environment));
   const config = yield* directConfig(validatedRoot, timing);
   if (config.project === null) {
     if (path !== config.path || config.source === undefined) return yield* Effect.fail(new ConcordError('FileNotFound', 'Only the malformed project configuration diagnostic is available until configuration is repaired'));
@@ -292,7 +296,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>): unknown {
+function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>, environment: Readonly<Record<string, string | undefined>>): unknown {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
     case 'document.create': throw new ConcordError('InvalidInput', 'Creation must run in its Effect scope');
@@ -333,7 +337,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     }
     case 'trace.show': return traceShow(repo, action.reference);
     case 'review': return { operation: 'review-render', markdown: renderReview(repo, action.reference) };
-    case 'doctor': return doctor(repo);
+    case 'doctor': return doctor(repo, undefined, 'off', environment);
   }
 }
 
@@ -353,9 +357,10 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError, Publication | Workspace | Sources | OwnedProcess | Installation> {
+export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError, Publication | Workspace | Sources | OwnedProcess | Installation | RuntimeEnvironment> {
   const sync = measuredSync(timing);
-  const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
+  const environment = yield* RuntimeEnvironment;
+  const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput, environment));
   const action = yield* sync('view.decodeAction', () => decodeViewAction(input));
   if (action.action === 'template.show') return { operation: 'template-show', name: action.name, body: yield* templateBody(action.name, action.title ?? 'Your title') };
   if (action.action === 'document.create') return yield* withRepository(root, repo => createDocument(repo, action.kind, { ...action, dryRun: action.dryRun ?? false }), { dryRun: action.dryRun }, timing);
@@ -373,6 +378,6 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
   if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
+  return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action, environment.env))), { access: actionAccess(action.action), dryRun }, timing);
 });
 // @concord-end

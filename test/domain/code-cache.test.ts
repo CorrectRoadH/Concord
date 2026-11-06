@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { writeProjectConfig } from '../support/support.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { createDocument } from '../support/operations.ts';
@@ -16,6 +17,8 @@ import { openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
 import { LocalRepository } from "../support/repository.ts";
 
 import { traceGaps } from "../../src/app/index.ts";
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 
@@ -36,7 +39,7 @@ function marked(symbol: string): string {
 }
 function scan(root: string, options?: Parameters<typeof scanCode>[1]) {
   const repo = new LocalRepository(root);
-  try { if (options?.cache === 'rebuild') PersistentCache.repository(repo).prepareWrite({ create: true }); return options === undefined ? scanCode(repo) : scanCode(repo, options); }
+  try { if (options?.cache === 'rebuild') PersistentCache.repository(repo).prepareWrite({ create: true }); return options === undefined ? scanCode(repo, undefined, nativeRuntime) : scanCode(repo, options, nativeRuntime); }
   finally { repo.close(); }
 }
 function open<A>(root: string, use: (repo: LocalRepository) => A): A {
@@ -70,7 +73,7 @@ test('caches code declaration parses per file and repairs a corrupt row', () => 
     assert.equal(partial.codes.find(item => item.file === 'src/alpha.ts')?.symbol, 'alphaEdited');
     assert.equal(partial.codes.find(item => item.file === 'src/beta.ts')?.symbol, 'beta');
     const cache = join(root, '.git/concord/cache.hawdb');
-    const db = openHawdb(cache, { readOnly: false, create: false });
+    const db = openHawdb(cache, { readOnly: false, create: false }, nativeRuntime);
     try {
       const rows = db.scan('code_cache');
       assert.ok(rows.length > 0);
@@ -86,10 +89,10 @@ test('caches code declaration parses per file and repairs a corrupt row', () => 
     const afterRepair = scan(root);
     assert.equal(afterRepair.cache.status, 'hit');
     assert.equal(afterRepair.codes.find(item => item.file === 'src/alpha.ts')?.symbol, 'alphaEdited');
-    open(root, repo => assert.match(cacheStatus(repo).detail ?? '', /code_cache/u));
-    open(root, repo => clearCache(repo));
+    open(root, repo => assert.match(cacheStatus(repo, nativeRuntime).detail ?? '', /code_cache/u));
+    open(root, repo => clearCache(repo, undefined, nativeRuntime));
     assert.equal(existsSync(cache), true);
-    open(root, repo => assert.equal(cacheStatus(repo).status, 'empty'));
+    open(root, repo => assert.equal(cacheStatus(repo, nativeRuntime).status, 'empty'));
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
@@ -104,7 +107,7 @@ test('cache off does not create the code projection, and rebuild rewrites it', (
     const rebuilt = scan(root, { cache: 'rebuild' });
     assert.equal(rebuilt.cache.status, 'miss');
     assert.equal(rebuilt.codes[0]?.symbol, 'alpha');
-    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });
+    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false }, nativeRuntime);
     try { db.put('code_cache', db.scan('code_cache').map(row => ({ key: row.key, payload: '{' }))); }
     finally { db.close(); }
     const again = scan(root, { cache: 'rebuild' });
@@ -141,18 +144,19 @@ test('a warm code and config cache hit does not load the TypeScript compiler', (
     write(root, 'src/alpha.ts', marked('alpha'));
     assert.equal(scan(root).cache.status, 'miss');
     const cache = join(root, '.git/concord/cache.hawdb');
-    const db = openHawdb(cache, { readOnly: true, create: false });
+    const db = openHawdb(cache, { readOnly: true, create: false }, nativeRuntime);
     try {
       assert.ok(db.scan('code_cache').length > 0);
       assert.ok(db.scan('config_cache').length > 0);
     } finally { db.close(); }
     const script = `
+      const nativeRuntime = { cwd: process.cwd(), env: { ...process.env } };
       import { createRequire } from 'node:module';
       import { LocalRepository } from ${JSON.stringify(fileURLToPath(new URL('../support/repository.ts', import.meta.url)))};
       import { scanCode } from ${JSON.stringify(fileURLToPath(new URL('../../src/domain/code/index.ts', import.meta.url)))};
       const repo = new LocalRepository(${JSON.stringify(root)});
       try {
-        const result = scanCode(repo);
+        const result = scanCode(repo, undefined, nativeRuntime);
         if (result.cache.status !== 'hit') { console.error(JSON.stringify(result.cache)); process.exit(2); }
       } finally { repo.close(); }
       const loaded = Object.keys(createRequire(import.meta.url).cache).some(key => key.replaceAll('\\\\', '/').endsWith('/typescript/dist/api/sync/api.js'));

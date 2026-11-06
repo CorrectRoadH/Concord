@@ -23,10 +23,7 @@ export class ViewRequestLog {
   private readonly now: () => number;
   private readonly thresholdMs: number;
   constructor(
-    write: (line: string) => boolean = line => {
-      if (process.stderr.destroyed || process.stderr.errored || process.stderr.writableLength >= 64 * 1024) return false;
-      process.stderr.write(line); return true;
-    },
+    write: (line: string) => boolean,
     now: () => number = performance.now.bind(performance),
     thresholdMs = 250,
   ) {

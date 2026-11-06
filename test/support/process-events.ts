@@ -20,7 +20,8 @@ export function installProcessEvents(context?: { readonly directory: string; rea
   if (!process.env.CONCORD_TEST_EVENT_DIRECTORY || !process.env.CONCORD_TEST_RUN_ID || !process.env.CONCORD_TEST_FILE_ID) return;
   if (installed) return;
   installed = true;
-  observeProcessEvents();
+  const releaseObserver = observeProcessEvents();
+  const ownerEnvironment = Object.freeze({ ...process.env });
   let depth = 0;
   const StartedFailure = Schema.Struct({ pid: Schema.Int.check(Schema.isGreaterThan(0)) });
   // Node 26 diagnostics_channel observes async spawn only; sync exports need explicit hooks.
@@ -38,8 +39,8 @@ export function installProcessEvents(context?: { readonly directory: string; rea
         const inherited = options.env?.CONCORD_TEST_PROCESS_EVENT_ID;
         // Product adapters already own these events and have prepared the child's association.
         const prepared = inherited !== undefined && inherited !== process.env.CONCORD_TEST_PROCESS_EVENT_ID;
-        const env = prepared ? options.env! : processEventEnvironment(command, options.env);
-        if (!prepared && (classifyConcordProcess(command) === undefined && /^(?:node(?:\.exe)?|bun|pnpm|npm|npx|yarn|corepack|sh|bash|zsh|dash|env|cmd(?:\.exe)?|powershell(?:\.exe)?)$/u.test(basename(executable)) || name === 'exec' || name === 'execSync')) recordProcessEvent({ kind: 'unknown' });
+        const env = prepared ? options.env! : processEventEnvironment(command, options.env ?? process.env);
+        if (!prepared && (classifyConcordProcess(command) === undefined && /^(?:node(?:\.exe)?|bun|pnpm|npm|npx|yarn|corepack|sh|bash|zsh|dash|env|cmd(?:\.exe)?|powershell(?:\.exe)?)$/u.test(basename(executable)) || name === 'exec' || name === 'execSync')) recordProcessEvent({ kind: 'unknown' }, env);
         if (typeof input[index] === 'function') input.splice(index, 0, { ...options, env });
         else input[index] = { ...options, env };
         let result: { pid?: number } | Buffer | string;
@@ -58,6 +59,6 @@ export function installProcessEvents(context?: { readonly directory: string; rea
   }
   syncBuiltinESMExports();
   const root = process.env.CONCORD_TEST_EVENT_SCOPE === 'browser-worker' || /\.(?:test|e2e)\.ts$/u.test(process.argv[1] ?? '');
-  recordProcessEvent({ kind: root ? 'coverage-start' : 'process-start' });
-  process.once('exit', () => Effect.runSync(Effect.sync(() => recordProcessEvent({ kind: root ? 'coverage-end' : 'process-end', healthy: processEventsHealthy() }))));
+  recordProcessEvent({ kind: root ? 'coverage-start' : 'process-start' }, ownerEnvironment);
+  process.once('exit', () => { try { Effect.runSync(Effect.sync(() => recordProcessEvent({ kind: root ? 'coverage-end' : 'process-end', healthy: processEventsHealthy() }, ownerEnvironment))); } finally { releaseObserver(); } });
 }

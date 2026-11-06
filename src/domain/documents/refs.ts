@@ -6,6 +6,9 @@ import { ConcordError, type DocumentKind, type DocumentRecord, type Finding, typ
 import { decodeDocumentSource } from "./document-codec.ts";
 import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/index.ts";
 import { extractSteps } from "./steps.ts";
+import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
+import { repositoryRuntime } from '../../base/workspace/index.ts';
+import { makeDocumentProjectionCache } from './document-projection.ts';
 
 function hasAnchor(source: string, expected: string): boolean {
   const collapsed = (value: string) => value.replace(/-+/gu, '-').replace(/^-+|-+$/gu, '');
@@ -21,10 +24,20 @@ function hasAnchor(source: string, expected: string): boolean {
  * runtime-specific Result errors intentionally do not cross this boundary.
  */
 export function resolveReference(
-  repo: Pick<Repository, 'read'>,
+  repo: Repository,
   documents: readonly DocumentRecord[],
   input: string,
   allowedKinds?: readonly DocumentKind[],
+): DocumentRecord {
+  const runtime = repositoryRuntime(repo), contentCache = makeDocumentProjectionCache(runtime);
+  try { return resolveReferenceInScope(repo, documents, input, allowedKinds, runtime, contentCache); }
+  finally { contentCache.close(); }
+}
+
+function resolveReferenceInScope(
+  repo: Pick<Repository, 'read'>, documents: readonly DocumentRecord[], input: string,
+  allowedKinds: readonly DocumentKind[] | undefined, runtime: RuntimeEnvironmentSnapshot,
+  contentCache: ReturnType<typeof makeDocumentProjectionCache>,
 ): DocumentRecord {
   const parsed = parseReference(input);
   let source: string | undefined;
@@ -37,7 +50,7 @@ export function resolveReference(
     if (source === undefined) throw new ConcordError('ReferenceNotFound', `Reference target does not exist: ${input}`);
     // A partial inventory may have omitted a malformed or historical owner.
     // Its bytes still define a boundary; never reinterpret it as an ancestor's page.
-    if (decodeDocumentSource(parsed.path, source) !== undefined) throw new ConcordError('ReferenceNotFound', `Reference owner is absent from the current inventory: ${input}`);
+    if (decodeDocumentSource(parsed.path, source, runtime, contentCache) !== undefined) throw new ConcordError('ReferenceNotFound', `Reference owner is absent from the current inventory: ${input}`);
     owner = documents
       .filter(document => document.metadata.kind === 'feature' || document.metadata.kind === 'engineering')
       .filter(document => parsed.path.startsWith(`${posix.dirname(document.path)}/`))
@@ -47,7 +60,7 @@ export function resolveReference(
       const boundary = `${directory}/README.md`;
       if (boundary === parsed.path) continue;
       const bytes = repo.read(boundary);
-      if (bytes !== undefined && decodeDocumentSource(boundary, bytes) !== undefined) throw new ConcordError('InvalidReferenceTarget', `Supporting Markdown crosses owner ${boundary}; reference its owner directly`);
+      if (bytes !== undefined && decodeDocumentSource(boundary, bytes, runtime, contentCache) !== undefined) throw new ConcordError('InvalidReferenceTarget', `Supporting Markdown crosses owner ${boundary}; reference its owner directly`);
     }
     const nestedOwner = documents.find(document =>
       document.path !== owner?.path &&
@@ -59,7 +72,7 @@ export function resolveReference(
   if (allowedKinds !== undefined && !allowedKinds.includes(owner.metadata.kind)) {
     throw new ConcordError('InvalidReferenceTarget', `${input} resolves to ${owner.metadata.kind}; expected ${allowedKinds.join(', ')}`);
   }
-  if (parsed.anchor !== undefined && (source === undefined || (!hasAnchor(source, parsed.anchor) && !(owner.metadata.kind === 'use-case' && owner.path === parsed.path && extractSteps(parsed.path, source).steps.some(step => step.id === parsed.anchor))))) {
+  if (parsed.anchor !== undefined && (source === undefined || (!hasAnchor(source, parsed.anchor) && !(owner.metadata.kind === 'use-case' && owner.path === parsed.path && extractSteps(parsed.path, source, runtime, contentCache).steps.some(step => step.id === parsed.anchor))))) {
     throw new ConcordError('AnchorNotFound', `Anchor ${parsed.anchor} does not exist in ${parsed.path}`);
   }
   return owner;
@@ -67,6 +80,7 @@ export function resolveReference(
 
 /** One graph compilation owns these temporary results and rechecks all read bytes. */
 export function referenceResolver(repo: Repository, documents: readonly DocumentRecord[]) {
+  const runtime = repositoryRuntime(repo);
   const sources = new Map<string, string | undefined>();
   const resolved = new Map<string, DocumentRecord>();
   const failures = new Map<string, unknown>();
@@ -86,8 +100,10 @@ export function referenceResolver(repo: Repository, documents: readonly Document
         return previous;
       }
       let owner: DocumentRecord;
-      try { owner = resolveReference(reader, documents, input, allowedKinds); }
+      const contentCache = makeDocumentProjectionCache(runtime);
+      try { owner = resolveReferenceInScope(reader, documents, input, allowedKinds, runtime, contentCache); }
       catch (cause) { failures.set(key, cause); throw cause; }
+      finally { contentCache.close(); }
       resolved.set(input, owner);
       return owner;
     },

@@ -1,3 +1,4 @@
+import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 
@@ -10,9 +11,9 @@ export class RepositoryRootError extends Error {
   }
 }
 
-export function repositoryRoot(): string {
-  const root = realpathSync(process.cwd());
-  const env = { ...process.env };
+export function repositoryRoot(runtime: RuntimeEnvironmentSnapshot): string {
+  const root = realpathSync(runtime.cwd);
+  const env = { ...runtime.env };
   for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
   let top: string;
   try {

@@ -7,6 +7,7 @@ import { packageBin } from '../package-location.ts';
 import { Effect, FileSystem, Schema } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
 import { BuildIdentity } from '../build-identity.ts';
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { io, mustRun, PerfError } from './process.ts';
 
 export interface Artifact { readonly label: 'candidate' | 'baseline'; readonly dir: string; readonly entry: string; readonly commit: string; readonly dirty: boolean; readonly digest: string }
@@ -66,13 +67,13 @@ export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Arti
   const identity = yield* io('Read build identity', () => identityBytes === undefined ? undefined : Schema.decodeUnknownSync(Schema.fromJsonString(BuildIdentity), { onExcessProperty: 'error' })(identityBytes));
   const commit = identity?.commit ?? (yield* git('rev-parse', 'HEAD'));
   const dirty = identity?.dirty ?? ((yield* git('status', '--porcelain')) !== '');
-  const digest = source ? yield* io('Identify source installation', () => workspaceInstallationIdentity()) : yield* digestInstallation(entry);
+  const digest = source ? yield* io('Identify source installation', () => workspaceInstallationIdentity(makeRuntimeEnvironment(process.cwd(), process.env))) : yield* digestInstallation(entry);
   return { label, dir, entry, commit, dirty, digest } satisfies Artifact;
 });
 
 /** Concurrent source commits do not change an already built installation. */
 export const verifyArtifact = Effect.fn('perf.verifyArtifact')(function*(artifact: Artifact) {
-  const digest = artifact.entry.endsWith('.ts') ? yield* io('Identify source installation', () => workspaceInstallationIdentity()) : yield* digestInstallation(artifact.entry);
+  const digest = artifact.entry.endsWith('.ts') ? yield* io('Identify source installation', () => workspaceInstallationIdentity(makeRuntimeEnvironment(process.cwd(), process.env))) : yield* digestInstallation(artifact.entry);
   if (digest !== artifact.digest) {
     return yield* new PerfError({ message: `${artifact.label} artifact changed during measurement` });
   }

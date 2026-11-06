@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -11,8 +12,10 @@ import { Effect } from 'effect';
 import { acquireServerLock, readServerRecord, scopedServerLock, ServerRuntime } from '../../src/base/server-lock/index.ts';
 import { tmpdir } from '../support/temporary.ts';
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 if (process.env.CONCORD_SERVER_LOCK_CHILD) {
-  const handle = await Effect.runPromise(acquireServerLock(process.env.CONCORD_SERVER_LOCK_CHILD));
+  const handle = await Effect.runPromise(acquireServerLock(process.env.CONCORD_SERVER_LOCK_CHILD).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   process.stdout.write('READY\n');
   process.on('SIGTERM', () => { Effect.runSync(handle.close); process.exit(0); });
   setInterval(() => {}, 1000);
@@ -46,14 +49,14 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
     const f = fixture();
     try {
       rmSync(f.server, { recursive: true });
-      assert.equal(yield* Effect.flatMap(ServerRuntime, runtime => runtime.released(f.root)).pipe(Effect.provide(ServerRuntime.layer)), true);
+      assert.equal(yield* Effect.flatMap(ServerRuntime, runtime => runtime.released(f.root)).pipe(Effect.provide(ServerRuntime.layer), Effect.provideService(RuntimeEnvironment, nativeRuntime)), true);
       assert.equal(existsSync(f.server), false);
     } finally { f.cleanup(); }
   })));
   // @feature docs/feature/local-data-engine/README.md
   test('normal record removal during a read still requires real service lock release', context => Effect.runPromise(Effect.gen(function*() {
     const f = fixture(), recordPath = join(f.server, 'current.json');
-    const held = yield* acquireServerLock(f.server);
+    const held = yield* acquireServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime));
     const originalRead = fs.readFileSync;
     let removed = false;
     try {
@@ -67,7 +70,7 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
       syncBuiltinESMExports();
       assert.equal(readServerRecord(f.root, false), undefined);
       assert.equal(removed, true);
-      const released = Effect.flatMap(ServerRuntime, runtime => runtime.released(f.root)).pipe(Effect.provide(ServerRuntime.layer));
+      const released = Effect.flatMap(ServerRuntime, runtime => runtime.released(f.root)).pipe(Effect.provide(ServerRuntime.layer), Effect.provideService(RuntimeEnvironment, nativeRuntime));
       assert.equal(yield* released, false, 'record absence cannot authorize shutdown while the owner holds its lock');
       yield* held.close;
       assert.equal(yield* released, true, 'shutdown is confirmed only after the actual native lock is released');
@@ -82,9 +85,9 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
     const f = fixture(); let child: ChildProcess | undefined;
     try {
       child = await owner(f.server);
-      assert.equal((await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.flip)))._tag, 'ServerLockHeld');
+      assert.equal((await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)).pipe(Effect.flip)))._tag, 'ServerLockHeld');
       await stop(child, 'SIGKILL');
-      const acquired = await Effect.runPromise(acquireServerLock(f.server));
+      const acquired = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
       await Effect.runPromise(acquired.verify);
       assert.match(acquired.identity.inode, /^\d+$/u);
       await Effect.runPromise(acquired.close);
@@ -96,7 +99,7 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
   test('deleting and rebuilding server directory invalidates held device/inode', () => Effect.runPromise(Effect.tryPromise(async () => {
     const f = fixture();
     try {
-      const held = await Effect.runPromise(acquireServerLock(f.server));
+      const held = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
       try {
         rmSync(f.server, { recursive: true }); mkdirSync(f.server); writeFileSync(join(f.server, 'lock'), 'new inode');
         assert.equal((await Effect.runPromise(held.verify.pipe(Effect.flip))).reason, 'identity');
@@ -107,16 +110,16 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
   test('lock replacement, symlinks and multiple links never masquerade as contention', () => Effect.runPromise(Effect.tryPromise(async () => {
     const f = fixture(); const path = join(f.server, 'lock');
     try {
-      const held = await Effect.runPromise(acquireServerLock(f.server));
+      const held = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
       try {
         rmSync(path); writeFileSync(path, 'replacement');
         assert.equal((await Effect.runPromise(held.verify.pipe(Effect.flip))).reason, 'identity');
       } finally { await Effect.runPromise(held.close); }
       rmSync(path); symlinkSync('elsewhere', path);
-      let error = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.flip));
+      let error = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)).pipe(Effect.flip));
       assert.equal(error._tag, 'ServerLockUnavailable'); if (error._tag === 'ServerLockUnavailable') assert.equal(error.reason, 'type');
       rmSync(path); writeFileSync(path, ''); linkSync(path, join(f.server, 'alias'));
-      error = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.flip));
+      error = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)).pipe(Effect.flip));
       assert.equal(error._tag, 'ServerLockUnavailable'); if (error._tag === 'ServerLockUnavailable') assert.equal(error.reason, 'type');
     } finally { f.cleanup(); }
   })));
@@ -124,17 +127,17 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
   test('permission and I/O errors are distinct; scoped ownership releases on failure', () => Effect.runPromise(Effect.tryPromise(async () => {
     const f = fixture();
     try {
-      const missing = await Effect.runPromise(acquireServerLock(join(f.server, 'missing')).pipe(Effect.flip));
+      const missing = await Effect.runPromise(acquireServerLock(join(f.server, 'missing')).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)).pipe(Effect.flip));
       assert.equal(missing._tag, 'ServerLockUnavailable'); if (missing._tag === 'ServerLockUnavailable') assert.equal(missing.reason, 'io');
       if (process.getuid?.() !== 0) {
         chmodSync(f.server, 0);
         try {
-          const denied = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.flip));
+          const denied = await Effect.runPromise(acquireServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)).pipe(Effect.flip));
           assert.equal(denied._tag, 'ServerLockUnavailable'); if (denied._tag === 'ServerLockUnavailable') assert.equal(denied.reason, 'permission');
         } finally { chmodSync(f.server, 0o700); }
       }
-      await Effect.runPromise(Effect.scoped(Effect.gen(function*() { yield* scopedServerLock(f.server); return yield* Effect.fail('failure'); })).pipe(Effect.flip));
-      await Effect.runPromise(Effect.scoped(scopedServerLock(f.server)));
+      await Effect.runPromise(Effect.scoped(Effect.gen(function*() { yield* scopedServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)); return yield* Effect.fail('failure'); })).pipe(Effect.flip));
+      await Effect.runPromise(Effect.scoped(scopedServerLock(f.server).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
     } finally { f.cleanup(); }
   })));
 }

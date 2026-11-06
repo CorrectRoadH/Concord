@@ -1,5 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
+import { repositoryRuntime } from '../base/workspace/index.ts';
+import type { RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
 import type { StepRename } from "../model/index.ts";
 import { posix } from "node:path";
 import type { Nodes } from "mdast";
@@ -38,7 +40,7 @@ function markdownTarget(path: string, url: string): string | undefined {
 }
 
 /** MDAST decides whether a destination is real; source positions only locate its bytes. */
-export function markdownReferenceTokens(path: string, source: string): readonly { readonly target: string; readonly start: number; readonly end: number }[] {
+export function markdownReferenceTokens(path: string, source: string, runtime: RuntimeEnvironmentSnapshot): readonly { readonly target: string; readonly start: number; readonly end: number }[] {
   const tokens: { target: string; start: number; end: number }[] = [];
   const visit = (node: Nodes): void => {
     if (node.type === 'link' || node.type === 'definition' || node.type === 'image') {
@@ -80,7 +82,7 @@ export function markdownReferenceTokens(path: string, source: string): readonly 
     }
     if ('children' in node) node.children.forEach(visit);
   };
-  visit(documentMarkdown(path, source));
+  visit(documentMarkdown(path, source, runtime));
   return tokens;
 }
 
@@ -113,7 +115,7 @@ export function scanStepReferences(repo: Repository) {
   const files = [...paths].sort().filter(path => !protectedPaths.has(path)).map(path => {
     const source = repo.read(path);
     if (source === undefined) return incomplete(path);
-    const markdown = path.startsWith('docs/') && path.endsWith('.md') ? markdownReferenceTokens(path, source) : [];
+    const markdown = path.startsWith('docs/') && path.endsWith('.md') ? markdownReferenceTokens(path, source, repositoryRuntime(repo)) : [];
     const tokens = path.startsWith('docs/') ? [] : sourceTokens(repo, path, source);
     return { path, source, markdown, tokens };
   });
@@ -133,16 +135,16 @@ export function planStepRename(repo: Repository, request: StepRename) {
   const document = readDocumentSelector(repo, useCase, 'use-case');
   if (document.path !== useCase) throw new ConcordError('InvalidReferenceTarget', 'Step publication requires the canonical Use Case path');
   const source = repo.read(useCase)!;
-  const extracted = inspectSteps(useCase, source);
+  const extracted = inspectSteps(useCase, source, repositoryRuntime(repo));
   if (extracted.findings.length) throw new ConcordError(extracted.findings[0]!.code, 'Fix invalid or ambiguous steps before renaming', extracted.findings);
   const old = extracted.items.find(item => item.marker?.id === oldId)?.marker;
   if (old === undefined) throw new ConcordError('AnchorNotFound', `Step ${oldId} does not exist in ${useCase}`);
-  if (headingAnchors(source, useCase).has(newId) || extracted.steps.some(step => step.id === newId)) throw new ConcordError('DuplicateAnchor', `Anchor ${newId} is already occupied`);
+  if (headingAnchors(source, useCase, repositoryRuntime(repo)).has(newId) || extracted.steps.some(step => step.id === newId)) throw new ConcordError('DuplicateAnchor', `Anchor ${newId} is already occupied`);
   const oldRef = `${useCase}#${oldId}`, newRef = `${useCase}#${newId}`;
   const scan = scanStepReferences(repo);
   for (const record of scan.documents) {
     const kind = record.metadata.kind;
-    if ((kind === 'memory' || kind === 'issue' || kind === 'design') && contains(record.metadata, oldRef) || (kind === 'memory' || kind === 'issue') && markdownReferenceTokens(record.path, record.body).some(token => token.target === oldRef)) throw new ConcordError('ManagedReferenceBlocked', `Managed references in ${record.path} require their lifecycle command`);
+    if ((kind === 'memory' || kind === 'issue' || kind === 'design') && contains(record.metadata, oldRef) || (kind === 'memory' || kind === 'issue') && markdownReferenceTokens(record.path, record.body, repositoryRuntime(repo)).some(token => token.target === oldRef)) throw new ConcordError('ManagedReferenceBlocked', `Managed references in ${record.path} require their lifecycle command`);
   }
   const changes: Change[] = [], affectedCases: { before: string; after: string; file: string; named: boolean }[] = [];
   for (const file of scan.files) {
@@ -158,7 +160,7 @@ export function planStepRename(repo: Repository, request: StepRename) {
     if (replacements.length) {
       const after = replace(file.source, replacements);
       if (file.path.startsWith('docs/')) {
-        const beforeOwner = decodeDocumentSource(file.path, file.source), afterOwner = decodeDocumentSource(file.path, after);
+        const beforeOwner = decodeDocumentSource(file.path, file.source, repositoryRuntime(repo)), afterOwner = decodeDocumentSource(file.path, after, repositoryRuntime(repo));
         if (canonical(beforeOwner?.metadata) !== canonical(afterOwner?.metadata)) throw new ConcordError('ManagedReferenceBlocked', `Cannot rewrite metadata in ${file.path}`);
       }
       changes.push({ path: file.path, before: file.source, after });
@@ -172,13 +174,13 @@ export function planStepRename(repo: Repository, request: StepRename) {
 }
 
 export function formatStepSource(repo: Repository, path: string, source: string, seed: boolean, list?: number): string {
-  const extracted = inspectSteps(path, source);
+  const extracted = inspectSteps(path, source, repositoryRuntime(repo));
   if (extracted.findings.length) throw new ConcordError(extracted.findings[0]!.code, 'Fix invalid or ambiguous steps before formatting', extracted.findings);
   if (seed !== (list !== undefined) || list !== undefined && (!Number.isSafeInteger(list) || list < 1 || !extracted.lists.some(item => item.ordinal === list))) throw new ConcordError('InvalidStepList', '--seed and --list must select one existing root ordered list');
   const selected = new Set(extracted.lists.filter(item => item.marked > 0 || item.ordinal === list).map(item => item.ordinal));
   if (!selected.size) return source;
   if (extracted.lists.some(list => selected.has(list.ordinal) && extracted.items.filter(item => item.listOrdinal === list.ordinal).length !== list.items)) throw new ConcordError('InvalidStepPosition', 'Every selected item must start with a paragraph');
-  const scan = scanStepReferences(repo), occupied = new Set([...headingAnchors(source, path), ...extracted.steps.map(step => step.id)]);
+  const scan = scanStepReferences(repo), occupied = new Set([...headingAnchors(source, path, repositoryRuntime(repo)), ...extracted.steps.map(step => step.id)]);
   for (const file of scan.files) for (const ref of [...file.tokens.map(token => token.reference), ...file.markdown.map(token => token.target)]) if (ref.startsWith(`${path}#`)) occupied.add(ref.slice(path.length + 1));
   for (const record of scan.documents) {
     const collect = (value: unknown): void => {
@@ -187,7 +189,7 @@ export function formatStepSource(repo: Repository, path: string, source: string,
       else if (value !== null && typeof value === 'object') Object.values(value).forEach(collect);
     };
     collect(record.metadata);
-    if (record.metadata.kind === 'memory' || record.metadata.kind === 'issue') for (const token of markdownReferenceTokens(record.path, record.body)) if (token.target.startsWith(`${path}#`)) occupied.add(token.target.slice(path.length + 1));
+    if (record.metadata.kind === 'memory' || record.metadata.kind === 'issue') for (const token of markdownReferenceTokens(record.path, record.body, repositoryRuntime(repo))) if (token.target.startsWith(`${path}#`)) occupied.add(token.target.slice(path.length + 1));
   }
   let next = Math.max(0, ...extracted.steps.map(step => /^step-([0-9]+)$/u.exec(step.id)?.[1]).filter(value => value !== undefined).map(Number)) + 1;
   if (!Number.isSafeInteger(next)) throw new ConcordError('InvalidStepId', 'Step sequence exceeds the safe integer range');

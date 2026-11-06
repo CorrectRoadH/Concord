@@ -1,3 +1,4 @@
+import { repositoryRuntime } from '../base/workspace/index.ts';
 import { unlinkedTests } from './unlinked-tests.ts';
 import { analysisView } from "./analysis-view.ts";
 import type { AnalysisView } from "../model/index.ts";
@@ -87,7 +88,7 @@ export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildT
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#步骤分组输出
 export function stepGroups(repo: Repository, trace: ReturnType<typeof buildTrace>, document: DocumentRecord, analysis: AnalysisView = analysisView(repo, trace.annotations.cases, trace.codeDeclarations, trace.documents)) {
-  const extracted = extractSteps(document.path, repo.read(document.path)!);
+  const extracted = extractSteps(document.path, repo.read(document.path)!, repositoryRuntime(repo));
   const group = (ref: string) => {
     const tests = trace.annotations.cases.filter(item => item.status === 'active' && item.contract === ref);
     const ids = new Set(tests.map(test => test.id));
@@ -161,7 +162,7 @@ export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildT
       contracts,
       cliPages,
       unmarkedLists: trace.documents.filter(doc => doc.metadata.kind === 'use-case').flatMap(doc => {
-        const lists = extractSteps(doc.path, repo.read(doc.path)!).lists.filter(list => list.marked < list.items);
+        const lists = extractSteps(doc.path, repo.read(doc.path)!, repositoryRuntime(repo)).lists.filter(list => list.marked < list.items);
         return lists.length ? [{ path: doc.path, lists }] : [];
       }),
       cache: trace.annotations.cache,

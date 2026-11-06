@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { writeConceptFile, writeWritingFile } from '../support/writing-files.ts';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,6 +14,8 @@ import { openHawdb, PersistentCache } from '../../src/base/cache/index.ts';
 import { LocalRepository } from '../support/repository.ts';
 import { writeProjectConfig, readProjectConfig } from '../support/support.ts';
 import { fixture, useCasePath, engineeringPath } from '../support/document-cache-fixture.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 function cli(root: string, dryRun: boolean, args = ['check']) {
   const repo = new LocalRepository(root, { access: 'read', dryRun, persistentCache: dryRun ? 'off' : 'use' });
@@ -57,7 +60,7 @@ test('volatile document projections preserve current CLI facts across edits, pat
     try { writeWritingFile(writer, { roots: ['docs'], bannedTerms: [{ term: 'undesirable', use: 'clear', why: 'Use a concrete term' }] }, digest(readFileSync(join(root, 'docs/writing.md'), 'utf8'))); } finally { writer.close(); }
     parity(root);
     assert.match(JSON.stringify(cli(root, false)), /undesirable/u);
-    const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false });
+    const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false }, nativeRuntime);
     try { assert.equal(new Set<string>(database.namespaces()).has('document_parse_cache'), false); }
     finally { database.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -68,7 +71,7 @@ test('damaged persistent auxiliary caches do not change authoritative document f
   const root = existingCacheFixture();
   try {
     const expected = cli(root, false);
-    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });
+    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false }, nativeRuntime);
     let damaged = 0;
     try {
       for (const namespace of ['annotation_cache', 'query_cache', 'config_cache'] as const) {

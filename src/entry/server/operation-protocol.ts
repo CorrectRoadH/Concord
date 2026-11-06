@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import { Schema } from 'effect';
 import { CacheSnapshotUnavailable, CacheDerivationBatch, ViewActionSchema } from '../../model/index.ts';
-import { strict } from './protocol.ts';
+import { CallerCwd, QueryEnvironment, strict } from './protocol.ts';
 
 const Row = strict(Schema.Struct({ key: Schema.String, payload: Schema.String }));
 export const Snapshot = strict(Schema.Struct({
@@ -15,8 +15,8 @@ export const Snapshot = strict(Schema.Struct({
   workspace_projection: Schema.optional(Schema.Array(Row)),
 }));
 export const OperationRequest = Schema.Union([
-  strict(Schema.Struct({ kind: Schema.Literal('action'), root: Schema.String, input: ViewActionSchema, snapshot: Snapshot })),
-  strict(Schema.Struct({ kind: Schema.Literal('job'), root: Schema.String, caseId: Schema.String, snapshot: Snapshot })),
+  strict(Schema.Struct({ kind: Schema.Literal('action'), root: Schema.String, cwd: CallerCwd, environment: QueryEnvironment, input: ViewActionSchema, snapshot: Snapshot })),
+  strict(Schema.Struct({ kind: Schema.Literal('job'), root: Schema.String, cwd: CallerCwd, environment: QueryEnvironment, caseId: Schema.String, snapshot: Snapshot })),
 ]);
 export const OperationReply = Schema.Union([
   strict(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json, derived: Schema.Array(CacheDerivationBatch) })),

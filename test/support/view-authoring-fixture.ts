@@ -8,6 +8,9 @@ import { createConsumer } from './consumer.ts';
 import { LocalRepository } from './repository.ts';
 import { addPage, createDocument } from './operations.ts';
 import { writeProjectConfig } from './support.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 export function authoringConsumer(): string {
   const root = createConsumer();
@@ -34,7 +37,7 @@ export function replayAuthoringState(root: string): void {
   const repo = new LocalRepository(root);
   const editParagraph = (path: string, text: string) => {
     const before = readFileSync(join(root, path), 'utf8');
-    const record = parseDocumentRecord(path, before);
+    const record = parseDocumentRecord(path, before, parserRuntime);
     const body = record?.body ?? before;
     const paragraph = fromMarkdown(body).children.find(node => node.type === 'paragraph');
     assert.ok(paragraph?.position?.start.offset !== undefined && paragraph.position.end.offset !== undefined);

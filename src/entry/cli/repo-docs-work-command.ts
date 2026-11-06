@@ -8,7 +8,7 @@ import { problem } from "../../model/index.ts";
 import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from "../../app/index.ts";
 
 export interface WorkSettings { readonly root?: string | undefined; readonly json: boolean; readonly dryRun?: boolean }
-export function makeDocsWorkCommand<SettingsR = never>(deliver: TerminalDeliverySink, settings?: Effect.Effect<WorkSettings, never, SettingsR>) {
+export function makeDocsWorkCommand<SettingsR = never, DeliveryE = never, DeliveryR = never>(deliver: TerminalDeliverySink<DeliveryE, DeliveryR>, settings?: Effect.Effect<WorkSettings, never, SettingsR>) {
   const group = Command.make('work').pipe(Command.withDescription('Partition documentation write sets, re-run checks and finalize verified work.'), Command.withSharedFlags({
     root: Flag.string('root').pipe(Flag.optional), json: Flag.boolean('json').pipe(Flag.withDefault(false)),
   }));

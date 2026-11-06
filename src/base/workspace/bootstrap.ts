@@ -2,13 +2,15 @@
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 import { execFileSync } from 'node:child_process';
 import { lstatSync, readdirSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { isAbsolute, join, resolve, sep } from 'node:path';
+import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { ConcordError } from '../../model/index.ts';
 const MAX_BYTES = 32 * 1024 * 1024;
 const errno = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code;
 function present(path: string): boolean { try { lstatSync(path); return true; } catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; } }
 
-export function git(root: string, args: readonly string[], environment: Readonly<Record<string, string | undefined>> = process.env): string {
+export function git(root: string, args: readonly string[], environment: Readonly<Record<string, string | undefined>> = {}): string {
+  if (!isAbsolute(root)) throw new ConcordError('ProjectRootInvalid', 'Git root must be absolute');
   const env = { ...environment };
   for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
   try { return execFileSync('git', ['-C', root, ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: MAX_BYTES, timeout: 10000 }).trimEnd(); }
@@ -45,10 +47,11 @@ export function assertNoSymlink(path: string): void {
   }
 }
 
-export function discoverRoot(input?: string, initialize = false): string {
-  let cursor = resolve(input ?? process.cwd());
+export function discoverRoot(input?: string, initialize = false, runtime?: RuntimeEnvironmentSnapshot): string {
+  if (runtime === undefined && (input === undefined || !isAbsolute(input))) throw new ConcordError('ProjectRootInvalid', 'An absolute root or an explicit runtime cwd is required');
+  const cursor = runtime === undefined ? input! : resolve(runtime.cwd, input ?? '.');
   assertNoSymlink(cursor);
   if (initialize || input !== undefined) return cursor;
-  try { return git(cursor, ['rev-parse', '--show-toplevel']); }
+  try { return git(cursor, ['rev-parse', '--show-toplevel'], runtime?.env); }
   catch { throw new ConcordError('ProjectNotFound', 'The current directory is not in a Git worktree'); }
 }

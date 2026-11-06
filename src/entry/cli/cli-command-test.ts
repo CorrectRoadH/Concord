@@ -13,6 +13,7 @@ import { analysisView } from "../../app/index.ts";
 import { scanCode } from "../../app/index.ts";
 import { text, many, id, sync, cached } from "./cli-base.ts";
 import { withRepo, withReadRepo, withQuery } from "./cli-repository.ts";
+import { setExitCode } from './invocation.ts';
 
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
   Command.make('marker', { contract: text('contract'), issue: many('issue') }, args => withReadRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.issue)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
@@ -24,7 +25,7 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
     const t=yield* sync(()=>repo.snapshot(()=>buildTrace(repo,'off',{includeCode:false})));yield* sync(()=>requireValidTrace(t));
     const selected=yield* sync(()=>selectCase(t.annotations.cases,args.id));
     const evidence=yield* runCase(repo,selected,t.documents,{requireNative:args.requireNative});
-    if(evidence.commandOutcome!=='pass' && evidence.commandOutcome!=='green') yield* Effect.sync(()=>{process.exitCode=1;});
+    if(evidence.commandOutcome!=='pass' && evidence.commandOutcome!=='green') yield* setExitCode(1);
     return evidence;
   }), { unlocked: true })),
   Command.make('verify', { id, defect: text('defect'), fix: text('fix') }, args => withRepo((repo,s) => s.dryRun ? Effect.fail(new ConcordError('InvalidOption', 'test verify does not accept --dry-run')) : verifyTest(repo,args.id,args.defect,args.fix), { unlocked:true, readonly:true })),

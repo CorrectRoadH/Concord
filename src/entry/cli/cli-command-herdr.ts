@@ -11,7 +11,7 @@ export const herdr = Command.make('herdr').pipe(
     Command.make(operation, {}, () => Effect.gen(function*() {
       const settings = yield* root;
       const receipt = yield* manageHerdrMod(operation, settings.dryRun);
-      yield* Effect.sync(() => emit(receipt, settings.json));
+      yield* emit(receipt, settings.json);
     })).pipe(Command.withDescription(operation === 'install' ? 'Copy the packaged mod into Herdr’s mods/concord directory.' : 'Remove only Herdr’s mods/concord directory.')),
   )),
 );

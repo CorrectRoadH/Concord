@@ -1,4 +1,7 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { initialize, runApplication, installedConcordCli, assert, createHash, execFileSync, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, resolve, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, ScanReport, freshConsumer, cli, cacheDiskSnapshot } from './hawdb-cache-fixture.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
@@ -35,7 +38,7 @@ test('fresh cache rebuild produces ready projections and reports busy rebuilds a
     const status = cli(root, 'cache', 'status');
     assert.equal(status.status, 0, status.stdout + status.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CacheReport))(status.stdout).status, 'ready');
-    const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });
+    const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false }, nativeRuntime);
     try {
       const busy = cli(root, 'cache', 'rebuild');
       assert.equal(busy.status, 1, busy.stdout + busy.stderr);

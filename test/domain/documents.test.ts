@@ -17,6 +17,9 @@ import { renderDocument } from "../../src/model/index.ts";
 import { LocalRepository } from "../support/repository.ts";
 
 import { inspectDocuments } from "../../src/app/index.ts";
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 function useConsumer(run: (repo: LocalRepository, root: string) => void): void {
   const root = createConsumer();
@@ -38,7 +41,7 @@ function throwsCode(code: string, operation: () => unknown): void {
 // @use-case docs/feature/document-packages/use-case/discover-managed-documents.md
 test('shared owner decoding refuses frontmatter on a Spec owner', () => {
   const invalid = '---\nformat: concord.document/v1\nid: example\nkind: feature\n---\n# Body\n';
-  throwsCode('InvalidData', () => parseDocumentRecord('docs/feature/示例/README.md', invalid));
+  throwsCode('InvalidData', () => parseDocumentRecord('docs/feature/示例/README.md', invalid, parserRuntime));
 });
 
 // @feature docs/feature/local-sdlc/README.md
@@ -48,7 +51,7 @@ test('owner titles accept the declared boundary and reject multiline or oversize
     const metadata = kind === 'use-case' ? { ...base, kind, feature: 'docs/feature/example/README.md' } : { ...base, kind };
     const source = renderDocument(metadata, `# ${base.title}\n`);
     const path = kind === 'use-case' ? 'docs/feature/example/use-case/title-boundary.md' : `docs/${kind}/title-boundary/README.md`;
-    assert.equal(parseDocumentRecord(path, source)?.metadata.title.length, 1024);
+    assert.equal(parseDocumentRecord(path, source, parserRuntime)?.metadata.title.length, 1024);
     for (const title of ['x'.repeat(1025), 'First\nSecond', 'First\rSecond', 'First\u2028Second', 'First\u2029Second']) {
       throwsCode('InvalidData', () => renderDocument({ ...metadata, title }, '# Body\n'));
     }

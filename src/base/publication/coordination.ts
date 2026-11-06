@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 import { execFileSync } from "node:child_process";
 import { lstatSync, mkdirSync } from "node:fs";
-import { resolve, join, sep } from "node:path";
+import { isAbsolute, resolve, join, sep } from "node:path";
 import { Effect } from "effect";
 import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, errno, recoverFileLease, releaseFileLease, type FileLease } from "./file-lease.ts";
 
@@ -12,8 +12,9 @@ export type TraceLease = FileLease;
 const TRACE_PRIVATE_PATH = 'concord/trace';
 export const PUBLICATION_LEASE = 'publication.lease';
 
-function gitPath(root: string, name: string): string {
-  const env = { ...process.env };
+function gitPath(root: string, name: string, environment: Readonly<Record<string, string | undefined>>): string {
+  if (!isAbsolute(root)) throw new CoordinationError({ operation: 'coordination', phase: 'git-private', message: 'Git-private root must be absolute' });
+  const env = { ...environment };
   for (const key of Object.keys(env)) if (key.startsWith("GIT_")) delete env[key];
   try {
     const output = execFileSync("git", ["-C", resolve(root), "rev-parse", "--git-path", name], {
@@ -29,14 +30,14 @@ function gitPath(root: string, name: string): string {
   }
 }
 
-export function tracePrivateDirectorySync(root: string): string { return gitPath(root, TRACE_PRIVATE_PATH); }
-export function genericPrivateDirectorySync(root: string): string { return gitPath(root, "concord"); }
+export function tracePrivateDirectorySync(root: string, environment: Readonly<Record<string, string | undefined>> = {}): string { return gitPath(root, TRACE_PRIVATE_PATH, environment); }
+export function genericPrivateDirectorySync(root: string, environment: Readonly<Record<string, string | undefined>> = {}): string { return gitPath(root, "concord", environment); }
 
 /** Explicit cache writers may create this Git-owned child; readers never call this. */
-export function ensureGenericPrivateDirectorySync(root: string, directory: string): void {
+export function ensureGenericPrivateDirectorySync(root: string, directory: string, environment: Readonly<Record<string, string | undefined>> = {}): void {
   try {
-    const expected = genericPrivateDirectorySync(root);
-    const gitDirectory = gitPath(root, '.');
+    const expected = genericPrivateDirectorySync(root, environment);
+    const gitDirectory = gitPath(root, '.', environment);
     if (directory !== expected || !expected.startsWith(`${gitDirectory}${sep}`)) throw new Error('Private directory must remain inside the selected Git directory');
     assertLeasePath(directory);
     try { mkdirSync(directory, { mode: 0o700 }); }
@@ -48,31 +49,31 @@ export function ensureGenericPrivateDirectorySync(root: string, directory: strin
     throw new CoordinationError({ operation: 'cache-write', phase: 'git-private', path: directory, message: cause instanceof Error ? cause.message : String(cause) });
   }
 }
-export function genericJournalPath(root: string): string {
-  const path = resolve(genericPrivateDirectorySync(root), "journal.json");
+export function genericJournalPath(root: string, environment: Readonly<Record<string, string | undefined>> = {}): string {
+  const path = resolve(genericPrivateDirectorySync(root, environment), "journal.json");
   assertLeasePath(path);
   return path;
 }
 
-function acquireNow(root: string, mode: TraceLease['mode'], operation: string, create: boolean, reclaimDead = false): TraceLease | undefined {
+function acquireNow(root: string, mode: TraceLease['mode'], operation: string, create: boolean, reclaimDead = false, environment: Readonly<Record<string, string | undefined>> = {}): TraceLease | undefined {
   const acquire = reclaimDead ? acquireRecoverablePublicationLease : acquireFileLease;
-  return acquire(root, tracePrivateDirectorySync(root), PUBLICATION_LEASE, mode, operation, create);
+  return acquire(root, tracePrivateDirectorySync(root, environment), PUBLICATION_LEASE, mode, operation, create);
 }
 
-export function recoverPublicationLeaseSync(root: string): readonly string[] {
-  return recoverFileLease(root, join(tracePrivateDirectorySync(root), PUBLICATION_LEASE), 'recover');
+export function recoverPublicationLeaseSync(root: string, environment: Readonly<Record<string, string | undefined>> = {}): readonly string[] {
+  return recoverFileLease(root, join(tracePrivateDirectorySync(root, environment), PUBLICATION_LEASE), 'recover');
 }
 
-export function acquireTraceLeaseSync(root: string, mode: TraceLease['mode'], operation: string, create = true, reclaimDead = false): TraceLease | undefined {
-  return acquireNow(root, mode, operation, create, reclaimDead);
+export function acquireTraceLeaseSync(root: string, mode: TraceLease['mode'], operation: string, create = true, reclaimDead = false, environment: Readonly<Record<string, string | undefined>> = {}): TraceLease | undefined {
+  return acquireNow(root, mode, operation, create, reclaimDead, environment);
 }
 export function releaseTraceLeaseSync(lease: TraceLease, operation: string): void { releaseFileLease(lease, operation); }
-export function acquireTraceLease(root: string, mode: TraceLease['mode'], operation: string, create: boolean, reclaimDead = false): Effect.Effect<TraceLease | undefined, CoordinationError> {
-  return Effect.try({ try: () => acquireNow(root, mode, operation, create, reclaimDead), catch: cause => cause instanceof CoordinationError ? cause : new CoordinationError({ operation, phase: 'lock', message: cause instanceof Error ? cause.message : String(cause) }) });
+export function acquireTraceLease(root: string, mode: TraceLease['mode'], operation: string, create: boolean, reclaimDead = false, environment: Readonly<Record<string, string | undefined>> = {}): Effect.Effect<TraceLease | undefined, CoordinationError> {
+  return Effect.try({ try: () => acquireNow(root, mode, operation, create, reclaimDead, environment), catch: cause => cause instanceof CoordinationError ? cause : new CoordinationError({ operation, phase: 'lock', message: cause instanceof Error ? cause.message : String(cause) }) });
 }
 export function releaseTraceLease(lease: TraceLease, operation: string): Effect.Effect<void, CoordinationError> {
   return Effect.try({ try: () => releaseTraceLeaseSync(lease, operation), catch: cause => cause instanceof CoordinationError ? cause : new CoordinationError({ operation, phase: 'cleanup', message: cause instanceof Error ? cause.message : String(cause) }) });
 }
-export function withTraceLease<A, E, R>(root: string, mode: TraceLease['mode'], operation: string, create: boolean, use: (lease: TraceLease | undefined) => Effect.Effect<A, E, R>): Effect.Effect<A, E | CoordinationError, R> {
-  return Effect.acquireUseRelease(acquireTraceLease(root, mode, operation, create), use, lease => lease === undefined ? Effect.succeed(undefined) : releaseTraceLease(lease, operation));
+export function withTraceLease<A, E, R>(root: string, mode: TraceLease['mode'], operation: string, create: boolean, use: (lease: TraceLease | undefined) => Effect.Effect<A, E, R>, environment: Readonly<Record<string, string | undefined>> = {}): Effect.Effect<A, E | CoordinationError, R> {
+  return Effect.acquireUseRelease(acquireTraceLease(root, mode, operation, create, false, environment), use, lease => lease === undefined ? Effect.succeed(undefined) : releaseTraceLease(lease, operation));
 }

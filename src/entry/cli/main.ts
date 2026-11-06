@@ -8,17 +8,34 @@ import { Installation } from '../../base/installation/index.ts';
 import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./launchers.ts";
 import { Publication } from "../../base/publication/index.ts";
 import type { Queries } from "../../app/index.ts";
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Clock, Context, Effect, Fiber, Layer, Schema } from "effect";
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
+import { type Cause, Clock, ConfigProvider, Console, Context, Effect, Fiber, Layer, Queue, Schema, Stdio, Stream, type Terminal } from "effect";
 import type { Command } from "effect/unstable/cli";
 import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.ts";
 import { humanOutput } from "./presentation.ts";
-import { OwnedProcess, OwnedProcessLive } from "../../base/process/index.ts";
+import { OwnedProcess, OwnedProcessLive, ProcessEventsLive } from "../../base/process/index.ts";
 import { Git } from '../../base/git/index.ts';
 import { Workspace } from '../../base/workspace/index.ts';
 import { Sources } from '../../base/sources/index.ts';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.ts';
+import { awaitCacheMaintenance } from '../../app/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
+import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
+import { CliInvocation, setExitCode, writeStderr } from './invocation.ts';
+
+export const cliPlatformLayer = NodeChildProcessSpawner.layer.pipe(Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)));
+/** Real startup captures input; this composition root binds its services. */
+export function cliEnvironmentLayer(cwd: string, env: Readonly<Record<string, string | undefined>>) {
+  const runtime = makeRuntimeEnvironment(cwd, env);
+  return Layer.merge(RuntimeEnvironment.layer(runtime), ConfigProvider.layer(ConfigProvider.fromEnvRecord(runtime.env)));
+}
+const stderrWriter = Effect.gen(function*() {
+  const stdio = yield* Stdio.Stdio;
+  const chunks = yield* Queue.unbounded<Uint8Array, Cause.Done>();
+  const writing = yield* Effect.forkScoped(Stream.fromQueue(chunks).pipe(Stream.run(stdio.stderr({ endOnDone: false }))));
+  yield* Effect.addFinalizer(() => Queue.end(chunks).pipe(Effect.andThen(Fiber.join(writing)), Effect.orDie));
+  return (chunk: Uint8Array) => { Queue.offerUnsafe(chunks, chunk); };
+});
 const loadClient = () => Effect.tryPromise(() => import('../server/index.ts')).pipe(Effect.mapError(failure));
 const requestWorkspace: typeof ServerTypes.requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
 const ServerFailure = Schema.Struct({ _tag: Schema.Literal('WorkspaceServerError'), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) });
@@ -44,7 +61,7 @@ const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*
   const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
   if (!record) return undefined;
   const { connectWorkspaceSocket } = yield* loadClient();
-  const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? (yield* installationIdentity(platform)), record.token, scope, countReuse);
+  const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? (yield* installationIdentity(platform)), record.token, scope, countReuse, (yield* RuntimeEnvironment).env);
   if (connection.hello.installation !== record.installation || connection.hello.protocol !== record.protocol) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Handshake differs from the running record'));
   return connection;
 });
@@ -81,8 +98,9 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
   }
   if (foreground) {
     const owner = yield* OwnedProcess, installed = yield* Installation;
-    yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], { cwd: installed.cwd, stream: { ready: () => {}, stdout: () => {}, stderr: chunk => { process.stderr.write(chunk); } } })));
-  } else yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
+    const stderr = yield* stderrWriter;
+    yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], { cwd: (yield* RuntimeEnvironment).cwd, stream: { ready: () => {}, stdout: () => {}, stderr } })));
+  } else yield* OwnedProcess.launch('workspace-server', [root], (yield* RuntimeEnvironment).cwd);
   const connection = yield* waitForServerHandshake(existingWorkspace(root, installation, undefined, undefined, false));
   if (connection.hello.installation !== installation || connection.hello.protocol !== PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'A workspace server from another Concord installation is running for this project. Stop it with: concord server stop'));
   return connection;
@@ -96,7 +114,7 @@ const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceReco
     const sourceDigest = yield* Effect.try({ try: runtime.sourceDigest, catch: failure });
     if (sourceDigest !== undefined && record.sourceDigest !== sourceDigest && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) {
       yield* Effect.scoped(Effect.gen(function*() {
-        const connection = yield* client.connectWorkspaceSocket(record.socket.path, record.installation, record.token).pipe(Effect.mapError(workspaceServerFailure));
+        const connection = yield* client.connectWorkspaceSocket(record.socket.path, record.installation, record.token, undefined, true, (yield* RuntimeEnvironment).env).pipe(Effect.mapError(workspaceServerFailure));
         yield* connection.client.shutdown({ token: record.token }).pipe(Effect.mapError(workspaceServerFailure));
       }));
       yield* waitForWorkspaceStop(runtime, privateDir, { token: record.token, pid: record.pid }).pipe(Effect.mapError(workspaceServerFailure));
@@ -112,7 +130,7 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
   const client = yield* loadClient();
   const runtime = yield* ServerRuntime;
   const installation = yield* installationIdentity(runtime);
-  const inherited = process.env.CONCORD_SERVER_SCOPE;
+  const inherited = (yield* RuntimeEnvironment).env.CONCORD_SERVER_SCOPE;
   if (inherited !== undefined) {
     const scope = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(client.CommandScope), { onExcessProperty: 'error' })(inherited).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid inherited command scope')));
     if (scope.root !== root || scope.privateDir !== privateDir) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeMismatch', 'Inherited command scope belongs to another project'));
@@ -132,12 +150,12 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
   }));
   if (current) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'A service already owns this project; command mode cannot attach to it'));
   const scope = { root, privateDir, key: crypto.randomUUID() };
-  const owner = (yield* loadApp()).makeOwnedProcessService({ graceMs: 5000 });
+  const owner = (yield* loadApp()).makeOwnedProcessService({ graceMs: 5000, environment: yield* RuntimeEnvironment });
   const installed = yield* Installation;
   yield* Effect.addFinalizer(() => owner.cleanupResults.pipe(Effect.flatMap(results => results.some(result => !OwnedProcess.confirmed(result))
     ? Effect.die(new ConcordError('CleanupFailed', 'Command service process group cleanup is unconfirmed')) : Effect.void)));
   const fiber = yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], {
-    cwd: installed.cwd, env: { ...process.env, CONCORD_SERVER_SCOPE: JSON.stringify(scope) },
+    cwd: (yield* RuntimeEnvironment).cwd, env: { ...(yield* RuntimeEnvironment).env, CONCORD_SERVER_SCOPE: JSON.stringify(scope) },
     ipc: { ready: () => {}, message: () => {} },
   })));
   const connection = yield* client.waitForServerHandshake(existingWorkspace(root, installation, privateDir, scope.key, false)).pipe(
@@ -160,8 +178,9 @@ const awaitQueryReady = Effect.fn('awaitQueryReady')(function*(connection: Serve
 const existingCompatibleWorkspace = Effect.fn('existingCompatibleWorkspace')(function*(root: string, privateDir: string) {
   const client = yield* loadClient(), runtime = yield* ServerRuntime;
   let key: string | undefined;
-  if (process.env.CONCORD_SERVER_SCOPE !== undefined) {
-    const scope = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(client.CommandScope), { onExcessProperty: 'error' })(process.env.CONCORD_SERVER_SCOPE).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid inherited command scope')));
+  const inherited = (yield* RuntimeEnvironment).env.CONCORD_SERVER_SCOPE;
+  if (inherited !== undefined) {
+    const scope = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(client.CommandScope), { onExcessProperty: 'error' })(inherited).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid inherited command scope')));
     if (scope.root !== root || scope.privateDir !== privateDir) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeMismatch', 'Inherited command scope belongs to another project'));
     key = scope.key;
   }
@@ -176,7 +195,7 @@ const existingCompatibleWorkspace = Effect.fn('existingCompatibleWorkspace')(fun
   return connection;
 });
 
-function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: ServerRuntime['Service'], local: PersistentCache['Service'], root: string | undefined, operation: Effect.Effect<A, E, R>, required: boolean): Effect.Effect<A, E | ConcordError, R> {
+function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: ServerRuntime['Service'], local: PersistentCache['Service'], root: string | undefined, operation: Effect.Effect<A, E, R>, required: boolean): Effect.Effect<A, E | ConcordError, R | RuntimeEnvironment | Stdio.Stdio> {
   return Effect.scoped(Effect.gen(function*() {
     // A damaged source installation cannot authenticate a remote owner. The
     // repository cache reports the same unavailable diagnostic on the local path.
@@ -192,9 +211,7 @@ function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: S
       ...local,
       attach: repo => repo.privateDir === identified.privateDir ? cache.attach(repo).pipe(Effect.provideService(CacheDerivations, derived)) : local.attach(repo),
     }));
-    yield* client.submitDerivations(connection, derived.batches()).pipe(Effect.mapError(workspaceServerFailure), Effect.catch(error => required ? Effect.fail(error) : Effect.sync(() => {
-      process.stderr.write(`${JSON.stringify({ warning: 'CacheUpdateFailed', message: 'The operation completed, but its disposable cache update failed', reason: error.code })}\n`);
-    })));
+    yield* client.submitDerivations(connection, derived.batches()).pipe(Effect.mapError(workspaceServerFailure), Effect.catch(error => required ? Effect.fail(error) : writeStderr(`${JSON.stringify({ warning: 'CacheUpdateFailed', message: 'The operation completed, but its disposable cache update failed', reason: error.code })}\n`).pipe(Effect.orDie)));
     return result;
   }));
 }
@@ -240,7 +257,7 @@ const stopWorkspaceServer = (root: string) => Effect.scoped(Effect.gen(function*
 }).pipe(Effect.mapError(asServerError)));
 
 const HttpLease = Schema.Struct({ host: Schema.String, port: Schema.Int, address: Schema.String, lease: Schema.String, token: Schema.String });
-function makeWorkspaceView() { return Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => void) {
+function makeWorkspaceView() { return Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => Effect.Effect<void, unknown, Stdio.Stdio>) {
   yield* builtAssetRoot('web');
   return yield* Effect.scoped(Effect.gen(function*() {
     const connection = yield* connectOrStartWorkspace(options.root, options.inProcess === true);
@@ -254,7 +271,7 @@ function makeWorkspaceView() { return Effect.fn('serveWorkspaceView')(function*(
     }
     const lease = yield* Schema.decodeUnknownEffect(HttpLease, { onExcessProperty: 'error' })(input);
     yield* Effect.addFinalizer(() => requestWorkspace(connection, 'http', { action: 'close', host: lease.host, port: lease.port, lease: lease.lease }).pipe(Effect.ignore));
-    yield* Effect.sync(() => ready({ root: options.root, host: lease.host, port: lease.port, address: lease.address }));
+    yield* ready({ root: options.root, host: lease.host, port: lease.port, address: lease.address });
     return yield* Effect.never;
   }));
 }, Effect.mapError(workspaceServerFailure)); }
@@ -270,8 +287,10 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
   const installation = yield* Installation;
   const processes = yield* OwnedProcess;
   const persistent = yield* PersistentCache;
+  const execution = yield* RuntimeEnvironment;
+  const stdio = yield* Stdio.Stdio;
   return Queries.Remote((root, request, cache = 'use') => Effect.scoped(Effect.gen(function*() {
-    if (cache === 'off' && process.env.CONCORD_SERVER_SCOPE === undefined) return yield* executeQuery(root, request, cache);
+    if (cache === 'off' && execution.env.CONCORD_SERVER_SCOPE === undefined) return yield* executeQuery(root, request, cache);
     const native = yield* Effect.result(nativeAvailable.pipe(Effect.provideService(PersistentCache, persistent)));
     if (native._tag === 'Failure') {
       if (request.name === 'historical' || request.name === 'workspace.show') return yield* Effect.fail(native.failure);
@@ -284,29 +303,30 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
       return reply;
     }
     const identified = yield* workspace.locate(root);
-    const environment = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    const environment = Object.fromEntries(Object.entries(execution.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
     delete environment.CONCORD_SERVER_SCOPE;
     if (Buffer.byteLength(JSON.stringify(environment)) > 256 * 1024) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Query environment exceeds 256 KiB'));
     for (let attempt = 0; ; attempt++) {
       const result = yield* Effect.result(Effect.scoped(Effect.gen(function*() {
         const connection = yield* connectQueryWorkspace(identified.root, identified.privateDir).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.provideService(Installation, installation), Effect.provideService(OwnedProcess, processes), Effect.provideService(PersistentCache, persistent));
         yield* awaitQueryReady(connection);
-        const reply = yield* requestWorkspace(connection, 'query', { ...request, environment, cache });
+        const reply = yield* requestWorkspace(connection, 'query', { ...request, cwd: execution.cwd, environment, cache });
         return yield* Schema.decodeUnknownEffect(QueryReply, { onExcessProperty: 'error' })(reply).pipe(Effect.mapError(failure));
       })));
       if (result._tag === 'Success') return result.success;
       const error = workspaceServerFailure(result.failure);
       const retryable = error.code === 'WorkspaceServerUnavailable' || error.code === 'WorkspaceComputeExited' || error.code === 'OperationFailed' && remoteFailure(result.failure) === undefined;
-      if (attempt >= 1 || !retryable || (yield* QueryServerMode) === 'command' || process.env.CONCORD_SERVER_SCOPE !== undefined) return yield* Effect.fail(error);
+      if (attempt >= 1 || !retryable || (yield* QueryServerMode) === 'command' || execution.env.CONCORD_SERVER_SCOPE !== undefined) return yield* Effect.fail(error);
     }
-  })));
+  })).pipe(Effect.provideService(Stdio.Stdio, stdio), Effect.provideService(RuntimeEnvironment, execution)));
 }));
 
 const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*() {
   const workspace = yield* Workspace;
   const runtime = yield* ServerRuntime;
+  const execution = yield* RuntimeEnvironment;
   return FeedbackCacheWriter.of({ merge: (root, connectionId, items) => Effect.scoped(Effect.gen(function*() {
-    const connection = yield* existingWorkspace(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.catch(() => Effect.succeed(undefined)));
+    const connection = yield* existingWorkspace(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.provideService(RuntimeEnvironment, execution), Effect.catch(() => Effect.succeed(undefined)));
     if (!connection) return yield* mergeLocalFeedbackObservation(root, connectionId, items).pipe(Effect.provideService(Workspace, workspace));
     if (connection.hello.installation !== runtime.installation()) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Feedback owner has another installation identity'));
     return yield* (yield* loadClient()).submitFeedback(connection, connectionId, items);
@@ -315,8 +335,9 @@ const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*
 
 const launchers = Layer.mergeAll(
   Layer.effect(ServerLauncher, Effect.gen(function*() {
-    const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
+    const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | Layer.Success<typeof cliPlatformLayer> | OwnedProcess | RuntimeEnvironment | Stdio.Stdio | Terminal.Terminal>();
     const workspace = yield* Workspace, runtime = yield* ServerRuntime, persistent = yield* PersistentCache;
+    const execution = yield* RuntimeEnvironment, stdio = yield* Stdio.Stdio;
     return ServerLauncher.of({
       processIdentity: installationIdentity(runtime).pipe(Effect.map(installation => ({ pid: process.pid, installation }))),
       run: root => nativeAvailable.pipe(Effect.andThen(loadServerMain()), Effect.flatMap(server => server.serveWorkspaceFromEnvironment(root)), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause)), Effect.provideContext(context)),
@@ -331,38 +352,47 @@ const launchers = Layer.mergeAll(
         const connection = yield* existingCompatibleWorkspace(identified.root, identified.privateDir).pipe(Effect.provideContext(context));
         return connection ? yield* requestWorkspace(connection, action, {}).pipe(Effect.mapError(workspaceServerFailure)) : undefined;
       })),
-      withCache: (root, operation, required = false) => withWorkspaceCache(workspace, runtime, persistent, root, operation, required),
+      withCache: (root, operation, required = false) => withWorkspaceCache(workspace, runtime, persistent, root, operation, required).pipe(Effect.provideService(RuntimeEnvironment, execution), Effect.provideService(Stdio.Stdio, stdio)),
     });
   })),
   Layer.effect(ViewLauncher, Effect.gen(function*() {
-    const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
+    const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | Layer.Success<typeof cliPlatformLayer> | OwnedProcess | RuntimeEnvironment | Stdio.Stdio | Terminal.Terminal>();
     return ViewLauncher.of({ serve: (options, ready) => Effect.gen(function*() {
       yield* builtAssetRoot('web');
       const http = yield* Effect.tryPromise(() => import('../http/index.ts'));
       return yield* serveWorkspaceView(options, info => ready({ ...info, ...http.viewAddresses(info.host, info.port) }));
     }).pipe(Effect.mapError(failure), Effect.provideContext(context)) });
   })),
-  Layer.succeed(LspLauncher, LspLauncher.of({ serve: root => Effect.tryPromise(() => import('../lsp/index.ts')).pipe(Effect.flatMap(lsp => lsp.serveEditor(root)), Effect.mapError(failure)) })),
+  Layer.effect(LspLauncher, Effect.gen(function*() {
+    const context = yield* Effect.context<RuntimeEnvironment | Stdio.Stdio>();
+    return LspLauncher.of({ serve: root => Effect.tryPromise(() => import('../lsp/index.ts')).pipe(Effect.flatMap(lsp => lsp.serveEditor(root)), Effect.mapError(failure), Effect.provideContext(context)) });
+  })),
 );
 
 const validation = Layer.unwrap(loadApp().pipe(Effect.map(app => app.PublicationValidationLive)));
 const cliServices = Layer.mergeAll(ServerRuntime.layer, Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(), PersistentCache.layer, Publication.layer.pipe(Layer.provide(validation))).pipe(
-  Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(cliPlatformLayer),
 );
 return launchers.pipe(Layer.merge(querySelection), Layer.merge(feedbackSelection), Layer.provideMerge(cliServices));
 })));
 }
 export const cliLayer = /*#__PURE__*/ makeCliLayer();
 
-const cliFailure = (cause: unknown) => Effect.tryPromise(() => import('effect/unstable/cli/CliError')).pipe(Effect.flatMap(CliError => Effect.sync(() => {
-  const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
+const cliFailure = (cause: unknown) => Effect.gen(function*() {
+  const CliError = yield* Effect.tryPromise(() => import('effect/unstable/cli/CliError'));
+  const error = CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))
     : failure(cause);
-  const result = {ok:false,error:error.code,message:error.message,...(error.code === 'WritingBudgetExceeded' ? {complete:false} : {}),...(error.details===undefined?{}:{details:error.details})};
-  process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;
-})));
-const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effect.gen(function*() {
+  const result = { ok: false, error: error.code, message: error.message, ...(error.code === 'WritingBudgetExceeded' ? { complete: false } : {}), ...(error.details === undefined ? {} : { details: error.details }) };
+  const invocation = yield* CliInvocation;
+  yield* writeStderr(`${invocation.argv.includes('--json') || invocation.argv.includes('--skill') ? JSON.stringify(result) : humanOutput(result)}\n`);
+  yield* setExitCode(1);
+});
+
+/** Both the real startup adapter and captured invocations await this exact program. */
+export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, argv: readonly string[]) => Effect.scoped(Effect.gen(function*() {
   const Command = yield* Effect.tryPromise(() => import('effect/unstable/cli/Command'));
+  yield* Layer.build(ProcessEventsLive);
   const version = yield* (yield* Installation).version;
   // @concord-begin
   // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
@@ -379,8 +409,24 @@ const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effec
   }));
   const guarded = command.pipe(Command.withSubcommands(commands)) as typeof command;
   // @concord-end
-  return yield* guarded.pipe(Command.run({ version, renderErrors: !process.argv.includes('--json') }));
-}).pipe(Effect.catch(cliFailure));
-export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | ProcessTypes.OwnedProcess>): void {
-  runCommand(command).pipe(Effect.provide(cliLayer), NodeRuntime.runMain);
-}
+  const program = Command.runWith(guarded, { version, renderErrors: !argv.includes('--json') })(argv);
+  if (argv.includes('--json')) {
+    const console = yield* Console.Console;
+    const CliError = yield* Effect.tryPromise(() => import('effect/unstable/cli/CliError'));
+    const lines: unknown[][] = [];
+    // Effect renders help before returning parse failures. Keep JSON errors atomic.
+    yield* program.pipe(
+      Effect.provideService(Console.Console, Object.assign(Object.create(console), { log: (...args: unknown[]) => { lines.push(args); } })),
+      Effect.tapError(cause => Effect.sync(() => { if (CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0) lines.length = 0; })),
+      Effect.ensuring(Effect.sync(() => { for (const args of lines) console.log(...args); })),
+      Effect.catch(cliFailure),
+    );
+  } else yield* program.pipe(Effect.catch(cliFailure));
+  return yield* (yield* CliInvocation).exitCode;
+})).pipe(Effect.provide(cliLayer), Effect.provide(CliInvocation.layer(argv)), Effect.ensuring(Effect.flatMap(RuntimeEnvironment, runtime => Effect.promise(() => awaitCacheMaintenance(runtime)))));
+
+export const skillCommand = (argv: readonly string[]) => Effect.scoped(Effect.gen(function*() {
+  const { skillProgram } = yield* Effect.tryPromise(() => import('./skill.ts'));
+  yield* skillProgram(argv).pipe(Effect.catch(cliFailure));
+  return yield* (yield* CliInvocation).exitCode;
+})).pipe(Effect.provide(CliInvocation.layer(argv)));

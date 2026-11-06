@@ -23,6 +23,9 @@ import { requireValidTrace } from "../../src/domain/trace/index.ts";
 import { siftQueryDrift } from "../../src/app/index.ts";
 import { digest } from "../../src/model/index.ts";
 import { renderDocument } from "../../src/model/index.ts";
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 const value = { operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } };
 function candidate(at: number, paths: string[] = [], publicationChanged = false): QueryUpdate {
@@ -145,15 +148,15 @@ test('owner and remote bodies are stripped and restored only after safe matching
   try {
     const stored = stripQueryBodies({ operation: 'trace-show', subject: owner, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.ok(!JSON.stringify(stored).includes('PRIVATE_OWNER_BODY'));
-    const matched = hydrateQueryValue(root, stored);
+    const matched = hydrateQueryValue(root, stored, undefined, parserRuntime);
     assert.equal(matched.bodyChanged.length, 0);
     assert.ok(JSON.stringify(matched.value).includes('PRIVATE_OWNER_BODY'));
     writeFileSync(join(root, path), source + '\nchanged\n');
-    const changed = hydrateQueryValue(root, stored);
+    const changed = hydrateQueryValue(root, stored, undefined, parserRuntime);
     assert.deepEqual(changed.bodyChanged, [path]);
     assert.ok(!JSON.stringify(changed.value).includes('PRIVATE_OWNER_BODY'));
     rmSync(join(root, path));
-    const missing = hydrateQueryValue(root, stored);
+    const missing = hydrateQueryValue(root, stored, undefined, parserRuntime);
     assert.deepEqual(missing.bodyUnavailable, [{ path, code: 'BodyUnavailable' }]);
     assert.throws(() => Schema.decodeUnknownSync(TraceShowValue, { onExcessProperty: 'error' })({ ...stored, subject: owner }));
     const metadata = { format: 'concord.document/v1' as const, kind: 'issue' as const, id: 'remote', title: 'Remote',
@@ -162,14 +165,14 @@ test('owner and remote bodies are stripped and restored only after safe matching
     const remoteSource = renderDocument(metadata, '# PRIVATE_ISSUE_BODY\n');
     const remote = stripQueryBodies({ operation: 'trace-show', subject: { path: 'docs/issues/remote.md', metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.doesNotMatch(JSON.stringify(remote), /PRIVATE_(REMOTE|ISSUE)_BODY/u);
-    assert.match(JSON.stringify(hydrateQueryValue(root, remote, () => remoteSource).value), /PRIVATE_REMOTE_BODY/u);
+    assert.match(JSON.stringify(hydrateQueryValue(root, remote, () => remoteSource, parserRuntime).value), /PRIVATE_REMOTE_BODY/u);
     const taste = '# PRIVATE_TASTE_BODY\n';
-    const matchedReview = hydrateQueryValue(root, { segments: [{ text: 'before\n' }, { taste: { path, digest: digest(taste) } }, { text: '\nafter' }] }, () => taste).value;
+    const matchedReview = hydrateQueryValue(root, { segments: [{ text: 'before\n' }, { taste: { path, digest: digest(taste) } }, { text: '\nafter' }] }, () => taste, parserRuntime).value;
     assert.ok('body' in matchedReview);
     assert.equal(matchedReview.body, 'before\n# PRIVATE_TASTE_BODY\nafter');
     const review = { segments: [{ text: 'before\n' }, { taste: { path, digest: digest(source) } }, { text: '\nafter' }] };
-    assert.deepEqual(hydrateQueryValue(root, review, () => source + 'changed').bodyChanged, [path]);
-    const rendered = hydrateQueryValue(root, review, () => source + 'changed').value;
+    assert.deepEqual(hydrateQueryValue(root, review, () => source + 'changed', parserRuntime).bodyChanged, [path]);
+    const rendered = hydrateQueryValue(root, review, () => source + 'changed', parserRuntime).value;
     assert.ok('body' in rendered);
     assert.match(rendered.body, /taste changed/);
   } finally { rmSync(root, { recursive: true, force: true }); }

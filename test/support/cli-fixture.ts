@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createRequire } from 'node:module';
 import { sourceCli } from './source-consumer.ts';
 import { createConsumer } from './consumer.ts';
@@ -22,6 +23,8 @@ import { renderDocument } from "../../src/model/index.ts";
 import { hawdb_native_HAWDB_REVISION as HAWDB_REVISION, openHawdb } from "../../src/base/cache/index.ts";
 import { verifyInstalledNative } from '../../scripts/verify-installed-native.ts';
 import { settleRefreshes } from '../../scripts/perf/process.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 export const Ack = Schema.Struct({});
 export const ErrorOutput = Schema.Struct({ error: Schema.String });
 export const DigestOutput = Schema.Struct({ digest: Schema.String });
@@ -62,7 +65,7 @@ export function savePage(root: string, path: string, body: string, expectedDiges
 export function consumer(name: string){
  const root=join(scratch,name);cpSync(createConsumer(),root,{recursive:true});
  writeProjectConfig(root,{testRoots:['test','tests']});
- openHawdb(join(root,'.git/concord/cache.hawdb'),{readOnly:false,create:true}).close();
+ openHawdb(join(root,'.git/concord/cache.hawdb'),{readOnly:false,create:true}, nativeRuntime).close();
  return root;
 }
 export function write(root: string,path: string,source: string){mkdirSync(join(root,path,".."),{recursive:true});writeFileSync(join(root,path),source);}

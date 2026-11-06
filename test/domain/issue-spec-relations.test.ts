@@ -11,6 +11,9 @@ import { ConcordError, ViewActionSchema, decode } from '../../src/model/index.ts
 import { createConsumer, withConsumer } from '../support/consumer.ts';
 import { createDocument } from '../support/operations.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md#link
 test('spec relations round-trip contract paths and anchors and enforce target and duplicate rules', () => withConsumer(repo => {
@@ -107,11 +110,11 @@ test('warm document and repository caches never authorize invalid relation bytes
   const path = 'docs/issues/observation.md';
   const valid = readFileSync(join(root, path), 'utf8');
   assert.equal(knowledgeIndex(repo, 'issue').complete, true);
-  assert.ok(decodeDocumentSource(path, valid));
+  assert.ok(decodeDocumentSource(path, valid, parserRuntime));
   const invalid = valid.replace('role: spec', 'role: adopts');
   writeFileSync(join(root, path), invalid);
   for (let read = 0; read < 2; read++) {
-    assert.throws(() => decodeDocumentSource(path, invalid), (cause: unknown) => cause instanceof ConcordError && cause.code === 'InvalidData');
+    assert.throws(() => decodeDocumentSource(path, invalid, parserRuntime), (cause: unknown) => cause instanceof ConcordError && cause.code === 'InvalidData');
     const result = knowledgeIndex(repo, 'issue');
     assert.equal(result.complete, false);
     assert.deepEqual(result.documents, []);

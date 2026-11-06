@@ -1,6 +1,7 @@
 import { readWorkspaceProjection } from '../support/operations.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { Workspace } from '../../src/base/workspace/index.ts';
+import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { NodeServices } from '@effect/platform-node';
 import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.ts';
 import { genericPrivateDirectorySync } from '../../src/base/publication/index.ts';
@@ -79,7 +80,7 @@ const waitForPublished = Effect.fn('waitForWatchedProjection')(function* (
 const sourceDigest = (value: WorkspaceProjection, path: string): string | undefined => value.snapshot.sources.find(source => source.path === path)?.digest;
 const waitForSource = (root: string, path: string, source: string) => waitForPublished(root, `source ${path}`, value => sourceDigest(value, path) === digest(source));
 
-const workspaceProjectionContext = (...args: Parameters<typeof identifyProjection>) => Effect.runSync(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)));
+const workspaceProjectionContext = (...args: Parameters<typeof identifyProjection>) => Effect.runSync(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env))));
 
 export { readWorkspaceProjection, createDocument, initialize, Workspace, NodeServices, installedConcordCli, parseWorkspaceProjectionOutput, genericPrivateDirectorySync, spawnSync, assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, tmpdir, dirname, join, test, Effect, Schema, ConcordError, digest, failure, LocalRepository, startViewServer, identifyProjection, readProjectConfig, writeProjectConfig, ownerPath, mainSource, busyDetails, write, fixture, closeServer, startServer, readPublished, waitForPublished, sourceDigest, waitForSource, workspaceProjectionContext };
 export type { WorkspaceProjection, ViewServerHandle };

@@ -1,3 +1,4 @@
+import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 // 跨进程保证：外部程序——adapter exchanges and split invocations produce a native CLI receipt.
 import { assert, test, Effect, Schema, OwnedProcessLive, text, Receipt, call } from '../support/test-adapters-consumer-fixture.ts';
 import { externalCase } from '../support/external-adapter-fixture.ts';
@@ -14,4 +15,4 @@ test('external adapter runs green and split report invocations (C3 C12)', { skip
     assert.equal(receipt.requested?.length, 2);
     if (mode === 'split') assert.equal(receipt.commandExecutionCount, 2);
   }
-})).pipe(Effect.provide(OwnedProcessLive))));
+})).pipe(Effect.provide(OwnedProcessLive), Effect.provide(RuntimeEnvironment.layer(makeRuntimeEnvironment(process.cwd(), process.env))))));

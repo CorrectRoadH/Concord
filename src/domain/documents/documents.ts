@@ -1,4 +1,6 @@
 import { posix } from "node:path";
+import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
+import { repositoryRuntime } from '../../base/workspace/index.ts';
 
 
 
@@ -14,7 +16,7 @@ import { parseReference } from "../../model/index.ts";
 
 
 
-import { inspectDocumentProjections, projectionRecord } from "./document-projection.ts";
+import { inspectDocumentProjections, projectionRecord, makeDocumentProjectionCache } from "./document-projection.ts";
 
 import { DOCUMENT_ROOTS, documentDisposition, documentPlacementError, matchingOwners } from "../../model/index.ts";
 import { packagePageKind, pageKindSuggestions } from '../../model/index.ts';
@@ -43,12 +45,12 @@ export function authorBody(value: string): string {
   return body.endsWith('\n') ? body : `${body}\n`;
 }
 
-export function parseDocumentRecord(path: string, source: string): DocumentRecord | undefined {
-  return parseDocumentSource(path, source);
+export function parseDocumentRecord(path: string, source: string, runtime: RuntimeEnvironmentSnapshot, contentCache?: ReturnType<typeof makeDocumentProjectionCache>): DocumentRecord | undefined {
+  return parseDocumentSource(path, source, runtime, contentCache);
 }
 
-export function inspectDocumentRecords(inputs: readonly { readonly path: string; readonly source: string }[], markdown = false) {
-  return inspectDocumentProjections(inputs, markdown).map((result, index) => {
+export function inspectDocumentRecords(inputs: readonly { readonly path: string; readonly source: string }[], markdown = false, runtime: RuntimeEnvironmentSnapshot, contentCache?: ReturnType<typeof makeDocumentProjectionCache>) {
+  return inspectDocumentProjections(inputs, markdown, runtime, contentCache).map((result, index) => {
     if (!result.ok) return result;
     // Always apply location rules, including on an in-memory projection hit.
     try { return { ok: true as const, value: projectionRecord(inputs[index]!.path, result.value) }; }
@@ -79,8 +81,8 @@ export function memory(record: DocumentRecord): MemoryMeta {
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 // @concord-implements docs/feature/document-packages/use-case/discover-managed-documents.md
-export function loadDocuments(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
-  return inRepositorySnapshot(repo, () => loadDocumentsUnderSnapshot(repo, kinds));
+export function loadDocuments(repo: Repository, kinds?: readonly DocumentKind[], contentCache?: ReturnType<typeof makeDocumentProjectionCache>): DocumentRecord[] {
+  return inRepositorySnapshot(repo, () => loadDocumentsUnderSnapshot(repo, kinds, contentCache));
 }
 function documentInputs(repo: Repository, kinds?: readonly DocumentKind[]): { path: string; source: string }[] {
   const paths = new Set<string>();
@@ -103,8 +105,8 @@ function currentDocument(repo: Repository, record: DocumentRecord | undefined): 
   return record !== undefined && documentDisposition(record.metadata.kind, record.path, ['memory']) === 'current';
 }
 
-function loadDocumentsUnderSnapshot(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
-  return inspectDocumentRecords(documentInputs(repo, kinds)).map(result => { if (!result.ok) throw result.cause; return result.value; })
+function loadDocumentsUnderSnapshot(repo: Repository, kinds?: readonly DocumentKind[], contentCache?: ReturnType<typeof makeDocumentProjectionCache>): DocumentRecord[] {
+  return inspectDocumentRecords(documentInputs(repo, kinds), false, repositoryRuntime(repo), contentCache).map(result => { if (!result.ok) throw result.cause; return result.value; })
     .filter((record): record is DocumentRecord => currentDocument(repo, record) && (kinds === undefined || kinds.includes(record.metadata.kind)))
     ;
 }
@@ -124,7 +126,7 @@ export function diagnoseDocuments(repo: Repository, kinds?: readonly DocumentKin
   return inRepositorySnapshot(repo, () => {
     const documents: DocumentRecord[] = [], findings: Finding[] = [];
     const inputs = documentInputs(repo, kinds);
-    const results = inspectDocumentRecords(inputs, true);
+    const results = inspectDocumentRecords(inputs, true, repositoryRuntime(repo));
     for (const [index, input] of inputs.entries()) {
       try {
         const result = results[index]!;
@@ -149,34 +151,37 @@ export function readDocumentReference(repo: Repository, reference: string, kinds
     const roots = documentRoots(repo);
     if (!roots.some(root => parsed.path.startsWith(`${root}/`))) throw new ConcordError('ReferenceNotFound', `Reference is outside document sources: ${reference}`);
     const records: DocumentRecord[] = [];
-    const read = (path: string): DocumentRecord | undefined => {
-      const source = repo.read(path);
-      const record = source === undefined ? undefined : parseDocumentRecord(path, source);
-      if (record !== undefined && !currentDocument(repo, record)) throw new ConcordError('InvalidReferenceTarget', `${path} is not a current owner`);
-      return record;
-    };
-    let owner = read(parsed.path);
-    if (owner === undefined) {
-      for (let directory = posix.dirname(parsed.path); roots.some(root => directory.startsWith(`${root}/`)); directory = posix.dirname(directory)) {
-        const candidate = `${directory}/README.md`;
-        if (candidate === parsed.path) continue;
-        owner = read(candidate);
-        if (owner !== undefined) break;
+    const runtime = repositoryRuntime(repo), contentCache = makeDocumentProjectionCache(runtime);
+    try {
+      const read = (path: string): DocumentRecord | undefined => {
+        const source = repo.read(path);
+        const record = source === undefined ? undefined : parseDocumentRecord(path, source, runtime, contentCache);
+        if (record !== undefined && !currentDocument(repo, record)) throw new ConcordError('InvalidReferenceTarget', `${path} is not a current owner`);
+        return record;
+      };
+      let owner = read(parsed.path);
+      if (owner === undefined) {
+        for (let directory = posix.dirname(parsed.path); roots.some(root => directory.startsWith(`${root}/`)); directory = posix.dirname(directory)) {
+          const candidate = `${directory}/README.md`;
+          if (candidate === parsed.path) continue;
+          owner = read(candidate);
+          if (owner !== undefined) break;
+        }
       }
-    }
-    if (owner !== undefined) {
-      if (kinds !== undefined && !kinds.includes(owner.metadata.kind)) throw new ConcordError('InvalidReferenceTarget', `${reference} resolves to ${owner.metadata.kind}; expected ${kinds.join(', ')}`);
-      records.push(owner);
-      let featurePath: string | undefined;
-      if (owner.metadata.kind === 'use-case') {
-        const feature = readDocumentReference(repo, owner.metadata.feature, ['feature', 'engineering']);
-        if (feature.path !== owner.metadata.feature) throw new ConcordError('InvalidPlacement', 'Use Case requires an exact Feature or Engineering owner');
-        featurePath = feature.path;
+      if (owner !== undefined) {
+        if (kinds !== undefined && !kinds.includes(owner.metadata.kind)) throw new ConcordError('InvalidReferenceTarget', `${reference} resolves to ${owner.metadata.kind}; expected ${kinds.join(', ')}`);
+        records.push(owner);
+        let featurePath: string | undefined;
+        if (owner.metadata.kind === 'use-case') {
+          const feature = readDocumentReference(repo, owner.metadata.feature, ['feature', 'engineering']);
+          if (feature.path !== owner.metadata.feature) throw new ConcordError('InvalidPlacement', 'Use Case requires an exact Feature or Engineering owner');
+          featurePath = feature.path;
+        }
+        const placement = documentPlacementError(owner.metadata.kind, owner.path, featurePath);
+        if (placement !== undefined) throw new ConcordError('InvalidPlacement', placement);
       }
-      const placement = documentPlacementError(owner.metadata.kind, owner.path, featurePath);
-      if (placement !== undefined) throw new ConcordError('InvalidPlacement', placement);
-    }
-    return resolveReference(repo, records, reference, kinds);
+      return resolveReference(repo, records, reference, kinds);
+    } finally { contentCache.close(); }
   });
 }
 

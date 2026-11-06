@@ -1,10 +1,11 @@
 // @concord-file
 // @concord-implements docs/engineering/build/architecture.md#从源码运行
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { Clock, Context, Effect, FileSystem, Layer, Schema, type Scope } from 'effect';
 import { acquireFileLease, CoordinationError, ownerIsAlive, readLeaseOwner, recoverFileLease, releaseFileLease, type FileLease } from '../publication/index.ts';
 import { packageRoot } from './location.ts';
 import { readWebReceipt, sourceWebCacheDirectory, sourceWebDigest, SourceWebCacheError, WebDigest, webFailure, webFiles, type WebReceipt } from './source-web-cache.ts';
+import { RuntimeEnvironment } from '../environment/index.ts';
 import { webHash } from './source-web-inputs.ts';
 
 const complete = (directory: string, digest: string) => readWebReceipt(directory, digest).pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)));
@@ -60,6 +61,7 @@ const compileWeb = Effect.fn('compileSourceWeb')(function*(root: string, tempora
 
 /** A failed or interrupted build has only private temporary bytes, never a published cache entry. */
 export const buildSourceWebArtifact = Effect.fn('buildSourceWebArtifact')(function*(root: string, cache: string, digest: string) {
+  const runtime = yield* RuntimeEnvironment;
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(cache, { recursive: true });
   const lease = yield* Effect.acquireRelease(acquireBuilder(cache, digest), (lease: FileLease | undefined) => lease === undefined ? Effect.void : Effect.sync(() => releaseFileLease(lease, 'source-web-build')), { interruptible: true });
@@ -76,7 +78,7 @@ export const buildSourceWebArtifact = Effect.fn('buildSourceWebArtifact')(functi
   // finalizer requires the original path would fail after that rename.
   const temporary = yield* Effect.acquireRelease(fs.makeTempDirectory({ directory: cache, prefix: `.${digest}-` }),
     path => fs.remove(path, { recursive: true, force: true }).pipe(Effect.orDie));
-  const log = process.env.CONCORD_TEST_WEB_BUILD_LOG;
+  const log = runtime.env.CONCORD_TEST_WEB_BUILD_LOG;
   if (log !== undefined) yield* fs.writeFileString(log, `${JSON.stringify({ digest, builderPid: process.pid })}\n`, { flag: 'a' });
   yield* compileWeb(root, temporary);
   const files: WebReceipt['files'][number][] = [];
@@ -93,15 +95,20 @@ export const buildSourceWebArtifact = Effect.fn('buildSourceWebArtifact')(functi
 
 export class SourceWebBuilder extends Context.Service<SourceWebBuilder, {
   readonly run: Effect.Effect<void, SourceWebCacheError, Scope.Scope>;
-}>()('concord/SourceWebBuilder') {}
+}>()('concord/SourceWebBuilder') {
+  static readonly Arguments = Schema.Tuple([WebDigest, Schema.String.check(Schema.makeFilter(
+    cwd => isAbsolute(cwd) && !cwd.includes('\0'), { message: 'caller cwd must be an absolute path without NUL' },
+  ))]);
+}
 
 /** Construction captures capabilities only; cancellable work runs in the entry's program scope. */
 export const SourceWebBuilderLive = Layer.effect(SourceWebBuilder, Effect.gen(function*() {
+  const runtime = yield* RuntimeEnvironment;
   const fs = yield* FileSystem.FileSystem;
   return SourceWebBuilder.of({
     run: Effect.gen(function*() {
-      const [digest] = yield* Schema.decodeUnknownEffect(Schema.Tuple([WebDigest]))(process.argv.slice(2));
-      yield* buildSourceWebArtifact(packageRoot, sourceWebCacheDirectory(), digest);
-    }).pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.mapError(webFailure('build'))),
+      const [digest] = yield* Schema.decodeUnknownEffect(SourceWebBuilder.Arguments)(process.argv.slice(2));
+      yield* buildSourceWebArtifact(packageRoot, sourceWebCacheDirectory(runtime), digest);
+    }).pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.provideService(RuntimeEnvironment, runtime), Effect.mapError(webFailure('build'))),
   });
 }));

@@ -21,6 +21,7 @@ test('isolated file contexts count direct sync failures and async starts without
   yield* fs.makeDirectory(output);
   const cli = resolve('src/entry/cli/entry.ts');
   const owned = new URL('../../src/base/process/index.ts', import.meta.url).href;
+  const runtime = new URL('../../src/base/environment/index.ts', import.meta.url).href;
   const effect = import.meta.resolve('effect');
   yield* fs.writeFileString(fixture, `
 import test from 'node:test';
@@ -28,6 +29,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync, execFileSync, execFile, fork } from 'node:child_process';
 import { Effect } from ${JSON.stringify(effect)};
 import { makeOwnedProcessService } from ${JSON.stringify(owned)};
+import { makeRuntimeEnvironment } from ${JSON.stringify(runtime)};
 test('starts', async () => {
  const args = [${JSON.stringify(cli)}, '--version'];
  assert.equal(spawnSync(process.execPath, args, { encoding: 'utf8' }).status, 0);
@@ -36,7 +38,7 @@ test('starts', async () => {
  await new Promise((resolve, reject) => { const child = spawn(process.execPath, args, { stdio: 'ignore' }); child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(new Error(String(code)))); });
  await new Promise((resolve, reject) => execFile(process.execPath, args, {}, error => error ? reject(error) : resolve()));
  await new Promise((resolve, reject) => { const child = fork(${JSON.stringify(cli)}, ['--version'], { stdio: 'ignore' }); child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(new Error(String(code)))); });
- const result = await Effect.runPromise(Effect.scoped(makeOwnedProcessService().run([process.execPath, ...args], { cwd: process.cwd() })));
+ const result = await Effect.runPromise(Effect.scoped(makeOwnedProcessService({ environment: makeRuntimeEnvironment(process.cwd(), process.env) }).run([process.execPath, ...args], { cwd: process.cwd() })));
  assert.equal(result.exitCode, 0);
  assert.equal(spawnSync('git', ['--version']).status, 0);
  assert.equal(spawnSync('/does-not-exist/bin/concord', []).pid, 0);

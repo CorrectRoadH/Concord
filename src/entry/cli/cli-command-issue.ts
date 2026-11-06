@@ -17,10 +17,13 @@ import type { IssueError } from "../../model/index.ts";
 import type { IssueCommandRequirements } from "../../app/index.ts";
 import * as issueRemoteContribution from './repo-issue-contribution.ts';
 import { makeNodeIssueCommandRunner } from "../../app/index.ts";
+import { setExitCode, writeStderr, writeStdout } from './invocation.ts';
 
 const issueRemoteCommands = issueRemoteContribution.makeIssueRemoteSubcommands(
-  (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.sync(() => {
-    process.stdout.write(delivery.stdout); process.stderr.write(delivery.stderr); if (delivery.exitCode !== 0) process.exitCode = delivery.exitCode;
+  (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.gen(function*() {
+    yield* writeStdout(delivery.stdout);
+    yield* writeStderr(delivery.stderr);
+    if (delivery.exitCode !== 0) yield* setExitCode(delivery.exitCode);
   }),
   <A>(connection: string, execute: boolean, program: Effect.Effect<A, IssueError, IssueCommandRequirements>) => Effect.gen(function*() {
     const settings = yield* root;

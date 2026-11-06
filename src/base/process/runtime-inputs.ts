@@ -32,7 +32,7 @@ function implementation(): string {
 }
 
 /** Observation-only runtime inputs for a source snapshot; this capability cannot launch a tool. */
-export function adapterRuntimeInputs(root: string, command: string, envNames: readonly string[], environment: Readonly<Record<string, string | undefined>> = process.env) {
+export function adapterRuntimeInputs(root: string, command: string, envNames: readonly string[], environment: Readonly<Record<string, string | undefined>> = {}) {
   const candidates = command.includes('/') ? [resolve(root, command)] : (environment.PATH ?? '').split(delimiter).map(path => resolve(root, path, command));
   const found = candidates.find(path => existsSync(path) && lstatSync(path).isFile());
   const linked = candidates.find(path => { try { return readFileSync(path).length > 0; } catch { return false; } });

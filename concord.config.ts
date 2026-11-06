@@ -113,6 +113,7 @@ export default {
       "test/support/browser-shared-fixture.ts",
       "test/support/cache-maintenance-holder.ts",
       "test/support/cache-off-probe.ts",
+      "test/support/cli.ts",
       "test/support/cli-fixture.ts",
       "test/support/cli-load-probe.ts",
       "test/support/consumer.ts",

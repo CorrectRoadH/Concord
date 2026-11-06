@@ -7,6 +7,7 @@ import * as Rpc from 'effect/unstable/rpc/Rpc';
 import * as RpcGroup from 'effect/unstable/rpc/RpcGroup';
 import * as SchemaBinary from 'effect/unstable/encoding/SchemaBinary';
 import { WorkspaceRead } from '../../model/index.ts';
+import { isAbsolute } from 'node:path';
 
 export const PROTOCOL = 'concord.workspace/v2';
 export const FRAME_LIMIT = 1024 * 1024;
@@ -20,6 +21,7 @@ export class WorkspaceServerError extends Schema.TaggedError<WorkspaceServerErro
 }) {}
 export const CommandScope = strict(Schema.Struct({ root: Schema.String, privateDir: Schema.String, key: Schema.String }));
 export const QueryEnvironment = Schema.Record(Schema.String, Schema.String);
+export const CallerCwd = Schema.String.check(Schema.makeFilter(value => isAbsolute(value) && !value.includes('\0')));
 export const HelloInput = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, scope: Schema.optional(Schema.String) }));
 export const Hello = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, token: Schema.String, state: ServerState, sourceDigest: Schema.NullOr(Schema.String) }));
 export const Identity = { token: Schema.String, installation: Schema.String, requestId: Schema.String, deadline: Schema.Number, scope: Schema.optional(Schema.String) };
@@ -34,7 +36,7 @@ export const WorkspaceRpcs = RpcGroup.make(
   rpc('workspace', empty),
   rpc('refresh', empty),
   rpc('read', strict(Schema.Struct({ ...Identity, path: Schema.String, expectedDigest: Schema.optional(Schema.String) }))),
-  rpc('query', strict(Schema.Struct({ ...Identity, ...QueryInput.fields, environment: QueryEnvironment, cache: Schema.Literals(['use', 'off']) }))),
+  rpc('query', strict(Schema.Struct({ ...Identity, ...QueryInput.fields, cwd: CallerCwd, environment: QueryEnvironment, cache: Schema.Literals(['use', 'off']) }))),
   rpc('git-status', empty),
   rpc('git-diff', strict(Schema.Struct({ ...Identity, path: Schema.String, area: Schema.Literals(['staged', 'unstaged', 'untracked']) }))),
   rpc('http', strict(Schema.Struct({ ...Identity, action: Schema.Literals(['open', 'close']), host: Schema.String, port: Schema.Int, lease: Schema.optional(Schema.String) }))),

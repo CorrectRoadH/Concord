@@ -25,3 +25,5 @@ export { Workspace } from './service.ts';
 export type { WorkspaceService } from './service.ts';
 
 export { readRepositoryBytesSync } from './storage.ts';
+
+export { repositoryRuntime } from './repository-runtime.ts';

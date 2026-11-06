@@ -1,9 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#启动与裁决
 import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Schema } from 'effect';
+import { makeRuntimeEnvironment, runtimeCacheHome, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
+import { packageRoot } from './location.ts';
 import { ConcordError, digest } from '../../model/index.ts';
 
 interface IdentityTree { readonly root: string; readonly prefix: string; readonly accept: (name: string, relative: string) => boolean }
@@ -33,8 +34,8 @@ function inspect(trees: readonly IdentityTree[]) {
   for (const tree of trees) visit(tree.root, tree.prefix, tree.accept);
   return { fingerprint: digest(JSON.stringify(metadata)), files };
 }
-function cachePath(root: string): string {
-  const directory = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'installation-identities');
+function cachePath(root: string, runtime: RuntimeEnvironmentSnapshot): string {
+  const directory = join(runtimeCacheHome(runtime), 'concord', 'installation-identities');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const stat = lstatSync(directory);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o777) !== 0o700) throw new Error('Unsafe installation identity cache');
@@ -52,10 +53,10 @@ function read(path: string, root: string, fingerprint: string): string | undefin
 }
 
 /** Every hit repeats metadata and directory membership verification. */
-export function installationIdentity(root: string, trees: readonly IdentityTree[], prefix: readonly string[][] = []): string {
+export function installationIdentity(root: string, trees: readonly IdentityTree[], prefix: readonly string[][] = [], runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})): string {
   const before = inspect(trees);
   let path: string | undefined;
-  try { path = cachePath(root); const cached = read(path, root, before.fingerprint); if (cached) return cached; }
+  try { path = cachePath(root, runtime); const cached = read(path, root, before.fingerprint); if (cached) return cached; }
   catch { /* An unreadable or damaged cache only costs a full content digest. */ }
   const files = before.files.map(file => [file.relative, digest(readFileSync(file.path))]);
   if (inspect(trees).fingerprint !== before.fingerprint) throw new ConcordError('InstallationChanged', 'Installation changed while its content identity was being verified; retry');

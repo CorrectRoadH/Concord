@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
@@ -32,10 +33,12 @@ import { hawdbTarget } from '../../src/base/installation/index.ts';
 import { installationResources } from '../support/source-resources.ts';
 import { sourceCli, prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a busy native cache is explicitly unavailable and recovers after its handle closes', async () => {
   const root = fixture();
-  const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: true });
+  const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: true }, nativeRuntime);
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
@@ -68,7 +71,7 @@ test('a running workspace serves its accepted generation while foreign cache ope
   const base = baseOf(server);
   try {
     const previous = await waitForWorkspaceProjection(base);
-    assert.throws(() => openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false }), { code: 'HawdbBusy' });
+    assert.throws(() => openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false }, nativeRuntime), { code: 'HawdbBusy' });
     const response = await fetchFresh(`${base}/api/workspace`);
     const body = await response.text();
     assert.equal(response.status, 200, body);
@@ -106,7 +109,7 @@ test('server stop returns only after persistent ownership and the instance recor
     const ready = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'list'], { encoding: 'utf8', timeout: 20_000 });
     assert.equal(ready.status, 0, ready.stdout + ready.stderr);
     stopWorkspaceServer(root);
-    const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: false });
+    const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: false }, nativeRuntime);
     try { database.put('query_cache', [{ key: 'released-owner', payload: '{}' }]); }
     finally { database.close(); }
   } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }

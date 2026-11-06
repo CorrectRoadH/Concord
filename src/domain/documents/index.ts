@@ -9,6 +9,7 @@ export type { DocumentPage } from './document-pages.ts';
 export { setPage } from './document-pages.ts';
 export { showPage } from './document-pages.ts';
 export { DOCUMENT_PARSER_VERSION } from './document-projection.ts';
+export { makeDocumentProjectionCache } from './document-projection.ts';
 export { documentMarkdown } from './document-projection.ts';
 export { documentMarkdownProjection } from './document-projection.ts';
 export { documentProjection } from './document-projection.ts';

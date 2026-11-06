@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { nativeArtifactRoot, sourceInstallation, verifySourceNativeArtifact } from "../installation/index.ts";
+import { nativeArtifactRoot, nativeFileDigest, nativeFileIdentity, sourceInstallation, verifySourceNativeArtifact } from "../installation/index.ts";
+import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
+import { packageRoot } from '../installation/index.ts';
 import { Effect, Schema } from "effect";
 import { HAWDB_ABI, HAWDB_REVISION, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget } from "../installation/index.ts";
 
@@ -67,24 +69,42 @@ interface NativeModule {
   CacheBridge: { new(path: string, readOnly: boolean, create: boolean): NativeBridge; memory(): NativeBridge };
   OwnerGuard: new(path: string) => { verify(): void; close(): void };
 }
-let loaded: NativeModule | undefined;
-let rejected: { readonly error: HawdbFailure; readonly retryAt: number } | undefined;
-function load(): NativeModule {
-  if (loaded) return loaded;
-  if (rejected !== undefined && performance.now() < rejected.retryAt) throw rejected.error;
-  try { return loadArtifact(); }
-  catch (cause) {
+const defaultRuntime = makeRuntimeEnvironment(packageRoot, {});
+const loaded = new Map<string, NativeModule>();
+const rejected = new Map<string, { readonly error: HawdbFailure; readonly retryAt: number }>();
+function load(runtime: RuntimeEnvironmentSnapshot, revalidate = false): NativeModule {
+  const base = join(nativeArtifactRoot(runtime), hawdbTarget());
+  let binary = join(base, 'hawdb.node'), manifest = '', binaryDigest: string | undefined;
+  try { binary = realpathSync(binary); } catch { /* Missing artifacts still get bounded failure retry. */ }
+  try { manifest = readFileSync(join(base, 'artifact.json'), 'utf8'); binaryDigest = decodeNativeArtifact(JSON.parse(manifest)).binarySha256; } catch { /* Verification reports the authoritative error. */ }
+  // Only failures are indexed before byte verification. No candidate identity
+  // authorizes a loaded binding; successful lookup uses verified binary bytes.
+  const identities = ['hawdb.node', 'artifact.json', 'THIRD-PARTY-NOTICES.txt'].map(name => { try { return nativeFileIdentity(join(base, name)); } catch { return null; } });
+  const selection = JSON.stringify([binary, binaryDigest ?? createHash('sha256').update(manifest).digest('hex'), sourceInstallation && runtime.env.CONCORD_NATIVE_TEST_HOOKS === '1', identities]);
+  const rejection = rejected.get(selection);
+  if (!revalidate && rejection !== undefined && performance.now() < rejection.retryAt) throw rejection.error;
+  try {
+    const artifact = verifiedArtifact(runtime);
+    const prior = loaded.get(artifact.key);
+    if (prior) { rejected.delete(selection); return prior; }
+    const require = createRequire(import.meta.url);
+    // Node caches require by path; our verified identity additionally owns bytes.
+    delete require.cache[artifact.binary];
+    const native = require(artifact.binary) as NativeModule;
+    readIdentity(native.nativeIdentity());
+    loaded.set(artifact.key, native);
+    rejected.delete(selection);
+    return native;
+  } catch (cause) {
     const error = asFailure(cause);
-    // Installation failures never authorize cached domain data. Bound repeated
-    // hashing during fallback scans, then retry so a repaired install recovers.
-    rejected = { error, retryAt: performance.now() + 1000 };
+    rejected.set(selection, { error, retryAt: performance.now() + 1000 });
     throw error;
   }
 }
-function verifiedArtifact(): string {
+function verifiedArtifact(runtime: RuntimeEnvironmentSnapshot): { readonly binary: string; readonly key: string } {
   const target = hawdbTarget();
-  if (sourceInstallation) verifySourceNativeArtifact();
-  const base = join(nativeArtifactRoot, target);
+  if (sourceInstallation) verifySourceNativeArtifact(runtime);
+  const base = join(nativeArtifactRoot(runtime), target);
   const metadata = decodeNativeArtifact(JSON.parse(readFileSync(join(base, 'artifact.json'), 'utf8')));
   if (!sourceInstallation && metadata.testHooks) throw new HawdbFailure('HawdbIncompatible', 'test-hook native artifact cannot be installed');
   if (metadata.target !== target || metadata.sourceDigest.length !== 64 || metadata.cargoLockDigest.length !== 64 || metadata.binarySha256.length !== 64 || metadata.noticesSha256.length !== 64) {
@@ -93,25 +113,17 @@ function verifiedArtifact(): string {
   if (target === 'darwin-arm64' && metadata.deploymentTarget !== HAWDB_MACOS_DEPLOYMENT_TARGET) {
     throw new HawdbFailure('HawdbIncompatible', 'macOS deployment target differs');
   }
-  const noticesDigest = createHash('sha256').update(readFileSync(join(base, 'THIRD-PARTY-NOTICES.txt'))).digest('hex');
+  const noticesDigest = nativeFileDigest(join(base, 'THIRD-PARTY-NOTICES.txt'));
   if (noticesDigest !== metadata.noticesSha256) throw new HawdbFailure('HawdbIncompatible', 'native notices digest differs');
-  const binary = join(base, 'hawdb.node');
-  const digest = createHash('sha256').update(readFileSync(binary)).digest('hex');
+  const binary = realpathSync(join(base, 'hawdb.node'));
+  const digest = nativeFileDigest(binary);
   if (digest !== metadata.binarySha256) throw new HawdbFailure('HawdbIncompatible', `native binary digest differs: ${binary}; expected ${metadata.binarySha256} from ${join(base, 'artifact.json')}; actual ${digest}. Reinstall a verified Concord package; cache clear cannot repair installation artifacts.`);
-  return binary;
-}
-function loadArtifact(): NativeModule {
-  const binary = verifiedArtifact();
-  const native = createRequire(import.meta.url)(binary) as NativeModule;
-  readIdentity(native.nativeIdentity());
-  loaded = native;
-  rejected = undefined;
-  return native;
+  return { binary, key: JSON.stringify([binary, digest, metadata.testHooks ?? false]) };
 }
 /** Revalidate the installation even when an already loaded binding remains usable. */
-export function validateHawdbArtifact(): void { boundary(() => { loadArtifact(); }); }
+export function validateHawdbArtifact(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): void { boundary(() => { load(runtime, true); }); }
 /** A remote client verifies installation bytes without loading an engine it does not own. */
-export function verifyHawdbArtifact(): void { boundary(() => { verifiedArtifact(); }); }
+export function verifyHawdbArtifact(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): void { boundary(() => { verifiedArtifact(runtime); }); }
 class Database implements HawdbDatabase {
   private readonly native: NativeBridge;
   constructor(native: NativeBridge) { this.native = native; }
@@ -137,16 +149,16 @@ class Database implements HawdbDatabase {
   }
   close(): void { boundary(() => this.native.close()); }
 }
-export function openHawdb(path: string, options: { readonly readOnly: boolean; readonly create: boolean }): HawdbDatabase {
-  return boundary(() => { const mode = decodeOptions(options); return new Database(new (load().CacheBridge)(decodePath(path), mode.readOnly, mode.create)); });
+export function openHawdb(path: string, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot = defaultRuntime): HawdbDatabase {
+  return boundary(() => { const mode = decodeOptions(options); return new Database(new (load(runtime).CacheBridge)(decodePath(path), mode.readOnly, mode.create)); });
 }
-export function createMemoryHawdb(): HawdbDatabase { return boundary(() => new Database(load().CacheBridge.memory())); }
-export function acquireHawdbClearGuard(path: string): { verify(): void; close(): void } {
+export function createMemoryHawdb(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): HawdbDatabase { return boundary(() => new Database(load(runtime).CacheBridge.memory())); }
+export function acquireHawdbClearGuard(path: string, runtime: RuntimeEnvironmentSnapshot = defaultRuntime): { verify(): void; close(): void } {
   return boundary(() => {
-    const guard = new (load().OwnerGuard)(decodePath(path));
+    const guard = new (load(runtime).OwnerGuard)(decodePath(path));
     return { verify: () => boundary(() => guard.verify()), close: () => boundary(() => guard.close()) };
   });
 }
-export function hawdbIdentity(): { readonly engine: 'hawdb'; readonly revision: string; readonly abi: string; readonly target: string } {
-  return boundary(() => { load(); return { engine: 'hawdb', revision: HAWDB_REVISION, abi: HAWDB_ABI, target: hawdbTarget() }; });
+export function hawdbIdentity(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): { readonly engine: 'hawdb'; readonly revision: string; readonly abi: string; readonly target: string } {
+  return boundary(() => { load(runtime); return { engine: 'hawdb', revision: HAWDB_REVISION, abi: HAWDB_ABI, target: hawdbTarget() }; });
 }

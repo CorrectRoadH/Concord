@@ -1,6 +1,7 @@
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { Workspace } from '../../src/base/workspace/index.ts';
+import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { NodeServices } from '@effect/platform-node';
 import { runApplication } from '../support/repository.ts';
 import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.ts';
@@ -57,4 +58,4 @@ export function interruptPublication(root: string): void {
   } finally { repo.close(); }
 }
 
-export const workspaceProjectionContext = (...args: Parameters<typeof identifyProjection>) => Effect.runSync(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)));
+export const workspaceProjectionContext = (...args: Parameters<typeof identifyProjection>) => Effect.runSync(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env))));

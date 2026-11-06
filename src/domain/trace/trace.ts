@@ -1,3 +1,5 @@
+import { repositoryRuntime } from '../../base/workspace/index.ts';
+import { makeDocumentProjectionCache } from '../documents/index.ts';
 import type { TraceEdge } from "../../model/index.ts";
 
 
@@ -21,6 +23,9 @@ export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 // @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
 export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' }) {
+  const runtime = repositoryRuntime(repo);
+  const contentCache = makeDocumentProjectionCache(runtime);
+  try {
   const inventory = options.inventory ?? diagnoseDocuments(repo);
   const documents = inventory.documents;
   const annotations = measureScan(options.timing, 'trace.annotations', () => scanAnnotations(repo, { cache, sourceMode: options.annotationSourceMode }));
@@ -40,14 +45,14 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
   }
   // Managed owners and supporting pages share one bounded memory-cache batch.
   // This also covers root pages and templates outside the owner inventory.
-  inspectDocumentRecords(markdown, true);
+  inspectDocumentRecords(markdown, true, runtime, contentCache);
   const taste = measureScan(options.timing, 'trace.taste', () => inspectTaste(repo, readPage));
   const tasteFindings = taste.findings;
   const advisories = tasteFindings.filter((finding) => finding.code === 'TasteMissing');
   const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents)), ...annotations.findings, ...tasteFindings.filter((finding) => finding.code !== 'TasteMissing')];
   // Taste list IDs are paragraphs, not Use Case steps.
   for (const path of docPaths.filter(path => path !== TASTE_PATH)) {
-    try { const source = readPage(path); if (source !== undefined) findings.push(...extractSteps(path, source).findings); }
+    try { const source = readPage(path); if (source !== undefined) findings.push(...extractSteps(path, source, runtime, contentCache).findings); }
     catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidSteps', path, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
   if (!inventory.complete && inventory.findings.length === 0) findings.push({ code: 'IncompleteInventory', path: '.', message: 'Document inventory is incomplete; no complete-graph conclusion is available' });
@@ -98,6 +103,7 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
   findings.push(...measureScan(options.timing, 'trace.verifyReferences', () => references.verify()));
   const trace = { documents, annotations, tasteReferences: taste.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.every(finding => finding.code === 'UnknownPageKind'), inventoryComplete: inventory.complete, advisories, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
   return { trace, references };
+  } finally { contentCache.close(); }
 }
 export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
   if (!trace.complete || trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);

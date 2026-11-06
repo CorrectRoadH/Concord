@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import type * as NodeHttpTypes from 'node:http';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
@@ -12,6 +13,8 @@ import { Schema } from 'effect';
 import { runSourceWeb, sourceWebDigest } from '../../src/base/installation/index.ts';
 import { acquireFileLease, releaseFileLease } from '../../src/base/publication/index.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const checkout = fileURLToPath(new URL('../..', import.meta.url));
 const entry = join(checkout, 'src/entry/cli/entry.ts');
@@ -126,7 +129,7 @@ test('two real source workspace services share one disk Web build without checko
 
 const runBuilder = (root: string, cache: string, digest: string) => new Promise<{ code: number | null; stderr: string }>((accept, reject) => {
   // An explicit JavaScript consumer exercises the public source export in an independent Node process.
-  const code = `import { runSourceWeb, buildSourceWebArtifact } from ${JSON.stringify(installation)}; await runSourceWeb(buildSourceWebArtifact(process.argv[1], process.argv[2], process.argv[3]));`;
+  const code = `const nativeRuntime = { cwd: process.cwd(), env: { ...process.env } }; import { runSourceWeb, buildSourceWebArtifact } from ${JSON.stringify(installation)}; await runSourceWeb(buildSourceWebArtifact(process.argv[1], process.argv[2], process.argv[3]), nativeRuntime);`;
   const child = spawn(process.execPath, ['--conditions=concord-source', '--input-type=module', '-e', code, root, cache, digest], { cwd: checkout, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, NODE_ENV: 'production' } });
   let stderr = ''; child.stderr.on('data', data => { stderr += String(data); });
   child.once('error', reject); child.once('close', code => accept({ code, stderr }));
@@ -148,18 +151,18 @@ test('real builder failure leaves no publication and deletion, corruption and a 
     }
     write('web/p5/runtime.ts', 'globalThis.console.log("p5 ready");');
     write('web/main.ts', 'export const broken = ;');
-    const broken = await runSourceWeb(sourceWebDigest(root));
+    const broken = await runSourceWeb(sourceWebDigest(root), nativeRuntime);
     assert.notEqual((await runBuilder(root, cache, broken)).code, 0);
     assert.equal(existsSync(join(cache, broken)), false);
     assert.deepEqual(readdirSync(cache), [], 'failed compilation cleans private temporary and lock');
     write('web/main.ts', 'document.body.textContent = "ready";');
-    const digest = await runSourceWeb(sourceWebDigest(root));
+    const digest = await runSourceWeb(sourceWebDigest(root), nativeRuntime);
     const first = await runBuilder(root, cache, digest); assert.equal(first.code, 0, first.stderr);
     const destination = join(cache, digest);
     const initial = receipt(destination);
     write('src/entry/cli/main.ts', 'export const cliOnly = true;');
     write('src/entry/server/main.ts', 'export const serverOnly = true;');
-    assert.equal(await runSourceWeb(sourceWebDigest(root)), digest);
+    assert.equal(await runSourceWeb(sourceWebDigest(root), nativeRuntime), digest);
     const reused = await runBuilder(root, cache, digest); assert.equal(reused.code, 0, reused.stderr);
     assert.equal(receipt(destination).builderPid, initial.builderPid, 'CLI and server changes reuse the disk bundle');
     const chunk = initial.files.find(file => /^web\/assets\/.*\.js$/u.test(file.path))!.path;
@@ -178,7 +181,7 @@ test('real builder failure leaves no publication and deletion, corruption and a 
     assert.ok(existsSync(join(destination, 'web/index.html')));
     assert.deepEqual(readdirSync(cache), [digest]);
     write('web/main.ts', 'document.body.textContent = "changed Web input";');
-    const changed = await runSourceWeb(sourceWebDigest(root));
+    const changed = await runSourceWeb(sourceWebDigest(root), nativeRuntime);
     assert.notEqual(changed, digest);
     const recompiled = await runBuilder(root, cache, changed); assert.equal(recompiled.code, 0, recompiled.stderr);
     assert.notEqual(receipt(join(cache, changed)).builderPid, receipt(destination).builderPid);
@@ -205,7 +208,7 @@ test('source builder disconnect interrupts a real lock wait and retains the live
       observer.once('error', reject);
       timer = setTimeout(() => reject(new Error('Builder did not attempt the real shared-cache lease')), 10_000);
     });
-    child = spawn(process.execPath, ['--conditions=concord-source', join(checkout, 'src/entry/web-build/main.ts'), digest], {
+    child = spawn(process.execPath, ['--conditions=concord-source', join(checkout, 'src/entry/web-build/main.ts'), digest, process.cwd()], {
       env: { ...process.env, XDG_CACHE_HOME: directory }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     });
     child.stderr!.on('data', bytes => { diagnostics += String(bytes); });

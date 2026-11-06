@@ -1,31 +1,26 @@
-import { Data, Effect, FileSystem } from "effect";
+// @concord-file
+// @concord-implements docs/engineering/testing/architecture.md#进程内-cli
+import { Data, Effect, FileSystem, Stdio, Stream } from "effect";
+import { resolve } from 'node:path';
+import { applicationRuntime } from '../../app/index.ts';
 
 export class CliInputError extends Data.TaggedError("CliInputError")<{
   readonly path: string;
   readonly message: string;
 }> {}
-export function readText(path: string) {
+export const readText = Effect.fn('CliInput.readText')(function*(path: string) {
   if (path === "-") {
-    return Effect.callback<string, CliInputError>((resume) => {
-      let source = "";
-      const onData = (chunk: string | Buffer) => { source += chunk.toString(); };
-      const onEnd = () => resume(Effect.succeed(source));
-      const onError = (error: Error) => resume(Effect.fail(new CliInputError({ path, message: String(error) })));
-      process.stdin.setEncoding("utf8");
-      process.stdin.on("data", onData);
-      process.stdin.once("end", onEnd);
-      process.stdin.once("error", onError);
-      return Effect.sync(() => {
-        process.stdin.off("data", onData);
-        process.stdin.off("end", onEnd);
-        process.stdin.off("error", onError);
-      });
-    });
+    const stdio = yield* Stdio.Stdio;
+    const chunks = yield* Stream.runCollect(stdio.stdin).pipe(
+      Effect.mapError(error => new CliInputError({ path, message: String(error) })),
+    );
+    return Buffer.concat(chunks).toString('utf8');
   }
-  return Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(path)).pipe(
+  const runtime = yield* applicationRuntime;
+  return yield* Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(resolve(runtime.cwd, path))).pipe(
     Effect.mapError((error) => new CliInputError({ path, message: String(error) })),
   );
-}
+});
 export function readJson(path: string) {
   return readText(path).pipe(Effect.flatMap((source) => Effect.try({
     try: () => JSON.parse(source) as unknown,

@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { runApplication } from '../support/repository.ts';
 import { PersistentCache } from '../../src/base/cache/index.ts';
 import { initialize } from '../support/operations.ts';
@@ -24,13 +25,15 @@ import { maintainCache } from "../../src/app/index.ts";
 import { sourceRoot, prepareSourceConsumer } from '../support/source-consumer.ts';
 import { pollUntil } from '../support/support.ts';
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-maintenance-')));
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
   try { initialize(repo, false, { testRoots: [], sourceRoots: [] }); } finally { repo.close(); }
   const path = join(root, '.git/concord/cache.hawdb');
-  const db = openHawdb(path, { readOnly: false, create: true });
+  const db = openHawdb(path, { readOnly: false, create: true }, nativeRuntime);
   db.put('config_cache', [{ key: 'retained', payload: 'a current logical value' }]); db.close();
   return { root, path, privateDir: join(root, '.git/concord'), padding: join(path, 'retained-padding') };
 }
@@ -40,7 +43,7 @@ function worker(root: string) {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 }
 const read = (path: string) => {
-  const db = openHawdb(path, { readOnly: true, create: false });
+  const db = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
   try { return db.get('config_cache', ['retained', 'concurrent-writer']); } finally { db.close(); }
 };
 async function settle(root: string) {
@@ -66,7 +69,7 @@ test('physical status counts internal hard links once and reports the unchanged 
   try {
     const repo = new LocalRepository(f.root, { access: 'read' });
     try {
-      const report = cacheStatus(repo);
+      const report = cacheStatus(repo, nativeRuntime);
       assert.equal(report.physicalLimitBytes, 224 * 1024 * 1024);
       assert.equal(report.physicalBytes, cachePhysicalBytes(f.privateDir));
     } finally { repo.close(); }
@@ -77,7 +80,7 @@ test('physical status counts internal hard links once and reports the unchanged 
 test('default-limits native reclamation preserves logical rows and refuses memory or readonly handles', () => Effect.runPromise(Effect.sync(() => {
   const f = fixture();
   try {
-    const db = openHawdb(f.path, { readOnly: false, create: false });
+    const db = openHawdb(f.path, { readOnly: false, create: false }, nativeRuntime);
     try {
       for (let i = 0; i < 12; i++) db.put('config_cache', [{ key: 'cycles', payload: String(i) }]);
       const report = db.reclaim();
@@ -87,9 +90,9 @@ test('default-limits native reclamation preserves logical rows and refuses memor
       assert.equal(db.get('config_cache', ['cycles'])[0]?.payload, '11');
     } finally { db.close(); }
     assert.equal(read(f.path)[0]?.payload, 'a current logical value');
-    const readonly = openHawdb(f.path, { readOnly: true, create: false });
+    const readonly = openHawdb(f.path, { readOnly: true, create: false }, nativeRuntime);
     try { assert.throws(() => readonly.reclaim(), { code: 'HawdbIncompatible' }); } finally { readonly.close(); }
-    const memory = createMemoryHawdb();
+    const memory = createMemoryHawdb(nativeRuntime);
     try { assert.throws(() => memory.reclaim(), { code: 'HawdbIncompatible' }); } finally { memory.close(); }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 })));
@@ -111,7 +114,7 @@ test('the maintenance worker reclaims below the hard cap, and discards only a st
     assert.equal(statSync(`${f.path}.concord.lock`).ino, external);
     const rebuilt = spawnSync(process.execPath, [installedConcordCli(), '--root', f.root, '--json', 'cache', 'rebuild'], { encoding: 'utf8', timeout: 30_000 });
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
-    const db = openHawdb(f.path, { readOnly: true, create: false });
+    const db = openHawdb(f.path, { readOnly: true, create: false }, nativeRuntime);
     try { assert.ok(db.scan('annotation_cache').length > 0, 'cold command reconstructs projections'); } finally { db.close(); }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 })));

@@ -9,6 +9,9 @@ import { LocalRepository } from '../support/repository.ts';
 import { query, analyze, projectCheck } from '../support/lsp-observation-operations.ts';
 import { consumer, server, target, source, write } from '../support/lsp-analysis-source-fixture.ts';
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#inspect-associations
 // @name analyzed-step-relevance
@@ -35,7 +38,7 @@ test('analyzed step references retain their level through code test and trace vi
     const traced = await query(root, { name: 'trace.show', input: { reference: target } }, TraceShowValue);
     assert.equal(traced.stepGroups[0]!.observation.result, 'observed');
     assert.equal(traced.stepGroups[0]!.steps[0]!.relevance[0]!.relevance.verdict, 'observed');
-    const hydrated = hydrateQueryValue(root, traced).value;
+    const hydrated = hydrateQueryValue(root, traced, undefined, parserRuntime).value;
     assert.equal(hydrated.operation, 'trace-show');
     if ('stepGroups' in hydrated) {
       assert.equal(hydrated.stepGroups[0]!.observation.result, 'not-observed');

@@ -1,3 +1,5 @@
+import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
+import { packageRoot } from '../installation/index.ts';
 import { Predicate } from "effect";
 import { readCachedProjectConfig } from "./config-cache.ts";
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type shared_ProjectConfig as ProjectConfig } from "../../model/index.ts";
@@ -5,7 +7,7 @@ import * as ts from 'typescript/ast';
 import { withTypeScriptSource, typescriptPackageVersion } from "../process/index.ts";
 import { ContentCache } from "../cache/index.ts";
 
-const configContentCache = new ContentCache<ProjectConfig>('document_parse', `typescript-ast/${typescriptPackageVersion()}/concord-config-parse/v1`, ProjectSchema, { maxEntries: 128, maxBytes: 1024 * 1024 });
+export const makeConfigContentCache = (runtime: RuntimeEnvironmentSnapshot) => new ContentCache<ProjectConfig>('document_parse', `typescript-ast/${typescriptPackageVersion()}/concord-config-parse/v1`, ProjectSchema, { maxEntries: 128, maxBytes: 1024 * 1024 }, runtime);
 
 // @concord-begin
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
@@ -71,13 +73,16 @@ export function renderTypeScriptConfig(config: ProjectConfig): string {
 
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-export function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string, absent = false): ConfigSnapshot {
+export function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string, absent = false, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {}), contentCache?: ContentCache<ProjectConfig>): ConfigSnapshot {
   if (path !== 'concord.config.ts') throw new ConcordError('InvalidData', 'Runtime configuration must be concord.config.ts');
   if (absent && source === '') return { path, source, digest: digest(source), config: {} };
   const sourceDigest = digest(source);
-  const config = configContentCache.get(path, source, () => {
-    const cached = privateDir === undefined ? undefined : readCachedProjectConfig(privateDir, sourceDigest);
-    return cached ?? parseTypeScriptConfig(source, path);
-  });
-  return { path, source, digest: sourceDigest, config };
+  const cache = contentCache ?? makeConfigContentCache(runtime);
+  try {
+    const config = cache.get(path, source, () => {
+      const cached = privateDir === undefined ? undefined : readCachedProjectConfig(privateDir, sourceDigest, runtime);
+      return cached ?? parseTypeScriptConfig(source, path);
+    });
+    return { path, source, digest: sourceDigest, config };
+  } finally { if (contentCache === undefined) cache.close(); }
 }

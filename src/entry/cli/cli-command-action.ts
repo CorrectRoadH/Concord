@@ -5,13 +5,15 @@ import { Command } from "effect/unstable/cli";
 import { ConcordError } from "../../model/index.ts";
 import { applyViewDryRun, executeViewAction } from "../../app/index.ts";
 import { root, text, body, emit, sync, viewRoot } from "./cli-base.ts";
+import { setExitCode } from './invocation.ts';
 
 const action = Command.make('action', { input: text('input') }, args => Effect.gen(function*() {
   const settings = yield* root;
-  const input = yield* sync(() => { try { return applyViewDryRun(JSON.parse(body(args.input)) as unknown, settings.dryRun); } catch (cause) { throw cause instanceof ConcordError ? cause : new ConcordError('InvalidJson', `Action input is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`); } });
-  const result = yield* executeViewAction(viewRoot(settings), input);
-  if (input.action === 'recover' && typeof result === 'object' && result !== null && 'status' in result && result.status === 'blocked') process.exitCode = 1;
-  yield* Effect.sync(() => emit(result, settings.json));
+  const source = yield* body(args.input);
+  const input = yield* sync(() => { try { return applyViewDryRun(JSON.parse(source) as unknown, settings.dryRun); } catch (cause) { throw cause instanceof ConcordError ? cause : new ConcordError('InvalidJson', `Action input is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`); } });
+  const result = yield* executeViewAction((yield* viewRoot(settings)), input);
+  if (input.action === 'recover' && typeof result === 'object' && result !== null && 'status' in result && result.status === 'blocked') yield* setExitCode(1);
+  yield* emit(result, settings.json);
 })).pipe(Command.withDescription('Execute one strict shared ViewAction from --input <file|->.'));
 
 export { action };

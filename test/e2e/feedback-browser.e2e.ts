@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { browserActionReceipt, browserDocumentProjection } from '../support/browser-save.ts';
 import assert from 'node:assert/strict';
 import { initialize, createDocument } from '../support/operations.ts';
@@ -13,6 +14,8 @@ import { mergeFeedbackCache, openHawdb, cacheDatabasePath } from '../../src/base
 import { type ViewServerHandle } from './server.ts';
 import { projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('feedback browser separates remote observations from local editing and protects connection drafts', async ({ page, workspace }) => {
   const root=workspace.privateRoot();
@@ -25,7 +28,7 @@ test('feedback browser separates remote observations from local editing and prot
     const repo=new LocalRepository(root,{initialize:true});
     try {
       initialize(repo,false,{testRoots:[]});
-      openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: false, create: true }).close();
+      openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: false, create: true }, nativeRuntime).close();
       createDocument(repo,'feature',{id:'target',title:'Feedback target'});
       createDocument(repo,'issue',{id:'remote-observation',title:'Local title retained',body:'Local notes retained.'});
       const document=loadDocuments(repo).find(item=>item.metadata.id==='remote-observation');

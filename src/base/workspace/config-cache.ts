@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { Schema } from "effect";
+import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../cache/index.ts";
 import { PersistentCache } from "../cache/index.ts";
 import { openHawdb } from "../cache/index.ts";
@@ -14,11 +15,11 @@ function cacheKey(privateDir: string, sourceDigest: string): string {
 }
 
 /** Constructor reads before Repository is available: use a short existing-only handle. */
-export function readCachedProjectConfig(privateDir: string, sourceDigest: string): ProjectConfig | undefined {
+export function readCachedProjectConfig(privateDir: string, sourceDigest: string, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(privateDir, {})): ProjectConfig | undefined {
   const path = cacheDatabasePath(privateDir);
   try {
     if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path)) return undefined;
-    const database = openHawdb(path, { readOnly: true, create: false });
+    const database = openHawdb(path, { readOnly: true, create: false }, runtime);
     try {
       const row = database.get('config_cache', [cacheKey(privateDir, sourceDigest)])[0];
       if (row === undefined) return undefined;

@@ -6,8 +6,8 @@ import { listTemplates, templateBody } from "../../app/index.ts";
 import { root, optional, body, emit, sync } from "./cli-base.ts";
 
 const templates = Command.make('template').pipe(Command.withDescription('Inspect built-in writing templates without a project.'), Command.withSubcommands([
-  Command.make('list', {}, () => Effect.gen(function*() { const settings = yield* root; const result = { operation: 'template-list', templates: yield* listTemplates() }; yield* Effect.sync(() => emit(result, settings.json)); })),
-  Command.make('show', { name: Argument.string('name'), title: optional('title') }, args => Effect.gen(function*() { const settings = yield* root; const result = { operation: 'template-show', name: args.name, body: yield* templateBody(args.name, Option.getOrElse(args.title, () => 'Your title')) }; yield* Effect.sync(() => emit(result, settings.json)); })),
+  Command.make('list', {}, () => Effect.gen(function*() { const settings = yield* root; const result = { operation: 'template-list', templates: yield* listTemplates() }; yield* emit(result, settings.json); })),
+  Command.make('show', { name: Argument.string('name'), title: optional('title') }, args => Effect.gen(function*() { const settings = yield* root; const result = { operation: 'template-show', name: args.name, body: yield* templateBody(args.name, Option.getOrElse(args.title, () => 'Your title')) }; yield* emit(result, settings.json); })),
 ]));
 
 export { templates };

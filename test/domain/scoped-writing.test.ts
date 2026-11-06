@@ -17,6 +17,9 @@ import { digest } from "../../src/model/index.ts";
 import { indexConcepts, readConceptCatalog, showConcepts } from "../../src/domain/concepts/index.ts";
 import { checkWriting } from "../../src/domain/writing/index.ts";
 import { writingIndex } from "../../src/domain/writing/index.ts";
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 const json = (value: unknown): string => typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`;
 const policy = (extra: Record<string, unknown> = {}) => ({ bannedTerms: [], ...extra });
@@ -86,8 +89,8 @@ test('writing snapshots exclude SVG and CSS content and membership', () => Effec
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('single spelling and deprecated uniqueness use the same normalization', () => Effect.runPromise(Effect.sync(() => {
-  assert.equal(readConceptCatalog(catalog([concept('feedback', 'Feedback')])).concepts.length, 1);
-  for (const source of [catalog([concept('feedback', 'Feedback', ['feedback'])]), catalog([concept('a', 'Feedback'), concept('b', 'feedback')]), catalog([concept('a', 'Alpha', ['Old']), concept('b', 'Beta', ['old'])])]) assert.throws(() => readConceptCatalog(source), { code: 'InvalidConceptCatalog' });
+  assert.equal(readConceptCatalog(catalog([concept('feedback', 'Feedback')]), undefined, parserRuntime).concepts.length, 1);
+  for (const source of [catalog([concept('feedback', 'Feedback', ['feedback'])]), catalog([concept('a', 'Feedback'), concept('b', 'feedback')]), catalog([concept('a', 'Alpha', ['Old']), concept('b', 'Beta', ['old'])])]) assert.throws(() => readConceptCatalog(source, undefined, parserRuntime), { code: 'InvalidConceptCatalog' });
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md

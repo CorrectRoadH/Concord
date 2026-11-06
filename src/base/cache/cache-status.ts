@@ -3,17 +3,19 @@
 import { cacheDatabasePath, inspectCacheClear, cachePhysicalBytes } from './cache-file.ts';
 import { hawdbIdentity, type HawdbDatabase } from './hawdb-native.ts';
 import { decodeEnvelope } from '../../model/index.ts';
+import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
+import { packageRoot } from '../installation/index.ts';
 import { CACHE_PHYSICAL_LIMIT_BYTES } from '../installation/index.ts';
 
 export interface CacheStatus { readonly status: string; readonly path: string; readonly detail?: string; readonly sourceDigest?: string; readonly physicalBytes: number | null; readonly physicalLimitBytes: number }
 
 /** The owner supplies access; inspecting status never acquires a second handle. */
-export function inspectCacheStatus(privateDir: string, enabled: boolean, access: () => Pick<HawdbDatabase, 'namespaces' | 'scan'>, release: () => void = () => {}): CacheStatus {
+export function inspectCacheStatus(privateDir: string, enabled: boolean, access: () => Pick<HawdbDatabase, 'namespaces' | 'scan'>, release: () => void = () => {}, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})): CacheStatus {
   const path = cacheDatabasePath(privateDir);
   const inspect = (): Omit<CacheStatus, 'physicalBytes' | 'physicalLimitBytes'> => {
     try {
       const inventory = inspectCacheClear(privateDir);
-      hawdbIdentity();
+      hawdbIdentity(runtime);
       if (!inventory.existing || inventory.empty) return { status: 'empty', path };
       if (!enabled) return { status: 'unavailable', path, detail: 'Persistent cache access is disabled' };
       const database = access();

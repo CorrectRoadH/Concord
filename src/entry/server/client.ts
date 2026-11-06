@@ -12,7 +12,8 @@ import { ConcordError, decodeWorkspaceRead } from '../../model/index.ts';
 import type { RemoteFeedback } from '../../model/index.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
 
-export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string, scope?: string, countReuse = true) {
+export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string, scope?: string, countReuse = true, eventEnvironment: Readonly<NodeJS.ProcessEnv> = {}) {
+  const environment = Object.freeze({ ...eventEnvironment });
   const opened = yield* Deferred.make<void, WorkspaceServerError>();
   const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(
     Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })),
@@ -26,7 +27,7 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
   if (hello.token !== token) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Instance token differs from the running record' }));
   yield* Effect.sync(() => {
     const events = channel('concord.test.process-event');
-    if (countReuse && events.hasSubscribers) events.publish({ kind: 'service-reuse' });
+    if (countReuse && events.hasSubscribers) events.publish({ kind: 'service-reuse', environment });
   });
   return { client, hello, identity: () => ({ token, installation, ...(scope === undefined ? {} : { scope }), requestId: crypto.randomUUID(), deadline: Date.now() + 60_000 }) };
 }, Effect.timeout('1 second'));

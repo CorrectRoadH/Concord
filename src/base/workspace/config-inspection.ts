@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { Effect } from 'effect';
 import { ConcordError, digest, failure, type ConfigSnapshot } from '../../model/index.ts';
 import { assertCurrentRuntimeFormat } from './storage.ts';
@@ -15,11 +16,11 @@ export interface ConfigurationInspection {
   readonly diagnostic?: ConcordError;
 }
 
-function inspectNow(root: string): ConfigurationInspection {
+function inspectNow(root: string, runtime?: RuntimeEnvironmentSnapshot): ConfigurationInspection {
   const path = 'concord.config.ts';
   const absolute = join(root, path);
   const unavailable = (cause: unknown, source?: string): ConfigurationInspection => ({ path, source, digest: source === undefined ? null : digest(source), diagnostic: failure(cause) });
-  try { assertCurrentRuntimeFormat(root); } catch (cause) { return unavailable(cause); }
+  try { assertCurrentRuntimeFormat(root, genericPrivateDirectorySync(root, runtime?.env)); } catch (cause) { return unavailable(cause); }
   if (!existsSync(absolute)) {
     const config: ConfigSnapshot = { path, source: '', digest: digest(''), config: {} };
     return { path, source: '', digest: config.digest, snapshot: config };
@@ -32,12 +33,12 @@ function inspectNow(root: string): ConfigurationInspection {
     source = readFileSync(absolute, 'utf8');
   } catch (cause) { return unavailable(cause); }
   try {
-    const parsed = snapshot(path, source);
+    const parsed = snapshot(path, source, undefined, false, runtime);
     return { path, source, digest: parsed.digest, snapshot: parsed };
   } catch (cause) { return unavailable(cause, source); }
 }
 
 /** Reread the current bytes, including malformed configurations for inspection. */
-export const inspectConfiguration = Effect.fn('Workspace.inspectConfiguration')((root: string) => Effect.try({ try: () => inspectNow(root), catch: failure }));
+export const inspectConfiguration = Effect.fn('Workspace.inspectConfiguration')((input: string, runtime?: RuntimeEnvironmentSnapshot) => Effect.try({ try: () => inspectNow(discoverRoot(input, false, runtime), runtime), catch: failure }));
 
 export { identifyWorkspace, locateWorkspace } from './identity.ts';

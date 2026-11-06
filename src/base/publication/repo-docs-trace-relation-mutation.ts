@@ -1,3 +1,4 @@
+import { RuntimeEnvironment, runtimePath } from '../environment/index.ts';
 import { TraceMutationError, type TraceCoordinationError } from "../../model/index.ts";
 import { execFileSync } from "node:child_process";
 import { validPackagePath } from "../../model/index.ts";
@@ -135,10 +136,10 @@ function repositoryPath(root: string, path: string, operation: string): string {
   return target;
 }
 
-function gitOutput(root: string, operation: string, args: readonly string[]): string {
+function gitOutput(root: string, operation: string, args: readonly string[], environment: Readonly<Record<string, string | undefined>> = {}): string {
   try {
     return execFileSync("git", [...args], {
-      cwd: resolve(root), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 128 * 1024 * 1024,
+      env: Object.fromEntries(Object.entries(environment).filter(([name]) => !name.startsWith('GIT_'))), cwd: resolve(root), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 128 * 1024 * 1024,
     }).trimEnd();
   } catch (cause) { throw mutationFailure(operation, "git-private", cause, args.join(" ")); }
 }
@@ -160,11 +161,11 @@ function durableReplace(path: string, bytes: string | Uint8Array, mode: number):
   } finally { rmSync(temporary, { force: true }); }
 }
 
-function acquireLease(root: string, mode: TraceLease["mode"], operation: string, create: boolean, reclaimPublication = true): Effect.Effect<TraceLease | undefined, TraceMutationError> {
+function acquireLease(root: string, mode: TraceLease["mode"], operation: string, create: boolean, reclaimPublication = true, environment: Readonly<Record<string, string | undefined>> = {}): Effect.Effect<TraceLease | undefined, TraceMutationError> {
   if (operation === "trace-recover" && reclaimPublication) {
-    try { recoverPublicationLeaseSync(root); } catch (cause) { return Effect.fail(mutationFailure(operation, "lock", cause)); }
+    try { recoverPublicationLeaseSync(root, environment); } catch (cause) { return Effect.fail(mutationFailure(operation, "lock", cause)); }
   }
-  return acquireTraceLease(root, mode, operation, create).pipe(Effect.mapError((cause) => mutationFailure(operation, cause.phase === "git-private" ? "git-private" : cause.phase === "cleanup" ? "cleanup" : "lock", cause, cause.path)));
+  return acquireTraceLease(root, mode, operation, create, false, environment).pipe(Effect.mapError((cause) => mutationFailure(operation, cause.phase === "git-private" ? "git-private" : cause.phase === "cleanup" ? "cleanup" : "lock", cause, cause.path)));
 }
 
 function releaseLease(lease: TraceLease, operation: string): Effect.Effect<void, TraceMutationError> {
@@ -178,20 +179,21 @@ function withLease<A, E, R>(
   create: boolean,
   use: (lease: TraceLease | undefined) => Effect.Effect<A, E, R>,
   reclaimPublication = true,
+  environment: Readonly<Record<string, string | undefined>> = {}
 ): Effect.Effect<A, E | TraceMutationError | TraceRecoveryConflict | TraceRecoveryRequired, R> {
   return Effect.uninterruptibleMask((restore) => Effect.gen(function*() {
     if (operation === "trace-recover") {
       try {
-        const generic = genericJournalPath(root);
+        const generic = genericJournalPath(root, environment);
         if (existsSync(generic)) throw new TraceRecoveryRequired({ path: generic, nextStep: "concord recover" });
-        const directory = tracePrivateDirectorySync(root);
+        const directory = tracePrivateDirectorySync(root, environment);
         readJournal(root, directory);
         readMultiJournal(root, directory);
       } catch (cause) {
         return yield* Effect.fail(cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(operation, "read", cause));
       }
     }
-    const lease = yield* acquireLease(root, mode, operation, create, reclaimPublication);
+    const lease = yield* acquireLease(root, mode, operation, create, reclaimPublication, environment);
     const useExit = yield* Effect.exit(restore(use(lease)));
     if (lease === undefined) {
       if (Exit.isFailure(useExit)) return yield* Effect.failCause(useExit.cause);
@@ -208,12 +210,12 @@ function withLease<A, E, R>(
 }
 
 function journalPath(directory: string): string { return resolve(directory, JOURNAL_FILE); }
-function pendingRecovery(root: string, directory: string): { readonly path: string; readonly nextStep: "pnpm trace recover" | "concord recover" } | undefined {
+function pendingRecovery(root: string, directory: string, environment: Readonly<Record<string, string | undefined>> = {}): { readonly path: string; readonly nextStep: "pnpm trace recover" | "concord recover" } | undefined {
   const trace = journalPath(directory);
   if (existsSync(trace)) return { path: trace, nextStep: "pnpm trace recover" };
   const multi = multiJournalPath(directory);
   if (existsSync(multi)) return { path: multi, nextStep: "pnpm trace recover" };
-  const generic = genericJournalPath(root);
+  const generic = genericJournalPath(root, environment);
   return existsSync(generic) ? { path: generic, nextStep: "concord recover" } : undefined;
 }
 
@@ -234,12 +236,12 @@ function coordinationId(directory: string, create: boolean): string {
   return value;
 }
 
-function worktreeIdentity(root: string, directory: string, create: boolean, operation: string): WorktreeIdentity {
+function worktreeIdentity(root: string, directory: string, create: boolean, operation: string, environment: Readonly<Record<string, string | undefined>> = {}): WorktreeIdentity {
   try {
     return {
       root: identityPart(resolve(root)),
-      gitDir: identityPart(gitOutput(root, operation, ["rev-parse", "--path-format=absolute", "--git-dir"]).trim()),
-      commonDir: identityPart(gitOutput(root, operation, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim()),
+      gitDir: identityPart(gitOutput(root, operation, ["rev-parse", "--path-format=absolute", "--git-dir"], environment).trim()),
+      commonDir: identityPart(gitOutput(root, operation, ["rev-parse", "--path-format=absolute", "--git-common-dir"], environment).trim()),
       coordinationId: coordinationId(directory, create),
     };
   } catch (cause) {
@@ -249,9 +251,9 @@ function worktreeIdentity(root: string, directory: string, create: boolean, oper
 }
 
 function sameIdentity(left: WorktreeIdentity, right: WorktreeIdentity): boolean { return JSON.stringify(left) === JSON.stringify(right); }
-function headCommit(root: string, operation: string): string { return gitOutput(root, operation, ["rev-parse", "HEAD"]).trim(); }
-function indexEntry(root: string, owner: string, operation: string): string | null {
-  const output = gitOutput(root, operation, ["ls-files", "--stage", "--", owner]);
+function headCommit(root: string, operation: string, environment: Readonly<Record<string, string | undefined>> = {}): string { return gitOutput(root, operation, ["rev-parse", "HEAD"], environment).trim(); }
+function indexEntry(root: string, owner: string, operation: string, environment: Readonly<Record<string, string | undefined>> = {}): string | null {
+  const output = gitOutput(root, operation, ["ls-files", "--stage", "--", owner], environment);
   return output.length === 0 ? null : output;
 }
 
@@ -428,23 +430,23 @@ function discardStage(root: string, directory: string, journal: DirectoryJournal
   removeJournal(directory);
 }
 
-function verifyRecoveryIdentity(root: string, directory: string, journal: PublicationJournal): void {
+function verifyRecoveryIdentity(root: string, directory: string, journal: PublicationJournal, environment: Readonly<Record<string, string | undefined>> = {}): void {
   if (journal.process.host !== hostname()) {
     throw new TraceRecoveryConflict({ path: journalPath(directory), message: "journal belongs to another host" });
   }
-  if (!sameIdentity(worktreeIdentity(root, directory, false, "recover"), journal.identity)) {
+  if (!sameIdentity(worktreeIdentity(root, directory, false, "recover", environment), journal.identity)) {
     throw new TraceRecoveryConflict({ path: journalPath(directory), message: "worktree or Git identity changed while a journal was active" });
   }
 }
-function verifyRecoveryGit(root: string, journal: PublicationJournal): void {
-  if (headCommit(root, "recover") !== journal.headCommit || indexEntry(root, journal.owner, "recover") !== journal.indexEntry) {
+function verifyRecoveryGit(root: string, journal: PublicationJournal, environment: Readonly<Record<string, string | undefined>> = {}): void {
+  if (headCommit(root, "recover", environment) !== journal.headCommit || indexEntry(root, journal.owner, "recover", environment) !== journal.indexEntry) {
     throw new TraceRecoveryConflict({ path: journal.owner, message: "HEAD or owner Git index entry changed while a journal was active" });
   }
 }
 
-function recoverFileJournal(root: string, directory: string, journal: FileJournal): TraceRecoveryReceipt {
-  verifyRecoveryIdentity(root, directory, journal);
-  verifyRecoveryGit(root, journal);
+function recoverFileJournal(root: string, directory: string, journal: FileJournal, environment: Readonly<Record<string, string | undefined>> = {}): TraceRecoveryReceipt {
+  verifyRecoveryIdentity(root, directory, journal, environment);
+  verifyRecoveryGit(root, journal, environment);
   const owner = repositoryPath(root, journal.owner, "recover");
   const temporary = repositoryPath(root, journal.temporary, "recover");
   const ownerState = readFileSnapshot(owner, "recover");
@@ -467,9 +469,9 @@ function recoverFileJournal(root: string, directory: string, journal: FileJourna
   throw new TraceRecoveryConflict({ path: journal.owner, message: "file publication state does not match a safe recovery transition" });
 }
 
-function recoverDirectoryJournal(root: string, directory: string, journal: DirectoryJournal): TraceRecoveryReceipt {
-  verifyRecoveryIdentity(root, directory, journal);
-  verifyRecoveryGit(root, journal);
+function recoverDirectoryJournal(root: string, directory: string, journal: DirectoryJournal, environment: Readonly<Record<string, string | undefined>> = {}): TraceRecoveryReceipt {
+  verifyRecoveryIdentity(root, directory, journal, environment);
+  verifyRecoveryGit(root, journal, environment);
   const stage = repositoryPath(root, journal.stage, "recover");
   const target = repositoryPath(root, journal.target, "recover");
   if (journal.phase === "discarding-stage") {
@@ -501,26 +503,30 @@ function recoverDirectoryJournal(root: string, directory: string, journal: Direc
   throw new TraceRecoveryConflict({ path: journal.target, message: "directory publication state does not match a safe recovery transition" });
 }
 
-function recoverUnderLease(root: string, directory: string): TraceRecoveryReceipt {
+function recoverUnderLease(root: string, directory: string, environment: Readonly<Record<string, string | undefined>> = {}): TraceRecoveryReceipt {
   const journal = readJournal(root, directory);
   if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none" };
-  invalidateActiveRun(root);
-  return journal.publication === "file-replace" ? recoverFileJournal(root, directory, journal) : recoverDirectoryJournal(root, directory, journal);
+  invalidateActiveRun(root, environment);
+  return journal.publication === "file-replace" ? recoverFileJournal(root, directory, journal, environment) : recoverDirectoryJournal(root, directory, journal, environment);
 }
 
-export function recoverTrace(root: string, options: { readonly reclaimPublication?: boolean } = {}): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError> {
+export function recoverTrace(input: string, options: { readonly reclaimPublication?: boolean } = {}): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError, RuntimeEnvironment> {
+  return Effect.flatMap(RuntimeEnvironment, runtime => {
+    const environment = runtime.env;
+    const root = runtimePath(runtime, input);
   return withLease(root, "exclusive", "trace-recover", true, (lease) => Effect.try({
     try: () => {
       if (lease === undefined) throw new Error("exclusive Trace lease was not created");
-      worktreeIdentity(root, lease.directory, true, "trace-recover");
-      const genericPath = genericJournalPath(root);
+      worktreeIdentity(root, lease.directory, true, "trace-recover", environment);
+      const genericPath = genericJournalPath(root, environment);
       if (existsSync(genericPath)) throw new TraceRecoveryRequired({ path: genericPath, nextStep: "concord recover" });
       if (existsSync(journalPath(lease.directory)) && existsSync(multiJournalPath(lease.directory))) throw new TraceRecoveryConflict({ path: lease.directory, message: "Multiple publication journals exist; preserve the conflicting recovery state" });
-      const single = recoverUnderLease(root, lease.directory);
-      return single.recovered ? single : recoverMultiUnderLease(root, lease.directory);
+      const single = recoverUnderLease(root, lease.directory, environment);
+      return single.recovered ? single : recoverMultiUnderLease(root, lease.directory, environment);
     },
     catch: (cause) => cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
-  }), options.reclaimPublication !== false);
+  }), options.reclaimPublication !== false, environment);
+  });
 }
 
 const MULTI_FILE_JOURNAL = "multi-file-publication-journal.json";
@@ -628,8 +634,8 @@ function readMultiJournal(root: string, directory: string): MultiFileJournalV2 |
   return validateMultiJournal(root, directory, value);
 }
 function removeMultiJournal(directory: string): void { rmSync(multiJournalPath(directory), { force: true }); fsyncDirectory(directory); }
-function assertMultiGit(root: string, journal: MultiFileJournalV2): void {
-  if (headCommit(root, "multi-file-recover") !== journal.headCommit || journal.files.some((file) => indexEntry(root, file.path, "multi-file-recover") !== journal.indexEntries[file.path])) {
+function assertMultiGit(root: string, journal: MultiFileJournalV2, environment: Readonly<Record<string, string | undefined>> = {}): void {
+  if (headCommit(root, "multi-file-recover", environment) !== journal.headCommit || journal.files.some((file) => indexEntry(root, file.path, "multi-file-recover", environment) !== journal.indexEntries[file.path])) {
     throw new TraceRecoveryConflict({ path: multiJournalPath(root), message: "HEAD or Git index changed while multi-file journal was active" });
   }
 }
@@ -658,11 +664,11 @@ function restoreMultiPreimages(root: string, journal: MultiFileJournalV2): void 
     else if (existsSync(temporary)) throw new TraceRecoveryConflict({ path: file.temporary, message: "unexpected temporary file for an absent planned image" });
   }
 }
-function recoverMultiUnderLease(root: string, directory: string): TraceRecoveryReceipt {
+function recoverMultiUnderLease(root: string, directory: string, environment: Readonly<Record<string, string | undefined>> = {}): TraceRecoveryReceipt {
   const journal = readMultiJournal(root, directory);
   if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none" };
-  if (!sameIdentity(worktreeIdentity(root, directory, false, "multi-file-recover"), journal.identity)) throw new TraceRecoveryConflict({ path: multiJournalPath(directory), message: "worktree identity changed" });
-  assertMultiGit(root, journal);
+  if (!sameIdentity(worktreeIdentity(root, directory, false, "multi-file-recover", environment), journal.identity)) throw new TraceRecoveryConflict({ path: multiJournalPath(directory), message: "worktree identity changed" });
+  assertMultiGit(root, journal, environment);
   if (journal.phase === "committed" || journal.phase === "cleanup") {
     for (const file of journal.files) {
       if (!fileSnapshotMatches(readFileSnapshot(repositoryPath(root, file.path, journal.operation), journal.operation), file.planned)) throw new TraceRecoveryConflict({ path: file.path, message: "committed planned digest changed" });
@@ -671,37 +677,44 @@ function recoverMultiUnderLease(root: string, directory: string): TraceRecoveryR
     removeMultiJournal(directory);
     return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed" };
   }
-  invalidateActiveRun(root);
+  invalidateActiveRun(root, environment);
   restoreMultiPreimages(root, journal);
   removeMultiJournal(directory);
   return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back" };
 }
 
-export function recoverTraceMultiFile(root: string): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError> {
+export function recoverTraceMultiFile(input: string): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError, RuntimeEnvironment> {
+  return Effect.flatMap(RuntimeEnvironment, runtime => {
+    const environment = runtime.env;
+    const root = runtimePath(runtime, input);
   return withLease(root, "exclusive", "trace-recover", true, (lease) => Effect.try({
     try: () => {
       if (lease === undefined) throw new Error("exclusive Trace lease was not created");
-      const genericPath = genericJournalPath(root);
+      const genericPath = genericJournalPath(root, environment);
       if (existsSync(genericPath)) throw new TraceRecoveryRequired({ path: genericPath, nextStep: "concord recover" });
       if (existsSync(journalPath(lease.directory))) throw new TraceRecoveryRequired({ path: journalPath(lease.directory), nextStep: "concord recover" });
-      return recoverMultiUnderLease(root, lease.directory);
+      return recoverMultiUnderLease(root, lease.directory, environment);
     },
     catch: (cause) => cause instanceof TraceRecoveryConflict || cause instanceof TraceMutationError || cause instanceof TraceRecoveryRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
-  }));
+  }), true, environment);
+  });
 }
 
-export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Effect.Effect<TraceMultiFileReceipt, E | TraceCoordinationError, R> {
+export function mutateTraceFiles<E, R>(input: TraceMultiFileOptions<E, R>): Effect.Effect<TraceMultiFileReceipt, E | TraceCoordinationError, R | RuntimeEnvironment> {
+  return Effect.flatMap(RuntimeEnvironment, runtime => {
+    const environment = runtime.env;
+    const options = { ...input, root: runtimePath(runtime, input.root) };
   return withLease(options.root, "exclusive", options.operation, true, (lease) => Effect.gen(function*() {
     let committed: MultiFileJournalV2 | undefined;
     let receipt: TraceMultiFileReceipt | undefined;
     try {
       if (lease === undefined) throw new Error("exclusive Trace lease was not created");
-      const pending = pendingRecovery(options.root, lease.directory);
+      const pending = pendingRecovery(options.root, lease.directory, environment);
       if (pending !== undefined) throw new TraceRecoveryRequired(pending);
-      invalidateActiveRun(options.root);
+      invalidateActiveRun(options.root, environment);
       const changes = options.prepareUnderLease === undefined ? options.changes : yield* options.prepareUnderLease;
       if (changes === undefined || changes.length === 0 || new Set(changes.map((change) => change.path)).size !== changes.length) throw mutationFailure(options.operation, "preimage", "changes must be non-empty and path-unique");
-      const head = headCommit(options.root, options.operation);
+      const head = headCommit(options.root, options.operation, environment);
       const token = `netxn_${randomUUID().replaceAll("-", "")}`;
       const files = changes.map((change): MultiFileJournalEntry => {
         const target = repositoryPath(options.root, change.path, options.operation);
@@ -712,9 +725,9 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
         const temporary = slash(relative(resolve(options.root), resolve(dirname(target), `.${basename(target)}.concord-${token}.tmp`)));
         return { path: change.path, temporary, preimage: preimageForJournal(source), planned: bytes === null ? { kind: "absent" as const } : { kind: "file" as const, digest: traceDigest(bytes), byteLength: bytes.byteLength, mode: change.mode ?? (source.kind === "file" ? source.mode : 0o644) } };
       });
-      const journal: MultiFileJournalV2 = { format: "concord.trace/multi-file-publication-journal/v1", phase: "prepared", transactionId: token, operation: options.operation, headCommit: head, indexEntries: Object.fromEntries(files.map((file) => [file.path, indexEntry(options.root, file.path, options.operation)])), identity: worktreeIdentity(options.root, lease.directory, true, options.operation), files };
+      const journal: MultiFileJournalV2 = { format: "concord.trace/multi-file-publication-journal/v1", phase: "prepared", transactionId: token, operation: options.operation, headCommit: head, indexEntries: Object.fromEntries(files.map((file) => [file.path, indexEntry(options.root, file.path, options.operation, environment)])), identity: worktreeIdentity(options.root, lease.directory, true, options.operation, environment), files };
       receipt = { format: "concord.docs-trace/multi-file-mutation/v1", transactionId: token, preimages: files.map(file => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map(file => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
-      invalidateActiveRun(options.root);
+      invalidateActiveRun(options.root, environment);
       writeMultiJournal(options.root, lease.directory, journal);
       files.forEach((file, index) => {
         if (file.planned.kind === "file") {
@@ -724,7 +737,7 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
         }
       });
       writeMultiJournal(options.root, lease.directory, { ...journal, phase: "publishing" });
-      assertMultiGit(options.root, journal);
+      assertMultiGit(options.root, journal, environment);
       files.forEach((file, index) => {
         const target = repositoryPath(options.root, file.path, options.operation);
         if (!fileSnapshotMatches(readFileSnapshot(target, options.operation), file.preimage)) throw mutationFailure(options.operation, "preimage", "preimage changed before publish", file.path);
@@ -746,8 +759,8 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
     } catch (cause) {
       if (committed && receipt && lease && !options.injectFailureAfterCommit) {
         try {
-          if (!sameIdentity(worktreeIdentity(options.root, lease.directory, false, options.operation), committed.identity)) throw new TraceRecoveryConflict({ path: lease.directory, message: "worktree identity changed during cleanup" });
-          assertMultiGit(options.root, committed);
+          if (!sameIdentity(worktreeIdentity(options.root, lease.directory, false, options.operation, environment), committed.identity)) throw new TraceRecoveryConflict({ path: lease.directory, message: "worktree identity changed during cleanup" });
+          assertMultiGit(options.root, committed, environment);
           for (const file of committed.files) {
             if (!fileSnapshotMatches(readFileSnapshot(repositoryPath(options.root, file.path, options.operation), options.operation), file.planned) || existsSync(repositoryPath(options.root, file.temporary, options.operation))) throw new TraceRecoveryConflict({ path: file.path, message: "committed planned image changed during cleanup" });
           }
@@ -757,5 +770,6 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
       }
       return yield* Effect.fail(cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(options.operation, "publish", cause));
     }
-  }));
+  }), true, environment);
+  });
 }

@@ -20,7 +20,7 @@ export const newDocument = Command.make('new', {
 }, args => withRepo((repo, settings) => Effect.gen(function*() {
   const receipt = yield* createDocument(repo, args.category, {
     id: args.name, title: Option.getOrUndefined(args.title) ?? args.name,
-    body: Option.isSome(args.body) ? body(args.body.value) : undefined,
+    body: Option.isSome(args.body) ? yield* body(args.body.value) : undefined,
     feature: Option.getOrUndefined(args.feature),
     pages: args.pages.length ? args.pages.flatMap(value => value.split(',').map(page => page.trim())) : undefined,
   });

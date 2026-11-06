@@ -125,6 +125,9 @@ export { planRemoteIssue, readRemoteIssueBody, executeRemoteIssue } from './issu
 export type { IssueCommandRequirements, IssueCommandRunner } from './issue-operations.ts';
 export { ViewJobManager } from './view-jobs.ts';
 export { discoverRoot } from './entry-operations.ts';
+export { applicationRuntime, locateProjectRoot } from './entry-operations.ts';
+export type { ApplicationRuntime } from './entry-operations.ts';
+export { recordProcessEvent, awaitCacheMaintenance } from './entry-operations.ts';
 export { cacheStatus } from './entry-operations.ts';
 export { clearCache } from './entry-operations.ts';
 export { previewCacheClear } from './entry-operations.ts';

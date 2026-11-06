@@ -1,9 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
+import { applicationRuntime, type ApplicationRuntime } from '../../app/index.ts';
 import { createReadRepository } from "../../app/index.ts";
 import { lstatSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { Effect, Schema } from "effect";
+import { type Cause, Effect, Fiber, Queue, Schema, Stdio, Stream } from "effect";
 import { discoverRoot, readRepositoryFileSync } from "../../app/index.ts";
 import { uriPath } from "../../app/index.ts";
 import { randomUUID } from "node:crypto";
@@ -20,8 +21,8 @@ interface Task {
 }
 
 /** Final verification deliberately opens a fresh config authorization context. */
-function verify(root: string, result: P.Computed): void {
-  const repo = createReadRepository(root, { access: 'read', optimistic: true, persistentCache: 'off' });
+function verify(root: string, result: P.Computed, runtime: ApplicationRuntime): void {
+  const repo = createReadRepository(root, { access: 'read', optimistic: true, persistentCache: 'off', runtime });
   try {
     repo.snapshot(() => {
       if (repo.configSnapshot.digest !== result.config) throw new ConcordError('ContentModified', 'Configuration changed');
@@ -37,10 +38,23 @@ function verify(root: string, result: P.Computed): void {
 }
 
 export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: string, createProcessService = makeOwnedProcessService) {
-  const root = yield* Effect.try({ try: () => discoverRoot(rootInput), catch: failure });
+  return yield* Effect.scoped(Effect.gen(function*() {
+  const runtime = yield* applicationRuntime;
+  const stdio = yield* Stdio.Stdio;
+  const context = yield* Effect.context<Effect.Services<typeof applicationRuntime>>();
+  const stdout = yield* Queue.unbounded<Uint8Array, Cause.Done>();
+  const stderr = yield* Queue.unbounded<Uint8Array, Cause.Done>();
+  let bufferedBytes = 0, exitCode = 0;
+  let outputFailure: unknown;
+  let transportFailed: (cause: unknown) => void = () => {};
+  const output = yield* Effect.forkScoped(Stream.runForEach(Stream.fromQueue(stdout), bytes => Stream.run(Stream.succeed(bytes), stdio.stdout({ endOnDone: false })).pipe(Effect.tap(() => Effect.sync(() => { bufferedBytes -= bytes.byteLength; })))).pipe(Effect.catch(cause => Effect.sync(() => { outputFailure ??= cause; transportFailed(cause); }))));
+  const errors = yield* Effect.forkScoped(Stream.run(Stream.fromQueue(stderr), stdio.stderr({ endOnDone: false })).pipe(Effect.catch(cause => Effect.sync(() => { outputFailure ??= cause; transportFailed(cause); }))));
+  yield* Effect.addFinalizer(() => Queue.end(stdout).pipe(Effect.andThen(Queue.end(stderr)), Effect.andThen(Fiber.join(output)), Effect.andThen(Fiber.join(errors)), Effect.andThen(Effect.suspend(() => outputFailure === undefined ? Effect.void : Effect.die(failure(outputFailure))))));
+  const root = yield* Effect.try({ try: () => discoverRoot(rootInput, false, runtime), catch: failure });
   // Validate the initial project without retaining a repository handle while waiting for stdin.
-  yield* Effect.try({ try: () => { const repo = createReadRepository(root, { access: 'read', persistentCache: 'off' }); repo.close(); }, catch: failure });
+  yield* Effect.try({ try: () => { const repo = createReadRepository(root, { access: 'read', persistentCache: 'off', runtime }); repo.close(); }, catch: failure });
   yield* Effect.callback<void, ConcordError>(resume => {
+    let inputFiber: Fiber.Fiber<void> | undefined;
     const frames = new P.EditorFrames();
     const overlays = new Map<string, P.Overlay>();
     const tasks = new Set<Task>();
@@ -65,15 +79,17 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
     const send = (message: unknown) => {
       if (ended) return;
       const text = JSON.stringify(message), bytes = Buffer.byteLength(text);
-      if (bytes > P.editorLimits.message || process.stdout.writableLength + bytes > P.editorLimits.output) { finish(new ConcordError('EditorBudgetExceeded', 'Output buffer limit')); return; }
-      process.stdout.write(`Content-Length: ${bytes}\r\n\r\n${text}`);
+      if (bytes > P.editorLimits.message || bufferedBytes + bytes > P.editorLimits.output) { finish(new ConcordError('EditorBudgetExceeded', 'Output buffer limit')); return; }
+      const frame = Buffer.from(`Content-Length: ${bytes}\r\n\r\n${text}`);
+      bufferedBytes += frame.byteLength;
+      Queue.offerUnsafe(stdout, frame);
     };
     const respond = (id: P.RpcId, result: unknown) => send({ jsonrpc: '2.0', id, result });
     const reject = (id: P.RpcId, code: number, name: string, message = name) => send({ jsonrpc: '2.0', id, error: { code, message, data: { name } } });
-    const log = (cause: unknown) => { const error = failure(cause); process.stderr.write(`${error.code}: ${error.message.slice(0, 2000)}\n`); };
+    const log = (cause: unknown) => { const error = failure(cause); Queue.offerUnsafe(stderr, Buffer.from(`${error.code}: ${error.message.slice(0, 2000)}\n`)); };
     const clear = (document: P.Overlay) => send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri: document.uri, version: document.version, diagnostics: [] } });
     const resolveUri = (uri: string) => {
-      const repo = createReadRepository(root, { access: 'read', persistentCache: 'off' });
+      const repo = createReadRepository(root, { access: 'read', persistentCache: 'off', runtime });
       try {
         const path = uriPath(repo, uri);
         if (path.split('/').some(part => part === '.git' || part === 'node_modules')) throw new ConcordError('UnsafeEditorUri', 'Private and dependency paths are excluded');
@@ -108,12 +124,12 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
         const config = readRepositoryFileSync(root, 'concord.config.ts');
         if (config === undefined) throw new ConcordError('ProjectNotFound', 'Project configuration is missing');
         return { root, session, config: digest(config), overlays: [...overlays.values()], method, ...(params === undefined ? {} : { params }) };
-      }, catch: failure }).pipe(Effect.flatMap(job => runEditorJob(job, recordCleanupFailure, createProcessService())));
-      task.promise = Effect.runPromise(work, { signal: task.controller.signal }).then(result => {
+      }, catch: failure }).pipe(Effect.flatMap(job => runEditorJob(job, recordCleanupFailure, createProcessService({ environment: runtime }))));
+      task.promise = Effect.runPromise(work.pipe(Effect.provideContext(context)), { signal: task.controller.signal }).then(result => {
         if (!tasks.has(task) || ended) return;
         if (cleanupFailure !== undefined) { if (id !== undefined) reject(id, -32603, cleanupFailure.code, cleanupFailure.message); return; }
         if (result.session !== session || task.session !== session) { stopTask(task, 'ContentModified'); return; }
-        try { verify(root, result); }
+        try { verify(root, result, runtime); }
         catch { stopTask(task, 'ContentModified'); schedule(); return; }
         if (id !== undefined) respond(id, result.value);
         // Query results never publish diagnostics: a diagnostics job owns that stream.
@@ -146,7 +162,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
         if (method === 'exit') {
           if (id !== undefined) throw new ConcordError('InvalidEditorMessage', 'exit is a notification');
           if (params !== undefined && params !== null) decode(P.Empty, params, method);
-          if (state !== 'shutdown') process.exitCode = 1;
+          if (state !== 'shutdown') exitCode = 1;
           finish(); return;
         }
         if (method === 'initialize') {
@@ -243,21 +259,19 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
     };
     const data = (chunk: Buffer) => { try { frames.receive(chunk, dispatch); } catch (cause) { finish(failure(cause)); } };
     const eof = () => { try { frames.end(); finish(); } catch (cause) { finish(failure(cause)); } };
-    const interrupted = () => finish();
-    const ioError = (cause: Error) => finish(new ConcordError('EditorTransportFailed', cause.message));
-    process.stdin.on('data', data); process.stdin.once('end', eof); process.stdin.once('error', ioError);
-    process.stdout.once('error', ioError); process.once('SIGINT', interrupted); process.once('SIGTERM', interrupted);
-    process.stdin.resume();
+    const ioError = (cause: unknown) => finish(new ConcordError('EditorTransportFailed', failure(cause).message));
+    transportFailed = ioError;
+    inputFiber = Effect.runFork(Stream.runForEach(stdio.stdin, chunk => Effect.sync(() => data(Buffer.from(chunk)))).pipe(Effect.match({ onFailure: ioError, onSuccess: eof })));
     function cleanup(): Promise<void> { return cleanupPromise ??= (async () => {
       ended = true; if (timer !== undefined) clearTimeout(timer);
-      process.stdin.off('data', data); process.stdin.off('end', eof); process.stdin.off('error', ioError); process.stdin.pause();
-      process.stdin.destroy();
-      process.stdout.off('error', ioError); process.off('SIGINT', interrupted); process.off('SIGTERM', interrupted);
+      if (inputFiber !== undefined) await Effect.runPromise(Fiber.interrupt(inputFiber));
       for (const task of running) task.controller.abort();
       await Promise.allSettled([...running].map(task => task.promise));
       tasks.clear(); running.clear(); overlays.clear(); frames.clear();
-      if (cleanupFailure !== undefined) { process.exitCode = 1; throw cleanupFailure; }
+      if (cleanupFailure !== undefined) throw cleanupFailure;
     })(); }
     return Effect.promise(cleanup);
   });
+  return exitCode;
+  }));
 });

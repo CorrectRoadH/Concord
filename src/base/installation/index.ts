@@ -1,7 +1,7 @@
 export * from './installation.ts';
 export { packageRoot } from "./location.ts";
 export { sourceInstallation } from './runtime.ts';
-export { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.ts";
+export { nativeArtifactRoot, verifySourceNativeArtifact, nativeFileDigest, nativeFileIdentity } from "./native-artifact.ts";
 export * from './hawdb-native-contract.ts';
 export { nativeSourceDigest, nativeCacheRoot, nativeSourceFiles, nativeLockDigest } from './native-artifact.ts';
 export { installationResources, installationRootForBin } from './resources.ts';

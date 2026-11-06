@@ -1,5 +1,6 @@
+import { runtimeTemporaryDirectory, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, rmSync } from 'node:fs';
-import { tmpdir, userInfo } from 'node:os';
+import { userInfo } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { Effect } from 'effect';
 import { ConcordError, failure } from '../../model/index.ts';
@@ -12,8 +13,8 @@ export interface PublicationScratch {
   readonly child: (name: string) => Effect.Effect<string, ConcordError>;
 }
 
-function temporaryParent(root: string): string {
-  const directory = resolve(tmpdir());
+function temporaryParent(root: string, runtime: RuntimeEnvironmentSnapshot): string {
+  const directory = runtimeTemporaryDirectory(runtime);
   const repository = resolve(root);
   if (directory === repository || directory.startsWith(`${repository}${sep}`)) throw new ConcordError('UnsafePath', 'Verification temporary directory must be outside the repository');
   for (let path = directory; ; path = dirname(path)) {
@@ -24,13 +25,13 @@ function temporaryParent(root: string): string {
 }
 
 /** An unconfirmed process cleanup must preserve its report/worktree directory. */
-export const scratchDirectory = Effect.fn('Publication.scratchDirectory')(function*(root: string, namespace: string, prefix: string, location?: 'temporary') {
+export const scratchDirectory = Effect.fn('Publication.scratchDirectory')(function*(root: string, namespace: string, prefix: string, location: 'temporary' | undefined, runtime: RuntimeEnvironmentSnapshot) {
   let preserved = false;
   return yield* Effect.acquireRelease(Effect.try({ try: (): PublicationScratch => {
     if (namespace.split('/').some(part => part === '..' || part === '.') || /[\\\0]/u.test(namespace) || !/^[a-z0-9-]+$/u.test(prefix)) throw new ConcordError('UnsafePath', 'Invalid private scratch name');
     if (location === 'temporary' && namespace !== '') throw new ConcordError('UnsafePath', 'Temporary scratch roots cannot use a shared namespace');
-    const privateDir = location === 'temporary' ? temporaryParent(root) : genericPrivateDirectorySync(root);
-    if (location !== 'temporary') ensureGenericPrivateDirectorySync(root, privateDir);
+    const privateDir = location === 'temporary' ? temporaryParent(root, runtime) : genericPrivateDirectorySync(root, runtime.env);
+    if (location !== 'temporary') ensureGenericPrivateDirectorySync(root, privateDir, runtime.env);
     let directory = privateDir;
     for (const part of namespace.split('/').filter(Boolean)) {
       directory = join(directory, part);
@@ -40,7 +41,7 @@ export const scratchDirectory = Effect.fn('Publication.scratchDirectory')(functi
     const path = mkdtempSync(join(directory, prefix));
     const identity = lstatSync(path);
     const assertOwned = () => {
-      temporaryParent(root);
+      temporaryParent(root, runtime);
       const current = lstatSync(path, { throwIfNoEntry: false });
       if (current === undefined) return false;
       if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino || current.uid !== userInfo().uid || (current.mode & 0o777) !== 0o700) throw new ConcordError('UnsafePath', `Verification scratch ownership changed; preserve ${path}`);

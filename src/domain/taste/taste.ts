@@ -9,6 +9,9 @@ import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/ind
 import { markdownBody } from "../../model/index.ts";
 import { documentMarkdown, documentMarkdownProjection } from "../documents/index.ts";
 import { inspectDocumentRecords } from "../documents/index.ts";
+import { makeDocumentProjectionCache } from '../documents/index.ts';
+import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
+import { repositoryRuntime } from '../../base/workspace/index.ts';
 
 
 
@@ -40,7 +43,7 @@ export function trailingId(source: string, node: Heading | Paragraph): { readonl
 const invalid = (line: number | undefined, message: string): never => { throw new ConcordError('TasteEntryInvalid', `docs/taste.md:${line ?? 1}: ${message}`, { path: TASTE_PATH, line }); };
 
 /** Clauses are H2 headings with `{#t-N}`; paragraphs are root ordered items below them with `{#general-name}`. */
-export function tasteEntries(source: string): TasteEntry[] {
+export function tasteEntries(source: string, runtime: RuntimeEnvironmentSnapshot): TasteEntry[] {
   const masked = markdownBody(source);
   const entries: { id: string; title: string; paragraphs: string[] }[] = [];
   const declared = new Map<string, number>(), slugs = new Set<string>();
@@ -49,7 +52,7 @@ export function tasteEntries(source: string): TasteEntry[] {
     declared.set(id, line ?? 1);
   };
   let current: { id: string; title: string; paragraphs: string[] } | undefined;
-  for (const node of documentMarkdown(TASTE_PATH, source).children) {
+  for (const node of documentMarkdown(TASTE_PATH, source, runtime).children) {
     const line = node.position?.start.line;
     if (node.type === 'heading') {
       if (node.depth <= 2) current = undefined;
@@ -98,9 +101,9 @@ export function entryIndex(entries: readonly TasteEntry[]): ReadonlyMap<string, 
   return index;
 }
 
-export function parseTaste(source: string): TasteRecord {
+export function parseTaste(source: string, runtime: RuntimeEnvironmentSnapshot): TasteRecord {
   if (/^(?:\uFEFF)?---(?:\r?\n|$)/u.test(source)) throw new ConcordError('TasteEntryInvalid', 'docs/taste.md:1: frontmatter is not allowed', { path: TASTE_PATH, line: 1 });
-  return { path: TASTE_PATH, source, body: source, digest: digest(source), entries: tasteEntries(source) };
+  return { path: TASTE_PATH, source, body: source, digest: digest(source), entries: tasteEntries(source, runtime) };
 }
 // @concord-end
 
@@ -139,8 +142,8 @@ export function tasteLinkTarget(from: string, url: string): LinkTarget | undefin
 }
 
 /** Inline link nodes only: images, reference links, HTML and code never contribute. */
-export function inlineLinks(source: string, path?: string): { readonly url: string; readonly line: number }[] {
-  if (path !== undefined) return [...documentMarkdownProjection(path, source).links];
+export function inlineLinks(source: string, path: string | undefined, runtime: RuntimeEnvironmentSnapshot, contentCache?: ReturnType<typeof makeDocumentProjectionCache>): { readonly url: string; readonly line: number }[] {
+  if (path !== undefined) return [...documentMarkdownProjection(path, source, runtime, contentCache).links];
   return markdownLinks(source);
 }
 
@@ -178,36 +181,39 @@ const inScope = (path: string) => path.endsWith('.md') && path !== TASTE_PATH &&
 
 /** Every inline link from authored docs Markdown is a reference occurrence; reverse views derive from this scan. */
 export function scanTasteLinks(repo: Repository, index: ReadonlyMap<string, { readonly entry: string }>, read: (path: string) => string | undefined = path => repo.read(path)): TasteLinkScan {
-  const references: (TasteReference & { target: string })[] = [], broken: { path: string; line: number; id: string }[] = [], findings: Finding[] = [];
-  let complete = true;
-  const candidates: { path: string; source?: string; finding?: Finding }[] = [];
-  for (const path of repo.files('docs').filter(inScope).sort()) {
-    let source: string | undefined;
-    try { source = read(path); }
-    catch (cause) { candidates.push({ path, finding: { code: cause instanceof ConcordError ? cause.code : 'SourceChanged', path, message: cause instanceof Error ? cause.message : String(cause) } }); continue; }
-    if (source === undefined) { candidates.push({ path, finding: { code: 'SourceChanged', path, message: 'File disappeared while taste references were read' } }); continue; }
-    // Any taste link spells the path, percent-encodes it, or uses a character reference.
-    if (!/taste|[%&]/iu.test(source)) continue;
-    candidates.push({ path, source });
-  }
-  inspectDocumentRecords(candidates.flatMap(item => item.source === undefined ? [] : [{ path: item.path, source: item.source }]), true);
-  for (const { path, source, finding } of candidates) {
-    if (finding !== undefined) { complete = false; findings.push(finding); continue; }
-    if (source === undefined) continue;
-    for (const link of inlineLinks(source, path)) {
-      const target = tasteLinkTarget(path, link.url);
-      if (target === undefined || target.kind === 'whole') continue;
-      if (target.kind === 'invalid') { complete = false; findings.push({ code: 'TasteLinkInvalid', path, line: link.line, message: target.message }); continue; }
-      const resolved = index.get(target.id);
-      if (resolved === undefined) {
-        broken.push({ path, line: link.line, id: target.id });
-        findings.push({ code: 'AnchorNotFound', path, line: link.line, message: `Taste entry ${target.id} does not exist` });
-        continue;
-      }
-      references.push({ path, line: link.line, entry: target.id, target: target.id });
+  const runtime = repositoryRuntime(repo), contentCache = makeDocumentProjectionCache(runtime);
+  try {
+    const references: (TasteReference & { target: string })[] = [], broken: { path: string; line: number; id: string }[] = [], findings: Finding[] = [];
+    let complete = true;
+    const candidates: { path: string; source?: string; finding?: Finding }[] = [];
+    for (const path of repo.files('docs').filter(inScope).sort()) {
+      let source: string | undefined;
+      try { source = read(path); }
+      catch (cause) { candidates.push({ path, finding: { code: cause instanceof ConcordError ? cause.code : 'SourceChanged', path, message: cause instanceof Error ? cause.message : String(cause) } }); continue; }
+      if (source === undefined) { candidates.push({ path, finding: { code: 'SourceChanged', path, message: 'File disappeared while taste references were read' } }); continue; }
+      // Any taste link spells the path, percent-encodes it, or uses a character reference.
+      if (!/taste|[%&]/iu.test(source)) continue;
+      candidates.push({ path, source });
     }
-  }
-  return { references, broken, findings, complete };
+    inspectDocumentRecords(candidates.flatMap(item => item.source === undefined ? [] : [{ path: item.path, source: item.source }]), true, runtime, contentCache);
+    for (const { path, source, finding } of candidates) {
+      if (finding !== undefined) { complete = false; findings.push(finding); continue; }
+      if (source === undefined) continue;
+      for (const link of inlineLinks(source, path, runtime, contentCache)) {
+        const target = tasteLinkTarget(path, link.url);
+        if (target === undefined || target.kind === 'whole') continue;
+        if (target.kind === 'invalid') { complete = false; findings.push({ code: 'TasteLinkInvalid', path, line: link.line, message: target.message }); continue; }
+        const resolved = index.get(target.id);
+        if (resolved === undefined) {
+          broken.push({ path, line: link.line, id: target.id });
+          findings.push({ code: 'AnchorNotFound', path, line: link.line, message: `Taste entry ${target.id} does not exist` });
+          continue;
+        }
+        references.push({ path, line: link.line, entry: target.id, target: target.id });
+      }
+    }
+    return { references, broken, findings, complete };
+  } finally { contentCache.close(); }
 }
 
 export interface TasteInspection { readonly record?: TasteRecord; readonly references: TasteLinkScan['references']; readonly findings: readonly Finding[]; readonly complete: boolean }
@@ -231,7 +237,7 @@ export function inspectTaste(repo: Repository, read?: (path: string) => string |
 export function showTaste(repo: Repository): TasteRecord {
   const source = repo.read(TASTE_PATH);
   if (source === undefined) throw new ConcordError('TasteMissing', 'docs/taste.md is missing; create docs/taste.md');
-  return parseTaste(source);
+  return parseTaste(source, repositoryRuntime(repo));
 }
 
 // @concord-code

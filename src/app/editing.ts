@@ -1,3 +1,4 @@
+import { repositoryRuntime } from '../base/workspace/index.ts';
 import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.ts";
 import { renderTypeScriptConfig } from "../base/workspace/index.ts";
 import { documentRoots, inspectDocumentRecords, parseDocumentRecord } from "../domain/documents/index.ts";
@@ -30,7 +31,7 @@ function inspectMarkdown(repo: Repository, path: string, captured?: { source: st
   if (source === undefined) return {};
   try {
     if (captured !== undefined && !captured.result.ok) throw captured.result.cause;
-    const document = captured === undefined ? parseDocumentRecord(path, source) : captured.result.ok ? captured.result.value : undefined;
+    const document = captured === undefined ? parseDocumentRecord(path, source, repositoryRuntime(repo)) : captured.result.ok ? captured.result.value : undefined;
     if (document) {
       const disposition = documentDisposition(document.metadata.kind, path, ['memory']);
       if (disposition === 'current') return { document: document };
@@ -77,7 +78,7 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
     const source = repo.read(path);
     return source === undefined ? [] : [{ path, source }];
   });
-  const results = inspectDocumentRecords(inputs);
+  const results = inspectDocumentRecords(inputs, undefined, repositoryRuntime(repo));
   for (const [index, input] of inputs.entries()) {
     const value = inspectMarkdown(repo, input.path, { source: input.source, result: results[index]! });
     if (value.document) documents.push(value.document);

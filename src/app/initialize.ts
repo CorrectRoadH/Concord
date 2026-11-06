@@ -1,3 +1,4 @@
+import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { Effect } from 'effect';
 import { canonicalPath } from "../model/index.ts";
 import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, InitializationReceiptSchema, decode, type Change, type WritingGuide, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.ts";
@@ -35,8 +36,9 @@ export type InitializationReceipt = typeof InitializationReceiptSchema.Type;
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
 export const initialize = Effect.fn('initialize')(function*(repo: Repository, dryRun = false, options: InitializeOptions = {}, initialGuide?: WritingGuide) {
   const catalog = yield* templateCatalog();
+  const runtime = yield* RuntimeEnvironment;
   return yield* Effect.try({ try: (): InitializationReceipt => inRepositorySnapshot(repo, () => {
-  const guide = initialGuide ?? selectWritingGuide(repo.root);
+  const guide = initialGuide ?? selectWritingGuide(repo.root, runtime.env);
   const config = decode(ProjectSchema, { ...(options.testRoots === undefined ? {} : { testRoots: options.testRoots }), ...(options.sourceRoots === undefined ? {} : { sourceRoots: options.sourceRoots }), ...(options.runner === undefined ? {} : { runner: options.runner }) }, 'init configuration');
   for (const root of [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])]) {
     canonicalPath(root);

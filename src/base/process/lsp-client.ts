@@ -26,7 +26,7 @@ export const analyzeLanguageServer = (repo: Repository, server: LanguageServer, 
   const owned = yield* OwnedProcess;
   const budgets = analysisBudgets(server), rpc = new LspConnection(budgets);
   const env: NodeJS.ProcessEnv = {};
-  for (const key of server.environment ?? []) if (process.env[key] !== undefined) env[key] = process.env[key];
+  for (const key of server.environment ?? []) if (owned.environment.env[key] !== undefined) env[key] = owned.environment.env[key];
   const matches = (path: string) => server.extensions.some(extension => path.endsWith(extension));
   const paths = [...files.keys()].filter(path => matches(path) && withinRoots(path, [...(repo.config.sourceRoots ?? []), ...repo.config.testRoots])).sort();
   if (paths.length > budgets.files) return yield* Effect.fail(new ConcordError('AnalysisBudgetExceeded', 'FileLimit'));

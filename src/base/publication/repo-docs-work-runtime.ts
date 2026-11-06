@@ -1,3 +1,4 @@
+import { RuntimeEnvironment, runtimePath } from '../environment/index.ts';
 import * as observer from '../process/index.ts';
 import { randomUUID, createHash } from "node:crypto";
 import { resolve, isAbsolute, join, dirname } from "node:path";
@@ -50,13 +51,15 @@ function makeGroupCleanup(pid: number) {
 // Every child has an owned POSIX process group, including commands which exit
 // before their descendants. Stream draining and leader waiting share one timeout.
 export const runProcess = Effect.fn('DocsWork.runProcess')(function*(root: string, argv: readonly string[], timeoutMs = 600000) {
+  const runtime = yield* RuntimeEnvironment;
+  root = runtimePath(runtime, root);
   if (argv.length === 0) return yield* fail('DocsWorkPlanInvalid', 'Empty command');
   if (argv.reduce((bytes, arg) => bytes + Buffer.byteLength(arg) + 1, 0) > 128 * 1024) return yield* fail('DocsWorkArgvTooLong', 'Expanded argv exceeds 128 KiB');
   return yield* Effect.scoped(Effect.gen(function*() {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const resource = yield* Effect.acquireRelease(
       spawner.spawn(ChildProcess.make(argv[0]!, argv.slice(1), {
-        cwd: root, shell: false, detached: true, stdin: 'ignore', killSignal: 'SIGKILL',
+        cwd: root, env: { ...runtime.env }, extendEnv: false, shell: false, detached: true, stdin: 'ignore', killSignal: 'SIGKILL',
       })).pipe(Effect.map(handle => ({ handle, cleanup: makeGroupCleanup(handle.pid) }))),
       resource => resource.cleanup,
     );
@@ -76,9 +79,12 @@ export const runProcess = Effect.fn('DocsWork.runProcess')(function*(root: strin
   })).pipe(Effect.catch(error => Effect.succeed({ exitCode: null, outputDigest: hash(String(error)), summary: tailSummary(String(error)) })));
 });
 export const git = Effect.fn('DocsWork.git')(function*(root: string, args: readonly string[]) {
+  const runtime = yield* RuntimeEnvironment;
+  const env = { ...runtime.env };
+  for (const name of Object.keys(env)) if (name.startsWith('GIT_')) delete env[name];
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   return yield* Effect.scoped(Effect.gen(function*() {
-    const handle = yield* spawner.spawn(ChildProcess.make('git', args, { cwd: root, shell: false, stdin: 'ignore' }));
+    const handle = yield* spawner.spawn(ChildProcess.make('git', args, { cwd: runtimePath(runtime, root), env, extendEnv: false, shell: false, stdin: 'ignore' }));
     const [code, output] = yield* Effect.all([handle.exitCode, Stream.mkString(Stream.decodeText(handle.stdout))], { concurrency: 'unbounded' });
     if (code !== 0) return yield* fail('DocsWorkPlanInvalid', `Git command failed: ${args[0]}`);
     return output;

@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -9,6 +10,8 @@ import { LocalRepository } from "../support/repository.ts";
 
 import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.ts";
 import { openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 function consumer() {
   const root = createConsumer();
@@ -55,7 +58,7 @@ test('parses comments v2', { skip: true }, () => {});
     const renamed = scan(root); assert.equal(renamed.cases[0]?.file, 'test/renamed.test.mjs');
     rmSync(join(root, 'test/renamed.test.mjs'));
     const deleted = scan(root); assert.equal(deleted.cases.length, 0);
-    const repo = new LocalRepository(root); try { assert.equal(clearCache(repo).status, 'cleared'); assert.equal(cacheStatus(repo).status, 'empty'); } finally { repo.close(); }
+    const repo = new LocalRepository(root); try { assert.equal(clearCache(repo, undefined, nativeRuntime).status, 'cleared'); assert.equal(cacheStatus(repo, nativeRuntime).status, 'empty'); } finally { repo.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
@@ -108,7 +111,7 @@ const fake = ` + '`ordinary text: @feature template-fake`' + `;
     rmSync(path, { recursive: true });
     writeFileSync(path, 'not a HawDB directory');
     const damaged = new LocalRepository(root);
-    try { assert.equal(cacheStatus(damaged).status, 'unavailable'); }
+    try { assert.equal(cacheStatus(damaged, nativeRuntime).status, 'unavailable'); }
     finally { damaged.close(); }
     const recovered = scan(root);
     assert.equal(recovered.cache.status, 'unavailable');
@@ -119,7 +122,7 @@ const fake = ` + '`ordinary text: @feature template-fake`' + `;
     const source = `import { test } from 'node:test';\n// @feature docs/feature/a/README.md\ntest('valid', () => {});\n`;
     write(root, 'test/findings.test.ts', source);
     const seeded = scan(root); assert.equal(seeded.cases.length, 1);
-    const cache = openHawdb(path, { readOnly: false, create: false }); try {
+    const cache = openHawdb(path, { readOnly: false, create: false }, nativeRuntime); try {
       const row = cache.scan('annotation_cache')[0];
       assert.ok(row);
       cache.put('annotation_cache', [{ key: row.key, payload: JSON.stringify({ cases: [], findings: [], files: [], digest: 'sha256:not-a-real-digest' }) }]);

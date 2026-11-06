@@ -10,6 +10,7 @@ export { cacheStat } from './cache-file.ts';
 export { deleteInspectedCache } from './cache-file.ts';
 export { inspectCacheClear } from './cache-file.ts';
 export { requestCacheMaintenance } from './cache-maintenance.ts';
+export { awaitCacheMaintenance } from './cache-maintenance.ts';
 export { readCachePayloads } from './cache-query.ts';
 export { writeCachePayloads } from './cache-query.ts';
 export { closeRepositoryCache } from './cache-store.ts';

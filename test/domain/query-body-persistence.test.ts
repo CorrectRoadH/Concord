@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,6 +10,8 @@ import { type QueryValue, TraceGapsValue } from '../../src/model/index.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 import { readQuery, storeQuery } from '../support/operations.ts';
 import { queryFactsConsumer, ownerPath, flow } from '../support/query-facts-fixture.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const current = (root: string, query: Query) => {
   const repo = new LocalRepository(root, { access: 'read', dryRun: true, persistentCache: 'off' });
@@ -22,7 +25,7 @@ async function persist(root: string, query: Query) {
   storeQuery(context, { kind: 'candidate', message: scanned });
   const stored = readQuery(context);
   assert.ok(stored.record, JSON.stringify(stored));
-  const db = openHawdb(cacheDatabasePath(context.privateDir), { readOnly: true, create: false });
+  const db = openHawdb(cacheDatabasePath(context.privateDir), { readOnly: true, create: false }, nativeRuntime);
   try { assert.doesNotMatch(JSON.stringify(db.scan('query_cache')), /PRIVATE_(OWNER|CONSTITUTION|ISSUE|REMOTE)_BODY_SENTINEL/u); } finally { db.close(); }
   return stored.record.value;
 }
@@ -36,7 +39,7 @@ test('C7 persists no owner or remote bodies and hydrates byte-identical current 
     for (const query of [['trace', 'show', ownerPath], ['trace', 'show', 'docs/issues/remote.md'], ['review', 'sample']] as const) {
       const value = await persist(root, query); stored.set(JSON.stringify(query), value);
       const fresh = current(root, query);
-      const historical = hydrateQueryValue(root, value).value;
+      const historical = hydrateQueryValue(root, value, undefined, nativeRuntime).value;
       assert.doesNotMatch(JSON.stringify(fresh) + JSON.stringify(historical), /relationsUnknown|codeRelationsUnknown/u);
       if (query[0] === 'trace') {
         assert.ok('subject' in historical && 'subject' in fresh);
@@ -55,15 +58,15 @@ test('C7 persists no owner or remote bodies and hydrates byte-identical current 
         try { assert.equal(output.body, repo.snapshot(() => renderReview(repo, 'sample', 'off'))); } finally { repo.close(); }
       }
     }
-    const gaps = Schema.decodeUnknownSync(TraceGapsValue)(hydrateQueryValue(root, await persist(root, ['trace', 'gaps'])).value);
+    const gaps = Schema.decodeUnknownSync(TraceGapsValue)(hydrateQueryValue(root, await persist(root, ['trace', 'gaps']), undefined, nativeRuntime).value);
     assert.equal(gaps.unmarkedLists[0]!.path, flow);
     writeFileSync(join(root, ownerPath), readFileSync(join(root, ownerPath), 'utf8') + '\nchanged\n');
-    const changed = hydrateQueryValue(root, stored.get(JSON.stringify(['trace', 'show', ownerPath]))!);
+    const changed = hydrateQueryValue(root, stored.get(JSON.stringify(['trace', 'show', ownerPath]))!, undefined, nativeRuntime);
     assert.deepEqual(changed.bodyChanged, [ownerPath]);
     assert.ok('subject' in changed.value);
     assert.equal('body' in changed.value.subject ? changed.value.subject.body : undefined, undefined);
     writeFileSync(join(root, 'docs/taste.md'), readFileSync(join(root, 'docs/taste.md'), 'utf8') + '\nchanged\n');
-    const review = hydrateQueryValue(root, stored.get(JSON.stringify(['review', 'sample']))!);
+    const review = hydrateQueryValue(root, stored.get(JSON.stringify(['review', 'sample']))!, undefined, nativeRuntime);
     assert.deepEqual(review.bodyChanged, ['docs/taste.md']);
     assert.match(Schema.decodeUnknownSync(Schema.Struct({ body: Schema.String }))(review.value).body, /taste changed since projection/u);
   } finally { rmSync(root, { recursive: true, force: true }); }

@@ -1,3 +1,4 @@
+import { withPublication } from '../support/repository.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs, { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -15,15 +16,15 @@ test('durable committed phase alone decides whether an interrupted complete pair
     execFileSync('git', ['-C', root, 'add', 'concord.config.ts']);
     execFileSync('git', ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
     for (const name of ['a', 'b']) writeFileSync(join(root, `${name}.md`), `old-${name}`);
-    await assert.rejects(Effect.runPromise(mutateTraceFiles({ root, operation: 'replace-pair',
+    await assert.rejects(Effect.runPromise(withPublication(mutateTraceFiles({ root, operation: 'replace-pair',
       changes: [{ path: 'a.md', bytes: 'new-a' }, { path: 'b.md', bytes: 'new-b' }],
       ...(committed ? { injectFailureAfterCommit: true } : { injectFailureAfterRename: 2 }),
-    })), /injected interruption/);
+    }))), /injected interruption/);
     const path = join(tracePrivateDirectorySync(root), 'multi-file-publication-journal.json');
     assert.equal(JSON.parse(readFileSync(path, 'utf8')).phase, committed ? 'committed' : 'publishing');
     assert.equal(readFileSync(join(root, 'a.md'), 'utf8'), 'new-a');
     assert.equal(readFileSync(join(root, 'b.md'), 'utf8'), 'new-b');
-    assert.equal((await Effect.runPromise(recoverTrace(root))).action, committed ? 'completed' : 'rolled-back');
+    assert.equal((await Effect.runPromise(withPublication(recoverTrace(root)))).action, committed ? 'completed' : 'rolled-back');
     for (const name of ['a', 'b']) assert.equal(readFileSync(join(root, `${name}.md`), 'utf8'), `${committed ? 'new' : 'old'}-${name}`);
     assert.equal(existsSync(path), false);
   }
@@ -43,7 +44,7 @@ test('the first cleanup failure after commit is recovered under the same lease a
   };
   syncBuiltinESMExports();
   try {
-    const receipt = await Effect.runPromise(mutateTraceFiles({ root, operation: 'commit-cleanup', changes: [{ path: 'a.md', bytes: 'committed' }] }));
+    const receipt = await Effect.runPromise(withPublication(mutateTraceFiles({ root, operation: 'commit-cleanup', changes: [{ path: 'a.md', bytes: 'committed' }] })));
     assert.equal(receipt.committed, true);
     assert.equal(readFileSync(join(root, 'a.md'), 'utf8'), 'committed');
     assert.equal(existsSync(path), false);

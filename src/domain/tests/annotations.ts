@@ -1,3 +1,5 @@
+import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
+import { repositoryRuntime } from '../../base/workspace/index.ts';
 import { snapshotMetadata } from '../../base/sources/index.ts';
 import { Schema } from "effect";
 import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from "../../base/cache/index.ts";
@@ -216,14 +218,14 @@ function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#rebuild
-export function clearCache(repo: Repository, onlyAboveBytes?: number): { readonly status: string; readonly path: string } {
-  return repo.snapshot === undefined ? clearUnderSnapshot(repo, onlyAboveBytes) : repo.snapshot(() => clearUnderSnapshot(repo, onlyAboveBytes));
+export function clearCache(repo: Repository, onlyAboveBytes?: number, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)): { readonly status: string; readonly path: string } {
+  return repo.snapshot === undefined ? clearUnderSnapshot(repo, onlyAboveBytes, runtime) : repo.snapshot(() => clearUnderSnapshot(repo, onlyAboveBytes, runtime));
 }
-export function previewCacheClear(repo: Repository) {
+export function previewCacheClear(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)) {
   const preview = () => {
     const inventory = inspectCacheClear(repo.privateDir);
     let native: { status: 'ready' | 'unavailable'; detail?: string };
-    try { hawdbIdentity(); native = { status: 'ready' }; }
+    try { hawdbIdentity(runtime); native = { status: 'ready' }; }
     catch (cause) { native = { status: 'unavailable', detail: cause instanceof Error ? cause.message : String(cause) }; }
     return {
       operation: 'cache-clear' as const, dryRun: true as const, engine: 'hawdb' as const,
@@ -234,12 +236,12 @@ export function previewCacheClear(repo: Repository) {
   };
   return repo.snapshot === undefined ? preview() : repo.snapshot(preview);
 }
-function clearUnderSnapshot(repo: Repository, onlyAboveBytes?: number): { readonly status: string; readonly path: string } {
+function clearUnderSnapshot(repo: Repository, onlyAboveBytes: number | undefined, runtime: RuntimeEnvironmentSnapshot): { readonly status: string; readonly path: string } {
   if (repo.access === 'read') throw new ConcordError('ReadOnlyRepository', 'Cache clear requires write access');
   const inventory = inspectCacheClear(repo.privateDir);
   if (!inventory.existing) return { status: 'empty', path: inventory.path };
   closeRepositoryCache(repo);
-  const guard = acquireHawdbClearGuard(inventory.path);
+  const guard = acquireHawdbClearGuard(inventory.path, runtime);
   try {
     guard.verify();
     if (onlyAboveBytes !== undefined && cachePhysicalBytes(repo.privateDir) <= onlyAboveBytes) return { status: 'below-limit', path: inventory.path };
@@ -248,8 +250,8 @@ function clearUnderSnapshot(repo: Repository, onlyAboveBytes?: number): { readon
   finally { guard.close(); }
   return { status: inventory.empty ? 'empty' : 'cleared', path: inventory.path };
 }
-export function cacheStatus(repo: Repository): CacheStatus {
-  const inspect = () => inspectCacheStatus(repo.privateDir, repo.persistentCache !== 'off', () => PersistentCache.repository(repo), () => closeRepositoryCache(repo));
+export function cacheStatus(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)): CacheStatus {
+  const inspect = () => inspectCacheStatus(repo.privateDir, repo.persistentCache !== 'off', () => PersistentCache.repository(repo), () => closeRepositoryCache(repo), runtime);
   return repo.snapshot === undefined ? inspect() : repo.snapshot(inspect);
 }
 // @concord-end

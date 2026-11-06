@@ -5,10 +5,12 @@ import { join } from "node:path";
 import { packageRoot } from "./location.ts";
 import { hawdbTarget } from "./hawdb-native-contract.ts";
 import { ConcordError, digest } from "../../model/index.ts";
+import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { installationIdentity } from './identity-cache.ts';
 import { sourceInstallation, runtimeDirectory, runtimeLoader } from './runtime.ts';
 
 const directory = runtimeDirectory;
+const defaultRuntime = makeRuntimeEnvironment(packageRoot, {});
 const distribution = join(packageRoot, 'dist');
 import { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.ts";
 export const resourcePath = (path: string): string => join(packageRoot, path);
@@ -47,36 +49,36 @@ function collectFiles(root: string, relative: string, accept: (name: string, rel
   return files;
 }
 
-function requireNativeArtifacts(): void {
+function requireNativeArtifacts(runtime: RuntimeEnvironmentSnapshot): void {
   for (const name of ['artifact.json', 'hawdb.node', 'THIRD-PARTY-NOTICES.txt']) {
-    if (lstatSync(join(nativeArtifactRoot, hawdbTarget(), name), { throwIfNoEntry: false }) === undefined) {
+    if (lstatSync(join(nativeArtifactRoot(runtime), hawdbTarget(), name), { throwIfNoEntry: false }) === undefined) {
       throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; run pnpm exec vp run build:native.');
     }
   }
-  if (sourceInstallation) verifySourceNativeArtifact();
+  if (sourceInstallation) verifySourceNativeArtifact(runtime);
 }
 
-function sourceIdentity(): InstallationFiles {
-  requireNativeArtifacts();
+function sourceIdentity(runtime: RuntimeEnvironmentSnapshot): InstallationFiles {
+  requireNativeArtifacts(runtime);
   return [['mode', 'source'], ...collectFiles(directory, 'src', () => true), ...collectFiles(join(packageRoot, 'web'), 'web', () => true),
-    ...collectFiles(nativeArtifactRoot, 'native', () => true)];
+    ...collectFiles(nativeArtifactRoot(runtime), 'native', () => true)];
 }
 
 /** Preserve the built query key's ordered file list. Source and built keys never overlap. */
-export function queryInstallationIdentity(): InstallationFiles {
-  if (sourceInstallation) return sourceIdentity();
+export function queryInstallationIdentity(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): InstallationFiles {
+  if (sourceInstallation) return sourceIdentity(runtime);
   const files = collectFiles(directory, '', (name, relative) => name.endsWith('.js') && !relative.startsWith('native/'));
-  for (const target of readdirSync(nativeArtifactRoot).sort()) {
-    for (const name of ['artifact.json', 'hawdb.node']) files.push([`native/${target}/${name}`, digest(readFileSync(join(nativeArtifactRoot, target, name)))]);
+  for (const target of readdirSync(nativeArtifactRoot(runtime)).sort()) {
+    for (const name of ['artifact.json', 'hawdb.node']) files.push([`native/${target}/${name}`, digest(readFileSync(join(nativeArtifactRoot(runtime), target, name)))]);
   }
   return files;
 }
 
 /** Metadata fingerprints avoid rehashing an unchanged installation across processes. */
-export function workspaceInstallationIdentity(): string {
-  requireNativeArtifacts();
+export function workspaceInstallationIdentity(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): string {
+  requireNativeArtifacts(runtime);
   return sourceInstallation
-    ? installationIdentity(directory, [{ root: directory, prefix: 'src', accept: () => true }, { root: join(packageRoot, 'web'), prefix: 'web', accept: () => true }, { root: nativeArtifactRoot, prefix: 'native', accept: () => true }], [['mode', 'source']])
-    : installationIdentity(directory, [{ root: directory, prefix: '', accept: (name, relative) => name.endsWith('.js') || relative.startsWith('native/') }]);
+    ? installationIdentity(directory, [{ root: directory, prefix: 'src', accept: () => true }, { root: join(packageRoot, 'web'), prefix: 'web', accept: () => true }, { root: nativeArtifactRoot(runtime), prefix: 'native', accept: () => true }], [['mode', 'source']], runtime)
+    : installationIdentity(directory, [{ root: directory, prefix: '', accept: (name, relative) => name.endsWith('.js') || relative.startsWith('native/') }], [], runtime);
 }
 

@@ -1,3 +1,4 @@
+import { repositoryRuntime } from '../base/workspace/index.ts';
 import { pathToFileURL } from "node:url";
 import { Effect } from "effect";
 import { openReadRepository } from "../base/workspace/index.ts";
@@ -82,7 +83,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
       if (!inventory.complete || code.relationsUnknown) gaps.add('IncompleteRelations');
       for (const path of repo.files('docs').filter(path => path.endsWith('.md'))) {
         const text = repo.read(path);
-        if (text !== undefined) findings.push(...extractSteps(path, text).findings);
+        if (text !== undefined) findings.push(...extractSteps(path, text, repositoryRuntime(repo)).findings);
       }
       const checkReference = (path: string, line: number, reference: string, kinds: Parameters<typeof resolveReference>[3]) => {
         try { return resolveReference(repo, inventory.documents, reference, kinds); }
@@ -92,7 +93,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
           const parsed = parseReference(reference);
           const target = inventory.documents.find(document => document.path === parsed.path);
           const text = repo.read(parsed.path);
-          const stepMissing = gaps.size === 0 && error.code === 'AnchorNotFound' && target?.metadata.kind === 'use-case' && text !== undefined && extractSteps(parsed.path, text).findings.length === 0;
+          const stepMissing = gaps.size === 0 && error.code === 'AnchorNotFound' && target?.metadata.kind === 'use-case' && text !== undefined && extractSteps(parsed.path, text, repositoryRuntime(repo)).findings.length === 0;
           findings.push({ code: stepMissing ? 'StepNotFound' : error.code, path, line, message: error.message });
           return undefined;
         }
@@ -116,7 +117,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
       if (job.params !== undefined && source !== undefined) {
         const offset = positionOffset(source, job.params.position, 'utf-16');
         const path = job.overlays.find(document => document.uri === job.params!.textDocument.uri)!.path;
-        const step = extractSteps(path, source).steps.find(step => job.params!.position.line + 1 >= step.line && job.params!.position.line + 1 <= step.endLine);
+        const step = extractSteps(path, source, repositoryRuntime(repo)).steps.find(step => job.params!.position.line + 1 >= step.line && job.params!.position.line + 1 <= step.endLine);
         selected = step === undefined ? undefined : `${path}#${step.id}`;
         for (const match of source.matchAll(/docs\/[^\s<>"'`()[\]{};,]+\.md(?:#[^\s<>"'`()[\]{};,]+)?/gu)) {
           if (offset >= match.index && offset <= match.index + match[0].length) { selected = match[0]; break; }
@@ -130,7 +131,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
       const locate = (reference: string) => {
         resolveReference(repo, trace.documents, reference);
         const parsed = parseReference(reference), text = repo.read(parsed.path)!;
-        const steps = extractSteps(parsed.path, text);
+        const steps = extractSteps(parsed.path, text, repositoryRuntime(repo));
         const step = steps.steps.find(step => step.id === parsed.anchor);
         const line = parsed.anchor === undefined ? 1 : step?.line ?? text.split('\n').findIndex(line => markdownAnchor(line) === parsed.anchor || line.includes(`<a id="${parsed.anchor}"></a>`)) + 1;
         return { uri: uri(parsed.path), range: range(Math.max(1, line)), text, parsed, step };
@@ -143,7 +144,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
           catch { continue; }
           candidates.add(path);
           const text = repo.read(path)!;
-          for (const step of extractSteps(path, text).steps) candidates.add(`${path}#${step.id}`);
+          for (const step of extractSteps(path, text, repositoryRuntime(repo)).steps) candidates.add(`${path}#${step.id}`);
         }
         value = { isIncomplete: gaps.size > 0, items: [...candidates].sort().slice(0, 2000).map(label => ({ label, kind: 18, insertText: label, detail: 'Concord canonical reference' })) };
         if (candidates.size > 2000) value = { ...value as object, isIncomplete: true };

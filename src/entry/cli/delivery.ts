@@ -7,6 +7,6 @@ export interface TerminalDelivery {
   readonly stderr: string;
   readonly exitCode: number;
 }
-export type TerminalDeliverySink = (
+export type TerminalDeliverySink<E = never, R = never> = (
   delivery: TerminalDelivery,
-) => Effect.Effect<void>;
+) => Effect.Effect<void, E, R>;

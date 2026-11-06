@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
+import type { fullProgram } from './entry-full.ts';
+import type { loadCommand } from './cli.ts';
 import { startupData, initializeNodeCompileCache } from "../../app/startup/index.ts";
 import type { StartupData } from "../../model/index.ts";
 
@@ -9,6 +11,20 @@ import type { StartupData } from "../../model/index.ts";
 initializeNodeCompileCache();
 
 const args = process.argv.slice(2);
+const cwd = process.cwd(), env = Object.freeze({ ...process.env });
+const { Effect } = await import('effect');
+const { NodeRuntime, NodeServices } = await import('@effect/platform-node');
+async function start(program: ReturnType<typeof fullProgram>): Promise<void> {
+  const { cliEnvironmentLayer } = await import('./main.ts');
+  NodeRuntime.runMain(program.pipe(
+    Effect.tap(code => Effect.sync(() => { process.exitCode = code; })),
+    // The real startup owns this descriptor. Stdio deliberately leaves it open,
+    // while a completed command (including LSP failure) must let Node terminate.
+    Effect.ensuring(Effect.sync(() => { process.stdin.destroy(); })),
+    Effect.provide(cliEnvironmentLayer(cwd, env)),
+    Effect.provide(NodeServices.layer),
+  ));
+}
 
 function selectedGroup(data: StartupData): string | undefined {
   // Let Effect own parsing. This conservative scan only chooses a module graph;
@@ -26,7 +42,7 @@ function selectedGroup(data: StartupData): string | undefined {
 
 try {
   if (args.includes('--skill')) {
-    await import("./entry-full.ts");
+    await start((await import("./entry-full.ts")).fullProgram(args));
   } else {
     const data = await startupData();
     // Effect's pinned formatter uses no colors for non-TTY output. Restrict the
@@ -42,15 +58,15 @@ try {
       process.exitCode = receipt.status;
     } else {
       const group = data === undefined ? undefined : selectedGroup(data);
-      let run: (() => void) | undefined;
+      let command: Awaited<ReturnType<typeof loadCommand>> | undefined;
       if (group !== undefined && data !== undefined) {
         try {
-          run = await (await import("./cli.ts")).loadCommand(group, data);
+          command = await (await import("./cli.ts")).loadCommand(group, data);
         }
         catch { /* Missing or mismatched command code uses the complete bundle. */ }
       }
-      if (run === undefined) await import("./entry-full.ts");
-      else run();
+      if (command === undefined) await start((await import("./entry-full.ts")).fullProgram(args));
+      else await start((await import("./main.ts")).runCommand(command, args));
     }
   }
 } catch (cause) {

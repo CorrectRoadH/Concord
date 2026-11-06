@@ -35,4 +35,4 @@ export { progress } from './lsp-protocol.ts';
 export type { Pending } from './lsp-protocol.ts';
 export { LspConnection } from './lsp-protocol.ts';
 export { adapterRuntimeInputs } from './runtime-inputs.ts';
-export { PROCESS_EVENT_FILE_LIMIT, ProcessEvent, ProcessRole, classifyConcordProcess, processEventEnvironment, processEventsHealthy, observeProcessEvents, recordProcessEvent, recordProcessSpawn } from './process-events.ts';
+export { PROCESS_EVENT_FILE_LIMIT, ProcessEvent, ProcessRole, ProcessEventsLive, classifyConcordProcess, processEventEnvironment, processEventsHealthy, observeProcessEvents, recordProcessEvent, recordProcessSpawn } from './process-events.ts';

@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,6 +11,8 @@ import { computationLayer } from '../../src/entry/server/main.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { createDocument } from '../support/operations.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @feature docs/feature/local-data-engine/README.md
 test('fresh computation requests retain the annotation parser cache owned by the long-lived process', async () => {
@@ -27,13 +30,13 @@ test('fresh computation requests retain the annotation parser cache owned by the
       yield* owner.open;
       const query = () => Effect.gen(function*() {
         const snapshot = yield* owner.snapshot, derived = CacheDerivations.make();
-        const reply = yield* Effect.promise(() => Effect.runPromise(Effect.scoped(executeQuery(root, { name: 'test.list', input: {} }).pipe(Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideContext(context)))));
+        const reply = yield* Effect.promise(() => Effect.runPromise(Effect.scoped(executeQuery(root, { name: 'test.list', input: {} }).pipe(Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideContext(context))).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
         yield* owner.mergeDerived(derived.batches());
         return reply;
       });
       yield* query(); const second = yield* query();
       assert.equal(Schema.decodeUnknownSync(status)(second).value.cache.status, 'hit', JSON.stringify(second));
-    })).pipe(Effect.provide(PersistentCache.layer)));
+    })).pipe(Effect.provide(PersistentCache.layer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -61,10 +64,10 @@ test('current query operations on read-only computation capabilities match cache
       for (const request of requests) {
         yield* Effect.promise(() => t.test(request.name, async () => {
           const expected = await runApplication(executeQuery(root, request, 'off'));
-          const actual = await Effect.runPromise(Effect.scoped(executeQuery(root, request).pipe(Effect.provide(CacheSnapshot.layer()), Effect.provideContext(context))));
+          const actual = await Effect.runPromise(Effect.scoped(executeQuery(root, request).pipe(Effect.provide(CacheSnapshot.layer()), Effect.provideContext(context))).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
           assert.deepEqual(comparable(actual), comparable(expected));
         }));
       }
-    })));
+    })).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

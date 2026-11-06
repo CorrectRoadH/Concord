@@ -1,2 +1,2 @@
 
-export const safeRunnerEnvironment = (): NodeJS.ProcessEnv => { const env = { ...process.env }; for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key]; return env; };
+export const safeRunnerEnvironment = (input: Readonly<Record<string, string | undefined>> = {}): NodeJS.ProcessEnv => { const env = { ...input }; for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key]; return env; };

@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { Workspace } from '../../src/base/workspace/index.ts';
@@ -31,6 +32,8 @@ import { PersistentCache } from '../../src/base/cache/index.ts';
 import { ConcordError } from '../../src/model/index.ts';
 import { storeWorkspaceProjection as publishProjection, readWorkspaceProjection as readPublishedProjection } from '../../src/app/index.ts';
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a completed workspace scan survives brief contention at publication', async () => {
   const root = fixture();
@@ -41,14 +44,14 @@ test('a completed workspace scan survives brief contention at publication', asyn
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const owner = yield* PersistentCache.owner(context.privateDir);
       yield* owner.open;
-      assert.throws(() => openHawdb(cacheDatabasePath(context.privateDir), { readOnly: false, create: true }), { code: 'HawdbBusy' });
+      assert.throws(() => openHawdb(cacheDatabasePath(context.privateDir), { readOnly: false, create: true }, nativeRuntime), { code: 'HawdbBusy' });
       let writes = 0;
       const service = { ...owner.service, update: (...args: Parameters<typeof owner.service.update>) => { writes++; return owner.service.update(...args); } };
       yield* publishProjection(context, candidate).pipe(Effect.provideService(PersistentCache, service));
       const published = yield* readPublishedProjection(context).pipe(Effect.provideService(PersistentCache, owner.service));
       assert.equal(published.projection.builtAt, candidate.builtAt);
       assert.equal(writes, 1, 'the persistent owner publishes the completed candidate exactly once');
-    })).pipe(Effect.provide(PersistentCache.layer)));
+    })).pipe(Effect.provide(PersistentCache.layer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

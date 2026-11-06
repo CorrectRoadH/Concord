@@ -16,13 +16,13 @@ export const skills = Command.make('skills').pipe(
       }), opened => Effect.sync(() => opened.close()));
       const preview = yield* installWorkflowSkills(repo, true);
       if (settings.dryRun) {
-        yield* Effect.sync(() => emit(preview, settings.json));
+        yield* emit(preview, settings.json);
         return;
       }
       yield* Effect.sync(() => repo.close());
       const writer = yield* Effect.acquireRelease(openWriteRepository(repo.root, { optimistic: true, persistentCache: 'off' }), opened => Effect.sync(() => opened.close()));
       const result = yield* installWorkflowSkills(writer, false);
-      yield* Effect.sync(() => emit(result, settings.json));
+      yield* emit(result, settings.json);
     }))),
   ]),
 );

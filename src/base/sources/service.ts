@@ -1,3 +1,4 @@
+import { RuntimeEnvironment, runtimePath, runtimeTemporaryDirectory } from '../environment/index.ts';
 import { Context, Effect, FileSystem, Layer, Path, Stdio, Stream, type Scope } from 'effect';
 import { failure, ConcordError } from '../../model/index.ts';
 import { inspectPendingJournals, waitForPublication } from '../publication/index.ts';
@@ -26,30 +27,31 @@ export interface SourcesService {
 /** Observations belong to one operation, including its return-time verification. */
 export class Sources extends Context.Service<Sources, SourcesService>()('concord/base/sources/Sources') {
   static readonly layer = Layer.effect(Sources, Effect.gen(function*() {
+    const runtime = yield* RuntimeEnvironment;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const stdio = yield* Stdio.Stdio;
     return Sources.of({
-      untrackedFile,
-      createReportDirectory: path => fs.makeDirectory(path, { mode: 0o700 }).pipe(Effect.mapError(failure)),
-      readBytes: (root, relative) => Effect.try({ try: () => readRepositoryBytesSync(path.resolve(root), relative), catch: failure }),
+      untrackedFile: (root, relative, limit) => untrackedFile(runtimePath(runtime, root), relative, limit),
+      createReportDirectory: path => fs.makeDirectory(runtimePath(runtime, path), { mode: 0o700 }).pipe(Effect.mapError(failure)),
+      readBytes: (root, relative) => Effect.try({ try: () => readRepositoryBytesSync(runtimePath(runtime, root), relative, runtime), catch: failure }),
       temporaryDirectory: Effect.fn('Sources.temporaryDirectory')((prefix: string, cleanupFailed?: (error: ConcordError) => void) => Effect.acquireRelease(
-        fs.makeTempDirectory({ prefix }).pipe(Effect.mapError(failure)),
+        fs.makeTempDirectory({ prefix, directory: runtimeTemporaryDirectory(runtime) }).pipe(Effect.mapError(failure)),
         directory => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.catch(cause => cleanupFailed === undefined ? Effect.die(failure(cause)) : Effect.sync(() => cleanupFailed(failure(cause))))),
       )),
-      pendingPublications: inspectPendingJournals,
-      readReportFiles,
-      exists: path => fs.exists(path).pipe(Effect.mapError(failure)),
-      directoryEntries: path => fs.readDirectory(path).pipe(Effect.mapError(failure)),
+      pendingPublications: (privateDir, verifyPaths) => inspectPendingJournals(runtimePath(runtime, privateDir), verifyPaths),
+      readReportFiles: (directory, declared, limits, budget, validateText) => readReportFiles(runtimePath(runtime, directory), declared, limits, budget, validateText),
+      exists: path => fs.exists(runtimePath(runtime, path)).pipe(Effect.mapError(failure)),
+      directoryEntries: path => fs.readDirectory(runtimePath(runtime, path)).pipe(Effect.mapError(failure)),
       watch: Effect.fn('Sources.watch')((root: string, changed: () => void, failed: (error: ConcordError) => void) => Effect.acquireRelease(
-        Effect.sync(() => new NodeSourceWatch(root, changed, failed)),
+        Effect.sync(() => new NodeSourceWatch(runtimePath(runtime, root), changed, failed)),
         watcher => Effect.sync(() => watcher.close()),
       )),
-      watchPrivateHead: (privateDir, changed) => Effect.forkScoped(Stream.runForEach(fs.watch(path.dirname(privateDir)), event => Effect.sync(() => { if (path.basename(event.path) === 'HEAD') changed(); })).pipe(Effect.ignore)).pipe(Effect.asVoid),
-      read: Effect.fn('Sources.read')((root: string, relative: string) => Effect.try({ try: () => readRepositoryFileSync(path.resolve(root), relative), catch: failure })),
+      watchPrivateHead: (privateDir, changed) => Effect.forkScoped(Stream.runForEach(fs.watch(path.dirname(runtimePath(runtime, privateDir))), event => Effect.sync(() => { if (path.basename(event.path) === 'HEAD') changed(); })).pipe(Effect.ignore)).pipe(Effect.asVoid),
+      read: Effect.fn('Sources.read')((root: string, relative: string) => Effect.try({ try: () => readRepositoryFileSync(runtimePath(runtime, root), relative), catch: failure })),
       authorBody: Effect.fn('Sources.authorBody')(function*(path: string) {
         if (path !== '-') {
-          const source = yield* fs.readFileString(path).pipe(Effect.mapError(failure));
+          const source = yield* fs.readFileString(runtimePath(runtime, path)).pipe(Effect.mapError(failure));
           if (Buffer.byteLength(source) > 4 * 1024 * 1024) return yield* Effect.fail(new ConcordError('InvalidBody', 'Author content exceeds 4 MiB'));
           return source;
         }

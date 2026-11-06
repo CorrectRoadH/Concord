@@ -1,5 +1,7 @@
 import { ConcordError, type Repository, type DocumentRecord } from "../../model/index.ts";
 import { decodeDocumentSource } from "./document-codec.ts";
+import { repositoryRuntime } from '../../base/workspace/index.ts';
+import { makeDocumentProjectionCache } from './document-projection.ts';
 import { documentDisposition, documentPlacementError, isDocumentName, matchingOwners } from "../../model/index.ts";
 
 export type LeafOwnerKind = 'memory' | 'issue';
@@ -8,18 +10,21 @@ const ownerRoot = (kind: LeafOwnerKind): string => kind === 'memory' ? 'memory' 
 /** The advanced API retains its existing static roots. Callers own the repository lease. */
 export function leafOwners(repo: Repository, kind: LeafOwnerKind): readonly DocumentRecord[] {
   const owners: DocumentRecord[] = [];
-  for (const path of repo.files(ownerRoot(kind)).filter(path => path.endsWith('.md'))) {
-    const source = repo.read(path);
-    if (source === undefined) continue;
-    const record = decodeDocumentSource(path, source);
-    if (record === undefined || documentDisposition(record.metadata.kind, path, ['memory']) !== 'current') continue;
-    if (record.metadata.kind !== kind) throw new ConcordError('InvalidPlacement', `${path}: expected ${kind} owner`);
-    const placement = documentPlacementError(kind, path);
-    if (placement !== undefined) throw new ConcordError('InvalidPlacement', `${path}: ${placement}`);
-    owners.push(record);
-  }
-  if (kind !== 'memory' && new Set(owners.map(owner => owner.metadata.id)).size !== owners.length) throw new ConcordError('DuplicateIdentity', 'Issue IDs must be unique');
-  return owners;
+  const runtime = repositoryRuntime(repo), contentCache = makeDocumentProjectionCache(runtime);
+  try {
+    for (const path of repo.files(ownerRoot(kind)).filter(path => path.endsWith('.md'))) {
+      const source = repo.read(path);
+      if (source === undefined) continue;
+      const record = decodeDocumentSource(path, source, runtime, contentCache);
+      if (record === undefined || documentDisposition(record.metadata.kind, path, ['memory']) !== 'current') continue;
+      if (record.metadata.kind !== kind) throw new ConcordError('InvalidPlacement', `${path}: expected ${kind} owner`);
+      const placement = documentPlacementError(kind, path);
+      if (placement !== undefined) throw new ConcordError('InvalidPlacement', `${path}: ${placement}`);
+      owners.push(record);
+    }
+    if (kind !== 'memory' && new Set(owners.map(owner => owner.metadata.id)).size !== owners.length) throw new ConcordError('DuplicateIdentity', 'Issue IDs must be unique');
+    return owners;
+  } finally { contentCache.close(); }
 }
 
 export function leafOwnerSelection(repo: Repository, kind: LeafOwnerKind, selector: string): { readonly path: string; readonly record?: DocumentRecord } {

@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { Publication } from '../../src/base/publication/index.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';
@@ -103,7 +104,7 @@ test('view jobs preserve pre-spawn cancellation, serialize repository ownership,
       const publication = yield* Publication;
       const repo = yield* openWriteRepository(selected);
       return yield* Effect.tryPromise({ try: () => use(repo, sources, publication), catch: cause => cause });
-    }))));
+    }))), makeRuntimeEnvironment(root, process.env));
     const beforeSpawn = manager.start(viewJobCase);
     assert.equal(manager.cancel(beforeSpawn.id).state, 'cancelling');
     assert.equal((await waitFor(manager, beforeSpawn.id, ['cancelled'])).state, 'cancelled');

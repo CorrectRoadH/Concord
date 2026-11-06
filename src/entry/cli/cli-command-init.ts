@@ -4,7 +4,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#init
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 import { openWriteRepository } from "../../app/index.ts";
-import { Effect, Option } from "effect";
+import { Effect, Option, Stdio } from "effect";
 import { Command, Flag, Prompt } from "effect/unstable/cli";
 
 import { initialize } from "../../app/index.ts";
@@ -18,8 +18,9 @@ const init = Command.make('init', {
 }, args => withRepo((repo, s) => Effect.gen(function*() {
   if (args.docsOnly && args.testRoot.length) return yield* Effect.fail(new ConcordError('ConflictingOptions', '--docs-only cannot be combined with --test-root'));
   const configFile = Option.getOrUndefined(args.runnerConfig);
-  const runner = yield* sync(() => configFile === undefined ? undefined : jsonBody(configFile, RunnerSchema, 'runner configuration'));
-  const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
+  const runner = configFile === undefined ? undefined : yield* jsonBody(configFile, RunnerSchema, 'runner configuration');
+  const stdio = yield* Stdio.Stdio;
+  const interactive = (yield* stdio.stdinIsTerminal) && (yield* stdio.stdoutIsTerminal);
   const options = {
     testRoots: args.docsOnly ? [] : args.testRoot.length ? args.testRoot : undefined, sourceRoots: args.sourceRoot.length ? args.sourceRoot : undefined, runner,
   } as const;
@@ -28,7 +29,7 @@ const init = Command.make('init', {
     return [...preview.createdPaths, ...preview.preservedPaths].map(path => ({ path, source: repo.read(path) }));
   }));
   if (s.dryRun) return preview;
-  if (interactive) yield* Effect.sync(() => emit({ operation: 'init-preview', configuration: preview.config, create: preview.createdPaths, preserve: preview.preservedPaths }, s.json));
+  if (interactive) yield* emit({ operation: 'init-preview', configuration: preview.config, create: preview.createdPaths, preserve: preview.preservedPaths }, s.json);
   const confirmed = args.yes || !interactive || (yield* Prompt.run(Prompt.confirm({ message: `Create ${preview.changedPaths.length} files?`, initial: true })));
   if (!confirmed) return { operation: 'init-cancelled', cancelled: true, dryRun: true, changedPaths: [], plannedPaths: preview.changedPaths };
   yield* sync(() => repo.close());

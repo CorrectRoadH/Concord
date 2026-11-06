@@ -4,6 +4,7 @@ import { markdownBody } from "../../model/index.ts";
 import { Schema } from "effect";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import type { Root } from "mdast";
+import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
 import { ContentCache } from "../../base/cache/index.ts";
 import { decodeUncachedDocumentSource, ownerKind } from "../../model/index.ts";
 import { fromMarkdown } from "../../model/index.ts";
@@ -24,8 +25,14 @@ const Metadata = { record: Schema.optional(Record), error: Schema.optional(Schem
 const Markdown = Schema.Struct({ anchors: Schema.Array(Schema.String), links: Schema.Array(Schema.Struct({ url: Schema.String, line: Schema.Int })), steps: Steps });
 const Projection = Schema.Struct({ ...Metadata, markdown: Schema.optional(Markdown) });
 type Projection = Schema.Schema.Type<typeof Projection>;
-const cache = new ContentCache('document_parse', DOCUMENT_PARSER_VERSION, Projection,
-  { maxEntries: 9872, maxBytes: 15 * 1024 * 1024 });
+export const makeDocumentProjectionCache = (runtime: RuntimeEnvironmentSnapshot) => new ContentCache('document_parse', DOCUMENT_PARSER_VERSION, Projection,
+  { maxEntries: 9872, maxBytes: 15 * 1024 * 1024 }, runtime);
+type DocumentProjectionCache = ReturnType<typeof makeDocumentProjectionCache>;
+function withProjectionCache<A>(runtime: RuntimeEnvironmentSnapshot, contentCache: DocumentProjectionCache | undefined, use: (cache: DocumentProjectionCache) => A): A {
+  const cache = contentCache ?? makeDocumentProjectionCache(runtime);
+  try { return use(cache); }
+  finally { if (contentCache === undefined) cache.close(); }
+}
 function parseMetadata(input: { readonly path: string; readonly source: string }): Projection {
   let record: ReturnType<typeof decodeUncachedDocumentSource>;
   let error: { code: string; message: string } | undefined;
@@ -42,31 +49,41 @@ function decodeTree(tree: string): Root {
   return decode(MarkdownRoot, JSON.parse(inflateRawSync(Buffer.from(tree, 'base64'), { maxOutputLength: 64 * 1024 * 1024 }).toString('utf8')), 'document syntax tree');
 }
 function currentTree(input: { readonly source: string }, previous: Projection): Root {
+  return projectionTree(input.source, previous);
+}
+/** Decode detached syntax bytes without retaining the cache that produced them. */
+export function projectionTree(source: string, previous: Projection): Root {
   if (previous.tree !== undefined) try { return decodeTree(previous.tree); } catch { /* Rebuild a damaged disposable tree. */ }
-  return fromMarkdown(markdownBody(input.source));
+  return fromMarkdown(markdownBody(source));
 }
 function withMarkdown(input: { readonly path: string; readonly source: string }, previous = parseMetadata(input), tree = currentTree(input, previous)): Projection {
   const { items: _items, ...steps } = inspectTreeSteps(input.path, input.source, previous.record?.metadata.kind === 'use-case', tree);
   return { ...previous, tree: serializeTree(tree), markdown: { anchors: [...headingAnchorsFromTree(input.source, tree)], links: inlineLinksFromTree(tree), steps } };
 }
-export function documentProjection(path: string, source: string) { return cache.get(path, source, () => parseMetadata({ path, source })); }
-export function inspectDocumentProjections(inputs: readonly { readonly path: string; readonly source: string }[], markdown = false) {
-  return cache.getManyResults(inputs, (input, previous) => markdown ? withMarkdown(input, previous) : parseMetadata(input), false, markdown ? value => value.markdown !== undefined : undefined);
+export function documentProjection(path: string, source: string, runtime: RuntimeEnvironmentSnapshot, contentCache?: DocumentProjectionCache) {
+  return withProjectionCache(runtime, contentCache, cache => cache.get(path, source, () => parseMetadata({ path, source })));
 }
-export function documentMarkdownProjection(path: string, source: string) {
-  const projection = cache.get(path, source, previous => withMarkdown({ path, source }, previous), false, value => value.markdown !== undefined);
-  return { ...projection, ...projection.markdown! };
+export function inspectDocumentProjections(inputs: readonly { readonly path: string; readonly source: string }[], markdown = false, runtime: RuntimeEnvironmentSnapshot, contentCache?: DocumentProjectionCache) {
+  return withProjectionCache(runtime, contentCache, cache => cache.getManyResults(inputs, (input, previous) => markdown ? withMarkdown(input, previous) : parseMetadata(input), false, markdown ? value => value.markdown !== undefined : undefined));
 }
-export function documentMarkdown(path: string, source: string): Root {
-  const projection = documentMarkdownProjection(path, source);
-  try {
-    // Decode the serialized tree only for consumers that need nodes and offsets.
-    return decodeTree(projection.tree!);
-  } catch {
-    const tree = fromMarkdown(markdownBody(source));
-    cache.get(path, source, () => withMarkdown({ path, source }, projection, tree), true);
-    return tree;
-  }
+export function documentMarkdownProjection(path: string, source: string, runtime: RuntimeEnvironmentSnapshot, contentCache?: DocumentProjectionCache) {
+  return withProjectionCache(runtime, contentCache, cache => {
+    const projection = cache.get(path, source, previous => withMarkdown({ path, source }, previous), false, value => value.markdown !== undefined);
+    return { ...projection, ...projection.markdown! };
+  });
+}
+export function documentMarkdown(path: string, source: string, runtime: RuntimeEnvironmentSnapshot, contentCache?: DocumentProjectionCache): Root {
+  return withProjectionCache(runtime, contentCache, cache => {
+    const projection = documentMarkdownProjection(path, source, runtime, cache);
+    try {
+      // Decode the serialized tree only for consumers that need nodes and offsets.
+      return decodeTree(projection.tree!);
+    } catch {
+      const tree = fromMarkdown(markdownBody(source));
+      cache.get(path, source, () => withMarkdown({ path, source }, projection, tree), true);
+      return tree;
+    }
+  });
 }
 export function projectionRecord(path: string, projection: Projection) {
   if (projection.error !== undefined) throw new ConcordError(projection.error.code, projection.error.message);

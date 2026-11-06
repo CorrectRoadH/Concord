@@ -1,11 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#启动与裁决
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
-import { HAWDB_ABI, HAWDB_REVISION, decodeNativeArtifact, hawdbTarget, nativeArtifactRoot, sourceInstallation, verifySourceNativeArtifact } from '../installation/index.ts';
+import { HAWDB_ABI, HAWDB_REVISION, decodeNativeArtifact, hawdbTarget, nativeArtifactRoot, nativeFileDigest, nativeFileIdentity, sourceInstallation, verifySourceNativeArtifact } from '../installation/index.ts';
+import { RuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import type { NativeServerLock, ServerLockBinding } from './native.ts';
 
 const Reason = Schema.Literals(['permission', 'io', 'type', 'identity', 'closed', 'native']);
@@ -21,21 +22,40 @@ export interface ServerLockHandle {
   readonly close: Effect.Effect<void>;
 }
 const NativeIdentity = Schema.Struct({ revision: Schema.Literal(HAWDB_REVISION), abi: Schema.Literal(HAWDB_ABI) });
-let binding: ServerLockBinding | undefined;
-function load(): ServerLockBinding {
-  if (binding) return binding;
-  if (sourceInstallation) verifySourceNativeArtifact();
-  const target = hawdbTarget(), directory = join(nativeArtifactRoot, target);
+const bindings = new Map<string, ServerLockBinding>();
+const rejected = new Map<string, { readonly cause: unknown; readonly retryAt: number }>();
+function load(runtime: RuntimeEnvironmentSnapshot): ServerLockBinding {
+  const directory = join(nativeArtifactRoot(runtime), hawdbTarget());
+  let binary = join(directory, 'hawdb.node'), manifest = '', binaryDigest: string | undefined;
+  try { binary = realpathSync(binary); } catch { /* Verification reports missing binaries. */ }
+  try { manifest = readFileSync(join(directory, 'artifact.json'), 'utf8'); binaryDigest = decodeNativeArtifact(JSON.parse(manifest)).binarySha256; } catch { /* Verification reports missing metadata. */ }
+  const identities = ['hawdb.node', 'artifact.json', 'THIRD-PARTY-NOTICES.txt'].map(name => { try { return nativeFileIdentity(join(directory, name)); } catch { return null; } });
+  const selection = JSON.stringify([binary, binaryDigest ?? createHash('sha256').update(manifest).digest('hex'), sourceInstallation && runtime.env.CONCORD_NATIVE_TEST_HOOKS === '1', identities]);
+  const rejection = rejected.get(selection);
+  if (rejection && performance.now() < rejection.retryAt) throw rejection.cause;
+  try { const binding = loadVerified(runtime); rejected.delete(selection); return binding; }
+  catch (cause) { rejected.set(selection, { cause, retryAt: performance.now() + 1000 }); throw cause; }
+}
+function loadVerified(runtime: RuntimeEnvironmentSnapshot): ServerLockBinding {
+  if (sourceInstallation) verifySourceNativeArtifact(runtime);
+  const target = hawdbTarget(), directory = join(nativeArtifactRoot(runtime), target);
   const artifact = decodeNativeArtifact(JSON.parse(readFileSync(join(directory, 'artifact.json'), 'utf8')));
-  const binary = join(directory, 'hawdb.node');
-  const hash = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
-  if (artifact.target !== target || artifact.binarySha256 !== hash(binary) || artifact.noticesSha256 !== hash(join(directory, 'THIRD-PARTY-NOTICES.txt'))) {
+  const binary = realpathSync(join(directory, 'hawdb.node'));
+  if (!sourceInstallation && artifact.testHooks) throw new Error('Test-hook native artifact cannot be installed');
+  const hash = nativeFileDigest;
+  const binaryDigest = hash(binary);
+  if (artifact.target !== target || artifact.binarySha256 !== binaryDigest || artifact.noticesSha256 !== hash(join(directory, 'THIRD-PARTY-NOTICES.txt'))) {
     throw new Error('Native server lock artifact digest differs');
   }
-  const loaded = createRequire(import.meta.url)(binary) as ServerLockBinding;
+  const key = JSON.stringify([binary, binaryDigest, artifact.testHooks ?? false]);
+  const prior = bindings.get(key);
+  if (prior) return prior;
+  const require = createRequire(import.meta.url);
+  delete require.cache[binary];
+  const loaded = require(binary) as ServerLockBinding;
   Schema.decodeUnknownSync(NativeIdentity, { onExcessProperty: 'error' })(loaded.nativeIdentity());
   if (typeof loaded.ServerLock !== 'function') throw new Error('Native artifact has no server lock binding');
-  binding = loaded;
+  bindings.set(key, loaded);
   return loaded;
 }
 const nativeReasons = { ServerLockPermission: 'permission', ServerLockIo: 'io', ServerLockType: 'type', ServerLockIdentity: 'identity', ServerLockClosed: 'closed' } as const;
@@ -48,10 +68,11 @@ function failure(cause: unknown): ServerLockUnavailable | ServerLockHeld {
 }
 /** The caller creates the canonical server directory before admission. */
 export const acquireServerLock = Effect.fn('acquireServerLock')(function*(serverDirectory: string) {
+  const runtime = yield* RuntimeEnvironment;
   return yield* Effect.try({
     try: (): ServerLockHandle => {
       const directory = Schema.decodeUnknownSync(Schema.String)(serverDirectory);
-      const native: NativeServerLock = new (load().ServerLock)(directory);
+      const native: NativeServerLock = new (load(runtime).ServerLock)(directory);
       try {
         const identity = Schema.decodeUnknownSync(Identity, { onExcessProperty: 'error' })(native.identity());
         return {

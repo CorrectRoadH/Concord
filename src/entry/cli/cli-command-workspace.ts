@@ -10,7 +10,7 @@ import { withQuery } from './cli-repository.ts';
 
 const workspace = Command.make('workspace').pipe(Command.withDescription('Inspect the shared human/agent workspace projection.'), Command.withSubcommands([
   Command.make('show', {}, () => withQuery({ name: 'workspace.show', input: {} })),
-  Command.make('projection', {}, () => Effect.gen(function*() { const settings = yield* root; const path = validateViewRoot(viewRoot(settings)); const remote = settings.dryRun ? undefined : yield* (yield* ServerLauncher).projection(path); const result = remote ?? (yield* readWorkspaceProjection(yield* workspaceProjectionContext(path))); yield* Effect.sync(() => emit({ operation: 'workspace-projection', ...result }, settings.json)); })),
+  Command.make('projection', {}, () => Effect.gen(function*() { const settings = yield* root; const path = validateViewRoot((yield* viewRoot(settings))); const remote = settings.dryRun ? undefined : yield* (yield* ServerLauncher).projection(path); const result = remote ?? (yield* readWorkspaceProjection(yield* workspaceProjectionContext(path))); yield* emit({ operation: 'workspace-projection', ...result }, settings.json); })),
 ]));
 
 export { workspace };

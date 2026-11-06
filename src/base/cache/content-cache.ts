@@ -2,6 +2,8 @@
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { Schema } from "effect";
 import { createMemoryHawdb, type HawdbDatabase, type HawdbEntry, type HawdbLimits, type HawdbNamespace } from "./hawdb-native.ts";
+import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
+import { packageRoot } from '../installation/index.ts';
 import { canonical, decode, digest, objectDigest } from "../../model/index.ts";
 import { readCachePayloads, writeCachePayloads } from "./cache-query.ts";
 
@@ -17,15 +19,17 @@ export class ContentCache<A> {
   private readonly parser: string;
   private readonly valueSchema: Schema.ConstraintDecoder<A, never>;
   private readonly limits?: HawdbLimits;
-  constructor(namespace: Extract<HawdbNamespace, 'document_parse' | 'code_parse'>, parser: string, valueSchema: Schema.ConstraintDecoder<A, never>, limits?: HawdbLimits) {
+  private readonly runtime: RuntimeEnvironmentSnapshot;
+  constructor(namespace: Extract<HawdbNamespace, 'document_parse' | 'code_parse'>, parser: string, valueSchema: Schema.ConstraintDecoder<A, never>, limits?: HawdbLimits, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) {
     this.namespace = namespace;
     this.parser = parser;
     this.valueSchema = valueSchema;
     this.limits = limits;
+    this.runtime = runtime;
   }
 
   private engine(): HawdbDatabase | undefined {
-    try { return this.database ?? (this.database = createMemoryHawdb()); }
+    try { return this.database ?? (this.database = createMemoryHawdb(this.runtime)); }
     catch { return undefined; }
   }
 

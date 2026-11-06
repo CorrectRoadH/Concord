@@ -1,5 +1,5 @@
 import type * as ModelTypes from '../../model/index.ts';
-import type { Effect } from "effect";
+import type { Effect, Stdio } from "effect";
 import { Context } from "effect";
 import type { ConcordError } from "../../model/index.ts";
 
@@ -11,10 +11,10 @@ export interface ViewLaunchInfo {
   readonly local: readonly string[]; readonly network: readonly string[];
 }
 export class ViewLauncher extends Context.Service<ViewLauncher, {
-  readonly serve: (options: ViewLaunchOptions, ready: (server: ViewLaunchInfo) => void) => Effect.Effect<unknown, ConcordError>;
+  readonly serve: (options: ViewLaunchOptions, ready: (server: ViewLaunchInfo) => Effect.Effect<void, unknown, Stdio.Stdio>) => Effect.Effect<unknown, ConcordError, Stdio.Stdio>;
 }>()('concord/cli/ViewLauncher') {}
 export class LspLauncher extends Context.Service<LspLauncher, {
-  readonly serve: (root: string | undefined) => Effect.Effect<void, ConcordError>;
+  readonly serve: (root: string | undefined) => Effect.Effect<number, ConcordError>;
 }>()('concord/cli/LspLauncher') {}
 export class ServerLauncher extends Context.Service<ServerLauncher, {
   readonly processIdentity: Effect.Effect<{ readonly pid: number; readonly installation: string }, ConcordError>;

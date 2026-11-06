@@ -1,3 +1,4 @@
+import { RuntimeEnvironment, runtimePath } from '../environment/index.ts';
 import { Context, Effect, Layer, type Scope } from "effect";
 import type { Change, Repository, StepRename } from "../../model/index.ts";
 import { failure, ConcordError } from "../../model/index.ts";
@@ -31,25 +32,26 @@ export class PublicationValidation extends Context.Service<PublicationValidation
 
 /** A writer can only be constructed from a Publication layer with validation. */
 export class Publication extends Context.Service<Publication, {
-  readonly scratchDirectory: typeof scratchDirectory;
+  readonly scratchDirectory: (root: string, namespace: string, prefix: string, location?: 'temporary') => ReturnType<typeof scratchDirectory>;
   readonly validation: PublicationValidation['Service'];
   readonly receiptStore: typeof makePublicationReceiptStore;
   readonly inspectExportAncestors: typeof inspectExportAncestors;
-  readonly publishExport: typeof publishExport;
+  readonly publishExport: (out: string, data: string, chain: Parameters<typeof publishExport>[2]) => ReturnType<typeof publishExport>;
   readonly lease: (root: string, operation: string, create?: boolean, reclaimDead?: boolean) => Effect.Effect<TraceLease | undefined, ConcordError, Scope.Scope>;
   readonly publish: (repo: Repository, operation: string, changes: readonly Change[], dryRun?: boolean) => Effect.Effect<ReturnType<Repository['publish']>, ConcordError>;
 }>()('concord/Publication') {
   static readonly layer = Layer.effect(Publication, Effect.gen(function*() {
     const validation = yield* PublicationValidation;
+    const runtime = yield* RuntimeEnvironment;
     return Publication.of({
-      scratchDirectory,
+      scratchDirectory: (root, namespace, prefix, location) => scratchDirectory(runtimePath(runtime, root), namespace, prefix, location, runtime),
       validation,
-      receiptStore: makePublicationReceiptStore,
-      inspectExportAncestors,
-      publishExport,
+      receiptStore: root => makePublicationReceiptStore(runtimePath(runtime, root)),
+      inspectExportAncestors: (out, root, privatePaths) => inspectExportAncestors(runtimePath(runtime, out), runtimePath(runtime, root), privatePaths.map(path => runtimePath(runtime, path))),
+      publishExport: (out, data, chain) => publishExport(runtimePath(runtime, out), data, chain, runtime),
       lease: Effect.fn('Publication.lease')(function*(root: string, operation: string, create = true, reclaimDead = true) {
         return yield* Effect.acquireRelease(
-          acquireTraceLease(root, 'exclusive', operation, create, reclaimDead).pipe(Effect.mapError(cause => new ConcordError(cause.message.includes('busy') ? 'RepositoryBusy' : 'CoordinationFailed', cause.message, { operation: cause.operation, path: cause.path, phase: cause.phase }))),
+          acquireTraceLease(runtimePath(runtime, root), 'exclusive', operation, create, reclaimDead, runtime.env).pipe(Effect.mapError(cause => new ConcordError(cause.message.includes('busy') ? 'RepositoryBusy' : 'CoordinationFailed', cause.message, { operation: cause.operation, path: cause.path, phase: cause.phase }))),
           lease => lease === undefined ? Effect.void : releaseTraceLease(lease, operation).pipe(Effect.orDie),
         );
       }),

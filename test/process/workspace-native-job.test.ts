@@ -1,3 +1,4 @@
+import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
@@ -30,4 +31,4 @@ test('a native Web job returns derived observations to the persistent workspace 
   assert.equal(listed.exitCode, 0, listed.stderr);
   const inventory = Schema.decodeUnknownSync(Schema.Struct({ observations: Schema.Array(Schema.Struct({ adapterId: Schema.String, observation: Schema.Struct({ value: Schema.Struct({ cases: Schema.Array(Schema.Unknown) }) }) })) }))(JSON.parse(listed.stdout));
   assert.equal(inventory.observations.find(item => item.adapterId === 'external')?.observation.value.cases.length, 2, 'the next computation receives observations merged by the main process');
-})).pipe(Effect.provide(OwnedProcessLive))));
+})).pipe(Effect.provide(OwnedProcessLive), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env)))));

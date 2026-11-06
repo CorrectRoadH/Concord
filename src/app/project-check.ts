@@ -1,3 +1,4 @@
+import { repositoryRuntime } from '../base/workspace/index.ts';
 import { ConcordError, type Finding, type Repository } from "../model/index.ts";
 import { buildTrace } from "../domain/trace/index.ts";
 import { indexConcepts } from "../domain/concepts/index.ts";
@@ -23,7 +24,7 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
     catch (cause) { conceptLinksComplete = false; conceptLinks.push({ category: 'relation', code: cause instanceof ConcordError ? cause.code : 'SourceReadFailed', path, line: 1, message: cause instanceof Error ? cause.message : String(cause) }); continue; }
     if (source === undefined) { conceptLinksComplete = false; conceptLinks.push({ category: 'relation', code: 'SourceChanged', path, line: 1, message: 'File disappeared while terminology links were read' }); continue; }
     if (!catalogPaths.has(path) && !/concepts|[%&]/iu.test(source)) continue;
-    for (const link of inlineLinks(source, path)) for (const catalog of catalogs) {
+    for (const link of inlineLinks(source, path, repositoryRuntime(repo))) for (const catalog of catalogs) {
       const target = relativeMarkdownLinkTarget(path, link.url, catalog.path);
       if (target === undefined || target.kind === 'whole') continue;
       if (target.kind === 'invalid') { conceptLinksComplete = false; conceptLinks.push({ category: 'relation', code: 'ConceptLinkInvalid', path, line: link.line, message: target.message }); break; }

@@ -9,6 +9,9 @@ import { closeIssue, linkIssue } from '../../src/domain/issues/index.ts';
 import { decodeDocumentSource, loadDocuments } from '../../src/domain/documents/index.ts';
 import { linkMemory } from '../../src/app/index.ts';
 import { ConcordError, renderDocument } from '../../src/model/index.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 function fixture(run: (repo: LocalRepository, root: string, write: (path: string, source: string) => void) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-current-owner-'));
@@ -44,8 +47,8 @@ test('Memory contains only supports relations and rejects retired metadata witho
   const source = readFileSync(join(root, 'memory/cache.md'), 'utf8');
   assert.match(source, /role: supports/u);
   assert.doesNotMatch(source, /type:|status:|supersededBy:/u);
-  for (const field of ['type: insight', 'status: current', 'supersededBy: memory/other.md']) assert.throws(() => decodeDocumentSource('memory/cache.md', `---\n${field}\n---\n# Cache\n`), code('InvalidData'));
-  const record = decodeDocumentSource('memory/cache.md', '# Cache\n')!;
+  for (const field of ['type: insight', 'status: current', 'supersededBy: memory/other.md']) assert.throws(() => decodeDocumentSource('memory/cache.md', `---\n${field}\n---\n# Cache\n`, parserRuntime), code('InvalidData'));
+  const record = decodeDocumentSource('memory/cache.md', '# Cache\n', parserRuntime)!;
   assert.equal(renderDocument(record.metadata, '# Cache\n'), '# Cache\n');
 }));
 
@@ -55,5 +58,5 @@ test('Design discovery owns one Markdown file and Research pages have no documen
   write('docs/research/cache/README.md', '# Plain document\n');
   const owners = loadDocuments(repo);
   assert.deepEqual(owners.map(owner => [owner.path, owner.metadata.kind]), [['docs/design/cache.md', 'design']]);
-  assert.equal(decodeDocumentSource('docs/research/cache/README.md', '# Plain document\n'), undefined);
+  assert.equal(decodeDocumentSource('docs/research/cache/README.md', '# Plain document\n', parserRuntime), undefined);
 }));

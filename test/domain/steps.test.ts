@@ -21,6 +21,9 @@ import { renderReview, traceGaps, traceShow } from "../../src/app/index.ts";
 import { clearCache, parseTestDeclarations } from "../../src/domain/tests/index.ts";
 import { digest } from "../../src/model/index.ts";
 import { checkWriting } from "../../src/domain/writing/index.ts";
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 const path = 'docs/feature/sample/use-case/flow.md';
 function document(body: string, kind: 'use-case' | 'feature' = 'use-case') {
@@ -44,19 +47,19 @@ function write(root: string, file: string, source: string) { mkdirSync(resolve(r
 // @name steps-ast-and-namespace
 test('steps C1 C3 C4 C10 C11 C12 use AST positions, exact Unicode IDs and one heading namespace', () => Effect.runPromise(Effect.sync(() => {
   const source = document('# Flow\n\n## 流程\n\n7. First 😀  {#拒绝令牌}\n8. Second\n   continuation {#second}\n\n## Acceptance\n\n1. Ordinary\n\n```md\n1. fake {#fence}\n```\n\n1. `example {#inline}`\n\n<div>\n1. fake {#html}\n</div>\n');
-  const result = extractSteps(path, source);
+  const result = extractSteps(path, source, parserRuntime);
   assert.deepEqual(result.steps.map(step => [step.id, step.ordinal, step.listOrdinal]), [['拒绝令牌', 1, 1], ['second', 2, 1]]);
   assert.deepEqual(result.findings, []);
   for (const marker of result.markers) assert.match(source.split('\n')[marker.line - 1]!.slice(marker.startColumn, marker.endColumn), /^ +\{#[^}]+\}$/u);
   assert.ok(result.steps[1]!.endLine > result.steps[1]!.line);
-  assert.deepEqual(extractSteps(path, document('# Flow\n\n1. New unmarked\n2. Second {#second}\n3. First {#拒绝令牌}\n')).steps.map(step => [step.id, step.ordinal]), [['second', 1], ['拒绝令牌', 2]]);
-  for (const body of ['## foo--bar\n\n1. Item {#foo-bar}\n', '## Title {#custom}\n\n1. Item {#custom}\n', '## Title {#custom} ###\n\n1. Item {#title}\n', '1. One {#same}\n2. Two {#same}\n']) assert.equal(extractSteps(path, document(body)).findings[0]?.code, 'DuplicateAnchor');
-  assert.deepEqual(extractSteps(path, document('1. Text <span>sample {#inside}\n')).steps, []);
-  assert.equal(extractSteps(path, document('1. Text <span>sample</span> {#outside}\n')).steps[0]?.id, 'outside');
-  assert.deepEqual(extractSteps(path, document('1. A {#é}\n2. B {#é}\n3. C {#É}\n')).findings, []);
-  for (const body of ['- Wrong {#bad}\n', '1. Parent\n   1. Nested {#bad}\n', 'Paragraph {#bad}\n', '1. Bad {#two--parts}\n']) assert.equal(extractSteps(path, document(body)).findings[0]?.code, 'InvalidStepPosition');
-  assert.equal(extractSteps('docs/feature/sample/README.md', document('1. Wrong {#bad}\n', 'feature')).findings[0]?.code, 'InvalidStepPosition');
-  assert.equal(extractSteps('docs/feature/sample/cli.md', '1. Wrong {#bad}\n').findings[0]?.code, 'InvalidStepPosition');
+  assert.deepEqual(extractSteps(path, document('# Flow\n\n1. New unmarked\n2. Second {#second}\n3. First {#拒绝令牌}\n'), parserRuntime).steps.map(step => [step.id, step.ordinal]), [['second', 1], ['拒绝令牌', 2]]);
+  for (const body of ['## foo--bar\n\n1. Item {#foo-bar}\n', '## Title {#custom}\n\n1. Item {#custom}\n', '## Title {#custom} ###\n\n1. Item {#title}\n', '1. One {#same}\n2. Two {#same}\n']) assert.equal(extractSteps(path, document(body), parserRuntime).findings[0]?.code, 'DuplicateAnchor');
+  assert.deepEqual(extractSteps(path, document('1. Text <span>sample {#inside}\n'), parserRuntime).steps, []);
+  assert.equal(extractSteps(path, document('1. Text <span>sample</span> {#outside}\n'), parserRuntime).steps[0]?.id, 'outside');
+  assert.deepEqual(extractSteps(path, document('1. A {#é}\n2. B {#é}\n3. C {#É}\n'), parserRuntime).findings, []);
+  for (const body of ['- Wrong {#bad}\n', '1. Parent\n   1. Nested {#bad}\n', 'Paragraph {#bad}\n', '1. Bad {#two--parts}\n']) assert.equal(extractSteps(path, document(body), parserRuntime).findings[0]?.code, 'InvalidStepPosition');
+  assert.equal(extractSteps('docs/feature/sample/README.md', document('1. Wrong {#bad}\n', 'feature'), parserRuntime).findings[0]?.code, 'InvalidStepPosition');
+  assert.equal(extractSteps('docs/feature/sample/cli.md', '1. Wrong {#bad}\n', parserRuntime).findings[0]?.code, 'InvalidStepPosition');
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#inspect-associations
@@ -109,7 +112,7 @@ test('steps C16 C17 C21 format seeds only an explicit list, skips occupied and d
   write(root, path, document('# Flow\n\n## step-2\n\n1. A   {#step-1}\n2. B\n3. C {#named}\n'));
   write(root, 'test/old.ts', `// @use-case ${path}#step-3\n`);
   formatUseCase(repo, path);
-  assert.deepEqual(extractSteps(path, repo.read(path)!).steps.map(step => step.id), ['step-1', 'step-4', 'named']);
+  assert.deepEqual(extractSteps(path, repo.read(path)!, parserRuntime).steps.map(step => step.id), ['step-1', 'step-4', 'named']);
   assert.match(repo.read(path)!, /A \{#step-1\}/u);
   assert.deepEqual(formatUseCase(repo, path).changedPaths, []);
   write(root, 'test/invalid.ts', '// @use-case\n');

@@ -10,7 +10,7 @@ const operation = (name: 'start' | 'stop' | 'status' | 'run') => Command.make(na
   const settings = yield* root;
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'server does not accept --dry-run'));
   const launcher = yield* ServerLauncher;
-  const value = yield* launcher[name](viewRoot(settings));
-  if (name !== 'run') yield* Effect.sync(() => emit(value, settings.json));
+  const value = yield* launcher[name]((yield* viewRoot(settings)));
+  if (name !== 'run') yield* emit(value, settings.json);
 }));
 export const server = Command.make('server').pipe(Command.withDescription('Manage the local worktree service.'), Command.withSubcommands(['start', 'stop', 'status', 'run'].map(name => operation(name as 'start' | 'stop' | 'status' | 'run'))));

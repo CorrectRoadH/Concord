@@ -11,6 +11,9 @@ import { tmpdir } from '../support/temporary.ts';
 import { LocalRepository } from '../support/repository.ts';
 import { parseTaste, tasteShow, inspectTaste } from '../../src/domain/taste/index.ts';
 import { checkProject, setMarkdown } from '../../src/app/index.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 const source = '# Taste\n\n## General {#general}\n\n1. Read first. {#general-read}\n\n## T-1 Keep one owner {#t-1}\n\nPrefer one source.\n\n## T-8 Read clearly {#t-8}\n';
 const code = (name: string) => (error: unknown) => error instanceof Error && 'code' in error && error.code === name;
@@ -24,13 +27,13 @@ function fixture(run: (repo: LocalRepository, write: (path: string, body: string
 
 // @use-case docs/feature/taste/use-case/write-taste.md
 test('taste uses current Markdown entries and general IDs without adoption state', () => {
-  const record = parseTaste(source);
+  const record = parseTaste(source, parserRuntime);
   assert.deepEqual(record.entries.map(entry => entry.id), ['general', 't-1', 't-8']);
   assert.deepEqual(record.entries[0]?.paragraphs, ['general-read']);
   assert.equal('metadata' in record, false);
-  for (const body of [source.replace('{#t-1}', ''), source.replace('{#t-8}', '{#t-1}'), source.replace('{#t-8}', '{#t-9}'), source.replace('T-8', 'T-08').replace('t-8', 't-08'), `---\nstatus: active\n---\n${source}`]) assert.throws(() => parseTaste(body), code('TasteEntryInvalid'));
-  assert.deepEqual(parseTaste('# Empty taste\n').entries, []);
-  assert.equal(parseTaste(`${source}\n\`{#t-99}\`\n\n<!-- {#t-100} -->\n`).entries.length, 3);
+  for (const body of [source.replace('{#t-1}', ''), source.replace('{#t-8}', '{#t-1}'), source.replace('{#t-8}', '{#t-9}'), source.replace('T-8', 'T-08').replace('t-8', 't-08'), `---\nstatus: active\n---\n${source}`]) assert.throws(() => parseTaste(body, parserRuntime), code('TasteEntryInvalid'));
+  assert.deepEqual(parseTaste('# Empty taste\n', parserRuntime).entries, []);
+  assert.equal(parseTaste(`${source}\n\`{#t-99}\`\n\n<!-- {#t-100} -->\n`, parserRuntime).entries.length, 3);
 });
 
 // @use-case docs/feature/taste/use-case/cite-taste.md

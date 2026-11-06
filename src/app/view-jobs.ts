@@ -1,3 +1,4 @@
+import { RuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
 import { Publication } from '../base/publication/index.ts';
 import { randomUUID } from "node:crypto";
 import { Cause, Effect, Exit, Option } from "effect";
@@ -53,10 +54,12 @@ export class ViewJobManager {
   private stopped = false;
 
   readonly root: string;
+  private readonly runtime: RuntimeEnvironmentSnapshot;
   private readonly onEvidencePublished: () => void;
   private readonly withWriter: <A>(root: string, use: (repo: LocalRepository, sources: Sources['Service'], publication: Publication['Service']) => Promise<A>) => Promise<A>;
-  constructor(root: string, onEvidencePublished: () => void, withWriter: <A>(root: string, use: (repo: LocalRepository, sources: Sources['Service'], publication: Publication['Service']) => Promise<A>) => Promise<A>) {
+  constructor(root: string, onEvidencePublished: () => void, withWriter: <A>(root: string, use: (repo: LocalRepository, sources: Sources['Service'], publication: Publication['Service']) => Promise<A>) => Promise<A>, runtime: RuntimeEnvironmentSnapshot) {
     this.root = root;
+    this.runtime = runtime;
     this.onEvidencePublished = onEvidencePublished;
     this.withWriter = withWriter;
   }
@@ -78,7 +81,7 @@ export class ViewJobManager {
       state: 'queued',
       startedAt: now(),
       cancelRequested: false,
-      process: makeOwnedProcessService(),
+      process: makeOwnedProcessService({ environment: this.runtime }),
     };
     this.jobs.set(job.id, job);
     this.active = job;
@@ -119,7 +122,7 @@ export class ViewJobManager {
       const trace = repo.snapshot(() => buildTrace(repo, 'off', { includeCode: false }));
       requireValidTrace(trace);
       const selected = selectCase(trace.annotations.cases, job.caseId);
-      const exit = await Effect.runPromiseExit(runCase(repo, selected, trace.documents).pipe(Effect.provideService(OwnedProcess, job.process), Effect.provideService(Sources, sources), Effect.provideService(Publication, publication)));
+      const exit = await Effect.runPromiseExit(runCase(repo, selected, trace.documents).pipe(Effect.provideService(OwnedProcess, job.process), Effect.provideService(Sources, sources), Effect.provideService(Publication, publication), Effect.provideService(RuntimeEnvironment, this.runtime)));
       const results = await Effect.runPromise(job.process.cleanupResults);
       const idle = (await Effect.runPromise(job.process.activeCount)) === 0;
       const cleanupOk = idle && results.every(hasConfirmedOwnedGroupCleanup);

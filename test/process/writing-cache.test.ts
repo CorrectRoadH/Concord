@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { initialize } from '../support/operations.ts';
 import { installedConcordCli } from '../support/support.ts';
@@ -14,6 +15,8 @@ import { LocalRepository } from "../support/repository.ts";
 import { checkWriting } from "../../src/domain/writing/index.ts";
 import { openHawdb } from "../../src/base/cache/index.ts";
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 const policy = '# Rules\n\n句子不超过 5 个字符。\n';
 function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeof checkWriting>) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-cache-'));
@@ -22,7 +25,7 @@ function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeo
   try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
   writeFileSync(join(root, 'docs/writing.md'), policy);
   writeFileSync(join(root, 'docs/corpus.md'), 'One two three.\n');
-  openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }).close();
+  openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }, nativeRuntime).close();
   const scan = (cache = true) => {
     const repo = new LocalRepository(root, { access: 'read' });
     try { return checkWriting(repo, undefined, cache); } finally { repo.close(); }
@@ -34,7 +37,7 @@ function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeo
 test('writing cache validates current sources, members, policies and payload integrity', () => Effect.runPromise(Effect.sync(() => fixture((root, scan) => {
   const uncached = scan(false);
   if (existsSync(join(root, '.git/concord/cache.hawdb'))) {
-    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false });
+    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false }, nativeRuntime);
     try { assert.equal(db.scan('query_cache').filter(row => row.key.startsWith('writing:')).length, 0); }
     finally { db.close(); }
   }
@@ -42,7 +45,7 @@ test('writing cache validates current sources, members, policies and payload int
   assert.deepEqual(cold, uncached);
   assert.ok(cold.findings.some(f => f.file === 'docs/corpus.md'));
   assert.deepEqual(scan(), cold);
-  const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });
+  const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false }, nativeRuntime);
   try {
     const rows = database.scan('query_cache');
     assert.equal(rows.length, 1);

@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+import type { RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
 import { historicalAnalysis } from "../model/index.ts";
 
 import { ConcordError, digest } from "../model/index.ts";
@@ -17,13 +18,13 @@ export function readQueryBody(root: string, path: string): string {
   if (source === undefined) throw new ConcordError('BodyUnavailable', `${path} no longer exists`);
   return source;
 }
-export function hydrateQueryValue(root: string, value: QueryValue, read = readQueryBody) {
+export function hydrateQueryValue(root: string, value: QueryValue, read = readQueryBody, runtime: RuntimeEnvironmentSnapshot) {
   const bodyChanged: string[] = [], bodyUnavailable: { path: string; code: string }[] = [];
   const body = (path: string, expected: string, taste: boolean) => {
     try {
       const source = read(root, path);
       if (digest(source) !== expected) { bodyChanged.push(path); return undefined; }
-      const owner = taste ? parseTaste(source) : decodeDocumentSource(path, source);
+      const owner = taste ? parseTaste(source, runtime) : decodeDocumentSource(path, source, runtime);
       if (!owner) throw new ConcordError('InvalidData', 'Expected a Concord owner');
       return owner;
     } catch (cause) {

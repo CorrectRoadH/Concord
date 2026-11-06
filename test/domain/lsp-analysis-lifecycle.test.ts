@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createDocument } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';
 import assert from 'node:assert/strict';
@@ -17,6 +18,8 @@ import { OwnedProcessLive } from "../../src/base/process/index.ts";
 import { tracePrivateDirectorySync } from "../../src/base/publication/index.ts";
 import { inspectRunner } from "../../src/base/publication/index.ts";
 import { collectNativeTests } from "../../src/domain/tests/index.ts";
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const target = 'docs/feature/sample/use-case/sample.md';
 function consumer(): string {
@@ -69,7 +72,7 @@ test('analysis releases persistent readers and publication ownership while its e
   const running = await blocked(root);
   try {
     assert.equal(existsSync(join(tracePrivateDirectorySync(root), 'publication.lease')), false);
-    const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true });
+    const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }, nativeRuntime);
     database.close();
     running.release();
     const result = await running.result;

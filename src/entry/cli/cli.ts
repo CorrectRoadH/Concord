@@ -2,10 +2,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
 import { Command } from "effect/unstable/cli";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { root } from "./cli-base.ts";
-import { runCli } from "./main.ts";
 import type { StartupData } from "../../model/index.ts";
 
 const loaders = {
@@ -40,7 +37,7 @@ const loaders = {
   herdr: () => import('./cli-command-herdr.ts').then(m => m.herdr),
 };
 
-export async function loadCommand(group: string, data: StartupData): Promise<() => void> {
+export async function loadCommand(group: string, data: StartupData) {
   const documentKinds = ['use-case', 'roadmap'] as const;
   const kind = documentKinds.find(name => name === group);
   const selected = kind === undefined ? await loaders[group as keyof typeof loaders]() : (await import("./cli-command-documents.ts")).docsGroup(kind);
@@ -48,12 +45,5 @@ export async function loadCommand(group: string, data: StartupData): Promise<() 
   // use the complete definition rather than these sibling descriptors.
   const commands = data.groups.map(item => item.name === group ? selected : Command.make(item.name).pipe(Command.withDescription(item.description ?? '')));
   const command = root.pipe(Command.withSubcommands(commands));
-  return () => runCli(command);
-}
-
-// Preserve the direct complete-CLI entry used by tooling. The package bin loads
-// this module as a library and invokes only the selected command above.
-if (process.argv[1] !== undefined && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const fallback = import.meta.url.endsWith('.ts') ? './cli-fallback.ts' : './cli-fallback-bundle.js';
-  await import(fallback);
+  return command;
 }

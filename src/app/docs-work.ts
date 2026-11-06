@@ -1,3 +1,4 @@
+import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { ancestors, changedInputs } from "../domain/docs-work/index.ts";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
@@ -22,13 +23,14 @@ const host = Effect.fn('DocsWork.host')(function*() { return { storage, config, 
 
 const context = Effect.fn('DocsWork.context')(function*(input?: string, existing = false) {
   const main = yield* host();
-  const root = yield* Effect.try({ try: () => main.storage.discoverRoot(input), catch: cause => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', String(cause)) });
+  const runtime = yield* RuntimeEnvironment;
+  const root = yield* Effect.try({ try: () => main.storage.discoverRoot(input, false, runtime), catch: cause => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', String(cause)) });
   const fs = yield* FileSystem.FileSystem;
   const source = yield* fs.readFileString(join(root, 'concord.config.ts')).pipe(Effect.catch(error => error.reason._tag === 'NotFound'
     ? Effect.succeed(undefined)
     : Effect.fail(fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', 'Cannot read project configuration'))));
   const config: ProjectConfig = yield* Effect.try({ try: () => source === undefined ? {} : main.config.parseTypeScriptConfig(source), catch: cause => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', String(cause)) });
-  return { root, config, configDigest: objectHash({ source: source ?? null, docsWork: config.docsWork ?? {} }), main };
+  return { root, config, configDigest: objectHash({ source: source ?? null, docsWork: config.docsWork ?? {} }), main, runtime };
 });
 
 type Context = Effect.Success<ReturnType<typeof context>>;
@@ -157,7 +159,8 @@ export const prepareDocsWork = Effect.fn('DocsWork.prepare')(function*(input: { 
 const ClockId = () => now.pipe(Effect.map(value => value.replace(/[^0-9]/gu, '')));
 export const showDocsWork = Effect.fn('DocsWork.show')(function*(runId: string, input?: string) {
   const main = yield* host();
-  const root = yield* Effect.try({ try: () => main.storage.discoverRoot(input), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) });
+  const runtime = yield* RuntimeEnvironment;
+  const root = yield* Effect.try({ try: () => main.storage.discoverRoot(input, false, runtime), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) });
   const path = yield* statePath(root, runId);
   const run = yield* readJson(join(path, 'run.json'), RunSchema);
   if (run.runId !== runId) return yield* fail('DocsWorkReceiptMismatch', 'Run identity does not match state directory');
@@ -185,7 +188,7 @@ export const current = Effect.fn('DocsWork.current')(function*(ctx: Context, run
 
 const runBuiltin = Effect.fn('DocsWork.runBuiltin')(function*(ctx: Context, kind: 'writing' | 'finalizer', paths: readonly string[] = []) {
   return yield* Effect.acquireUseRelease(
-    Effect.try({ try: () => new ctx.main.storage.LocalRepository(ctx.root, { access: 'read' }), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) }),
+    Effect.try({ try: () => new ctx.main.storage.LocalRepository(ctx.root, { access: 'read', runtime: ctx.runtime }), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) }),
     repo => Effect.try({ try: () => {
       if (kind === 'finalizer') {
         const result = ctx.main.project.checkProject(repo);
@@ -253,7 +256,8 @@ export const checkDocsWork = Effect.fn('DocsWork.check')(function*(runId: string
 });
 export const finalizeDocsWork = Effect.fn('DocsWork.finalize')(function*(runId: string, root?: string) {
   const main = yield* host();
-  const resolvedRoot = yield* Effect.try({ try: () => main.storage.discoverRoot(root), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) });
+  const runtime = yield* RuntimeEnvironment;
+  const resolvedRoot = yield* Effect.try({ try: () => main.storage.discoverRoot(root, false, runtime), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) });
   const path = yield* statePath(resolvedRoot, runId);
   return yield* withLock(path, Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;

@@ -1,3 +1,4 @@
+import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, parse, sep } from 'node:path';
 import { Effect, Schema } from 'effect';
@@ -60,9 +61,9 @@ export const inspectExportAncestors = Effect.fn('Publication.inspectExportAncest
     return directoryChain(dirname(out));
   }, catch: failure,
 }));
-export const publishExport = Effect.fn('Publication.publishExport')(function*(out: string, data: string, chain: DirectoryIdentity[]) {
+export const publishExport = Effect.fn('Publication.publishExport')(function*(out: string, data: string, chain: DirectoryIdentity[], runtime: RuntimeEnvironmentSnapshot) {
   const files = sourceInstallation
-    ? yield* Effect.tryPromise({ try: async () => (await import('../installation/index.ts')).sourcePreviewFiles(), catch: failure })
+    ? yield* Effect.tryPromise({ try: async () => (await import('../installation/index.ts')).sourcePreviewFiles(runtime), catch: failure })
     : yield* Effect.try({ try: staticFiles, catch: failure });
   return yield* Effect.try({ try: () => publishNow(out, data, chain, files), catch: failure });
 });

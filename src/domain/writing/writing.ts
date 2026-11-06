@@ -1,3 +1,5 @@
+import { repositoryRuntime } from '../../base/workspace/index.ts';
+import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
 import type { WritingFinding, WritingReport } from "../../model/index.ts";
 import { fromMarkdown } from "../../model/index.ts";
 import type { Nodes } from "mdast";
@@ -13,10 +15,10 @@ import { extractSteps } from "../documents/index.ts";
 import { readWritingFindings, writeWritingFindings } from "../../base/cache/index.ts";
 // @concord-begin
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
-function withoutStepMarkers(path: string, source: string): string {
+function withoutStepMarkers(path: string, source: string, runtime: RuntimeEnvironmentSnapshot): string {
   if (!source.includes('{#')) return source;
   const lines = source.split('\n');
-  for (const range of extractSteps(path, source).markers) {
+  for (const range of extractSteps(path, source, runtime).markers) {
     const line = lines[range.line - 1]!;
     lines[range.line - 1] = line.slice(0, range.startColumn) + ' '.repeat(range.endColumn - range.startColumn) + line.slice(range.endColumn);
   }
@@ -173,11 +175,11 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     if (cached === undefined) {
       // The cache key binds every catalog byte and the parser revision. Reparse
       // changed or uncached sources; exact validated hits need no Markdown parser.
-      const catalogs = analyzeCatalogs(sourceCatalogs);
+      const catalogs = analyzeCatalogs(sourceCatalogs, repositoryRuntime(repo));
       if (catalogs.diagnostics.length) throw new ConcordError(catalogs.diagnostics[0]!.code, catalogs.diagnostics.map(item => item.message).join('; '), catalogs.diagnostics);
       const used = new Set<string>(), eligible = new Set<string>();
       for (const [file, authored] of documents) {
-        const source = withoutStepMarkers(file, authored);
+        const source = withoutStepMarkers(file, authored, repositoryRuntime(repo));
         const parsed = prose(file, source);
         const owners = applicablePolicy(file, activePolicies);
         const concepts = effectiveConcepts(file, catalogs.catalogs);

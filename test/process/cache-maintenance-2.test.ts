@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { runApplication } from '../support/repository.ts';
 import { PersistentCache } from '../../src/base/cache/index.ts';
 import { initialize } from '../support/operations.ts';
@@ -24,13 +25,15 @@ import { maintainCache } from "../../src/app/index.ts";
 import { sourceRoot, prepareSourceConsumer } from '../support/source-consumer.ts';
 import { pollUntil } from '../support/support.ts';
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-maintenance-')));
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
   try { initialize(repo, false, { testRoots: [], sourceRoots: [] }); } finally { repo.close(); }
   const path = join(root, '.git/concord/cache.hawdb');
-  const db = openHawdb(path, { readOnly: false, create: true });
+  const db = openHawdb(path, { readOnly: false, create: true }, nativeRuntime);
   db.put('config_cache', [{ key: 'retained', payload: 'a current logical value' }]); db.close();
   return { root, path, privateDir: join(root, '.git/concord'), padding: join(path, 'retained-padding') };
 }
@@ -40,7 +43,7 @@ function worker(root: string) {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 }
 const read = (path: string) => {
-  const db = openHawdb(path, { readOnly: true, create: false });
+  const db = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
   try { return db.get('config_cache', ['retained', 'concurrent-writer']); } finally { db.close(); }
 };
 async function settle(root: string) {
@@ -53,7 +56,7 @@ async function settle(root: string) {
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('native sweep budget and I/O failures defer even an oversized cache and release the handle', async () => {
   const f = fixture();
-  const db = openHawdb(f.path, { readOnly: false, create: false });
+  const db = openHawdb(f.path, { readOnly: false, create: false }, nativeRuntime);
   const boundary = Object.getPrototypeOf(db) as { reclaim: typeof db.reclaim };
   const reclaim = boundary.reclaim;
   db.close();

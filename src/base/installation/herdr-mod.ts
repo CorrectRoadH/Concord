@@ -5,6 +5,8 @@ import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join } from 'node:path';
 import { ConcordError, failure } from '../../model/index.ts';
+import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
+import { packageRoot } from './location.ts';
 import { modManifest } from '../../model/herdr-mod/index.ts';
 
 export interface HerdrInstallHost {
@@ -19,15 +21,15 @@ export interface HerdrModReceipt {
   readonly absent?: true;
   readonly openHerdr?: true;
 }
-const herdrCommand = Effect.fn('Installation.herdrCommand')(function*(args: readonly string[]) {
-  const child = yield* (yield* ChildProcessSpawner.ChildProcessSpawner).spawn(ChildProcess.make('herdr-app', args, { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
+const herdrCommand = Effect.fn('Installation.herdrCommand')(function*(args: readonly string[], runtime: RuntimeEnvironmentSnapshot) {
+  const child = yield* (yield* ChildProcessSpawner.ChildProcessSpawner).spawn(ChildProcess.make('herdr-app', args, { cwd: runtime.cwd, env: runtime.env, extendEnv: false, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
   const reply = yield* Effect.all({ code: child.exitCode, stdout: Stream.mkString(Stream.decodeText(child.stdout)), stderr: Stream.mkString(Stream.decodeText(child.stderr)) }, { concurrency: 'unbounded' });
   return { code: Number(reply.code), output: reply.stdout + reply.stderr };
 }, Effect.scoped, Effect.mapError(failure));
 
 /** Replace only this mod's packaged files, using rename for possibly mapped files. */
 export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*(
-  operation: 'install' | 'uninstall', appHome: string, resources: string, dryRun = false, sourceRoot?: string, host?: HerdrInstallHost,
+  operation: 'install' | 'uninstall', appHome: string, resources: string, dryRun = false, sourceRoot?: string, host?: HerdrInstallHost, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {}),
 ) {
   const fs = yield* FileSystem.FileSystem;
   const homeExists = yield* fs.exists(appHome);
@@ -45,7 +47,7 @@ export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*
     if (!dryRun) yield* fs.remove(path, { recursive: true, force: true });
     return receipt;
   }
-  const available = host ? yield* host.available : yield* herdrCommand(['--version']).pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)));
+  const available = host ? yield* host.available : yield* herdrCommand(['--version'], runtime).pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)));
   if ((!homeExists && !available) || (homeExists && (yield* fs.stat(appHome)).type !== 'Directory')) {
     return yield* Effect.fail(new ConcordError('HerdrNotFound', 'Install Herdr: curl -fsSL https://releases.herdr.dev/app/install.sh | sh\nThen run concord herdr install'));
   }
@@ -82,7 +84,7 @@ export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*
     );
   }
   if (available) {
-    const checked = yield* (host ? host.check(path) : herdrCommand(['check', path])).pipe(Effect.catch(cause => Effect.succeed({ code: 1, output: cause.message })));
+    const checked = yield* (host ? host.check(path) : herdrCommand(['check', path], runtime)).pipe(Effect.catch(cause => Effect.succeed({ code: 1, output: cause.message })));
     if (checked.code !== 0) return yield* Effect.fail(new ConcordError('HerdrModCheckFailed', 'Herdr rejected the installed Concord mod', { output: checked.output }));
   }
   return { ...receipt, ...(!homeExists ? { openHerdr: true as const } : {}) };

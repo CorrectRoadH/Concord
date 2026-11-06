@@ -7,6 +7,9 @@ import { createConsumer } from './consumer.ts';
 import { writeProjectConfig } from './support.ts';
 import { LocalRepository } from './repository.ts';
 import { createDocument } from './operations.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 export const ownerPath = 'docs/feature/sample/README.md';
 export const flow = 'docs/feature/sample/use-case/flow.md';
@@ -29,7 +32,7 @@ export function queryFactsConsumer(): string {
     writeFileSync(join(root, path!), readFileSync(join(root, path!), 'utf8') + `\n${marker}\n`);
   }
   const issuePath = 'docs/issues/remote.md';
-  const issue = decodeDocumentSource(issuePath, readFileSync(join(root, issuePath), 'utf8'))!;
+  const issue = decodeDocumentSource(issuePath, readFileSync(join(root, issuePath), 'utf8'), parserRuntime)!;
   assert.equal(issue.metadata.kind, 'issue');
   assert.ok(issue.metadata.kind === 'issue');
   writeFileSync(join(root, issuePath), renderDocument({ ...issue.metadata, source: {

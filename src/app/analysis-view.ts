@@ -1,3 +1,4 @@
+import { repositoryRuntime } from '../base/workspace/index.ts';
 import { type AnalysisView, relevanceFor } from "../model/index.ts";
 import { referenceResolver } from "../domain/documents/index.ts";
 import { readAnalysisObservations } from "./code-analysis.ts";
@@ -7,7 +8,7 @@ import { extractSteps } from "../domain/documents/index.ts";
 export function analysisView(repo: Repository, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[], documents: readonly DocumentRecord[], references = referenceResolver(repo, documents)): AnalysisView {
   const observations = readAnalysisObservations(repo);
   const stepRefs = new Set(documents.filter(document => document.metadata.kind === 'use-case').flatMap(document =>
-    extractSteps(document.path, repo.read(document.path) ?? '').steps.map(step => `${document.path}#${step.id}`)));
+    extractSteps(document.path, repo.read(document.path) ?? '', repositoryRuntime(repo)).steps.map(step => `${document.path}#${step.id}`)));
   const targets = new Map<string, DocumentRecord>();
   for (const ref of new Set([...cases.map(test => test.contract), ...codes.flatMap(code => code.contracts)])) {
     try { targets.set(ref, references.resolve(ref)); } catch { /* Static owners report invalid references independently. */ }

@@ -1,3 +1,4 @@
+import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { workerEntryArgv } from "../base/installation/index.ts";
 import { Effect } from "effect";
 import { OwnedProcess, makeOwnedProcessService, type OwnedProcessService } from "../base/process/index.ts";
@@ -6,7 +7,8 @@ import * as P from '../model/editor/index.ts';
 
 
 /** Each invocation owns its service, including its completed-output history. */
-export const runEditorJob = Effect.fn('editor.runJob')(function*(job: P.Job, cleanupFailed: (error: ConcordError) => void, service: OwnedProcessService = makeOwnedProcessService()) {
+export const runEditorJob = Effect.fn('editor.runJob')(function*(job: P.Job, cleanupFailed: (error: ConcordError) => void, providedService?: OwnedProcessService) {
+  const service = providedService ?? makeOwnedProcessService({ environment: yield* RuntimeEnvironment });
   if (process.platform === 'win32') return yield* Effect.fail(new ConcordError('EditorTaskFailed', 'Editor computation requires owned POSIX process groups'));
   const input = yield* Effect.try({ try: () => JSON.stringify(job), catch: failure });
   if (Buffer.byteLength(input) > P.editorLimits.input) return yield* Effect.fail(new ConcordError('EditorBudgetExceeded', 'Job input limit'));
@@ -14,7 +16,7 @@ export const runEditorJob = Effect.fn('editor.runJob')(function*(job: P.Job, cle
   const work = Effect.gen(function*() {
     const owner = yield* OwnedProcess;
     attempted = true;
-    const result = yield* owner.run([process.execPath, ...workerEntryArgv('editor-worker', ['--max-old-space-size=256'])], {
+    const result = yield* owner.run([process.execPath, ...workerEntryArgv('editor-worker', ['--max-old-space-size=256']), service.environment.cwd], {
       cwd: job.root, stdin: input, timeoutMs: P.editorLimits.timeout, outputLimitBytes: P.editorLimits.output,
     }).pipe(Effect.mapError(error => new ConcordError('EditorTaskFailed', error.detail)));
     if (result.timedOut || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('EditorBudgetExceeded', result.timedOut ? 'Computation timeout' : 'Computation output limit'));

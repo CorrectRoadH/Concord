@@ -11,6 +11,9 @@ import { initialize } from '../support/operations.ts';
 import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
 import { checkWriting } from '../../src/domain/writing/index.ts';
 import { readConceptCatalog } from '../../src/domain/concepts/index.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('Markdown rules round-trip escaped cells, limits, roots and longer exceptions and reject malformed sections', () => {
@@ -27,9 +30,9 @@ test('Markdown rules round-trip escaped cells, limits, roots and longer exceptio
     renderWritingPolicy({ roots: ['../escape'], bannedTerms: [] }),
   ]) assert.throws(() => parseWritingPolicy(source), /line \d+:/u);
   assert.throws(() => parseWritingPolicy(renderWritingPolicy(policy), 'docs/cart/writing.md'), /Only docs\/writing.md/u);
-  const catalog = readConceptCatalog('# Terms\n\nIntro.\n\n## Order {#order}\n\nA purchase.\n\n旧写法：`单子`、`订货单`\n\n### Details\n\nExplanation.\n');
+  const catalog = readConceptCatalog('# Terms\n\nIntro.\n\n## Order {#order}\n\nA purchase.\n\n旧写法：`单子`、`订货单`\n\n### Details\n\nExplanation.\n', undefined, parserRuntime);
   assert.deepEqual(catalog.concepts[0]?.deprecated, ['单子', '订货单']);
-  for (const old of ['旧写法：unquoted', '旧写法：`Old` and `Older`', '旧写法：`Order`', '旧写法：`Old`、`old`']) assert.throws(() => readConceptCatalog(`# Terms\n\n## Order {#order}\n\nA purchase.\n\n${old}\n`), { code: 'InvalidConceptCatalog' });
+  for (const old of ['旧写法：unquoted', '旧写法：`Old` and `Older`', '旧写法：`Order`', '旧写法：`Old`、`old`']) assert.throws(() => readConceptCatalog(`# Terms\n\n## Order {#order}\n\nA purchase.\n\n${old}\n`, undefined, parserRuntime), { code: 'InvalidConceptCatalog' });
 });
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md

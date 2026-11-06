@@ -1,11 +1,11 @@
 // @concord-file
 // @concord-implements docs/engineering/build/architecture.md#从源码运行
 import type * as EffectTypes from 'effect';
-import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { Clock, Effect, FileSystem, Schema } from 'effect';
-import { NodeServices } from '@effect/platform-node';
+import { Clock, Effect, FileSystem, Layer, Schema } from 'effect';
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from '@effect/platform-node';
 import { makeOwnedProcessService, hasSuccessfulOwnedProcessResult } from '../process/index.ts';
+import { RuntimeEnvironment, runtimeCacheHome, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { packageRoot } from './location.ts';
 import { workerEntryArgv } from './index.ts';
 import { sourceWebInputDigest, sourceWebRuntimeImports, webHash } from './source-web-inputs.ts';
@@ -30,10 +30,7 @@ const DependencyManifest = Schema.Struct({
   dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
-export const sourceWebCacheDirectory = (): string => {
-  const configured = process.env.XDG_CACHE_HOME;
-  return join(configured && isAbsolute(configured) ? configured : join(homedir(), '.cache'), 'concord', 'web');
-};
+export const sourceWebCacheDirectory = (runtime: RuntimeEnvironmentSnapshot): string => join(runtimeCacheHome(runtime), 'concord', 'web');
 
 export const webFiles = Effect.fn('webFiles')(function*(directory: string, prefix = ''): Effect.fn.Return<readonly string[], unknown, FileSystem.FileSystem> {
   const fs = yield* FileSystem.FileSystem;
@@ -113,13 +110,14 @@ export const readWebReceipt = Effect.fn('readWebReceipt')(function*(directory: s
 }, Effect.mapError(webFailure('integrity')));
 
 export const sourceWebArtifact = Effect.fn('sourceWebArtifact')(function*() {
+  const runtime = yield* RuntimeEnvironment;
   const digest = yield* sourceWebDigest(packageRoot);
-  const directory = join(sourceWebCacheDirectory(), digest);
+  const directory = join(sourceWebCacheDirectory(runtime), digest);
   if (yield* readWebReceipt(directory, digest).pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))) return directory;
-  const owner = makeOwnedProcessService();
+  const owner = makeOwnedProcessService({ environment: runtime });
   const started = yield* Clock.currentTimeMillis;
-  const result = yield* owner.run([process.execPath, ...workerEntryArgv('web-build'), digest], {
-    cwd: packageRoot, env: { ...process.env, NODE_ENV: 'production' }, timeoutMs: 180_000, outputLimitBytes: 1024 * 1024,
+  const result = yield* owner.run([process.execPath, ...workerEntryArgv('web-build'), digest, runtime.cwd], {
+    cwd: packageRoot, env: { ...runtime.env, NODE_ENV: 'production' }, timeoutMs: 180_000, outputLimitBytes: 1024 * 1024,
     // The channel conveys parent lifetime only. No application messages travel on it.
     ipc: { ready: () => {}, message: () => {} },
   });
@@ -129,5 +127,6 @@ export const sourceWebArtifact = Effect.fn('sourceWebArtifact')(function*() {
 }, Effect.mapError(webFailure('build')));
 
 /** Promise adapters retain the existing consumer API while all resources remain scoped. */
-export const runSourceWeb = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | EffectTypes.Scope.Scope>): Promise<A> =>
-  Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
+export const runSourceWeb = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | EffectTypes.Scope.Scope | RuntimeEnvironment>, runtime: RuntimeEnvironmentSnapshot): Promise<A> =>
+  Effect.runPromise(effect.pipe(Effect.scoped, Effect.provideService(RuntimeEnvironment, runtime),
+    Effect.provide(NodeChildProcessSpawner.layer.pipe(Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))))));

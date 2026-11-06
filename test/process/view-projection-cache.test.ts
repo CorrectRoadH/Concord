@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { Workspace } from '../../src/base/workspace/index.ts';
@@ -30,6 +31,8 @@ import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitFo
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.ts';
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('workspace projection survives query-cache eviction pressure in its own namespace', async () => {
   const root = fixture();
@@ -40,7 +43,7 @@ test('workspace projection survives query-cache eviction pressure in its own nam
   // before applying query-cache pressure.
   const built = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));
   const path = cacheDatabasePath(genericPrivateDirectorySync(root));
-  const database = openHawdb(path, { readOnly: false, create: false });
+  const database = openHawdb(path, { readOnly: false, create: false }, nativeRuntime);
   try {
     for (let index = 0; index < 64; index++) {
       try {
@@ -63,7 +66,7 @@ test('a corrupt workspace row is reported unavailable without falling back to a 
   try { await waitForWorkspaceProjection(baseOf(server)); }
   finally { await server.close(); }
   const path = cacheDatabasePath(genericPrivateDirectorySync(root));
-  const database = openHawdb(path, { readOnly: false, create: false });
+  const database = openHawdb(path, { readOnly: false, create: false }, nativeRuntime);
   try { database.put('workspace_projection', [{ key: 'workspace', payload: 'corrupt-not-json{' }]); }
   finally { database.close(); }
   assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionUnavailable' });

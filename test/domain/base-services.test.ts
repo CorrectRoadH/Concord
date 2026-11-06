@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import type * as WorkspaceTypes from '../../src/base/workspace/index.ts';
 import type * as CacheTypes from '../../src/base/cache/index.ts';
 import assert from 'node:assert/strict';
@@ -22,6 +23,8 @@ import { operationLayer } from '../../src/entry/server/operation/main.ts';
 import { PersistentCache } from '../../src/base/cache/index.ts';
 import { Git } from '../../src/base/git/index.ts';
 
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
+
 // @feature docs/feature/local-sdlc/README.md
 test('OwnedProcess preserves cancellation received while the platform is acquiring a real child', async () => {
   await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -29,7 +32,7 @@ test('OwnedProcess preserves cancellation received while the platform is acquiri
     const spawned = yield* Deferred.make<void>();
     const proceed = yield* Deferred.make<void>();
     // Only the external platform boundary is delayed; spawning and cleanup are real.
-    const owner = makeOwnedProcessService({ spawner: { ...platform, spawn: command => platform.spawn(command).pipe(
+    const owner = makeOwnedProcessService({ environment: nativeRuntime, spawner: { ...platform, spawn: command => platform.spawn(command).pipe(
       Effect.tap(() => Deferred.succeed(spawned, undefined)), Effect.tap(() => Deferred.await(proceed)),
     ) } });
     const fiber = yield* Effect.forkChild(Effect.scoped(owner.run([process.execPath, '-e', 'setInterval(() => {}, 1000)'], { cwd: process.cwd(), timeoutMs: 3000 })));
@@ -41,7 +44,7 @@ test('OwnedProcess preserves cancellation received while the platform is acquiri
     assert.equal(result.timedOut, false);
     assert.equal(hasConfirmedOwnedGroupCleanup(result), true);
     assert.equal(yield* owner.activeCount, 0);
-  })).pipe(Effect.provide(NodeServices.layer)));
+  })).pipe(Effect.provide(NodeServices.layer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
 });
 
 // @feature docs/feature/project-onboarding/README.md
@@ -64,7 +67,7 @@ test('Workspace rereads configuration for each operation and Sources rejects a c
       })));
       assert.equal(result._tag, 'Failure');
       if (result._tag === 'Failure') assert.equal(result.failure.code, 'SourceChanged');
-    }).pipe(Effect.scoped, Effect.provide(live)));
+    }).pipe(Effect.scoped, Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -87,7 +90,7 @@ test('read snapshots reread current inputs, verify original observations and dis
       assert.equal(result._tag, 'Failure');
       if (result._tag === 'Failure') assert.equal(result.failure.code, 'SourceChanged');
       yield* sources.snapshot(repo, Effect.sync(() => assert.equal(repo.read('docs/README.md'), '# Updated\n')));
-    })).pipe(Effect.provide(live)));
+    })).pipe(Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -99,7 +102,7 @@ test('entry layers build the declared reader and operation capabilities', async 
     ['reader worker', readerLayer, false, false, false],
     ['cache maintenance worker', writerLayer, true, true, false],
   ] as const) {
-    const context = await Effect.runPromise(Effect.scoped(Layer.build(layer)));
+    const context = await Effect.runPromise(Effect.scoped(Layer.build(layer)).pipe(Effect.provide(NodeServices.layer), Effect.provideService(RuntimeEnvironment, nativeRuntime)));
     assert.equal(Option.isSome(Context.getOption(context, Workspace)), true, name);
     assert.equal(Option.isSome(Context.getOption(context, Sources)), true, name);
     assert.equal(Option.isSome(Context.getOption(context, Cache)), true, name);
@@ -108,7 +111,7 @@ test('entry layers build the declared reader and operation capabilities', async 
     assert.equal(Option.isSome(Context.getOption(context, Git)), git, name);
     assert.equal(Option.isSome(Context.getOption(context, PersistentCache)), persistent, name);
   }
-  const refresh = await Effect.runPromise(Effect.scoped(Layer.build(refreshLayer)));
+  const refresh = await Effect.runPromise(Effect.scoped(Layer.build(refreshLayer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   assert.equal(Option.isSome(Context.getOption(refresh, Workspace)), true);
   assert.equal(Option.isSome(Context.getOption(refresh, Publication)), false);
   assert.equal(Option.isSome(Context.getOption(refresh, PersistentCache)), true);
@@ -127,12 +130,12 @@ test('PersistentCache reuses nested source ownership and releases the native han
         PersistentCache.repository(repo).prepareWrite({ create: true });
         PersistentCache.repository(repo).put('code_cache', [{ key: 'scope-test', payload: 'value' }]);
         repo.snapshot(() => assert.deepEqual(PersistentCache.repository(repo).get('code_cache', ['scope-test']), [{ key: 'scope-test', payload: 'value' }]));
-        assert.throws(() => openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: true, create: false }), { code: 'HawdbBusy' });
+        assert.throws(() => openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: true, create: false }, nativeRuntime), { code: 'HawdbBusy' });
       }));
-      const database = openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: true, create: false });
+      const database = openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: true, create: false }, nativeRuntime);
       try { assert.deepEqual(database.get('code_cache', ['scope-test']), [{ key: 'scope-test', payload: 'value' }]); }
       finally { database.close(); }
-    })).pipe(Effect.provide(live)));
+    })).pipe(Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
     assert.deepEqual(PersistentCache.repository(captured!).get('code_cache', ['scope-test']), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -154,7 +157,7 @@ test('Sources snapshots verify raw bytes and isolate caller mutations', async ()
       })));
       assert.equal(result._tag, 'Failure');
       if (result._tag === 'Failure') assert.equal(result.failure.code, 'SourceChanged');
-    })).pipe(Effect.provide(live)));
+    })).pipe(Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -177,7 +180,7 @@ test('memory Cache owns its handle and read-only snapshots retain detached immut
     database.clearNamespace('document_parse');
     database.put('document_parse', [{ key: 'first', payload: 'new' }]);
     assert.deepEqual(database.get('document_parse', ['first']), [{ key: 'first', payload: 'new' }]);
-  }).pipe(Effect.scoped, Effect.provide(live)));
+  }).pipe(Effect.scoped, Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   assert.throws(() => closed!.get('document_parse', ['missing']), cause => cause instanceof HawdbFailure && cause.code === 'HawdbClosed');
 });
 
@@ -193,9 +196,9 @@ test('publication contention expires at its deadline under TestClock and release
       const result = yield* Fiber.join(fiber);
       assert.equal(result._tag, 'Failure');
       if (result._tag === 'Failure') assert.equal(result.failure.code, 'RepositoryBusy');
-    }).pipe(Effect.provide(publicationLayer), Effect.provide(TestClock.layer())));
+    }).pipe(Effect.provide(publicationLayer), Effect.provide(TestClock.layer())).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { releaseTraceLeaseSync(held, 'test-owner'); }
-  await Effect.runPromise(Effect.scoped(Effect.flatMap(Publication, publication => publication.lease(root, 'test-released'))).pipe(Effect.provide(publicationLayer)));
+  await Effect.runPromise(Effect.scoped(Effect.flatMap(Publication, publication => publication.lease(root, 'test-released'))).pipe(Effect.provide(publicationLayer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   const reacquired = acquireTraceLeaseSync(root, 'exclusive', 'test-after-scope')!;
   releaseTraceLeaseSync(reacquired, 'test-after-scope');
   rmSync(root, { recursive: true, force: true });

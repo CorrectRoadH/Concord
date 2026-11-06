@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -5,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { runSourceWeb, sourceWebDigest, sourceWebInputDigest, sourceWebRuntimeImports } from '../../src/base/installation/index.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const checkout = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -20,7 +23,7 @@ test('Web digest follows runtime shared inputs and ignores CLI, scripts, type-on
     write('web/styles.css', 'body { color: red }');
     write('src/model/index.ts', 'export { value } from "./shared.ts"; export type { NeverRead } from "../domain/unused.ts";');
     write('src/model/shared.ts', 'export const value = 1;');
-    const digest = () => runSourceWeb(sourceWebDigest(root));
+    const digest = () => runSourceWeb(sourceWebDigest(root), nativeRuntime);
     const first = await digest();
     write('src/entry/cli/main.ts', 'export const cli = 2;');
     write('src/entry/server/main.ts', 'export const server = 2;');

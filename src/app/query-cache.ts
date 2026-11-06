@@ -1,3 +1,4 @@
+import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { launchDetachedWorker } from '../base/process/index.ts';
 import { Context, Effect, Option, Result, Schema } from "effect";
 import { Workspace } from "../base/workspace/index.ts";
@@ -102,6 +103,7 @@ export const readQuery = Effect.fn('readQuery')(function*(context: QueryContext)
 });
 export const storeQuery = Effect.fn('storeQuery')(function*(context: QueryContext, update: QueryUpdate) {
   const cache = yield* PersistentCache;
+  const runtime = yield* RuntimeEnvironment;
   yield* cache.update(context.privateDir, 'query_cache', context.key, payload => {
     let prior: QueryCacheEnvelope | undefined;
     if (payload !== undefined) { try { prior = decodeForQuery(context, payload); } catch { /* Rebuild corrupt disposable data. */ } }
@@ -110,13 +112,15 @@ export const storeQuery = Effect.fn('storeQuery')(function*(context: QueryContex
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) > 4 * 1024 * 1024) throw new ConcordError('QueryRefreshOutputLimit', 'Query envelope exceeds 4 MiB');
     return serialized;
-  }).pipe(Effect.ensuring(Effect.sync(() => requestCacheMaintenance(context))));
+  }).pipe(Effect.ensuring(Effect.sync(() => requestCacheMaintenance(context, runtime))));
 });
 // @concord-end
 /** The detached supervisor owns the bounded scan, never a source publication. */
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+// @concord-implements docs/feature/local-data-engine/cli.md#历史投影
 export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | undefined, query: Query) {
+  const runtime = yield* RuntimeEnvironment;
   const context = yield* queryContext(input, query);
   let observed = yield* readQuery(context);
   const deadline = Date.now() + 500;
@@ -127,12 +131,12 @@ export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | un
     observed = yield* readQuery(context);
   }
   const requester = yield* Effect.serviceOption(QueryRefreshRequest);
-  const refresh = yield* Effect.result(Option.isSome(requester) ? requester.value.request(context) : launchDetachedWorker('query-refresh-worker', [context.root, JSON.stringify(query), String(Date.now())], context.root));
+  const refresh = yield* Effect.result(Option.isSome(requester) ? requester.value.request(context) : launchDetachedWorker('query-refresh-worker', [context.root, JSON.stringify(query), String(Date.now())], runtime.cwd));
   if (observed.unavailable) return yield* Effect.fail(new ConcordError(observed.unavailableCode ?? 'QueryCacheInvalid', observed.unavailable));
   if (Result.isFailure(refresh) && !observed.record) return yield* Effect.fail(refresh.failure);
   if (!observed.record) return yield* Effect.fail(new ConcordError('QueryPending', 'No readable diagnostic snapshot; background refresh requested. Use --fresh to wait for current sources.', { refresh: observed.error ?? observed.unavailable ?? 'requested' }));
   const { value: stored, ...record } = observed.record;
-  const hydrated = yield* Effect.sync(() => hydrateQueryValue(context.root, stored));
+  const hydrated = yield* Effect.sync(() => hydrateQueryValue(context.root, stored, undefined, runtime));
   const projection = { current: false, ...record, refresh: Result.isSuccess(refresh) ? 'requested' : 'failed',
     ...(observed.lastAttempt ? { lastAttempt: observed.lastAttempt } : {}), ...(observed.error ? { lastError: observed.error } : {}),
     ...(Result.isFailure(refresh) ? { refreshError: refresh.failure.message } : {}),

@@ -58,7 +58,7 @@ export const engine: EngineHandle = defineEngine({
       }, workerID);
       cleanupComplete = true;
     } finally {
-      recordProcessEvent({ kind: 'coverage-end', healthy: cleanupComplete && processEventsHealthy() });
+      recordProcessEvent({ kind: 'coverage-end', healthy: cleanupComplete && processEventsHealthy() }, process.env);
     }
   },
 });

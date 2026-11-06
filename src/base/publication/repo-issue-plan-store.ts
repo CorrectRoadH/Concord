@@ -18,6 +18,7 @@ export const detail = (cause: unknown) => cause instanceof Error ? cause.message
 export const isCode = (cause: unknown, code: string) => typeof cause === "object" && cause !== null && "code" in cause && cause.code === code;
 
 export async function gitDirectory(root: string): Promise<string> {
+  if (!isAbsolute(root)) throw new Error('Git-private root must be absolute');
   const dotGit = resolve(root, ".git");
   const stat = await lstat(dotGit);
   if (stat.isDirectory()) return dotGit;

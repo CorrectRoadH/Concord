@@ -17,6 +17,9 @@ import { checkProject } from "../../src/app/index.ts";
 
 import { setMarkdown } from "../../src/app/index.ts";
 import { digest } from "../../src/model/index.ts";
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 const fixture = () => {
   const root = createConsumer();
@@ -34,13 +37,13 @@ const term = (id: string, spelling: string) => `# Terms\n\n## ${spelling} {#${id
 // C4, C7, C8, C16, C17, C18
 test('Markdown catalog structure is strict, preserves definition Markdown, and reports the failing line', () => Effect.runPromise(Effect.sync(() => {
   const source = '# Terms\n\nIntro.\n\n## Memory {#memory}\n\nA **durable** [finding](notes.md) with `code`.\n\n### Explanation\n\nExtra paragraphs.\n\n## Issue {#issue}\n\nAn observation.\n';
-  const parsed = readConceptCatalog(source);
+  const parsed = readConceptCatalog(source, undefined, parserRuntime);
   assert.equal(parsed.title, 'Terms');
-  assert.equal(readConceptCatalog('# **Project** `terms`\n').title, 'Project terms');
+  assert.equal(readConceptCatalog('# **Project** `terms`\n', undefined, parserRuntime).title, 'Project terms');
   assert.equal(readFileSync(new URL('../../templates/concepts.md', import.meta.url), 'utf8'), EMPTY_CONCEPT_CATALOG);
   assert.deepEqual(parsed.concepts[0], { id: 'memory', term: 'Memory', definition: 'A **durable** [finding](notes.md) with `code`.', deprecated: [] });
   assert.equal(parsed.concepts.length, 2);
-  assert.deepEqual(readConceptCatalog(term('constructor', 'Constructor')).concepts[0]?.deprecated, []);
+  assert.deepEqual(readConceptCatalog(term('constructor', 'Constructor'), undefined, parserRuntime).concepts[0]?.deprecated, []);
   for (const [source, line] of [
     ['# Terms\n\n## Missing ID\n\nDefinition.\n', 3],
     ['# Terms\n\n## `Code` {#code}\n\nDefinition.\n', 3],
@@ -49,9 +52,9 @@ test('Markdown catalog structure is strict, preserves definition Markdown, and r
     ['# Terms\n\n# Second\n', 3],
     ['## Term {#term}\n\nDefinition.\n\n# Too late\n', 1],
     ['# Terms\n\n## Term {#term}\n\nDefinition.\n\n## Another {#term}\n\nDefinition.\n', 7],
-  ] as const) assert.throws(() => readConceptCatalog(source), error => error instanceof Error && 'code' in error && error.code === 'InvalidConceptCatalog' && error.message.includes(`line ${line}:`));
+  ] as const) assert.throws(() => readConceptCatalog(source, undefined, parserRuntime), error => error instanceof Error && 'code' in error && error.code === 'InvalidConceptCatalog' && error.message.includes(`line ${line}:`));
   for (const metadata of ['format: concord.concepts/v1', 'version: 1', 'unknown: true', 'imports: [docs/concepts.md#term, docs/concepts.md#term]', 'deprecated: {missing: [Old]}', 'deprecated: {term: [term]}', 'deprecated: {term: []}', 'deprecated: {term: [Old, old]}', 'imports: [docs/../concepts.md#term]', 'imports: [docs/_template/concepts.md#term]', 'imports: [docs/concepts.json#term]']) {
-    assert.throws(() => readConceptCatalog(`---\n${metadata}\n---\n\n${term('term', 'Term')}`), { code: 'InvalidConceptCatalog' });
+    assert.throws(() => readConceptCatalog(`---\n${metadata}\n---\n\n${term('term', 'Term')}`, undefined, parserRuntime), { code: 'InvalidConceptCatalog' });
   }
 })));
 

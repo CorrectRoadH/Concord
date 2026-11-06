@@ -9,6 +9,9 @@ import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, HAWDB_MACOS_DEPLOYMENT_TARGET
 
 import { nativeSourceDigest, nativeCacheRoot } from "../src/base/installation/index.ts";
 
+import { makeRuntimeEnvironment } from '../src/base/environment/index.ts';
+
+const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
 const root = resolve(import.meta.dirname, '..');
 const crate = join(root, 'native/hawdb');
 const hash = (data: Uint8Array | string): string => createHash('sha256').update(data).digest('hex');
@@ -90,7 +93,7 @@ const dependencyNotices = Effect.fn('native.dependencyNotices')(function*(dest: 
 });
 const ArgsSchema = Schema.Struct({ output: Schema.String, prebuilt: Schema.optional(Schema.String), requirePortable: Schema.Boolean, testHooks: Schema.Boolean, reuse: Schema.Boolean });
 function parseArgs(argv: readonly string[]): Schema.Schema.Type<typeof ArgsSchema> {
-  const result: { output: string; prebuilt?: string; requirePortable: boolean; testHooks: boolean; reuse: boolean } = { output: nativeCacheRoot(), requirePortable: false, testHooks: false, reuse: false };
+  const result: { output: string; prebuilt?: string; requirePortable: boolean; testHooks: boolean; reuse: boolean } = { output: nativeCacheRoot(runtime), requirePortable: false, testHooks: false, reuse: false };
   for (let i = 0; i < argv.length; i++) {
     const value = argv[i];
     if (value === '--output' && argv[i + 1]) result.output = argv[++i]!;
@@ -231,7 +234,7 @@ const program = Effect.gen(function*() {
     return;
   }
   const target = yield* Effect.sync(hawdbTarget);
-  const cache = yield* Effect.sync(nativeCacheRoot);
+  const cache = yield* Effect.sync(() => nativeCacheRoot(runtime));
   if (args.reuse && !args.testHooks && !args.requirePortable && (yield* reuseNative(cache, output, target))) return;
   if (target === 'darwin-arm64' && process.env.MACOSX_DEPLOYMENT_TARGET !== HAWDB_MACOS_DEPLOYMENT_TARGET) return yield* new NativeBuildFailed({ detail: `MACOSX_DEPLOYMENT_TARGET=${HAWDB_MACOS_DEPLOYMENT_TARGET} required` });
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;

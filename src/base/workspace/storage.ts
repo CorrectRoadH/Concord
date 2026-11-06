@@ -1,3 +1,5 @@
+import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
+import { bindRepositoryRuntime } from './repository-runtime.ts';
 import { git, discoverRoot, darwinPathCollisionKey, hasExactDarwinEntry, assertNoSymlink } from './bootstrap.ts';
 export { git, discoverRoot, darwinPathCollisionKey, hasExactDarwinEntry } from './bootstrap.ts';
 import { adapterRuntimeInputs } from '../process/index.ts';
@@ -13,7 +15,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { Schema } from "effect";
 import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from "../publication/index.ts";
 import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, isObsoleteWorkflowSkillRemoval, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.ts";
-import { snapshot } from "./config.ts";
+import { snapshot, makeConfigContentCache } from "./config.ts";
 import { closeRepositoryCache } from "../cache/index.ts";
 import { invalidateActiveRun } from "../publication/index.ts";
 import { acquireFileLease, acquireRecoverablePublicationLease } from "../publication/index.ts";
@@ -203,15 +205,17 @@ Before planning, implementing, or reviewing governed work:
 Follow the returned instructions and the repository's current \`docs/taste.md\`. A gap result means an explicit Concord relationship is absent; it is not code coverage, and undocumented CLI commands require the product's own inventory. Do not infer completion or test coverage from document structure or command receipts alone.`;
 // @concord-end
 
-export interface RepositoryOptions { readonly environment?: Readonly<Record<string, string | undefined>>; readonly initialize?: boolean; readonly recover?: boolean; readonly reclaimPublication?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off'; readonly optimistic?: boolean }
+export interface RepositoryOptions { readonly runtime?: RuntimeEnvironmentSnapshot; readonly environment?: Readonly<Record<string, string | undefined>>; readonly initialize?: boolean; readonly recover?: boolean; readonly reclaimPublication?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off'; readonly optimistic?: boolean }
 export interface ReadRepositoryOptions extends RepositoryOptions { readonly access: 'read' }
 
 export class LocalRepository implements Repository {
+  private readonly runtime: RuntimeEnvironmentSnapshot;
+  private readonly configContentCache: ReturnType<typeof makeConfigContentCache>;
   private readonly executionEnvironment: Readonly<Record<string, string | undefined>>;
   readonly runtimeVersion = process.version;
   exists(path: string): boolean { return this.inspectComponents(path).stat !== undefined; }
   runtimeInputs(command: string, envNames: readonly string[]) { return adapterRuntimeInputs(this.root, command, envNames, this.executionEnvironment); }
-  environment(names: readonly string[]): Readonly<Record<string, string | undefined>> { return Object.fromEntries(names.map(name => [name, this.executionEnvironment[name]])); }
+  environment(names?: readonly string[]): Readonly<Record<string, string | undefined>> { return names === undefined ? this.executionEnvironment : Object.freeze(Object.fromEntries(names.map(name => [name, this.executionEnvironment[name]]))); }
   inspect(path: string): ReturnType<NonNullable<Repository['inspect']>> {
     const read = () => {
       const stat = this.inspectComponents(path).stat;
@@ -267,8 +271,12 @@ export class LocalRepository implements Repository {
   constructor(input: string | undefined, options: RepositoryOptions, validation: PublicationValidation['Service']);
   constructor(input?: string, options: RepositoryOptions = {}, validation?: PublicationValidation['Service']) {
     this.validation = validation;
-    this.executionEnvironment = Object.freeze({ ...(options.environment ?? process.env) });
-    this.root = discoverRoot(input, options.initialize);
+    const environment = Object.freeze({ ...(options.environment ?? options.runtime?.env ?? {}) });
+    this.root = discoverRoot(input, options.initialize, options.runtime === undefined ? undefined : { cwd: options.runtime.cwd, env: environment });
+    this.runtime = makeRuntimeEnvironment(options.runtime?.cwd ?? this.root, environment);
+    bindRepositoryRuntime(this, this.runtime);
+    this.executionEnvironment = this.runtime.env;
+    this.configContentCache = makeConfigContentCache(this.runtime);
     assertNoSymlink(this.root);
     const anchors: RootAnchor[] = [];
     let anchorPath: string = sep;
@@ -288,26 +296,28 @@ export class LocalRepository implements Repository {
     if (options.recover && this.noWrite) throw new ConcordError('InvalidOption', 'recover does not accept --dry-run');
     assertReadHost();
     if (git(this.root, ['rev-parse', '--show-toplevel'], this.executionEnvironment) !== this.root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
-    assertCurrentRuntimeFormat(this.root);
-    try { this.privateDir = genericPrivateDirectorySync(this.root); }
-    catch (cause) { throw storageCoordinationFailure(cause); }
+    const privateDir = genericPrivateDirectorySync(this.root, this.executionEnvironment);
+    assertCurrentRuntimeFormat(this.root, privateDir);
+    this.privateDir = privateDir;
     assertNoSymlink(this.privateDir);
-    this.coordinationDirectory = tracePrivateDirectorySync(this.root);
+    this.coordinationDirectory = tracePrivateDirectorySync(this.root, this.executionEnvironment);
     try {
       this.openRoot();
       this.snapshotDepth = 1;
-      const coordinationDir = tracePrivateDirectorySync(this.root);
+      const coordinationDir = this.coordinationDirectory;
+      assertNoSymlink(coordinationDir);
       // Only a new owner-free, lock-free repository may preview without creating private state.
       const emptyPreview = options.initialize === true && this.noWrite
         && !['concord.config.ts', 'docs', 'memory', 'DESIGN.md'].some(path => present(this.absolute(path)))
         && ![join(this.privateDir, 'lock.json'), join(this.privateDir, 'journal.json'), join(coordinationDir, PUBLICATION_LEASE), join(coordinationDir, 'publication-journal.json'), join(coordinationDir, 'multi-file-publication-journal.json')].some(present);
       this.previewWithoutState = emptyPreview;
-      if (options.recover && options.reclaimPublication !== false) recoverPublicationLeaseSync(this.root);
+      if (options.recover && options.reclaimPublication !== false) recoverPublicationLeaseSync(this.root, this.executionEnvironment);
       try {
-        if (!this.optimistic) this.traceLease = acquireTraceLeaseSync(this.root, 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview, !options.recover && options.reclaimPublication !== false);
+        if (!this.optimistic) this.traceLease = acquireTraceLeaseSync(this.root, 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview, !options.recover && options.reclaimPublication !== false, this.executionEnvironment);
       }
       catch (cause) { throw storageCoordinationFailure(cause); }
-      assertCurrentRuntimeFormat(this.root);
+      assertNoSymlink(this.privateDir);
+      assertCurrentRuntimeFormat(this.root, this.privateDir);
       const traceDir = coordinationDir;
       const traceJournal = traceDir === undefined ? undefined : join(traceDir, 'publication-journal.json');
       const traceMultiJournal = traceDir === undefined ? undefined : join(traceDir, 'multi-file-publication-journal.json');
@@ -322,7 +332,7 @@ export class LocalRepository implements Repository {
       const markerPath = 'concord.config.ts';
       const recoveryJournal = options.recover && present(genericJournal) ? currentJournal(genericJournal) : undefined;
       if (options.initialize && marker !== undefined) throw new ConcordError('ProjectExists', `${markerPath} already exists`);
-      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir);
+      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
       this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
       this.validateConfiguredRoots(this.config);
       for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...(this.config.runner?.sourceFiles ?? [])]) this.absolute(path);
@@ -475,7 +485,7 @@ export class LocalRepository implements Repository {
   private allowedOwner(path: string, _config: ProjectConfig = this.config): boolean { return fixedOwner(path) || isWorkflowSkillPath(path) || path.startsWith('memory/') && path.endsWith('.md') || path.startsWith('docs/') && path.endsWith('/writing.md'); }
   private currentSnapshot(): ConfigSnapshot {
     const source = this.read('concord.config.ts');
-    return snapshot('concord.config.ts', source ?? '', this.privateDir, source === undefined);
+    return snapshot('concord.config.ts', source ?? '', this.privateDir, source === undefined, this.runtime, this.configContentCache);
   }
   private validateConfiguredRoot(root: string): void {
       canonicalPath(root);
@@ -557,6 +567,7 @@ export class LocalRepository implements Repository {
   // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   close(): void {
+    this.configContentCache.close();
     this.snapshotDepth = this.snapshotDepth > 0 || this.traceLease !== undefined || this.rootFd !== undefined ? 1 : 0;
     this.endSnapshot();
     closeRepositoryCache(this);
@@ -662,7 +673,7 @@ export class LocalRepository implements Repository {
     const plannedConfigChange = configChanges[0];
     if (plannedConfigChange?.after === null) throw new ConcordError('InvalidChange', 'The runtime configuration cannot be deleted or renamed');
     if (operation === 'set-config' && changes.length !== 1) throw new ConcordError('InvalidChange', 'config.set must publish exactly one configuration');
-    const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, dryRun || this.persistentCache === 'off' ? undefined : this.privateDir).config;
+    const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, dryRun || this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache).config;
     if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) this.validateProjectConfig(authorizationConfig);
     const entries = changes.map(c => {
       this.absolute(c.path);
@@ -678,7 +689,7 @@ export class LocalRepository implements Repository {
     const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest } };
     const receipt = this.publishJournal(journal, dryRun);
     if (!receipt.dryRun && plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
-      this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir);
+      this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
       this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
     }
     return receipt;
@@ -745,7 +756,7 @@ export class LocalRepository implements Repository {
     return this.underLease(() => {
       // Planning is optimistic. Only validation and publication serialize writers.
       const commitLease = this.optimistic && !dryRun && !this.noWrite
-        ? acquireTraceLeaseSync(this.root, 'exclusive', 'publication', true, true) : undefined;
+        ? acquireTraceLeaseSync(this.root, 'exclusive', 'publication', true, true, this.executionEnvironment) : undefined;
       if (commitLease !== undefined) this.traceLease = commitLease;
       try {
       this.validateObservations();
@@ -757,7 +768,7 @@ export class LocalRepository implements Repository {
           this.observedFiles.clear(); this.observedDirectories.clear();
           const config = journal.changes.find(change => change.path === 'concord.config.ts');
           if (config?.after !== undefined && config.after !== null) {
-            this.configSnapshot = snapshot('concord.config.ts', config.after, this.persistentCache === 'off' ? undefined : this.privateDir);
+            this.configSnapshot = snapshot('concord.config.ts', config.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
             this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
           }
         }
@@ -785,7 +796,7 @@ export class LocalRepository implements Repository {
     if (this.access !== 'write') throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     if (this.traceLease?.mode !== 'exclusive') throw new ConcordError('RepositoryBusy', 'Publication requires an owned exclusive lease');
     this.clearPathObservations();
-    invalidateActiveRun(this.root);
+    invalidateActiveRun(this.root, this.executionEnvironment);
     const journalPath = join(this.privateDir, 'journal.json');
     if (present(journalPath)) throw new ConcordError('RecoveryRequired', 'Run concord recover before another publication');
     atomic(journalPath, `${canonical(journal)}\n`);
@@ -837,7 +848,9 @@ export class LocalRepository implements Repository {
       if (digest(scope.configSource) !== scope.configDigest || current.path !== scope.configPath || current.digest !== scope.configDigest) fail('Issue closure project configuration changed');
       const before = new Map(journal.changes.map(change => [change.path, change.before]));
       const reader: Repository = { root: this.root, privateDir: this.privateDir, config: resolveProjectConfig(this.root, current.config), configSnapshot: current,
+        environment: names => this.environment(names), runtimeInputs: (command, names) => this.runtimeInputs(command, names),
         read: path => before.has(path) ? before.get(path) ?? undefined : this.read(path), files: (path, scope) => this.files(path, scope), absolute: path => this.absolute(path), publish: () => { throw new ConcordError('InvalidChange', 'Recovery recomputation cannot publish'); } };
+      bindRepositoryRuntime(reader, this.runtime);
       try {
         const plan = this.validation!.planIssueClose(reader, scope);
         if (plan.inputsDigest !== scope.inputsDigest || canonical(plan.testFiles) !== canonical(scope.testFiles) || canonical(plan.changes) !== canonical(journal.changes.map(({ path, before, after }) => ({ path, before, after })))) fail('Issue closure inputs or allowed rewrite differ from the journal');
@@ -856,7 +869,9 @@ export class LocalRepository implements Repository {
       const before = new Map(journal.changes.map(change => [change.path, change.before]));
       const requiredMemberships = new Set<string>();
       const reader: Repository = { root: this.root, privateDir: this.privateDir, config: resolveProjectConfig(this.root, current.config), configSnapshot: current,
+        environment: names => this.environment(names), runtimeInputs: (command, names) => this.runtimeInputs(command, names),
         read: path => before.has(path) ? before.get(path) ?? undefined : this.read(path), files: (path, scope) => { requiredMemberships.add(canonical([path, scope ?? 'all'])); return this.files(path, scope); }, absolute: path => this.absolute(path), publish: () => { throw new ConcordError('InvalidChange', 'Recovery recomputation cannot publish'); } };
+      bindRepositoryRuntime(reader, this.runtime);
       try {
         const plan = this.validation!.planStepRename(reader, scope);
         if (plan.inputsDigest !== scope.inputsDigest || canonical(plan.changes) !== canonical(journal.changes.map(({ path, before, after }) => ({ path, before, after })))) fail('Step rename inputs or complete allowed rewrite differ from the journal');
@@ -883,7 +898,7 @@ export class LocalRepository implements Repository {
       const frozenPath = journal.scope.configPath;
       const current = this.currentSnapshot();
       if (current.path !== frozenPath || current.digest !== journal.scope.configDigest) fail('Project configuration changed since source publication');
-      const config = snapshot(frozenPath, journal.scope.configSource, this.privateDir, true).config;
+      const config = snapshot(frozenPath, journal.scope.configSource, this.privateDir, true, this.runtime, this.configContentCache).config;
       const change = journal.changes[0]!;
       const roots = this.sourceScopeRoots(config);
       this.sourcePath(change.path, roots);
@@ -902,10 +917,10 @@ export class LocalRepository implements Repository {
           const plannedSource = plannedConfigChange?.after ?? '';
           const typed = this.read('concord.config.ts');
           if (!recovering && typed !== undefined) fail('Project configuration appeared since init planning');
-          authorizationConfig = snapshot('concord.config.ts', plannedSource as string, this.privateDir, true).config;
+          authorizationConfig = snapshot('concord.config.ts', plannedSource as string, this.privateDir, true, this.runtime, this.configContentCache).config;
           this.validateProjectConfig(authorizationConfig);
         } else {
-          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.privateDir, true).config;
+          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.privateDir, true, this.runtime, this.configContentCache).config;
           this.validateProjectConfig(authorizationConfig);
           const current = this.currentSnapshot();
           const recoveringPlannedConfig = recovering && plannedConfigChange?.path === journal.scope.configPath && plannedConfigChange.after !== null && current.source === plannedConfigChange.after;
@@ -913,7 +928,7 @@ export class LocalRepository implements Repository {
         }
       }
       if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
-        const next = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir).config;
+        const next = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir, false, this.runtime, this.configContentCache).config;
         this.validateProjectConfig(next);
       }
       if (plannedConfigChange?.after === null) fail('A journal cannot delete the runtime configuration');
@@ -974,7 +989,7 @@ export class LocalRepository implements Repository {
     const journal = currentJournal(path);
     this.preflight(journal, true);
     if (journal.phase === 'prepared') {
-      invalidateActiveRun(this.root);
+      invalidateActiveRun(this.root, this.executionEnvironment);
       for (const change of [...journal.changes].reverse()) {
         if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
           const current = this.currentSnapshot();
@@ -995,7 +1010,7 @@ export class LocalRepository implements Repository {
   }
 }
 
-export function readRepositoryBytesSync(root: string, path: string): Uint8Array | undefined {
-  const repo = new LocalRepository(root, { access: 'read', optimistic: true });
+export function readRepositoryBytesSync(root: string, path: string, runtime?: RuntimeEnvironmentSnapshot): Uint8Array | undefined {
+  const repo = new LocalRepository(root, { access: 'read', optimistic: true, runtime });
   try { return repo.snapshot(() => repo.readBytes(path)); } finally { repo.close(); }
 }

@@ -9,11 +9,13 @@ import { Schema } from 'effect';
 import { writeCachePayloads } from './cache-query.ts';
 import { mergeFeedbackRows } from './feedback-cache.ts';
 import type { RemoteFeedback } from '../../model/index.ts';
+import { RuntimeEnvironment } from '../environment/index.ts';
 import { inspectCacheStatus } from './cache-status.ts';
 
 /** One scoped owner, with an explicit close/reopen boundary for maintenance. */
 export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(function*(privateDir: string) {
   const backend = yield* PersistentCache;
+  const runtime = yield* RuntimeEnvironment;
   let scope: Scope.Closeable | undefined;
   let database: HawdbDatabase | undefined;
   let openError: HawdbFailure | undefined;
@@ -23,7 +25,7 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     const now = yield* Clock.currentTimeMillis;
     if (now - validatedAt >= 1000) {
       validatedAt = now;
-      const outcome = yield* Effect.result(Effect.try({ try: validateHawdbArtifact, catch: cause => new HawdbFailure('HawdbUnavailable', `Native artifact validation failed: ${cause instanceof Error ? cause.message : String(cause)}`) }));
+      const outcome = yield* Effect.result(Effect.try({ try: () => validateHawdbArtifact(runtime), catch: cause => new HawdbFailure('HawdbUnavailable', `Native artifact validation failed: ${cause instanceof Error ? cause.message : String(cause)}`) }));
       validationError = outcome._tag === 'Failure' ? outcome.failure : undefined;
     }
     if (validationError) return yield* Effect.fail(validationError);
@@ -69,7 +71,7 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
   const status = Effect.sync(() => inspectCacheStatus(privateDir, true, () => {
     if (!database) throw openError ?? new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');
     return database;
-  }));
+  }, undefined, runtime));
   return { open, close, verify, service, snapshot, mergeDerived, status,
     mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use(db => { const warnings = mergeFeedbackRows(db, connectionId, items); snapshots.delete('feedback_cache'); return warnings; }),
   };

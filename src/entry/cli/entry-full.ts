@@ -1,21 +1,13 @@
-#!/usr/bin/env node
-// Keep ordinary help independent of consumer host code.
-try {
-  if (process.argv.includes('--skill')) {
-    // @concord-begin
-    // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
-    const { runSkillMain } = await import("./skill.ts");
-    await runSkillMain(process.argv.slice(2));
-    // @concord-end
-  } else {
-    // @concord-begin
-    // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
-    const cli = import.meta.url.endsWith('.ts') ? './cli-fallback.ts' : './cli-fallback-bundle.js';
-    await import(cli);
-    // @concord-end
-  }
-} catch (cause) {
-  const error = cause as { code?: string; message?: string };
-  process.stderr.write(JSON.stringify({ ok: false, error: error.code ?? 'OperationFailed', message: error.message ?? String(cause) }) + '\n');
-  process.exitCode = 1;
+// @concord-file
+// @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
+import { Effect, type FileSystem, type Stdio, type Terminal } from 'effect';
+import type { applicationRuntime } from '../../app/index.ts';
+import type { fullCommand } from './cli-fallback.ts';
+import { runCommand, skillCommand } from './main.ts';
+
+/** Loading command definitions has no startup or invocation side effects. */
+export function fullProgram(argv: readonly string[]): Effect.Effect<number, unknown, Effect.Services<typeof applicationRuntime> | FileSystem.FileSystem | Stdio.Stdio | Terminal.Terminal> {
+  if (argv.includes('--skill')) return skillCommand(argv);
+  const fallback = import.meta.url.endsWith('.ts') ? './cli-fallback.ts' : './cli-fallback-bundle.js';
+  return Effect.tryPromise(() => import(fallback)).pipe(Effect.flatMap(module => runCommand(module.fullCommand as typeof fullCommand, argv)));
 }

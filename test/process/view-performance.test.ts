@@ -1,3 +1,4 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';
 import { installationResources } from "../../src/base/installation/index.ts";
@@ -20,6 +21,8 @@ import { openHawdb } from '../../src/base/cache/index.ts';
 
 import { startViewServer } from '../e2e/server.ts';
 import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-performance-'));
@@ -107,7 +110,7 @@ test('direct file reads preserve owner diagnostics and inspect only the target a
 test('warm workspace caches observe changed bytes with unchanged timestamps and removed paths', async () => {
   const root = fixture();
   try {
-    openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }).close();
+    openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }, nativeRuntime).close();
     await runApplication(getWorkspaceSnapshot(root, 'use'));
     const warm = await runApplication(getWorkspaceSnapshot(root, 'use'));
     assert.ok(warm.cache && typeof warm.cache === 'object' && 'status' in warm.cache);

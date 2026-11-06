@@ -1,4 +1,7 @@
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { initialize, runApplication, installedConcordCli, assert, createHash, execFileSync, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, resolve, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, ScanReport, freshConsumer, cli, cacheDiskSnapshot } from './hawdb-cache-fixture.ts';
+
+const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
@@ -33,12 +36,12 @@ test('cache-enabled workspace recovers an interrupted WAL without clearing commi
     const interrupted = cacheDiskSnapshot(path);
     await runApplication(getWorkspaceSnapshot(root, 'off'));
     assert.deepEqual(cacheDiskSnapshot(path), interrupted, 'cache-off must not touch the interrupted database');
-    const readOnly = openHawdb(path, { readOnly: true, create: false });
+    const readOnly = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
     try { assert.deepEqual(readOnly.get('config_cache', ['interrupted']), [{ key: 'interrupted', payload: 'committed' }]); }
     finally { readOnly.close(); }
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'use'));
     assert.equal(snapshot.complete, true);
-    const recovered = openHawdb(path, { readOnly: true, create: false });
+    const recovered = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
     try { assert.deepEqual(recovered.get('config_cache', ['interrupted']), [{ key: 'interrupted', payload: 'committed' }]); }
     finally { recovered.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -63,8 +66,8 @@ test('large cache directories remain readable and clearable without deleting the
       truncateSync(large, 257 * 1024 * 1024);
       for (let index = 0; index < 4100; index++) writeFileSync(join(path, `old-${index}`), '');
       assert.equal(scanAnnotations(repo).cache.status, 'hit');
-      assert.notEqual(cacheStatus(repo).status, 'unavailable');
-      assert.equal(clearCache(repo).status, 'cleared');
+      assert.notEqual(cacheStatus(repo, nativeRuntime).status, 'unavailable');
+      assert.equal(clearCache(repo, undefined, nativeRuntime).status, 'cleared');
       assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
       PersistentCache.repository(repo).prepareWrite({ create: true });
       assert.equal(scanAnnotations(repo).cache.status, 'miss');
@@ -76,7 +79,7 @@ test('large cache directories remain readable and clearable without deleting the
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('clear keeps the HawDB lock inode and removes only HawDB cache data', () => {
-  assert.equal(hawdbIdentity().engine, 'hawdb');
+  assert.equal(hawdbIdentity(nativeRuntime).engine, 'hawdb');
   const root = mkdtempSync(join(tmpdir(), 'concord-hawdb-clear-'));
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -85,7 +88,7 @@ test('clear keeps the HawDB lock inode and removes only HawDB cache data', () =>
     const repo = new LocalRepository(root);
     try {
       const path = join(repo.privateDir, 'cache.hawdb');
-      assert.equal(cacheStatus(repo).status, 'empty');
+      assert.equal(cacheStatus(repo, nativeRuntime).status, 'empty');
       assert.equal(existsSync(path), false);
       PersistentCache.repository(repo).prepareWrite({ create: true });
       assert.equal(scanAnnotations(repo).cache.status, 'miss');
@@ -93,15 +96,15 @@ test('clear keeps the HawDB lock inode and removes only HawDB cache data', () =>
       const inode = statSync(lock).ino;
       const unrelated = join(repo.privateDir, 'unrelated-data');
       writeFileSync(unrelated, 'preserve these bytes');
-      assert.equal(clearCache(repo).status, 'cleared');
+      assert.equal(clearCache(repo, undefined, nativeRuntime).status, 'cleared');
       assert.equal(existsSync(unrelated), true);
       assert.equal(statSync(lock).ino, inode);
-      assert.equal(cacheStatus(repo).status, 'empty');
-      assert.equal(clearCache(repo).status, 'empty');
+      assert.equal(cacheStatus(repo, nativeRuntime).status, 'empty');
+      assert.equal(clearCache(repo, undefined, nativeRuntime).status, 'empty');
       assert.equal(statSync(lock).ino, inode);
       const unsafe = join(path, 'unexpected-link');
       symlinkSync(join(repo.privateDir, 'absent'), unsafe);
-      assert.throws(() => clearCache(repo), /Unsupported cache entry|UnsafePath/u);
+      assert.throws(() => clearCache(repo, undefined, nativeRuntime), /Unsupported cache entry|UnsafePath/u);
       assert.equal(statSync(lock).ino, inode);
       rmSync(unsafe);
     } finally { repo.close(); }
@@ -114,7 +117,7 @@ test('clear rejects an ownership inode replacement and a link introduced after i
   for (const mutation of ['owner', 'link']) {
     const root = mkdtempSync(join(tmpdir(), 'concord-clear-race-'));
     const path = join(root, 'cache.hawdb');
-    const guard = acquireHawdbClearGuard(path);
+    const guard = acquireHawdbClearGuard(path, nativeRuntime);
     try {
       const sentinel = join(root, 'sentinel');
       writeFileSync(sentinel, 'keep');
@@ -170,7 +173,7 @@ test('identity mismatch is unavailable for reads and the next writable rebuild d
     assert.deepEqual(readFileSync(join(path, 'manifest.hawdb')), manifest);
     const scan = cli(root, 'cache', 'rebuild');
     assert.equal(scan.status, 0, scan.stdout + scan.stderr);
-    const current = openHawdb(path, { readOnly: true, create: false });
+    const current = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
     try {
       assert.equal(current.scan('config_cache').some(entry => entry.key === 'legacy-config'), false);
       assert.deepEqual(current.scan('feedback_cache'), []);

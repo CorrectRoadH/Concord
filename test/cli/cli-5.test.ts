@@ -1,6 +1,9 @@
 import { createRequire, sourceCli, createConsumer, sourceRoot, prepareSourceConsumer, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, TemplatesOutput, scratch, cli, call, callString, readPage, savePage, consumer, write } from '../support/cli-fixture.ts';
 
 import { decodeChangePreview } from '../../src/model/change-preview.ts';
+import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/environment/index.ts';
+const parserRuntime = makeParserRuntime(process.cwd(), process.env);
+
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md
 test('packed feedback commands persist connections and local triage without remote calls', () => Effect.runPromise(Effect.sync(() => {
@@ -13,7 +16,7 @@ test('packed feedback commands persist connections and local triage without remo
  call(root,['new', 'issue','observation','--title','Local observation'],Ack);
  call(root,['issue','link','observation','--role','spec','docs/feature/feedback-target/README.md'],Ack);
  const relative='docs/issues/observation.md';
- const linked=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
+ const linked=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'), parserRuntime);
  assert.equal(linked?.metadata.kind,'issue');
  if(linked?.metadata.kind!=='issue')assert.fail('feedback must retain the local issue owner');
  assert.deepEqual(linked.metadata.relations.filter(relation => relation.role === 'spec').map(relation => relation.target),['docs/feature/feedback-target/README.md']);

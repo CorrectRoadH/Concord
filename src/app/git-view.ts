@@ -2,20 +2,31 @@ import type * as SourcesTypes from '../base/sources/index.ts';
 import type { GitEntry, GitStatus, GitArea, GitDiff } from "../model/index.ts";
 import { Effect, Schema } from "effect";
 import { parseTestDeclarations } from "../domain/tests/index.ts";
-import { createMemoryHawdb, type HawdbDatabase } from "../base/cache/index.ts";
+import { createMemoryHawdb, verifyHawdbArtifact, type HawdbDatabase } from "../base/cache/index.ts";
 import { ConcordError, decode, objectDigest } from "../model/index.ts";
 import { typescriptPackageVersion } from "../base/process/index.ts";
 import { OUTPUT_LIMIT } from "../base/git/index.ts";
 import { runGit } from "../base/git/index.ts";
 import type { Git } from '../base/git/index.ts';
+import { RuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
+import { nativeArtifactRoot } from '../base/installation/index.ts';
 import { Sources } from '../base/sources/index.ts';
 export interface GitBaselineCache { database?: HawdbDatabase; }
+const baselineArtifacts = new WeakMap<GitBaselineCache, string>();
+function baselineDatabase(cache: GitBaselineCache, runtime: RuntimeEnvironmentSnapshot): HawdbDatabase {
+  const selection = JSON.stringify([nativeArtifactRoot(runtime), runtime.env.CONCORD_NATIVE_TEST_HOOKS === '1']);
+  if (baselineArtifacts.get(cache) !== selection) closeGitBaselineCache(cache);
+  if (cache.database) verifyHawdbArtifact(runtime);
+  else cache.database = createMemoryHawdb(runtime);
+  baselineArtifacts.set(cache, selection);
+  return cache.database;
+}
 
 export const BaselineSchema = Schema.Struct({ root: Schema.String, revision: Schema.String, roots: Schema.String, parser: Schema.String, caseIds: Schema.Array(Schema.String) });
 
 export const BASELINE_PARSER = `typescript-ast/${typescriptPackageVersion()}/concord-marker-baseline/v4`;
-export function closeGitBaselineCache(cache: GitBaselineCache): void { cache.database?.close(); cache.database = undefined; }
-export const getGitStatus = Effect.fn('view.getGitStatus')(function*(root: string, includeTestBaseline = false, baselineCache?: GitBaselineCache, testRoots?: readonly string[]): Effect.fn.Return<GitStatus, ConcordError, Git> {
+export function closeGitBaselineCache(cache: GitBaselineCache): void { cache.database?.close(); cache.database = undefined; baselineArtifacts.delete(cache); }
+export const getGitStatus = Effect.fn('view.getGitStatus')(function*(root: string, includeTestBaseline = false, baselineCache?: GitBaselineCache, testRoots?: readonly string[]): Effect.fn.Return<GitStatus, ConcordError, Git | RuntimeEnvironment> {
   const result = yield* runGit(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
   if (result.truncated) return yield* Effect.fail(new ConcordError('GitOutputLimit', 'Git status exceeds 2 MiB; narrow the working tree changes before inspecting them.'));
   const records = result.stdout.split('\0');
@@ -40,14 +51,14 @@ export const getGitStatus = Effect.fn('view.getGitStatus')(function*(root: strin
 
 
 export const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(root: string, cache?: GitBaselineCache, testRoots?: readonly string[]) {
+  const runtime = yield* RuntimeEnvironment;
   const baselineCaseIds: string[] = [];
     const roots = testRoots === undefined ? '*' : [...testRoots].sort().join('\0');
     const revision = yield* runGit(root, ['rev-parse', '--verify', 'HEAD'], true);
     const revisionId = revision.stdout.trim();
     const key = objectDigest({ root, revision: revisionId, roots, parser: BASELINE_PARSER });
     if (cache && revisionId) try {
-      cache.database ??= createMemoryHawdb();
-      const row = cache.database.get('git_baseline', [key])[0];
+      const row = baselineDatabase(cache, runtime).get('git_baseline', [key])[0];
       if (row) {
         const value = decode(BaselineSchema, JSON.parse(row.payload), 'Git baseline cache');
         if (value.root === root && value.revision === revisionId && value.roots === roots && value.parser === BASELINE_PARSER) return [...value.caseIds];
@@ -68,8 +79,7 @@ export const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(roo
     }
   const caseIds = [...new Set(baselineCaseIds)];
   if (cache) try {
-    cache.database ??= createMemoryHawdb();
-    cache.database.put('git_baseline', [{ key, payload: JSON.stringify({ root, revision: revisionId, roots, parser: BASELINE_PARSER, caseIds }) }]);
+    baselineDatabase(cache, runtime).put('git_baseline', [{ key, payload: JSON.stringify({ root, revision: revisionId, roots, parser: BASELINE_PARSER, caseIds }) }]);
   } catch { /* baseline remains derived from HEAD */ }
   return [...caseIds];
 });
@@ -91,7 +101,7 @@ export function untrackedDiff(path: string, inspected: SourcesTypes.UntrackedFil
   const oldLabel = label(`a/${path}`), newLabel = label(`b/${path}`);
   return { ...empty, patch: `diff --git ${oldLabel} ${newLabel}\nnew file mode ${(mode & 0o111) ? '100755' : '100644'}\n--- /dev/null\n+++ ${newLabel}\n@@ -0,0 +1,${lines.length} @@\n${lines.map(line => `+${line}\n`).join('')}${source && !source.endsWith('\n') ? '\\ No newline at end of file\n' : ''}` };
 }
-export const getGitDiff = Effect.fn('view.getGitDiff')(function*(root: string, path: string, area: GitArea): Effect.fn.Return<GitDiff, ConcordError, Git | Sources> {
+export const getGitDiff = Effect.fn('view.getGitDiff')(function*(root: string, path: string, area: GitArea): Effect.fn.Return<GitDiff, ConcordError, Git | Sources | RuntimeEnvironment> {
   const status = yield* getGitStatus(root);
   const entry = status.entries.find(item => item.path === path);
   if (!entry) return yield* Effect.fail(new ConcordError('GitChangeNotFound', 'This file no longer has Git changes; refresh the panel.'));

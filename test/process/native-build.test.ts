@@ -11,10 +11,13 @@ import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
+
+const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 
 const target = hawdbTarget();
-const original = join(nativeArtifactRoot, target);
+const original = join(nativeArtifactRoot(runtime), target);
 const identity = Effect.runSync(Effect.sync(() => decodeNativeArtifact(JSON.parse(readFileSync(join(original, 'artifact.json'), 'utf8')))));
 const args = (root: string) => ['scripts/build-native.ts', '--reuse', '--output', join(root, 'output')];
 const cachePath = (root: string) => join(root, 'cache/concord/native', `${identity.sourceDigest}-${identity.cargoLockDigest}`, target);
@@ -71,7 +74,7 @@ test('native per-digest download populates the cache and invalid archives fall b
   let corrupt = false;
   const requested: string[] = [];
   const archive = join(root, 'native.tar.gz');
-  yield* Effect.sync(() => execFileSync('tar', ['-czf', archive, '-C', nativeArtifactRoot, target], { env: { ...process.env, COPYFILE_DISABLE: '1' } }));
+  yield* Effect.sync(() => execFileSync('tar', ['-czf', archive, '-C', nativeArtifactRoot(runtime), target], { env: { ...process.env, COPYFILE_DISABLE: '1' } }));
   const server = createServer((request, response) => {
     requested.push(request.url ?? '');
     response.end(corrupt ? Buffer.from('invalid archive') : readFileSync(archive));

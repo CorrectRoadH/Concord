@@ -1,7 +1,9 @@
 import { selectEffectiveConcepts, splitConceptReference } from '../../model/index.ts';
 import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.ts";
 import { fromMarkdown } from "../../model/index.ts";
-import { documentMarkdown } from "../documents/index.ts";
+import { documentMarkdown, makeDocumentProjectionCache } from "../documents/index.ts";
+import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
+import { repositoryRuntime } from '../../base/workspace/index.ts';
 import { parseConceptCatalog, conceptSpellingKey, type ConceptCatalog, type ConceptDefinition } from "../../model/index.ts";
 import { discovered, globalCatalogPath, scopeOf, under } from "../../model/index.ts";
 
@@ -37,8 +39,8 @@ export function splitReference(reference: string): { path: string; id: string } 
   return splitConceptReference(reference);
 }
 
-export function readConceptCatalog(source: string, path?: string): ConceptCatalog {
-  try { return parseConceptCatalog(source, path === undefined ? fromMarkdown : () => documentMarkdown(path, source)); }
+export function readConceptCatalog(source: string, path: string | undefined, runtime: RuntimeEnvironmentSnapshot, contentCache?: ReturnType<typeof makeDocumentProjectionCache>): ConceptCatalog {
+  try { return parseConceptCatalog(source, path === undefined ? fromMarkdown : () => documentMarkdown(path, source, runtime, contentCache)); }
   catch (cause) { throw new ConcordError('InvalidConceptCatalog', cause instanceof Error ? cause.message : String(cause)); }
 }
 export interface CatalogRecord { path: string; scope: string; digest: string; catalog: ConceptCatalog }
@@ -46,15 +48,18 @@ export interface ConceptDiagnostic { code: string; message: string; sources: rea
 export function catalogSources(repo: Repository): Map<string, string> {
   return new Map(discovered(repo, 'catalog').map(path => [path, repo.read(path) ?? '']));
 }
-export function analyzeCatalogs(sources: Map<string, string>) {
+export function analyzeCatalogs(sources: Map<string, string>, runtime: RuntimeEnvironmentSnapshot) {
   const catalogs: CatalogRecord[] = [];
   const diagnostics: ConceptDiagnostic[] = [];
-  for (const [path, source] of sources) {
-    try { catalogs.push({ path, scope: scopeOf(path, 'catalog'), digest: digest(source), catalog: readConceptCatalog(source, path) }); }
-    catch (cause) { diagnostics.push({ code: 'InvalidConceptCatalog', message: cause instanceof Error ? cause.message : String(cause), sources: [path], scope: scopeOf(path, 'catalog') }); }
-  }
-  const byPath = new Map(catalogs.map(record => [record.path, record]));
-  return { catalogs, diagnostics, byPath };
+  const contentCache = makeDocumentProjectionCache(runtime);
+  try {
+    for (const [path, source] of sources) {
+      try { catalogs.push({ path, scope: scopeOf(path, 'catalog'), digest: digest(source), catalog: readConceptCatalog(source, path, runtime, contentCache) }); }
+      catch (cause) { diagnostics.push({ code: 'InvalidConceptCatalog', message: cause instanceof Error ? cause.message : String(cause), sources: [path], scope: scopeOf(path, 'catalog') }); }
+    }
+    const byPath = new Map(catalogs.map(record => [record.path, record]));
+    return { catalogs, diagnostics, byPath };
+  } finally { contentCache.close(); }
 }
 export function effectiveConcepts(file: string, catalogs: readonly CatalogRecord[]): { reference: string; path: string; scope: string; concept: ConceptDefinition }[] {
   return selectEffectiveConcepts(file, catalogs);
@@ -87,7 +92,7 @@ function ambiguityDiagnostics(catalogs: readonly CatalogRecord[]): ConceptDiagno
 export function indexConcepts(repo: Repository) {
   return inRepositorySnapshot(repo, () => {
     const sources = catalogSources(repo);
-    const { catalogs, diagnostics } = analyzeCatalogs(sources);
+    const { catalogs, diagnostics } = analyzeCatalogs(sources, repositoryRuntime(repo));
     return { operation: 'concepts-index', catalogs, concepts: catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, path: record.path, scope: record.scope, concept }))), diagnostics: [...diagnostics, ...ambiguityDiagnostics(catalogs)], inputDigest: objectDigest({ config: repo.configSnapshot.source, sources: [...sources], membership: [...sources.keys()] }) };
   });
 }
@@ -97,10 +102,11 @@ export function showConcepts(repo: Repository, path = globalCatalogPath) {
   return inRepositorySnapshot(repo, () => {
     const scope = scopeOf(path, 'catalog');
     const source = repo.read(path);
-    const analyzed = analyzeCatalogs(catalogSources(repo));
+    const runtime = repositoryRuntime(repo);
+    const analyzed = analyzeCatalogs(catalogSources(repo), runtime);
     const projection = { effectiveConcepts: effectiveConcepts(`${scope}/_scope.md`, analyzed.catalogs), diagnostics: [...analyzed.diagnostics, ...ambiguityDiagnostics(analyzed.catalogs)] };
     if (source === undefined) return { operation: 'concepts-show', state: 'missing' as const, path, scope, digest: null, source: null, catalog: null, ...projection };
-    try { return { operation: 'concepts-show', state: 'valid' as const, path, scope, digest: digest(source), source, catalog: readConceptCatalog(source, path), ...projection }; }
+    try { return { operation: 'concepts-show', state: 'valid' as const, path, scope, digest: digest(source), source, catalog: readConceptCatalog(source, path, runtime), ...projection }; }
     catch (cause) { return { operation: 'concepts-show', state: 'invalid' as const, path, scope, digest: digest(source), source, catalog: null, diagnostic: cause instanceof Error ? cause.message : String(cause), ...projection }; }
   });
 }

@@ -1,10 +1,11 @@
+import { RuntimeEnvironment, runtimePath } from '../environment/index.ts';
 import { Context, Effect, Layer } from 'effect';
 import { ConcordError } from '../../model/index.ts';
 import { OwnedProcess, hasConfirmedOwnedGroupCleanup } from '../process/index.ts';
 
 export const OUTPUT_LIMIT = 2 * 1024 * 1024;
-export function previewGitEnvironment(): NodeJS.ProcessEnv {
-  const environment = { ...process.env };
+export function previewGitEnvironment(input: Readonly<Record<string, string | undefined>>): NodeJS.ProcessEnv {
+  const environment = { ...input };
   for (const name of Object.keys(environment)) if (name.startsWith('GIT_')) delete environment[name];
   return { ...environment, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
     GIT_ATTR_NOSYSTEM: '1', GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' };
@@ -16,9 +17,11 @@ export interface GitService {
 export class Git extends Context.Service<Git, GitService>()('concord/base/git/Git') {
   static readonly layer = Layer.effect(Git, Effect.gen(function*() {
     const owned = yield* OwnedProcess;
+    const runtime = yield* RuntimeEnvironment;
     return Git.of({
       run: Effect.fn('Git.run')(function*(root: string, args: readonly string[], allowFailure: boolean | readonly number[] = false) {
-        const env = { ...process.env };
+        root = runtimePath(runtime, root);
+        const env = { ...runtime.env };
         for (const name of Object.keys(env)) if (name.startsWith('GIT_')) delete env[name];
         env.GIT_TERMINAL_PROMPT = '0';
         const result = yield* Effect.scoped(owned.run(['git', '--no-optional-locks', '--literal-pathspecs', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', '-C', root, ...args], {
@@ -30,6 +33,7 @@ export class Git extends Context.Service<Git, GitService>()('concord/base/git/Gi
         return { stdout: result.stdout, truncated: false };
       }),
       preview: Effect.fn('Git.preview')(function*(cwd: string, args: readonly string[], environment: NodeJS.ProcessEnv, limit = OUTPUT_LIMIT, input?: string) {
+        cwd = runtimePath(runtime, cwd);
         const chunks: Buffer[] = [];
         const result = yield* Effect.scoped(owned.run(['git', '--no-optional-locks', '--literal-pathspecs', '-c', 'core.fsmonitor=false', '-c', `core.attributesFile=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`, ...args], {
           cwd, env: environment, stdin: input ?? '', timeoutMs: 10_000, stdoutLimitBytes: limit, stderrLimitBytes: 65_536, outputLimitBytes: limit + 65_536,

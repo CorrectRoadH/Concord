@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/review-pull-request.md
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { RuntimeEnvironment, runtimePath } from '../base/environment/index.ts';
 import { requireBuiltAssets } from "../base/installation/index.ts";
 import { Effect, Schema } from "effect";
 import { ConcordError, failure } from "../model/index.ts";
@@ -49,9 +50,10 @@ function labelPatch(patch: string, entry: RawEntry): string {
 }
 export interface ChangePreviewOptions { root: string; base: string; head?: string; baseLabel?: string; out: string; }
 export const exportChangePreview = Effect.fn('preview.export')(function*(options: ChangePreviewOptions) {
+  const runtime = yield* RuntimeEnvironment;
   yield* checked(requireBuiltAssets);
   return yield* Effect.scoped(Effect.gen(function*(){
-    const environment=previewGitEnvironment(); const cwd=resolve(options.root);
+    const environment=previewGitEnvironment(runtime.env); const cwd=runtimePath(runtime, options.root);
     const sourceText = (args: readonly string[]) => previewGit(cwd,args,environment,MiB).pipe(Effect.map(bytes=>bytes.toString('utf8').replace(/\r?\n$/u,'')));
     const root=yield* sourceText(['rev-parse','--show-toplevel']);
     const gitDir=yield* sourceText(['rev-parse','--absolute-git-dir']);
@@ -62,7 +64,7 @@ export const exportChangePreview = Effect.fn('preview.export')(function*(options
     const objectFormat=yield* sourceText(['rev-parse','--show-object-format']);
     if(objectFormat!=='sha1'&&objectFormat!=='sha256')return yield* Effect.fail(new ConcordError('PreviewGitInvalid','Unsupported Git object format.'));
     const objects=yield* sourceText(['rev-parse','--path-format=absolute','--git-path','objects']);
-    const out=resolve(options.out);
+    const out=runtimePath(runtime, options.out);
     const publication = yield* Publication;
     const sources = yield* Sources;
     const chain = yield* publication.inspectExportAncestors(out, root, [gitDir, common, join(root, '.git')]);

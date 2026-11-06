@@ -5,12 +5,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { makeOwnedProcessService } from "../../src/base/process/index.ts";
 import { Deferred, Effect, Fiber } from 'effect';
+import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { TestClock } from 'effect/testing';
 import { withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../../src/base/process/index.ts";
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('owned editor job timeout releases its real native compiler group', { skip: process.platform !== 'linux', timeout: 15000 }, () => Effect.runPromise(Effect.gen(function*() {
-  const owner = makeOwnedProcessService();
+  const owner = makeOwnedProcessService({ environment: makeRuntimeEnvironment(process.cwd(), process.env) });
   const ready = yield* Deferred.make<void>();
   const running = yield* Effect.forkChild(Effect.scoped(owner.run([process.execPath, fileURLToPath(new URL('../fixtures/typescript-scope-worker.ts', import.meta.url))], {
     cwd: process.cwd(), timeoutMs: 2500,
@@ -77,6 +78,7 @@ test('native compiler closes after nested domain failure and snapshot disposal f
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('editor verifies cleanup records only after Scope release and rejects every unconfirmed ownership state', { skip: process.platform === 'win32' }, () => Effect.runPromise(Effect.tryPromise(async () => {
   const { runEditorJob } = await import("../../src/app/index.ts");
+  const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
   const computed = { session: 'fixture', config: 'fixture', complete: true, gaps: [], value: null, diagnostics: [], reads: [], listings: [] };
   const job = { root: process.cwd(), session: 'fixture', config: 'fixture', overlays: [], method: 'diagnostics' };
   const { makeOwnedProcessService } = await import("../../src/base/process/owned-process.ts");
@@ -85,11 +87,11 @@ test('editor verifies cleanup records only after Scope release and rejects every
   const variants: readonly (Result | undefined)[] = [confirmed, { ...confirmed, processGroupOwned: false }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, owned: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, checked: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, gone: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, gone: null } }, undefined];
   for (const record of variants) {
     let released = false, failures = 0;
-    const service = { ...makeOwnedProcessService(), run: () => Effect.acquireRelease(Effect.succeed(confirmed), () => Effect.sync(() => { released = true; })), cleanupResults: Effect.sync(() => {
+    const service = { ...makeOwnedProcessService({ environment: runtime }), run: () => Effect.acquireRelease(Effect.succeed(confirmed), () => Effect.sync(() => { released = true; })), cleanupResults: Effect.sync(() => {
       assert.equal(released, true, 'cleanup is inspected after Scope finalizers');
       return record === undefined ? [] : [record];
     }) };
-    const promise = Effect.runPromise(runEditorJob(job, () => { failures++; }, service));
+    const promise = Effect.runPromise(runEditorJob(job, () => { failures++; }, service).pipe(Effect.provideService(RuntimeEnvironment, runtime)));
     if (record === confirmed) { assert.deepEqual(await promise, computed); assert.equal(failures, 0); }
     else { await assert.rejects(promise, /cleanup could not be confirmed/u); assert.equal(failures, 1); }
   }
