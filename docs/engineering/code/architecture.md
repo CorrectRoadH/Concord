@@ -123,7 +123,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | Workspace | 项目目录、对应的 Git-private 目录与安装身份 |
 | Sources | 路径安全的读取、来源快照与返回前核验 |
 | Publication | 租约、journal、原子替换与恢复 |
-| Cache | 解析缓存、只读快照与持久命名空间的独占写入 |
+| Cache | 解析缓存、只读快照与持久命名空间的独占写入。解析缓存跟随持有它的入口：工作区服务与计算进程在整个进程生命周期内保留它，按项目与经过验证的原生身份区分；一次 CLI 调用的解析缓存在调用结束时释放 |
 | Git | 状态、diff、提交与 worktree 操作 |
 | OwnedProcess | 子进程的启动、信号、后代清理确认与输出预算 |
 
