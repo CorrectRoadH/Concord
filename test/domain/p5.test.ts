@@ -7,8 +7,8 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { P5BundleSchema } from '../../src/model/p5/index.js';
-import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
-import { fetchFresh } from '../support/support.js';
+import { compileP5 } from '../../src/app/index.js';
+import { runApplication } from '../support/repository.js';
 
 import { LocalRepository } from "../support/repository.js";
 
@@ -19,14 +19,7 @@ test('p5 compiler checks captured modules, resources, options and repository bou
   const root = mkdtempSync(join(tmpdir(), 'concord-p5-compiler-'));
   const document = 'docs/feature/sketch/README.md';
   const write = (path: string, source: string | Buffer) => { const target = join(root, 'docs/feature/sketch', path); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, source); };
-  let server: ViewServerHandle | undefined;
-  const compile = async (code: string, meta = '') => {
-    server ??= await startViewServer({ root });
-    const response = await fetchFresh(`${server.address}api/p5/compile`, { method: 'POST', headers: { 'content-type': 'application/json', Origin: server.address.replace(/\/$/u, '') }, body: JSON.stringify({ document, code, meta }) });
-    const body = await response.text();
-    if (response.status !== 200) throw new Error(body);
-    return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ok: Schema.Literal(true), value: P5BundleSchema })))(body).value;
-  };
+  const compile = (code: string, meta = '') => runApplication(compileP5(root, { document, code, meta }));
   try {
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
@@ -86,5 +79,5 @@ test('p5 compiler checks captured modules, resources, options and repository bou
     assert.equal(readFileSync(join(root, document), 'utf8'), before);
     const writable = new LocalRepository(root);
     try { writable.snapshot(() => assert.ok(writable.read(document))); } finally { writable.close(); }
-  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { rmSync(root, { recursive: true, force: true }); }
 })));

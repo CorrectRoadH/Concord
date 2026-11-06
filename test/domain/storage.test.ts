@@ -1,5 +1,5 @@
 import { initialize } from '../support/operations.js';
-import { installedConcordCli } from '../support/support.js';
+import { recoverLocalState } from '../../src/app/index.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, symlinkSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository, runApplication } from "../support/repository.js";
 
 import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
 import { digest } from "../../src/model/index.js";
@@ -65,7 +65,7 @@ test('interrupted multi-file publication rolls back, and recovery preserves exte
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
-test('unified journal recovers interrupted init, preflights every target, and preserves unknown formats',()=>Effect.runPromise(Effect.sync(()=>{
+test('unified journal recovers interrupted init, preflights every target, and preserves unknown formats',async () => {
  const root=fixture();let repo: LocalRepository | undefined;try {
   const config=renderTypeScriptConfig({testRoots:[],runner:{kind:'node-test',sourceFiles:[],timeoutMs:60000}});
   const guide='# guide\n'; const journalPath=join(root,'.git','concord','journal.json');mkdirSync(join(root,'.git','concord'),{recursive:true});mkdirSync(join(root,'docs'),{recursive:true});writeFileSync(join(root,'docs/concord.md'),guide);
@@ -73,7 +73,7 @@ test('unified journal recovers interrupted init, preflights every target, and pr
    {path:'concord.config.ts',before:null,after:config,beforeDigest:null,afterDigest:digest(config),mode:420},
    {path:'docs/concord.md',before:null,after:guide,beforeDigest:null,afterDigest:digest(guide),mode:420},
   ]})+'\n');
-  const recovered = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({status: Schema.Literal('rolled-back'), journalStatus: Schema.Literal('rolled-back')})))(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'recover'], {encoding:'utf8'}));
+  const recovered = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({status: Schema.Literal('rolled-back'), journalStatus: Schema.Literal('rolled-back')})))(JSON.stringify(await runApplication(recoverLocalState(root))));
   assert.equal(recovered.status,'rolled-back');assert.equal(existsSync(join(root,'concord.config.ts')),false);assert.equal(existsSync(join(root,'docs/concord.md')),false);
   const initial=new LocalRepository(root,{initialize:true});initialize(initial, false, { testRoots: ['test', 'tests'] });initial.close();
   writeFileSync(join(root,'memory/a.md'),'before-a');writeFileSync(join(root,'memory/b.md'),'before-b');const marker=readFileSync(join(root,projectConfigPath(root)),'utf8');
@@ -84,4 +84,4 @@ test('unified journal recovers interrupted init, preflights every target, and pr
   writeFileSync(join(root,'memory/a.md'),'after-a');writeFileSync(join(root,'memory/b.md'),'external');writeFileSync(journalPath,JSON.stringify(batch)+'\n');assert.throws(()=>new LocalRepository(root,{recover:true}),{code:'RecoveryConflict'});assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'after-a');assert.equal(existsSync(journalPath),true);
   rmSync(journalPath);writeFileSync(journalPath,'{"format":"concord.journal/v2"}\n');assert.throws(()=>new LocalRepository(root,{recover:true}),{code:'InvalidData'});assert.equal(existsSync(journalPath),true);
  } finally {repo?.close();rmSync(root,{recursive:true,force:true});}
-})));
+});

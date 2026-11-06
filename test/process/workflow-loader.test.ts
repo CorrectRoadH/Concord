@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { NodeServices } from '@effect/platform-node';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { Effect, FileSystem, Schema, Stream } from 'effect';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import test from 'node:test';
+import { SkillsInstallReceiptSchema, workflowSkillPaths } from '../../src/model/index.js';
+import { tmpdir } from '../support/temporary.js';
+
+// @use-case docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
+test('the lightweight command loader routes skills install to the same managed publication', { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-workflow-loader-' });
+  assert.equal(Number(yield* spawner.exitCode(ChildProcess.make('git', ['init', '-q', root]))), 0);
+  const bootstrap = join(root, 'light-entry.mts');
+  // Internal loader protocol is a source-process exception, not a domain test.
+  yield* fs.writeFileString(bootstrap, `import { loadCommand } from ${JSON.stringify(pathToFileURL(resolve('src/entry/cli/cli.ts')).href)};
+loadCommand('skills', { format: 'concord.startup/v1', packageDigest: '', dataDigest: '', files: {}, sourceFiles: {}, receipts: {}, groups: [{ name: 'skills' }] }).then(run => run());\n`);
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), bootstrap, '--root', root, '--json', 'skills', 'install'], {
+    cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+  }));
+  const [stdout, stderr, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.stdout)), Stream.mkString(Stream.decodeText(child.stderr)), child.exitCode], { concurrency: 'unbounded' });
+  assert.equal(Number(code), 0, JSON.stringify({ stdout, stderr, code }));
+  const result = Schema.decodeUnknownSync(Schema.fromJsonString(SkillsInstallReceiptSchema), { onExcessProperty: 'error' })(stdout);
+  assert.deepEqual(result.createdPaths, workflowSkillPaths);
+})).pipe(Effect.provide(NodeServices.layer))));

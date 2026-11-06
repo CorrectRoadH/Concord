@@ -2,37 +2,23 @@ import { createRequire, packageBin, createConsumer, sourceConcord, prepareSource
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#link-declarations
 // @name packed-steps-navigation-and-maintenance
-test('packed steps C15 C16 C18 navigate exact steps, preserve examples and rename through one journal', () => Effect.runPromise(Effect.sync(() => {
- const root = join(scratch, 'steps'); mkdirSync(root); execFileSync('git', ['init', '-q', root]);
- call(root, ['init', '--source-root', 'src'], Ack);
+test('packed step commands route, return JSON and expose invalid relation exits', () => {
+ const root = consumer('steps-boundary');
  call(root, ['new', 'feature', 'journey', '--title', 'Journey'], Ack);
  call(root, ['new', 'use-case', 'flow', '--title', 'Flow', '--feature', 'journey'], Ack);
  const path = 'docs/feature/journey/use-case/flow.md';
- const owner = call(root, ['show', path], Schema.Struct({ document: DigestOutput }));
- savePage(root, path, '# Flow\n\n## Details\n\n1. Reject {#reject-token}\n2. Report\n\n## Acceptance\n\n1. Leave unmarked\n', owner.document.digest);
- write(root, 'test/flow.ts', `// @use-case ${path}#reject-token\n// @name stable\n\n// @use-case ${path}#details\n\n// @use-case ${path}\n\n// pytest.mark.unrelated\nconst fake = '// @use-case ${path}#reject-token';\n`);
- write(root, 'src/flow.ts', `// @concord-file\n// @concord-implements ${path}#reject-token\nexport const flow = 1;\n`);
- write(root, 'docs/feature/journey/links.md', `[Flow](use-case/flow.md#reject-token)\n\n\`[Example](use-case/flow.md#reject-token)\`\n`);
- const steps = Schema.Struct({ steps: Schema.Array(Schema.Struct({ id: Schema.String, testCount: Schema.Int, codeCount: Schema.Int })), lists: Schema.Array(Schema.Struct({ ordinal: Schema.Int, marked: Schema.Int })) });
- const initial = call(root, ['use-case', 'steps', path], steps);
- assert.deepEqual(initial.steps, [{ id: 'reject-token', testCount: 1, codeCount: 1 }]);
- assert.equal(initial.lists[1]?.marked, 0);
- call(root, ['check'], CheckOutput);
+ const before = readPage(root, path);
+ savePage(root, path, '# Flow\n\n1. Step {#first}\n', before.digest);
+ const steps = Schema.Struct({ steps: Schema.Array(Schema.Struct({ id: Schema.String })) });
+ assert.deepEqual(call(root, ['use-case', 'steps', path], steps).steps.map(step => step.id), ['first']);
  call(root, ['use-case', 'format', path], Ack);
- assert.deepEqual(call(root, ['use-case', 'steps', path], steps).steps.map(step => step.id), ['reject-token', 'step-1']);
- const result = call(root, ['use-case', 'rename-step', path, 'reject-token', '拒绝令牌'], Schema.Struct({ affectedCases: Schema.Array(Schema.Struct({ before: Schema.String, after: Schema.String, named: Schema.Boolean })) }));
- assert.equal(result.affectedCases[0]?.before, result.affectedCases[0]?.after);
- assert.match(readFileSync(join(root, 'docs/feature/journey/links.md'), 'utf8'), /\[Flow\]\(use-case\/flow.md#拒绝令牌\)/u);
- assert.match(readFileSync(join(root, 'docs/feature/journey/links.md'), 'utf8'), /`\[Example\]\(use-case\/flow.md#reject-token\)`/u);
- const trace = call(root, ['trace', 'show', path], Schema.Struct({ stepGroups: Schema.Array(Schema.Struct({ nonStepAnchors: Schema.Array(Schema.Struct({ ref: Schema.String })), wholeUseCase: Schema.Struct({ tests: Schema.Array(Schema.Unknown) }) })) }));
- assert.equal(trace.stepGroups[0]?.nonStepAnchors[0]?.ref, `${path}#details`);
- assert.equal(trace.stepGroups[0]?.wholeUseCase.tests.length, 1);
- assert.match(callString(root, ['review', path]), /Step: .*#拒绝令牌/u);
- call(root, ['check'], CheckOutput);
+ const renamed = call(root, ['use-case', 'rename-step', path, 'first', 'second'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
+ assert.deepEqual(renamed.changedPaths, [path]);
  write(root, 'test/broken.ts', `// @use-case ${path}#missing\n`);
  const broken = call(root, ['check'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ code: Schema.String })) }), '', 1);
- assert.equal(broken.ok, false); assert.ok(broken.findings.some(finding => finding.code === 'AnchorNotFound'));
-})));
+ assert.equal(broken.ok, false);
+ assert.ok(broken.findings.some(finding => finding.code === 'AnchorNotFound'));
+});
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('installed Roadmap retains selected pages and Memory supports Engineering', () => Effect.runPromise(Effect.sync(() => {

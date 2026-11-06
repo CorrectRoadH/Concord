@@ -6,6 +6,7 @@ import { tap } from 'node:test/reporters';
 import { createHash } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { inspect } from 'node:util';
+import { summarizeTestLayers } from './test-layers.js';
 
 type TestEvent = Parameters<typeof tap>[0] extends AsyncIterable<infer Event> ? Event : never;
 class TestRunnerFailed extends Schema.TaggedError<TestRunnerFailed>()('TestRunnerFailed', {
@@ -25,6 +26,7 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
   let success = false;
   const fileTimings = new Map<string, { file: string; duration_ms: number; success: boolean }>();
   const fileProcesses = new Set<string>();
+  const fileCases = new Map<string, number>();
   const diagnose = Effect.fn('test.node.diagnostic')(function*(event: TestEvent) {
     const data = event.data;
     const file = data !== undefined && 'file' in data ? data.file : undefined;
@@ -39,6 +41,7 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
       yield* fs.writeFileString(join(output, 'node-failures.jsonl'), `${JSON.stringify({ file, name: event.data.name, error })}\n`, { flag: 'a' });
     }
     if (event.type === 'test:summary') {
+      if (file !== undefined) fileCases.set(file, event.data.counts.tests);
       const timing = { ...event.data, scope: file === undefined ? 'run' : 'file',
         // Only the official runner's isolated file processes, never case descendants.
         ...(file === undefined ? { fileProcessStarts: fileProcesses.size } : {}) };
@@ -62,7 +65,14 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
   yield* Stream.fromAsyncIterable(tap(measured()), cause => new TestRunnerFailed({ cause })).pipe(
     Stream.runForEach(text => Effect.sync(() => { process.stdout.write(text); })),
   );
-  const sortedTimings = [...fileTimings.values()].sort((left, right) => right.duration_ms - left.duration_ms);
+  const sortedTimings = [...fileTimings.values()].map(timing => ({ ...timing,
+    ...(fileCases.has(timing.file) ? { cases: fileCases.get(timing.file)! } : {}),
+  })).sort((left, right) => right.duration_ms - left.duration_ms);
   yield* fs.writeFileString(join(output, 'file-timings.json'), `${JSON.stringify(sortedTimings, null, 2)}\n`);
+  const layers = summarizeTestLayers(sortedTimings.map(timing => timing.file), sortedTimings);
+  yield* fs.writeFileString(join(output, 'layer-timings.json'), `${JSON.stringify(layers, null, 2)}\n`);
+  for (const layer of layers) {
+    yield* Effect.sync(() => console.error(`# Node layer ${layer.layer}: files=${layer.files}; cases=${layer.cases}; countedFiles=${layer.countedFiles}; ${(layer.duration_ms / 1000).toFixed(3)}s (sum of file durations)`));
+  }
   return !success;
 });

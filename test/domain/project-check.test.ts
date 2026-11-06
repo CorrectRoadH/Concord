@@ -1,10 +1,10 @@
 import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
 import { initialize } from '../support/operations.js';
 import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.js';
-import { installedConcordCli } from '../support/support.js';
+import { executeQuery } from '../../src/app/index.js';
 import { runApplication } from '../support/repository.js';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
@@ -17,7 +17,6 @@ import { checkProject } from "../../src/app/index.js";
 import { checkCurrentProject } from "../../src/app/index.js";
 import { ConcordError } from "../../src/model/index.js";
 
-const cli = installedConcordCli();
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('project check combines relation and writing findings and reports incomplete writing inputs', async t => {
@@ -28,9 +27,9 @@ test('project check combines relation and writing findings and reports incomplet
     const repo = new LocalRepository(root);
     try { return run(repo); } finally { repo.close(); }
   };
-  const callCheck = () => {
-    const result = spawnSync(process.execPath, [cli, '--root', root, '--json', 'check'], { encoding: 'utf8' });
-    return { status: result.status, output: JSON.parse(result.stdout) as ReturnType<typeof checkProject> };
+  const callCheck = async () => {
+    const result = await runApplication(executeQuery(root, { name: 'check', input: {} }, 'off'));
+    return { status: result.exitCode, output: result.value as unknown as ReturnType<typeof checkProject> };
   };
   const initial = new LocalRepository(root, { initialize: true });
   try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
@@ -48,8 +47,8 @@ test('project check combines relation and writing findings and reports incomplet
   assert.equal(writingOnly.complete, true);
   assert.deepEqual(writingOnly.checks, { relations: { ok: true, complete: true }, writing: { ok: false, complete: true } });
   assert(writingOnly.findings.some(finding => finding.category === 'writing' && finding.code === 'bannedTerm'));
-  assert.equal(callCheck().status, 1);
-  assert.deepEqual(callCheck().output.checks, writingOnly.checks);
+  assert.equal((await callCheck()).status, 1);
+  assert.deepEqual((await callCheck()).output.checks, writingOnly.checks);
   const action = await runApplication(executeViewAction(root, { action: 'check' })) as ReturnType<typeof checkProject>;
   assert.deepEqual(action.checks, writingOnly.checks);
   assert.deepEqual(action.findings, writingOnly.findings);
@@ -66,7 +65,7 @@ test('project check combines relation and writing findings and reports incomplet
   assert.equal(incomplete.complete, false);
   assert.equal(incomplete.checks.writing.complete, false);
   assert(incomplete.findings.some(finding => finding.category === 'writing' && finding.code === 'InvalidWritingPolicy'));
-  const command = callCheck();
+  const command = await callCheck();
   assert.equal(command.status, 1);
   assert.equal(command.output.complete, false);
   assert.equal(command.output.checks.writing.complete, false);
