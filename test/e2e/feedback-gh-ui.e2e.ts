@@ -75,7 +75,9 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await expect.poll(() => savedTransport(root, 0)).toBe('gh');
     assert.deepEqual(readProjectConfig(root).feedbackConnections?.[0], { id: 'existing', provider: 'github', transport: 'gh', owner: 'acme', repo: 'demo', repositoryId: '321' });
     assert.deepEqual(checks, []);
+    const existingChecked = browserActionReceipt(page, 'feedback.check', input => input.connection === 'existing');
     await existing.getByRole('button', { name: '检测连接' }).click();
+    await existingChecked;
     await expect(existing.getByRole('status')).toContainText('连接正常');
     assert.deepEqual(checks, ['existing']);
 
@@ -112,10 +114,12 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await page.getByLabel('GitHub repository').fill('repo');
     const addedConnection = browserActionReceipt(page, 'config.set', input => JSON.stringify(input.config).includes('new-gh'));
     await page.getByRole('button', { name: '添加', exact: true }).click();
-    const next = page.locator('.content-record').filter({ hasText: 'other/repo' });
-    await next.getByRole('button', { name: '检测连接' }).click();
-    await expect(next.getByRole('status')).toContainText('连接正常');
     await addedConnection;
+    const next = page.locator('.content-record').filter({ hasText: 'other/repo' });
+    const addedChecked = browserActionReceipt(page, 'feedback.check', input => input.connection === 'new-gh');
+    await next.getByRole('button', { name: '检测连接' }).click();
+    await addedChecked;
+    await expect(next.getByRole('status')).toContainText('连接正常');
     await expect.poll(() => readProjectConfig(root).feedbackConnections?.length).toBe(2);
     assert.deepEqual(readProjectConfig(root).feedbackConnections?.[1], { id: 'new-gh', provider: 'github', transport: 'gh', owner: 'other', repo: 'repo' });
     assert.deepEqual(checks, ['existing', 'existing', 'new-gh']);

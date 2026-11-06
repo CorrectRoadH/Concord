@@ -106,13 +106,17 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     await route.continue();
   });
   await page.getByRole('link', { name: '写作', exact: true }).click();
+  const stalePolicy = browserActionReceipt(page, 'writing.show', input => input.path === `${a}/writing.md`);
   await page.getByLabel('新适用范围').fill(a);
   await page.getByRole('button', { name: '打开范围' }).click();
   await heldA;
+  const betaPolicy = browserActionReceipt(page, 'writing.show', input => input.path === `${b}/writing.md`);
   await page.getByLabel('新适用范围').fill(b);
   await page.getByRole('button', { name: '打开范围' }).click();
+  await betaPolicy;
   await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta');
   releaseA();
+  await stalePolicy;
   await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta');
   await page.unroute('**/api/action');
 
@@ -193,7 +197,9 @@ test('real browser can check again after editing invalidates a delayed check res
   server = await workspace.ready();
   await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
+  const initialPolicy = browserActionReceipt(page, 'writing.show', input => input.path === 'docs/writing.md');
   await page.goto(`http://127.0.0.1:${server.port}/writing`);
+  await initialPolicy;
   await expect(page.getByLabel('替换建议 1')).toHaveValue('New');
 
   let releaseOld!: () => void;
