@@ -92,6 +92,8 @@ state: absent
 - [检索 Memory 与 Issue 时总是得到当前内容](use-case/query-current-projections.md)
 - [读取后台刷新的诊断结果](use-case/query-asynchronous-projections.md)
 
+命令的输出字段与错误见 [CLI](cli.md)。
+
 ## 范围与验收
 
 - 缓存只加速：删除缓存不能删除 Spec、Memory、Issue 或证据，也不能改变 fixed 判定。

@@ -70,7 +70,7 @@
    }
    ```
 
-   `current` 恒为 false。`builtFrom` 与 `builtUntil` 是扫描区间，`builtAt` 是发布时间。`consistent` 只回答构建期间观察到的来源是否保持不变。
+   `current` 恒为 false，`consistent` 只回答构建期间观察到的来源是否保持不变。全部字段见 [CLI](../cli.md#历史投影)。
 
 4. 在编辑过程中读取。 {#drift}
 
@@ -127,11 +127,7 @@
 
 6. 刷新失败时查看原因。 {#refresh-error}
 
-   最近一次刷新失败时，`projection` 附 `lastError`，含 `code`、`message` 与 `scannedAt`；超时另含 `elapsedMs` 与 `limitMs`。以 `lastError` 是否存在判断最近一次刷新是否失败。
-
-   `lastError.code` 是开放集合。已知码有 `QueryRefreshTimedOut`、`QueryRefreshOutputLimit`、`QueryRefreshFailed`、`QueryRefreshCleanupUnconfirmed`；扫描的具名失败保留原码，例如 `TraceInvalid`、`InvalidConfig`。
-
-   还没有投影时，`QueryPending` 的 `details.refresh` 是同一个失败对象；尚无失败时为 `"requested"`。
+   最近一次刷新失败时，`projection` 附 `lastError`，以它是否存在判断最近一次刷新是否失败。还没有投影时，`QueryPending` 的 `details.refresh` 是同一个失败对象。字段与已知错误码见 [CLI](../cli.md#历史投影)。
 
 ## 结果
 

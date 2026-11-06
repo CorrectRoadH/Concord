@@ -40,7 +40,7 @@
    physicalLimitBytes: 234881024
    ```
 
-   `ready` 表示投影可读，不表示某次扫描命中。`physicalBytes` 与 `physicalLimitBytes` 是物理体积与上限。
+   `ready` 表示投影可读，不表示某次扫描命中。全部字段见 [CLI](../cli.md#缓存状态)。
 
    结果还说明缓存由谁持有。`owner` 为 `service` 时由工作区服务持有，`pid` 与 `installation` 是服务的进程号与安装身份（与 `concord server status` 的 `installation` 相同），`sourceDigest` 是服务当前结果的摘要；没有服务时 `owner` 为 `process`，`pid` 与 `installation` 是当前 CLI 进程的。人读输出多出三行，例如：
 
