@@ -9,7 +9,7 @@ concord herdr install
 concord herdr uninstall
 ```
 
-`install` 把随包的 mod 写到 Herdr 的 mods 目录（`$HERDR_APP_HOME/mods/concord`，未设置时为 `~/.config/herdr-app/mods/concord`），已存在时覆盖为当前版本。`uninstall` 删除这个目录。`--json` 返回 `{"operation":"herdr-install","path":"..."}`。
+`install` 把随包的 mod 写到 Herdr 的 mods 目录（`$HERDR_APP_HOME/mods/concord`，未设置时为 `~/.config/herdr-app/mods/concord`），已存在时覆盖为当前版本。从源码运行时，`install` 先把 mod 构建到同一个 mods 目录再安装，不需要事先构建安装包，检出中也不留下产物。`uninstall` 删除这个目录。`--json` 返回 `{"operation":"herdr-install","path":"..."}`。
 
 | 错误 | 什么时候出现 |
 | --- | --- |
