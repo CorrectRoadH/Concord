@@ -67,9 +67,9 @@ export class ModSession {
   private selection = {};
   constructor(readonly host: ModHost, cwd: string) { this.root = cwd; }
 
-  command<S extends Schema.Top & { readonly DecodingServices: never }>(args: readonly string[], schema: S, diagnostic = false) {
+  command<S extends Schema.Top & { readonly DecodingServices: never }>(args: readonly string[], schema: S, diagnostic = false, discoverRoot = false) {
     return Effect.gen({ self: this }, function*() {
-      const reply = yield* io(() => this.host.exec('concord', ['--json', '--fresh', '--root', this.root, ...args], { cwd: this.root }));
+      const reply = yield* io(() => this.host.exec('concord', ['--json', '--fresh', ...(discoverRoot ? [] : ['--root', this.root]), ...args], { cwd: this.root }));
       if (reply.code !== 0 && (!diagnostic || !reply.stdout.trim())) {
         const error = Schema.decodeUnknownExit(Schema.fromJsonString(ErrorReply), { onExcessProperty: 'ignore' })(reply.stderr);
         return yield* Effect.fail(new ModFailure({ message: error._tag === 'Success' ? `${error.value.error}: ${error.value.message}` : reply.stderr || 'Concord command failed' }));
@@ -82,22 +82,41 @@ export class ModSession {
     const observation = this.observation = {};
     const current = () => !this.closed && observation === this.observation;
     const selected = this.selected;
-    const [doctor] = yield* Effect.all([
-      this.command(['doctor'], Doctor, true),
+    // A pane can start below the Git top. Without a local marker, let the public
+    // doctor discover that top before sending any initialization-guarded query.
+    let doctor: typeof Doctor.Type | undefined;
+    let taste = yield* io(() => this.host.readTextFile(`${this.root}/docs/taste.md`));
+    if (!current()) return;
+    if (taste === null) {
+      const before = this.root;
+      doctor = yield* this.command(['doctor'], Doctor, true, true);
+      if (!current()) return;
+      this.root = doctor.root;
+      if (this.root !== before) taste = yield* io(() => this.host.readTextFile(`${this.root}/docs/taste.md`));
+      if (!current()) return;
+    }
+    this.initialized = taste !== null;
+    if (!this.initialized) {
+      this.documents = []; this.pages = []; this.concepts = []; this.detail = {};
+      this.watchRoots = [...new Set(['docs', 'memory', ...(doctor?.configuration.sourceRoots ?? []), ...(doctor?.configuration.testRoots ?? [])])];
+      this.error = '';
+      notify();
+      return;
+    }
+    const [resolvedDoctor] = yield* Effect.all([
+      doctor ? Effect.succeed(doctor) : this.command(['doctor'], Doctor, true),
       this.command(['list'], Schema.Struct({ documents: Schema.Array(Owner) })).pipe(Effect.tap(reply => Effect.sync(() => {
         if (!current()) return;
         this.documents = reply.documents;
-        if (reply.documents.length > 0) this.initialized = true;
         notify(); // The first readable Feature list need not wait for concepts or package details.
       }))),
       selected ? this.open(selected, false).pipe(Effect.tap(() => Effect.sync(() => { if (current()) notify(); }))) : Effect.void,
     ], { concurrency: 'unbounded' });
     if (!current()) return;
-    this.root = doctor.root;
-    this.watchRoots = [...new Set(['docs', 'memory', ...(doctor.configuration.sourceRoots ?? []), ...(doctor.configuration.testRoots ?? [])])];
+    this.root = resolvedDoctor.root;
+    this.watchRoots = [...new Set(['docs', 'memory', ...(resolvedDoctor.configuration.sourceRoots ?? []), ...(resolvedDoctor.configuration.testRoots ?? [])])];
     const fixed = yield* Effect.forEach(fixedPages, path => io(() => this.host.readTextFile(`${this.root}/${path}`)).pipe(Effect.map(source => source === null ? undefined : { path, kind: path === 'docs/taste.md' ? 'taste' : path.endsWith('/concepts.md') ? 'concepts' : 'page', name: /^#\s+(.+)$/mu.exec(source)?.[1] ?? path })), { concurrency: 'unbounded' });
     if (!current()) return;
-    this.initialized = this.documents.length > 0 || fixed.some(Boolean);
     this.pages = fixed.filter((page): page is NonNullable<typeof page> => page !== undefined);
     notify();
     // Details are derived again on every refresh, never saved as a second registry.

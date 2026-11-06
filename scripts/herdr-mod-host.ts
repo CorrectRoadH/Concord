@@ -25,6 +25,7 @@ class HostElement {
   p(_v: number) { return this; } px(_v: number) { return this; } py(_v: number) { return this; }
   bg(_v: string) { return this; } text_color(_v: string) { return this; } text_size(_v: number) { return this; }
   rounded(_v: number) { return this; } overflow_y_scroll() { return this; }
+  items_stretch() { return this; } overflow_hidden() { return this; }
   on_click(callback: Callback) { this.click = callback; return this; }
   on_link_click(_callback: (url: string, cx: HostContext) => void) { return this; }
   text(): string { return this.nodes.map(node => typeof node === 'string' ? node : node.text()).join('\n'); }
@@ -76,9 +77,12 @@ const main = Effect.scoped(Effect.gen(function*() {
     Editor: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
     InputState: { new: () => new HostState('') }, Input: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
     focused: () => ({ cwd: root, pane: 'external-boundary' }), theme: () => ({}), pickFolder: async () => root,
-    exec: async (command: string, args: string[], options: { cwd: string }) => {
+    panes: () => [], spaces: () => [], run: () => null, closeOverlay: () => null, appHome: () => '/external-herdr-home',
+    props: () => ({}),
+    exec: async (command: string, args: string[], options: { cwd: string } = { cwd: root }) => {
       if (command !== 'concord') throw new Error(`Unexpected product command ${command}`);
-      calls.push(args.slice(args.indexOf('--root') + 2));
+      const operation = args.includes('--root') ? args.slice(args.indexOf('--root') + 2) : args.filter(arg => arg !== '--json' && arg !== '--fresh');
+      calls.push(operation);
       const started = performance.now();
       const execution = Effect.scoped(Effect.gen(function*() {
         const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [entry, ...args], {
@@ -91,10 +95,11 @@ const main = Effect.scoped(Effect.gen(function*() {
       const child = await Effect.runPromise(Fiber.join(fiber), { signal });
       fibers.add(child);
       const reply = await Effect.runPromise(Fiber.join(child), { signal });
-      timings.push({ operation: args.slice(args.indexOf('--root') + 2).join(' '), ms: performance.now() - started });
+      timings.push({ operation: operation.join(' '), ms: performance.now() - started });
       return reply;
     },
-    readTextFile: (path: string) => Effect.runPromise(fs.readFileString(path).pipe(Effect.catch(error => error.reason._tag === 'NotFound' ? Effect.succeed(null) : Effect.fail(error)))),
+    readTextFile: (path: string) => path === '/external-herdr-home/mods/concord/mod.json' ? Promise.resolve(JSON.stringify({ minimumConcordVersion: 'dev' }))
+      : Effect.runPromise(fs.readFileString(path).pipe(Effect.catch(error => error.reason._tag === 'NotFound' ? Effect.succeed(null) : Effect.fail(error)))),
     writeTextFile: async (path: string, text: string, expected: string | null) => {
       if (await host.readTextFile(path) !== expected) throw new Error('File changed');
       const temporary = `${path}.herdr-host-tmp`;
@@ -118,7 +123,7 @@ const main = Effect.scoped(Effect.gen(function*() {
   };
   const global = globalThis as typeof globalThis & { __concordHerdrBoundary?: typeof host };
   global.__concordHerdrBoundary = host;
-  const exports: Record<string, readonly string[]> = { 'gpui-kit': ['View', 'div'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'theme'] };
+  const exports: Record<string, readonly string[]> = { 'gpui-kit': ['View', 'div'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'props', 'theme'] };
   const hooks = registerHooks({
     resolve(specifier, context, next) { return exports[specifier] ? { url: `concord-host:${specifier}`, shortCircuit: true } : next(specifier, context); },
     load(url, context, next) {

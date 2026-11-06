@@ -87,3 +87,4 @@ export { installationResources, installationRootForBin } from './resources.js';
 export { Installation } from './service.js';
 export { sourceWebServer, sourceP5Runtime, sourcePreviewFiles } from './source-web.js';
 export type { TemplateResources } from './service.js';
+export type { HerdrModReceipt } from './herdr-mod.js';

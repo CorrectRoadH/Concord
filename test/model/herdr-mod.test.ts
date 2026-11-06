@@ -11,7 +11,7 @@ function boundary() {
   const host = {
     async exec(command, args) {
       assert.equal(command, 'concord');
-      const operation = args.slice(args.indexOf('--root') + 2); calls.push(operation);
+      const operation = args.includes('--root') ? args.slice(args.indexOf('--root') + 2) : args.slice(2); calls.push(operation);
       const value = operation[0] === 'doctor' ? { root: '/repo', configuration: { sourceRoots: ['src'], testRoots: ['test'] } }
         : operation[0] === 'list' ? { documents: [{ path, kind: 'feature', title: 'Cart' }] }
         : operation[0] === 'concepts' ? { concepts: [], catalogs: [] }
@@ -27,6 +27,48 @@ function boundary() {
   } satisfies ModHost;
   return { host, files, calls, writes, session: new ModSession(host, '/repo/nested') };
 }
+
+// @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#open
+test('only the canonical taste file enables guarded queries, including when other docs exist', async () => {
+  const b = boundary(); b.files.clear(); b.files.set('/repo/docs/architecture.md', '# Existing architecture\n');
+  const execute = b.host.exec;
+  b.host.exec = async (command, args) => {
+    assert.equal(args.at(-1), 'doctor', 'uninitialized repositories must not run guarded queries');
+    assert.equal(args.includes('--root'), false, 'doctor discovers the Git top from the pane cwd');
+    b.calls.push(['doctor']);
+    return { code: 0, stdout: JSON.stringify({ root: '/repo', configuration: {} }), stderr: '' };
+  };
+  await Effect.runPromise(b.session.refresh());
+  assert.equal(b.session.root, '/repo'); assert.equal(b.session.initialized, false);
+  assert.deepEqual(b.session.documents, []); assert.deepEqual(b.session.pages, []);
+  assert.equal(b.session.error, ''); assert.deepEqual(b.session.watchRoots, ['docs', 'memory']);
+  b.files.set('/repo/docs/taste.md', ''); b.host.exec = execute;
+  await Effect.runPromise(b.session.refresh());
+  assert.equal(b.session.initialized, true, 'even an empty taste file is the initialization marker');
+  assert.ok(b.calls.some(call => call[0] === 'list'));
+  b.files.delete('/repo/docs/taste.md');
+  b.host.exec = async () => ({ code: 0, stdout: JSON.stringify({ root: '/repo', configuration: {} }), stderr: '' });
+  await Effect.runPromise(b.session.refresh());
+  assert.equal(b.session.initialized, false); assert.deepEqual(b.session.documents, []);
+});
+
+// @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-feature
+test('an initialized root can publish its feature list while doctor is still running', { timeout: 5000 }, async () => {
+  const b = boundary(); b.session.root = '/repo';
+  const execute = b.host.exec;
+  let release!: () => void, listed!: () => void;
+  const pendingDoctor = new Promise<void>(resolve => { release = resolve; });
+  const listStarted = new Promise<void>(resolve => { listed = resolve; });
+  b.host.exec = async (command, args) => {
+    if (args.at(-1) === 'doctor') await pendingDoctor;
+    if (args.at(-1) === 'list') listed();
+    return execute(command, args);
+  };
+  const refresh = Effect.runPromise(b.session.refresh());
+  await listStarted;
+  release(); await refresh;
+  assert.equal(b.session.initialized, true);
+});
 
 // @use-case docs/feature/herdr-mod/use-case/read-spec.md
 test('mod observes public CLI schemas, package pages and only fixed or linked Markdown', async () => {
@@ -82,4 +124,17 @@ test('an external edit between read and native write is preserved by the host CA
   assert.equal(b.session.conflict, true); assert.equal(b.session.draft, '# Draft\n');
   assert.equal(b.files.get(`/repo/${path}`), '# Concurrent\n');
   assert.ok(!b.calls.some(call => call[0] === 'check'));
+});
+
+// @use-case docs/feature/herdr-mod/use-case/edit-and-check.md
+test('host text limits and command failures remain errors without replacing a draft or writing', async () => {
+  const b = boundary(); await Effect.runPromise(b.session.open(path));
+  b.host.writeTextFile = async () => { throw new Error('Text file exceeds 1 MiB'); };
+  await assert.rejects(Effect.runPromise(b.session.save('# Oversized draft\n')), /Text file exceeds 1 MiB/u);
+  assert.equal(b.session.draft, '# Oversized draft\n'); assert.equal(b.session.conflict, true);
+  assert.equal(b.files.get(`/repo/${path}`), original);
+  assert.ok(!b.calls.some(call => call[0] === 'check'));
+  b.host.exec = async () => { throw new Error('cannot start concord'); };
+  await assert.rejects(Effect.runPromise(b.session.refresh()), /cannot start concord/u);
+  assert.equal(b.session.draft, '# Oversized draft\n');
 });

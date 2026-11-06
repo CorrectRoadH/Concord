@@ -24,7 +24,7 @@ export class Installation extends Context.Service<Installation, {
 }>()('concord/base/installation/Installation') {
   static readonly layer = Layer.succeed(Installation, Installation.of({
     worker: (...args) => workerEntryArgv(...args), identity: () => workspaceInstallationIdentity(), cwd: packageRoot,
-    herdrMod: (operation, dryRun) => manageHerdrMod(operation, process.env.HERDR_APP_HOME || join(homedir(), '.config/herdr-app'), join(packageRoot, 'dist/herdr-mod'), dryRun),
+    herdrMod: (operation, dryRun) => manageHerdrMod(operation, process.env.HERDR_APP_HOME || join(homedir(), '.config/herdr-app'), join(packageRoot, 'dist/herdr-mod'), dryRun, sourceInstallation ? packageRoot : undefined),
     version: Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ version: Schema.NonEmptyString })), { onExcessProperty: 'ignore' })(readFileSync(join(packageRoot, 'package.json'), 'utf8')).version, catch: failure }),
     templates: Effect.try({ try: () => {
       const directory = join(packageRoot, 'templates');

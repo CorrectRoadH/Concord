@@ -1,11 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/README.md
 // @concord-implements docs/feature/herdr-mod/use-case/read-spec.md#open-feature
-import { Effect, Scheduler } from 'effect';
-import { View, div, type Context, type Element, type Task } from 'gpui-kit';
+import { Effect, Scheduler, Schema } from 'effect';
+import { View, div, type AsyncContext, type Context, type Element, type Task } from 'gpui-kit';
 import { h_flex, v_flex, TextView, Editor, EditorState, Input, InputState } from 'gpui-base';
-import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, focused, theme } from 'herdr';
+import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, focused, panes, spaces, run, closeOverlay, appHome, props as hostProps, theme } from 'herdr';
 import { ModSession, markdownTarget } from './session.js';
+import { ModManifest, ModVersion, compareModVersions } from '../../model/herdr-mod/index.js';
 
 const color = (name: string) => theme()[name] ?? '#888888';
 const text = (value: string) => div().child(value);
@@ -16,6 +17,7 @@ export default class ConcordMod extends View {
   private tasks = new Set<Task>();
   private watcher: Task | undefined;
   private debounce: Task | undefined;
+  private polling: Task | undefined;
   private watchedRoot: string | undefined;
   private editor: EditorState | undefined;
   private preview: EditorState | undefined;
@@ -24,13 +26,58 @@ export default class ConcordMod extends View {
   private name: InputState | undefined;
   private title: InputState | undefined;
   private creating = false;
+  private cli: 'checking' | 'missing' | 'outdated' | 'ready' = 'checking';
+  private cliVersion = '';
+  private minimumVersion = '';
+  private newerCli = false;
+  private initialCwd: string | undefined;
+  private remote = false;
 
-  init(_props: Readonly<Record<string, unknown>> | undefined, cx: Context): void {
+  init(initialProps: Readonly<Record<string, unknown>> | undefined, cx: AsyncContext): void {
+    const props = { ...hostProps(), ...initialProps };
+    const focus = focused();
+    const allPanes = panes();
+    const pane = allPanes.find(item => item.pane === focus?.pane) ?? allPanes.find(item => item.focused);
+    const space = spaces().find(item => item.id === focus?.space) ?? spaces().find(item => item.active);
+    this.remote = space?.machine != null;
+    if (this.remote) return;
+    const cwd = typeof props?.cwd === 'string' && props.cwd ? props.cwd : focus?.cwd || pane?.cwd || space?.folder;
+    // mod.open is an overlay on the host; its explicit command opens our right pane.
+    if (typeof props?.overlay === 'string') {
+      const existing = allPanes.find(item => item.mod === 'concord' && item.tab === focus?.tab);
+      if (existing || pane) {
+        if (existing) run('pane.focus', { pane: existing.pane });
+        else run('pane.split', { pane: pane!.pane, direction: 'right', mod: 'concord', props: cwd ? { cwd } : {} });
+        closeOverlay(props.overlay);
+        return;
+      }
+    }
     this.name = InputState.new({ placeholder: 'Feature 名称' });
     this.title = InputState.new({ placeholder: '标题' });
-    const cwd = focused()?.cwd;
-    if (cwd) this.useFolder(cwd, cx);
-    else this.session.error = '请先在 Git 仓库中打开。';
+    this.initialCwd = typeof props?.overlay === 'string' && !pane ? undefined : cwd;
+    this.detectCli(cx);
+  }
+
+  private detectCli(cx: Context): void {
+    this.cli = 'checking';
+    this.session.error = '';
+    this.run(cx, Effect.tryPromise(async () => {
+      const source = await readTextFile(`${appHome()}/mods/concord/mod.json`);
+      const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(ModManifest), { onExcessProperty: 'ignore' })(source);
+      this.minimumVersion = manifest.minimumConcordVersion;
+      let reply;
+      try { reply = await exec('concord', ['--version']); }
+      catch { this.cli = 'missing'; return; }
+      if (reply.code !== 0) { this.cli = 'missing'; return; }
+      this.cliVersion = Schema.decodeUnknownSync(ModVersion)(reply.stdout.trim().replace(/^concord(?:-sdlc)?\s+v?/u, ''));
+      const order = compareModVersions(this.cliVersion, this.minimumVersion);
+      this.cli = order < 0 ? 'outdated' : 'ready';
+      this.newerCli = order > 0;
+    }), current => {
+      if (this.cli !== 'ready') return;
+      if (this.initialCwd) this.useFolder(this.initialCwd, current);
+      else this.session.error = '没有可用的当前目录。';
+    });
   }
 
   private run<A, E>(cx: Context, effect: Effect.Effect<A, E> | ((cx: Context) => Effect.Effect<A, E>), after?: (cx: Context) => void): void {
@@ -39,10 +86,12 @@ export default class ConcordMod extends View {
     const task = cx.spawn(async current => {
       try {
         await runEffect(typeof effect === 'function' ? effect(current) : effect);
+        this.tasks.delete(task); // A completed action may switch folders and cancel other tasks.
         if (!session.closed && session === this.session) after?.(current);
       } catch (cause) {
         if (!session.closed) session.error = cause instanceof Error ? cause.message : String(cause);
       }
+      this.tasks.delete(task);
       if (!session.closed && session === this.session) current.notify();
     });
     this.tasks.add(task);
@@ -50,7 +99,7 @@ export default class ConcordMod extends View {
 
   private useFolder(cwd: string, cx: Context): void {
     this.session.stop();
-    this.watcher?.cancel(); this.debounce?.cancel();
+    this.watcher?.cancel(); this.debounce?.cancel(); this.polling?.cancel();
     for (const task of this.tasks) task.cancel();
     this.tasks.clear(); this.watchedRoot = undefined;
     this.editor?.release(); this.editor = undefined;
@@ -69,17 +118,27 @@ export default class ConcordMod extends View {
   private watch(cx: Context): void {
     const session = this.session;
     if (this.watchedRoot === session.root) return;
-    this.watcher?.cancel(); this.watchedRoot = session.root;
+    this.watcher?.cancel(); this.polling?.cancel(); this.watchedRoot = session.root;
     this.watcher = cx.spawn(async current => {
-      while (!session.closed) {
-        const paths = await watchFolder(session.root);
+      try {
+        while (!session.closed) {
+          const paths = await watchFolder(session.root);
+          if (session.closed || session !== this.session) return;
+          if (!paths.some(path => {
+            if (path === session.root) return true;
+            const relative = path.startsWith(`${session.root}/`) ? path.slice(session.root.length + 1) : path;
+            return relative === 'concord.config.ts' || session.watchRoots.some(root => relative === root || relative.startsWith(`${root}/`));
+          })) continue;
+          this.debounce?.cancel();
+          this.debounce = current.timer.after(200, next => this.refresh(next));
+        }
+      } catch {
         if (session.closed || session !== this.session) return;
-        if (!paths.some(path => {
-          const relative = path.startsWith(`${session.root}/`) ? path.slice(session.root.length + 1) : path;
-          return relative === 'concord.config.ts' || session.watchRoots.some(root => relative === root || relative.startsWith(`${root}/`));
-        })) continue;
-        this.debounce?.cancel();
-        this.debounce = current.timer.after(200, next => this.refresh(next));
+        // The host rejects watches above its Linux directory or folder budget.
+        // Keep observing through fresh timer contexts without a tight retry loop.
+        this.polling = current.timer.every(1000, next => {
+          if (!session.closed && session === this.session) this.refresh(next);
+        });
       }
     });
   }
@@ -171,15 +230,26 @@ export default class ConcordMod extends View {
   }
   render(_cx: Context): Element {
     const session = this.session;
+    if (this.remote) return v_flex().id('concord-mod').size_full().p(10).child('Concord mod 只能用于本机的 pane');
+    if (this.cli !== 'ready') {
+      const messages = this.cli === 'checking' ? ['正在检测 Concord 命令行工具…']
+        : this.cli === 'missing' ? ['这个 mod 需要 Concord 命令行工具。', 'curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh', '安装后点“重新检测”。']
+          : [`Concord 当前版本：${this.cliVersion}；要求的最低版本：${this.minimumVersion}`, 'curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh'];
+      return v_flex().id('concord-mod').size_full().p(10).gap(8).bg(color('surface')).text_color(color('foreground')).text_size(13).children([
+        text('Concord'), ...messages.map(text), ...(session.error ? [text(session.error)] : []),
+        this.button('recheck-cli', '重新检测', cx => { this.detectCli(cx); cx.notify(); }),
+      ]);
+    }
     const choose = (cx: Context) => {
       cx.spawn(async current => { const cwd = await pickFolder({ prompt: '选择 Concord 仓库' }); if (cwd && !session.closed) this.useFolder(cwd, current); });
     };
     const toolbar = h_flex().gap(6).children([
       text('Concord').flex_1(), this.button('choose-folder', '选择目录', choose),
-      this.button('refresh', '刷新', cx => this.refresh(cx)),
-      this.button('new-feature', '新建 Feature', cx => { this.creating = !this.creating; cx.notify(); }),
+      ...(session.root && !session.error ? [this.button('refresh', '刷新', cx => this.refresh(cx))] : []),
+      ...(session.initialized ? [this.button('new-feature', '新建 Feature', cx => { this.creating = !this.creating; cx.notify(); })] : []),
     ]);
     const status = session.error ? text(session.error.includes('Git') || /git repository/iu.test(session.error) ? '请先在 Git 仓库中打开。' : session.error).text_color(color('blocked')) : text(session.root || '请选择 Git 仓库');
+    if (!session.root || (session.error && !session.initialized)) return v_flex().id('concord-mod').size_full().p(10).gap(8).bg(color('surface')).text_color(color('foreground')).text_size(13).children([toolbar, status]);
     const roots = session.documents.map(owner => ({ path: owner.path, kind: owner.kind, name: owner.title }));
     const entries = [...new Map([...roots, ...session.pages].map(page => [page.path, page])).values()];
     const categories: readonly [string, string, (page: typeof entries[number]) => boolean][] = [
@@ -231,14 +301,17 @@ export default class ConcordMod extends View {
     }
     if (this.conceptText) body.push(this.button('close-concept', '关闭术语定义', cx => { this.conceptText = undefined; cx.notify(); }), TextView.markdown('concord-concept', this.conceptText));
     if (this.preview) body.push(text(this.previewLabel), this.button('close-preview', '关闭源码', cx => { this.preview?.release(); this.preview = undefined; cx.notify(); }), Editor.new(this.preview));
-    return v_flex().id('concord-mod').size_full().min_w(0).min_h(0).p(10).gap(8).bg(color('surface')).text_color(color('foreground')).text_size(13).children([
-      toolbar, status, h_flex().flex_1().min_h(0).gap(10).children([navigation, v_flex().id(`concord-document-${session.selected ?? 'none'}`).flex_1().min_w(0).min_h(0).overflow_y_scroll().gap(6).children(body)]),
+    return v_flex().id('concord-mod').size_full().min_w(0).min_h(0).overflow_hidden().p(10).gap(8).bg(color('surface')).text_color(color('foreground')).text_size(13).children([
+      toolbar, status, ...(this.newerCli ? [text('运行 concord herdr install，将 mod 更新到与命令行相同的版本。')] : []), h_flex().flex_1().min_h(0).items_stretch().gap(10).children([
+        ...(session.initialized ? [navigation] : []),
+        v_flex().id(`concord-document-${session.selected ?? 'none'}`).flex_1().min_w(0).min_h(0).overflow_y_scroll().gap(6).children(body),
+      ]),
     ]);
   }
 
-  close(_cx: Context): void {
+  close(_cx: AsyncContext): void {
     this.session.stop();
-    this.watcher?.cancel(); this.debounce?.cancel();
+    this.watcher?.cancel(); this.debounce?.cancel(); this.polling?.cancel();
     for (const task of this.tasks) task.cancel();
     this.tasks.clear();
     this.editor?.release(); this.preview?.release(); this.name?.release(); this.title?.release();

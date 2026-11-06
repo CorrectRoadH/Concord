@@ -9,6 +9,7 @@ import { packJavaScript, p5RuntimeNotice } from './pack-javascript.js';
 import { buildStartup } from './startup-build.js';
 import { P5_LIBRARIES } from "../src/model/p5/index.js";
 import { captureBuildSource, writeBuildIdentity, type BuildIdentity } from './build-identity.js';
+import { modManifest } from '../src/model/herdr-mod/index.js';
 
 let sourceIdentity: BuildIdentity | undefined;
 let outputRoot: string;
@@ -130,7 +131,9 @@ const prepare = Effect.gen(function*() {
   yield* packJavaScript({ entry: { main: 'src/entry/herdr-mod/main.ts' }, outDir: dist('herdr-mod'), format: 'esm', platform: 'neutral', target: 'es2022', minify: true,
     deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$)/u, onlyBundle: false },
     outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
-  yield* fs.writeFileString(dist('herdr-mod/mod.json'), JSON.stringify({ place: 'right', size: 760 }) + '\n');
+  const modPackage = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: Schema.String })), { onExcessProperty: 'ignore' })(yield* fs.readFileString('package.json'));
+  yield* fs.writeFileString(dist('herdr-mod/mod.json'), JSON.stringify(modManifest(modPackage.version)) + '\n');
+  yield* fs.copyFile('src/entry/herdr-mod/preview.png', dist('herdr-mod/preview.png'));
   yield* fs.writeFileString(dist('herdr-mod/NOTICE.txt'), `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);
 });
 

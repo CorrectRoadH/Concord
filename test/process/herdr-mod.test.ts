@@ -6,6 +6,15 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { installedConcordCli } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
+import { installedPackageRoot } from '../support/installed-package.js';
+import { verifyInstalledHerdrMod } from '../support/installed-herdr-mod.js';
+
+// @use-case docs/feature/herdr-mod/use-case/install-with-cli.md#install
+test('packaged CLI installs, updates and uninstalls against isolated Herdr homes and external commands', { timeout: 90_000 }, () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-herdr-install-cases-'));
+  try { verifyInstalledHerdrMod(installedPackageRoot(), root); }
+  finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
 test('the native mod reads and refreshes through the public CLI and a shared workspace server', { timeout: 90_000 }, () => {
@@ -24,7 +33,7 @@ test('the native mod reads and refreshes through the public CLI and a shared wor
       const result = JSON.parse(reply.stdout) as { ms: number; text: string; boundary: string; calls: string[][] };
       assert.ok(result.ms > 0); assert.match(result.text, /measured/u);
       assert.match(result.boundary, /no native drawing/u);
-      assert.ok(result.calls.every(call => ['doctor', 'list', 'show', 'concepts', 'taste'].includes(call[0]!)));
+      assert.ok(result.calls.every(call => ['--version', 'doctor', 'list', 'show', 'concepts', 'taste'].includes(call[0]!)));
       assert.equal(existsSync(join(root, '.git/concord/server/current.json')), true);
       assert.equal(readFileSync(path, 'utf8'), original, 'measurement restores its edited consumer source');
       if (mode === 'push') assert.match(result.text, /MOD_PUSH_/u);

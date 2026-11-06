@@ -29,8 +29,8 @@ export function humanOutput(value: unknown): string {
   // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
   if (value.error === 'ProjectNotInitialized' && Predicate.isObject(value.details)) return `ok: false\nerror: ProjectNotInitialized\nmessage: ${String(value.message)}\n\nInitialize: concord init\nWriting guide after init: concord --skill ${String(value.details.guide)}`;
   // @concord-end
-  if (value.operation === 'herdr-install') return `${value.dryRun ? 'Would install' : 'Installed'} Concord mod: ${String(value.path)}\nHerdr loads it on save; open it with the "Concord" command.`;
-  if (value.operation === 'herdr-uninstall') return `${value.dryRun ? 'Would uninstall' : 'Uninstalled'} Concord mod: ${String(value.path)}`;
+  if (value.operation === 'herdr-install') return `${value.dryRun ? 'Would install' : value.updated ? 'Updated' : 'Installed'} Concord mod: ${String(value.path)}\n${value.openHerdr ? 'Open Herdr, then open the "Concord" command.' : 'Herdr loads it on save; open it with the "Concord" command.'}`;
+  if (value.operation === 'herdr-uninstall') return value.absent ? 'Concord mod is not installed' : `${value.dryRun ? 'Would uninstall' : 'Uninstalled'} Concord mod: ${String(value.path)}`;
   if (Predicate.isObject(value.document) && Array.isArray(value.pages)) {
     const { pages, ...relations } = value;
     return ['Pages:', ...pages.filter(Predicate.isObject).map(page => `  ${String(page.path)} [${String(page.kind)}] ${String(page.name)}`), '', humanOutput(relations)].join('\n');
