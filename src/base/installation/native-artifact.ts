@@ -19,7 +19,8 @@ export function verifySourceNativeArtifact(): void {
   const artifact = decodeNativeArtifact(JSON.parse(readFileSync(join(folder, 'artifact.json'), 'utf8')));
   if (artifact.target !== hawdbTarget() || artifact.sourceDigest !== nativeSourceDigest() || artifact.cargoLockDigest !== nativeLockDigest()
     || artifact.binarySha256 !== hash(readFileSync(join(folder, 'hawdb.node')))
-    || artifact.noticesSha256 !== hash(readFileSync(join(folder, 'THIRD-PARTY-NOTICES.txt'))) || artifact.testHooks) {
+    || artifact.noticesSha256 !== hash(readFileSync(join(folder, 'THIRD-PARTY-NOTICES.txt')))
+    || (artifact.testHooks ?? false) !== (process.env.CONCORD_NATIVE_TEST_HOOKS === '1')) {
     throw new Error('HawdbIncompatible: source native artifact identity differs');
   }
 }

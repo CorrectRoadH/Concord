@@ -44,6 +44,7 @@ jobs:
         if: matrix.shard == 1
         run: |
           export XDG_CACHE_HOME="$RUNNER_TEMP/hawdb-hooks-cache"
+          export CONCORD_NATIVE_TEST_HOOKS=1
           node scripts/build-native.ts --test-hooks
           node --test test/process/hawdb-native.test.ts
       - run: sudo apt-get update && sudo apt-get install -y ripgrep patchelf binutils

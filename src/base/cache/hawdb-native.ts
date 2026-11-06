@@ -86,6 +86,7 @@ function verifiedArtifact(): string {
   if (sourceInstallation) verifySourceNativeArtifact();
   const base = join(nativeArtifactRoot, target);
   const metadata = decodeNativeArtifact(JSON.parse(readFileSync(join(base, 'artifact.json'), 'utf8')));
+  if (!sourceInstallation && metadata.testHooks) throw new HawdbFailure('HawdbIncompatible', 'test-hook native artifact cannot be installed');
   if (metadata.target !== target || metadata.sourceDigest.length !== 64 || metadata.cargoLockDigest.length !== 64 || metadata.binarySha256.length !== 64 || metadata.noticesSha256.length !== 64) {
     throw new HawdbFailure('HawdbIncompatible', 'native artifact identity is incomplete');
   }
