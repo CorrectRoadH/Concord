@@ -14,7 +14,7 @@ import { OwnedProcess, OwnedProcessLive } from "../../base/process/index.js";
 import { Git } from '../../base/git/index.js';
 import { Workspace } from '../../base/workspace/index.js';
 import { Sources } from '../../base/sources/index.js';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter, validateHawdbArtifact } from '../../base/cache/index.js';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.js';
 import { ServerRuntime } from '../../base/server-lock/index.js';
 const loadClient = () => Effect.tryPromise(() => import('../server/index.js')).pipe(Effect.mapError(failure));
 const requestWorkspace: typeof import('../server/index.js').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
@@ -26,7 +26,9 @@ const remoteFailure = (cause: unknown): ConcordError | undefined => {
 const workspaceServerFailure = (cause: unknown): ConcordError => remoteFailure(cause) ?? failure(cause);
 const asServerError = workspaceServerFailure;
 const installationIdentity = (runtime: ServerRuntime['Service']) => Effect.try({ try: () => runtime.installation(), catch: failure });
-const nativeAvailable = Effect.try({ try: validateHawdbArtifact, catch: cause => new ConcordError('HawdbUnavailable', cause instanceof Error ? cause.message : String(cause)) });
+const nativeAvailable = Effect.flatMap(PersistentCache, cache => cache.verifyArtifact).pipe(
+  Effect.mapError(cause => new ConcordError('HawdbUnavailable', cause.message)),
+);
 
 const loadServerMain = () => Effect.tryPromise(() => import('../server/main.js'));
 const loadApp = () => Effect.tryPromise(() => import('../../app/index.js'));
@@ -59,8 +61,8 @@ const clearExistingWorkspaceCache = (root: string) => Effect.scoped(Effect.gen(f
   if (connection.hello.protocol !== (yield* loadClient()).PROTOCOL) return undefined;
   return yield* requestWorkspace(connection, 'cache-clear', {}).pipe(Effect.mapError(workspaceServerFailure));
 }));
-const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false, identifiedPrivateDir?: string, capturedInstallation?: string) {
-  yield* nativeAvailable;
+const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false, identifiedPrivateDir?: string, capturedInstallation?: string, artifactVerified = false) {
+  if (!artifactVerified) yield* nativeAvailable;
   const { PROTOCOL, waitForServerHandshake } = yield* loadClient();
   const platform = yield* ServerRuntime;
   const installation = capturedInstallation ?? (yield* installationIdentity(platform));
@@ -120,7 +122,8 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
     if (connection.hello.installation !== installation || connection.hello.protocol !== client.PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The inherited service uses another installation or protocol'));
     return connection;
   }
-  if ((yield* QueryServerMode) === 'shared') return yield* connectOrStartWorkspace(root, false, privateDir, installation);
+  // Query selection has already verified the same installation for fallback.
+  if ((yield* QueryServerMode) === 'shared') return yield* connectOrStartWorkspace(root, false, privateDir, installation, true);
   const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
   if (record && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'A service already owns this project; command mode cannot attach to it'));
   const current = yield* existingWorkspace(root, installation, privateDir).pipe(Effect.catch(cause => {
@@ -246,9 +249,10 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
   const runtime = yield* ServerRuntime;
   const installation = yield* Installation;
   const processes = yield* OwnedProcess;
+  const persistent = yield* PersistentCache;
   return Queries.Remote((root, request, cache = 'use') => Effect.scoped(Effect.gen(function*() {
     if (cache === 'off' && process.env.CONCORD_SERVER_SCOPE === undefined) return yield* executeQuery(root, request, cache);
-    const native = yield* Effect.result(nativeAvailable);
+    const native = yield* Effect.result(nativeAvailable.pipe(Effect.provideService(PersistentCache, persistent)));
     if (native._tag === 'Failure') {
       if (request.name === 'historical' || request.name === 'workspace.show') return yield* Effect.fail(native.failure);
       const reply = yield* executeQuery(root, request, 'off');
@@ -265,7 +269,7 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
     if (Buffer.byteLength(JSON.stringify(environment)) > 256 * 1024) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Query environment exceeds 256 KiB'));
     for (let attempt = 0; ; attempt++) {
       const result = yield* Effect.result(Effect.scoped(Effect.gen(function*() {
-        const connection = yield* connectQueryWorkspace(identified.root, identified.privateDir).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.provideService(Installation, installation), Effect.provideService(OwnedProcess, processes));
+        const connection = yield* connectQueryWorkspace(identified.root, identified.privateDir).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.provideService(Installation, installation), Effect.provideService(OwnedProcess, processes), Effect.provideService(PersistentCache, persistent));
         yield* awaitQueryReady(connection);
         const reply = yield* requestWorkspace(connection, 'query', { ...request, environment, cache });
         return yield* Schema.decodeUnknownEffect(QueryReply, { onExcessProperty: 'error' })(reply).pipe(Effect.mapError(failure));

@@ -29,7 +29,7 @@ export type { HawdbEntry } from './hawdb-native.js';
 export { HawdbFailure } from './hawdb-native.js';
 export type { HawdbFailureCode } from './hawdb-native.js';
 export { hawdbIdentity } from './hawdb-native.js';
-export { validateHawdbArtifact } from './hawdb-native.js';
+export { validateHawdbArtifact, verifyHawdbArtifact } from './hawdb-native.js';
 export type { HawdbLimits } from './hawdb-native.js';
 export type { HawdbNamespace } from './hawdb-native.js';
 export type { HawdbReclamation } from './hawdb-native.js';

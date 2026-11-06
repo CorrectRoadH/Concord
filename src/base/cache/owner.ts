@@ -47,6 +47,7 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     return run(database);
   }, catch: cause => cause instanceof HawdbFailure || cause instanceof ConcordError ? cause : new HawdbFailure('HawdbUnavailable', String(cause)) })));
   const service: PersistentCacheService = {
+    verifyArtifact: backend.verifyArtifact,
     attach: () => Effect.fail(new HawdbFailure('HawdbUnavailable', 'The persistent owner cannot execute repository operations')),
     open: () => Effect.fail(new HawdbFailure('HawdbUnavailable', 'The owner does not transfer database handles')),
     read: (_directory, namespace, keys) => use(db => keys === undefined ? db.scan(namespace) : db.get(namespace, keys)).pipe(Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', cause.message))),

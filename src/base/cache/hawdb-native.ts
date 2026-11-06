@@ -80,7 +80,7 @@ function load(): NativeModule {
     throw error;
   }
 }
-function loadArtifact(): NativeModule {
+function verifiedArtifact(): string {
   const target = hawdbTarget();
   if (sourceInstallation) verifySourceNativeArtifact();
   const base = join(nativeArtifactRoot, target);
@@ -96,6 +96,10 @@ function loadArtifact(): NativeModule {
   const binary = join(base, 'hawdb.node');
   const digest = createHash('sha256').update(readFileSync(binary)).digest('hex');
   if (digest !== metadata.binarySha256) throw new HawdbFailure('HawdbIncompatible', `native binary digest differs: ${binary}; expected ${metadata.binarySha256} from ${join(base, 'artifact.json')}; actual ${digest}. Reinstall a verified Concord package; cache clear cannot repair installation artifacts.`);
+  return binary;
+}
+function loadArtifact(): NativeModule {
+  const binary = verifiedArtifact();
   const native = createRequire(import.meta.url)(binary) as NativeModule;
   readIdentity(native.nativeIdentity());
   loaded = native;
@@ -104,6 +108,8 @@ function loadArtifact(): NativeModule {
 }
 /** Revalidate the installation even when an already loaded binding remains usable. */
 export function validateHawdbArtifact(): void { boundary(() => { loadArtifact(); }); }
+/** A remote client verifies installation bytes without loading an engine it does not own. */
+export function verifyHawdbArtifact(): void { boundary(() => { verifiedArtifact(); }); }
 class Database implements HawdbDatabase {
   constructor(private readonly native: NativeBridge) {}
   get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[] {

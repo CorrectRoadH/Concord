@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, type Scope } from 'effect';
 import { cacheDatabasePath, assertCacheDatabaseSafe, cacheRootOwnerOnly } from './cache-file.js';
-import { createMemoryHawdb, openHawdb, HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace } from './hawdb-native.js';
+import { createMemoryHawdb, openHawdb, verifyHawdbArtifact, HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace } from './hawdb-native.js';
 import { bindRepositoryCache, nodeRepositoryCache, repositoryCache, type RepositoryCache } from './cache-store.js';
 import { CacheSnapshotUnavailable, ConcordError, type Repository } from '../../model/index.js';
 import { assertLeasePath } from '../publication/index.js';
@@ -12,6 +12,7 @@ export interface CacheService {
   readonly memory: Effect.Effect<HawdbDatabase, HawdbFailure, Scope.Scope>;
 }
 export interface PersistentCacheService {
+  readonly verifyArtifact: Effect.Effect<void, HawdbFailure>;
   readonly attach: (repo: Repository) => Effect.Effect<void, HawdbFailure, Scope.Scope>;
   readonly read: (privateDir: string, namespace: HawdbNamespace, keys?: readonly string[]) => Effect.Effect<readonly HawdbEntry[], HawdbFailure>;
   readonly update: (privateDir: string, namespace: HawdbNamespace, key: string, update: (prior: string | undefined) => string) => Effect.Effect<void, HawdbFailure | ConcordError>;
@@ -70,6 +71,7 @@ export class PersistentCache extends Context.Service<PersistentCache, Persistent
     try { return use(); } finally { release(); }
   }
   static readonly layer = Layer.succeed(PersistentCache, PersistentCache.of({
+    verifyArtifact: Effect.try({ try: verifyHawdbArtifact, catch: cacheFailure }),
     attach: repo => Effect.gen(function*() {
       const cache = yield* Effect.serviceOption(Cache);
       const memory = cache._tag === 'Some' ? yield* cache.value.memory.pipe(Effect.catch(() => Effect.succeed(undefined))) : undefined;
