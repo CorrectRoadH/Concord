@@ -1,5 +1,8 @@
 name: Release
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -55,7 +58,10 @@ jobs:
           node scripts/build-native.ts --test-hooks
           node --test test/process/hawdb-native.test.ts
       - name: Build the pinned host engine
-        run: node scripts/build-native.ts --output native-artifacts
+        run: node scripts/build-native.ts --output native-artifacts --require-portable
+      - name: Sign Darwin native addon and official ripgrep
+        if: matrix.target == 'darwin-arm64'
+        run: node scripts/prepare-release-native.ts native-artifacts
       - uses: actions/upload-artifact@v4
         with:
           name: concord-hawdb-${{ matrix.target }}
@@ -65,7 +71,9 @@ jobs:
 
   package:
     needs: native
-    timeout-minutes: 10
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+    timeout-minutes: 15
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -81,6 +89,9 @@ jobs:
           node-version-file: '.node-version'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Record the checked out tag commit
+        id: identity
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Prepare package version from release tag
         env:
           RELEASE_TAG: ${{ inputs.tag }}
@@ -90,27 +101,10 @@ jobs:
           pattern: concord-hawdb-*
           path: native-artifacts
           merge-multiple: true
-      - name: Build and typecheck maintained build scripts
-        run: pnpm exec vp build --outDir "$RUNNER_TEMP/concord-package" && pnpm exec vp exec tsc -p tsconfig.scripts.json
-        env:
-          CONCORD_NATIVE_ARTIFACTS: native-artifacts
-          CONCORD_REQUIRE_PORTABLE_NATIVE: '1'
-      - name: Pack once
-        run: |
-          mkdir release
-          node scripts/release-package.ts release "$RUNNER_TEMP/concord-package"
-          test "$(find release -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
-          cp install.sh release/install.sh
-          sha256sum release/concord-sdlc-*.tgz release/install.sh > release/SHA256SUMS
-      - name: Verify frozen production installation from the final archive
-        run: |
-          sudo apt-get update && sudo apt-get install -y ripgrep
-          candidate="$(mktemp -d)"
-          trap 'rm -rf "$candidate"' EXIT
-          tar -xzf release/concord-sdlc-*.tgz -C "$candidate"
-          (cd "$candidate/package" && pnpm install --prod --frozen-lockfile --ignore-scripts)
-          for name in package.json pnpm-lock.yaml pnpm-workspace.yaml; do cmp "$name" "$candidate/package/$name"; done
-          node scripts/verify-installed-native.ts "$candidate/package"
+      - name: Typecheck maintained build scripts
+        run: pnpm exec vp exec tsc -p tsconfig.scripts.json
+      - name: Assemble both target archives and the library from one application build
+        run: node scripts/assemble-release.ts release "$RUNNER_TEMP/concord-package" native-artifacts
       - uses: actions/upload-artifact@v4
         with:
           name: concord-release-package
@@ -118,8 +112,49 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  verify:
+    needs: package
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x64
+          - os: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: concord-release-package
+          path: release
+      - name: Verify the exact candidate on its target host
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+          RELEASE_COMMIT: ${{ needs.package.outputs.commit }}
+        run: |
+          archive=(release/concord-*-$RELEASE_TARGET.tar.gz)
+          test "${#archive[@]}" -eq 1
+          version="${archive[0]#release/concord-}"
+          version="${version%-$RELEASE_TARGET.tar.gz}"
+          node scripts/verify-release-archive.ts "${archive[0]}" "$version" release/SHA256SUMS
+
   publish:
-    needs: [package, gate]
+    needs: [package, verify, gate]
     outputs:
       source-published: ${{ steps.source-release.outcome == 'success' }}
     timeout-minutes: 3
@@ -137,21 +172,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_COMMIT: ${{ needs.package.outputs.commit }}
         run: |
           version="${RELEASE_TAG#concord-}"
           version="${version#v}"
-          digest="$(awk -v name="release/concord-sdlc-$version.tgz" '$2 == name { print $1 }' release/SHA256SUMS)"
-          installer_digest="$(awk '$2 == "release/install.sh" { print $1 }' release/SHA256SUMS)"
-          test -n "$digest" && test -n "$installer_digest"
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > existing-release.json 2>/dev/null; then
-            jq -e --arg name "concord-sdlc-$version.tgz" --arg digest "sha256:$digest" '.assets | any(.name == $name and .digest == $digest)' existing-release.json
-            jq -e --arg digest "sha256:$installer_digest" '.assets | any(.name == "install.sh" and .digest == $digest) and any(.name == "SHA256SUMS")' existing-release.json
-            echo "Existing release has the same immutable package; continuing channel notification." >> "$GITHUB_STEP_SUMMARY"
+          cd release
+          sha256sum --check SHA256SUMS
+          expected=("concord-$version-linux-x64.tar.gz" "concord-$version-darwin-arm64.tar.gz" "concord-sdlc-$version.tgz" install.sh)
+          test "$(wc -l < SHA256SUMS)" -eq 4
+          for name in "${expected[@]}"; do
+            test "$(awk -v name="$name" '$2 == name && length($1) == 64 { print $1 }' SHA256SUMS | wc -l)" -eq 1
+          done
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > ../existing-release.json 2> ../release-api-error; then
+            jq -e --arg tag "$RELEASE_TAG" --arg commit "$RELEASE_COMMIT" '.tag_name == $tag and .target_commitish == $commit and (.draft == false) and (.prerelease == false) and (.assets | length == 5)' ../existing-release.json
+            for name in "${expected[@]}" SHA256SUMS; do
+              digest="$(sha256sum "$name" | cut -d' ' -f1)"
+              jq -e --arg name "$name" --arg digest "sha256:$digest" '.assets | any(.name == $name and .digest == $digest)' ../existing-release.json
+            done
+            echo "Existing release has the same immutable assets; continuing channel notification." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" "release/install.sh" \
-            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
-            --notes "Apple Silicon macOS 15+ (including macOS 27) and Linux x64/glibc. Built once with pinned native engines; package metadata and SHA-256 verified. The same tag commit passed the repository checks. macOS 27 is not directly covered by CI. Homebrew/Nix metadata synchronization is tracked at https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Channel completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG . Package SHA-256: $digest."
+          if ! grep -q 'HTTP 404' ../release-api-error; then cat ../release-api-error >&2; exit 1; fi
+          gh release create "$RELEASE_TAG" "${expected[@]}" SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --target "$RELEASE_COMMIT" --title "Concord $version" \
+            --notes "Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives and the concord-sdlc library. Exact candidate bytes verified on Ubuntu 24.04 and macOS 15; the same tag commit passed the repository gate. Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
       - name: Notify Homebrew tap of the published release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -207,10 +251,10 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          sha256sum --check release/SHA256SUMS
+          (cd release && sha256sum --check SHA256SUMS)
           mkdir -p "$RUNNER_TEMP/herdr-package" "$RUNNER_TEMP/herdr-mirror"
-          tar -xzf release/concord-sdlc-*.tgz -C "$RUNNER_TEMP/herdr-package"
-          node scripts/herdr-mod-release.ts "$RUNNER_TEMP/herdr-package/package" "$RUNNER_TEMP/herdr-mirror" "$RELEASE_TAG"
+          tar -xzf release/concord-*-linux-x64.tar.gz -C "$RUNNER_TEMP/herdr-package"
+          node scripts/herdr-mod-release.ts "$RUNNER_TEMP/herdr-package/app" "$RUNNER_TEMP/herdr-mirror" "$RELEASE_TAG"
       - uses: actions/checkout@v4
         with:
           ref: master

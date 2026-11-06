@@ -1,5 +1,8 @@
 name: Native
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
 
@@ -39,6 +42,9 @@ jobs:
           deployment-target: ${{ matrix.target == 'darwin-arm64' && '15.0' || 'none' }}
       - name: Build from pinned sources and verify portability
         run: node scripts/build-native.ts --output native-artifacts --require-portable
+      - name: Sign Darwin native addon and official ripgrep
+        if: matrix.target == 'darwin-arm64'
+        run: node scripts/prepare-release-native.ts native-artifacts
       - name: Archive the validated target
         env:
           NATIVE_TARGET: ${{ matrix.target }}
@@ -74,12 +80,14 @@ jobs:
           digest="$(jq -r .sourceDigest native-artifacts/linux-x64-glibc/artifact.json)"
           tag="native-${digest:0:16}"
           sha256sum concord-native-*.tar.gz > SHA256SUMS
-          if gh api "repos/$GH_REPO/releases/tags/$tag" > existing-release.json 2>/dev/null; then
-            for archive in concord-native-*.tar.gz; do
+          if gh api "repos/$GH_REPO/releases/tags/$tag" > existing-release.json 2> release-api-error; then
+            jq -e '(.assets | length == 3) and (.prerelease == true)' existing-release.json
+            for archive in concord-native-*.tar.gz SHA256SUMS; do
               archive_digest="$(sha256sum "$archive" | cut -d' ' -f1)"
               jq -e --arg name "$archive" --arg digest "sha256:$archive_digest" '.assets | any(.name == $name and .digest == $digest)' existing-release.json
             done
             exit 0
           fi
+          if ! grep -q 'HTTP 404' release-api-error; then cat release-api-error >&2; exit 1; fi
           gh release create "$tag" concord-native-*.tar.gz SHA256SUMS --target "$NATIVE_COMMIT" --prerelease --latest=false \
             --title "Concord native $digest" --notes "Pinned native artifacts for source digest $digest."

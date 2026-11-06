@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
@@ -60,9 +61,9 @@ test('Herdr catalog sync uses the tagged package after source publication even w
   assert.ok(mirror.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
   const generation = mirror.steps.find(step => step.name === 'Generate Herdr mirror from the verified release package');
   assert.equal(generation?.env?.RELEASE_TAG, '${{ inputs.tag }}');
-  assert.match(generation?.run ?? '', /sha256sum --check release\/SHA256SUMS/u);
-  assert.match(generation?.run ?? '', /tar -xzf release\/concord-sdlc-\*\.tgz/u);
-  assert.match(generation?.run ?? '', /scripts\/herdr-mod-release\.ts "\$RUNNER_TEMP\/herdr-package\/package" "\$RUNNER_TEMP\/herdr-mirror" "\$RELEASE_TAG"/u);
+  assert.match(generation?.run ?? '', /cd release && sha256sum --check SHA256SUMS/u);
+  assert.match(generation?.run ?? '', /tar -xzf release\/concord-\*-linux-x64\.tar\.gz/u);
+  assert.match(generation?.run ?? '', /scripts\/herdr-mod-release\.ts "\$RUNNER_TEMP\/herdr-package\/app" "\$RUNNER_TEMP\/herdr-mirror" "\$RELEASE_TAG"/u);
   const commands = mirror.steps.map(step => step.run ?? '').join('\n');
   assert.match(commands, /git -C herdr-mirror add -- concord/u);
   assert.equal((commands.match(/ commit -m /gu) ?? []).length, 1);
@@ -132,19 +133,22 @@ test('release builds two native targets and gates publication on the same commit
     assert.deepEqual(native.strategy?.matrix.include?.find(target => target.target === 'darwin-arm64'), { os: 'macos-15', target: 'darwin-arm64' });
     assert.equal(native.strategy?.matrix.include?.length, 2);
     assert.equal(pack.needs, 'native');
-    assert.deepEqual(publish.needs, ['package', 'gate']);
+    assert.deepEqual(publish.needs, ['package', 'verify', 'gate']);
     assert.equal(graph.jobs.gate.uses, './.github/workflows/gate.yml');
     assert.match(graph.jobs.gate.with.ref, /inputs.tag/);
-    const build = 'pnpm exec vp build --outDir "$RUNNER_TEMP/concord-package" && pnpm exec vp exec tsc -p tsconfig.scripts.json';
+    const build = 'pnpm exec vp exec tsc -p tsconfig.scripts.json';
     assert.ok(pack.steps.some(step => step.run === build));
     assert.ok(pack.steps.findIndex(step => step.run === 'node scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === build));
     const commands = pack.steps.map(step => step.run ?? '').join('\n');
-    assert.match(commands, /cp install\.sh release\/install\.sh/);
-    assert.match(commands, /sha256sum release\/concord-sdlc-\*\.tgz release\/install\.sh > release\/SHA256SUMS/);
-    assert.equal((commands.match(/scripts\/release-package.ts release/gu) ?? []).length, 1);
+    assert.equal((commands.match(/scripts\/assemble-release.ts release/gu) ?? []).length, 1);
     assert.ok(publish.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
-    assert.match(commands, /pnpm install --prod --frozen-lockfile --ignore-scripts/);
-    assert.match(commands, /verify-installed-native.ts/);
+    const verification = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ verify: Job }) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
+    assert.equal(verification.jobs.verify.needs, 'package');
+    assert.deepEqual(verification.jobs.verify.strategy?.matrix.include, [{ os: 'ubuntu-24.04', target: 'linux-x64' }, { os: 'macos-15', target: 'darwin-arm64' }]);
+    const verifyCommands = verification.jobs.verify.steps.map(step => step.run ?? '').join('\n');
+    assert.match(verifyCommands, /node scripts\/verify-release-archive.ts/u);
+    assert.doesNotMatch(verifyCommands, /vp build|buildApplication|build-native|assemble-release|release-package|pnpm install --prod/u);
+    assert.ok(verification.jobs.verify.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
     const gate = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Record(Schema.String, Schema.Unknown), jobs: Schema.Struct({ gate: Job }) }))(
       parse(yield* fs.readFileString('.github/workflows/gate.yml')),
     );
@@ -168,31 +172,36 @@ test('publication retry reuses identical assets and refuses a different digest',
     const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-publish-retry-' });
     yield* fs.makeDirectory(join(root, 'bin'));
     yield* fs.makeDirectory(join(root, 'release'));
-    const digest = 'a'.repeat(64);
-    const installerDigest = 'c'.repeat(64);
-    yield* fs.writeFileString(join(root, 'release/SHA256SUMS'), `${digest}  release/concord-sdlc-0.8.2.tgz\n${installerDigest}  release/install.sh\n`);
-    // Only the remote GitHub boundary is simulated; execute the actual workflow shell.
-    yield* fs.writeFileString(join(root, 'bin/gh'), '#!/usr/bin/env bash\nif test "$1" = api; then\n  if test "$GH_CASE" = absent; then exit 1; fi\n  cat "$GH_FIXTURE"\nelse\n  printf "%s\\n" "$*" >> "$GH_CALLS"\nfi\n');
+    const names = ['concord-0.8.2-linux-x64.tar.gz', 'concord-0.8.2-darwin-arm64.tar.gz', 'concord-sdlc-0.8.2.tgz', 'install.sh'];
+    const sums: string[] = [], assets: { name: string; digest: string }[] = [];
+    for (const name of names) {
+      yield* fs.writeFileString(join(root, 'release', name), `immutable ${name} bytes`);
+      const digest = createHash('sha256').update(`immutable ${name} bytes`).digest('hex');
+      sums.push(`${digest}  ${name}`); assets.push({ name, digest: `sha256:${digest}` });
+    }
+    const checksumText = `${sums.join('\n')}\n`;
+    yield* fs.writeFileString(join(root, 'release/SHA256SUMS'), checksumText);
+    assets.push({ name: 'SHA256SUMS', digest: `sha256:${createHash('sha256').update(checksumText).digest('hex')}` });
+    // Only the GitHub boundary is simulated; run the production workflow shell and hash actual files.
+    yield* fs.writeFileString(join(root, 'bin/gh'), '#!/usr/bin/env bash\nif test "$1" = api; then\n  if test "$GH_CASE" = absent; then echo "HTTP 404" >&2; exit 1; fi\n  if test "$GH_CASE" = network; then echo "connection reset" >&2; exit 1; fi\n  cat "$GH_FIXTURE"\nelse\n  printf "%s\\n" "$*" >> "$GH_CALLS"\nfi\n');
     yield* fs.chmod(join(root, 'bin/gh'), 0o755);
-    for (const kind of ['same', 'different', 'different-installer', 'missing-installer', 'absent']) {
-      yield* fs.writeFileString(join(root, 'fixture.json'), JSON.stringify({ assets: [
-        { name: 'concord-sdlc-0.8.2.tgz', digest: `sha256:${kind === 'different' ? 'b'.repeat(64) : digest}` },
-        { name: 'SHA256SUMS' },
-        ...(kind === 'missing-installer' ? [] : [{ name: 'install.sh', digest: `sha256:${kind === 'different-installer' ? 'd'.repeat(64) : installerDigest}` }]),
-      ] }));
+    for (const kind of ['same', 'linux', 'darwin', 'library', 'installer', 'checksums', 'missing', 'tag', 'commit', 'prerelease', 'network', 'absent']) {
+      const fixtureAssets = assets.map((asset, index) => ({ ...asset, digest: ['linux', 'darwin', 'library', 'installer', 'checksums'][index] === kind ? `sha256:${'b'.repeat(64)}` : asset.digest }));
+      yield* fs.writeFileString(join(root, 'fixture.json'), JSON.stringify({ tag_name: kind === 'tag' ? 'v0.0.0' : 'v0.8.2', target_commitish: kind === 'commit' ? 'b'.repeat(40) : 'a'.repeat(40), draft: false, prerelease: kind === 'prerelease', assets: kind === 'missing' ? fixtureAssets.slice(1) : fixtureAssets }));
       const calls = join(root, `${kind}.calls`);
       const status: number = yield* spawner.exitCode(ChildProcess.make('bash', ['-e', '-c', script], {
         cwd: root, extendEnv: true, env: {
-          PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, RELEASE_TAG: 'v0.8.2',
+          PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, RELEASE_TAG: 'v0.8.2', RELEASE_COMMIT: 'a'.repeat(40),
           GITHUB_REPOSITORY: 'fixture/concord', GITHUB_STEP_SUMMARY: join(root, 'summary'),
           GH_CASE: kind, GH_FIXTURE: join(root, 'fixture.json'), GH_CALLS: calls,
         },
       }));
-      assert.equal(Number(status) === 0, kind === 'same' || kind === 'absent');
-      assert.equal(yield* fs.exists(calls), kind === 'absent', 'existing release must never be overwritten');
+      assert.equal(Number(status) === 0, kind === 'same' || kind === 'absent', kind);
+      assert.equal(yield* fs.exists(calls), kind === 'absent', kind);
       if (kind === 'absent') {
-        assert.match(yield* fs.readFileString(calls), /^release create v0\.8\.2 /u);
-        assert.match(yield* fs.readFileString(calls), /release\/install\.sh/u);
+        const command = yield* fs.readFileString(calls);
+        for (const name of [...names, 'SHA256SUMS']) assert.ok(command.includes(name), name);
+        assert.doesNotMatch(command, /--clobber/u);
       }
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
@@ -280,6 +289,6 @@ test('digest-native publication is manual and both release workflows compile nat
   assert.match(publication, /--prerelease --latest=false/u);
   assert.doesNotMatch(publication, /--clobber|gh release delete/u);
   const release = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job }) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
-  assert.ok(release.jobs.native.steps.some(step => step.run === 'node scripts/build-native.ts --output native-artifacts'));
+  assert.ok(release.jobs.native.steps.some(step => step.run === 'node scripts/build-native.ts --output native-artifacts --require-portable'));
   assert.ok(release.jobs.native.steps.every(step => !step.run?.includes('--reuse')));
 }).pipe(Effect.provide(NodeServices.layer))));
