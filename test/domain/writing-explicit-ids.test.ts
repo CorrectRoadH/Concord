@@ -8,7 +8,6 @@ import { createConsumer } from '../support/consumer.ts';
 import { LocalRepository } from '../support/repository.ts';
 
 // @feature docs/feature/documentation-quality/format.md#匹配
-// @issue docs/issues/banned-term-matches-heading-id.md
 test('explicit heading and step IDs are excluded while authored terminology remains checked', () => {
   const root = createConsumer();
   const path = 'docs/feature/sample/use-case/checkout.md';
