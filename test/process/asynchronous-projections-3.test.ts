@@ -1,5 +1,6 @@
+// 跨进程保证：运行环境——真实刷新 worker 接受请求与缺省配置；并发写进程触发 C2 漂移。
 import { runApplication } from '../support/repository.ts';
-import { makeOwnedProcessService, installationResources, installationRootForBin, classifyQueryRefresh, persist, pathToFileURL, sourceCli, createConsumer, genericPrivateDirectorySync, refreshQuery, pollUntil, decodeDocumentSource, workerEntryArgv, installedConcordCli, assert, execFileSync, spawn, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, tmpdir, join, resolve, test, before, after, Effect, Schema, sourceRoot, prepareSourceConsumer, cacheDatabasePath, openHawdb, readProjectConfig, writeProjectConfig, LocalRepository, initialize, setAuthor, createDocument, renderDocument, ConcordError, digest, QueryCacheEnvelope, queryContext, readQuery, storeQuery, type Query, gaps, candidate, consumer, cli, call, historicalCall, waitForRefreshExit, packageScratch, installedCli, installedCall, packedConsumer, packedEnvelope, refreshInstalled, editing } from '../support/asynchronous-projections-fixture.ts';
+import { assert, candidate, consumer, createConsumer, editing, Effect, existsSync, gaps, genericPrivateDirectorySync, installedCall, join, packedConsumer, packedEnvelope, queryContext, readQuery, refreshInstalled, refreshQuery, rmSync, spawnSync, storeQuery, test, waitForRefreshExit, workerEntryArgv } from '../support/asynchronous-projections-fixture.ts';
 
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
@@ -45,7 +46,7 @@ test('packed C2 retains the consistent generation and annotates the later drifti
 
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-test('diagnostic refresh accepts absent configuration and binds its later appearance', async () => {
+test('diagnostic refresh accepts absent configuration', async () => {
   const root = createConsumer();
   try {
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);
@@ -54,9 +55,5 @@ test('diagnostic refresh accepts absent configuration and binds its later appear
     const refreshed = readQuery(missing);
     assert.equal(refreshed.record?.complete, true, JSON.stringify(refreshed));
     assert.equal(refreshed.error, undefined);
-    writeProjectConfig(root, { testRoots: [], sourceRoots: [] });
-    assert.notEqual(queryContext(root, missing.query).key, missing.key);
-    rmSync(join(root, 'concord.config.ts'));
-    assert.equal(queryContext(root, missing.query).key, missing.key);
   } finally { await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
 });

@@ -131,6 +131,7 @@ export default {
       "test/support/installed-herdr-mod.ts",
       "test/support/installed-package.ts",
       "test/support/installed-startup.ts",
+      "test/support/issue-remote-domain.ts",
       "test/support/issue-remote-fixture.ts",
       "test/support/lsp-analysis-fixture.ts",
       "test/support/lsp-analysis-source-fixture.ts",
