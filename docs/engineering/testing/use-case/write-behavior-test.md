@@ -37,22 +37,21 @@
 
 4. 写测试，表中每行一个子测试。 {#write}
 
-   准备状态在进程内完成：`createConsumer` 复制模板仓库，`withRepository` 打开它，`createDocument` 与 `linkIssue` 是领域写入入口。只有被测的那条命令以子进程运行，`sourceCli` 给出源码 CLI 入口。
+   准备状态在进程内完成：`createConsumer` 复制模板仓库，`withRepository` 打开它，`createDocument` 与 `linkIssue` 是领域写入入口。被测命令通过 `test/support/cli.ts` 的 `runCli` 在测试进程内运行，显式传入 argv、cwd 和完整环境，等待本次调用的 stdout、stderr 与退出码。
 
    ```ts
    import assert from 'node:assert/strict';
-   import { spawnSync } from 'node:child_process';
    import { rmSync } from 'node:fs';
    import test from 'node:test';
    import { createConsumer } from '../support/consumer.ts';
    import { createDocument } from '../support/operations.ts';
    import { withRepository } from '../support/application-fixture.ts';
-   import { sourceCli } from '../support/source-consumer.ts';
+   import { runCli } from '../support/cli.ts';
    import { linkIssue } from '../../src/domain/issues/index.ts';
 
-   function call(root: string, args: readonly string[], status = 0): Record<string, unknown> {
-     const result = spawnSync(process.execPath, [sourceCli(), '--root', root, '--json', ...args], { cwd: root, encoding: 'utf8', timeout: 30_000 });
-     assert.equal(result.status, status, JSON.stringify({ args, status: result.status, signal: result.signal, stdout: result.stdout, stderr: result.stderr }));
+   async function call(root: string, args: readonly string[], status = 0): Promise<Record<string, unknown>> {
+     const result = await runCli({ argv: ['--root', root, '--json', ...args], cwd: root, env: process.env, signal: AbortSignal.timeout(30_000) });
+     assert.equal(result.exitCode, status, JSON.stringify({ args, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr }));
      return JSON.parse(result.stdout.trim() || result.stderr) as Record<string, unknown>;
    }
 
@@ -61,14 +60,14 @@
      for (const [row, linked, expected] of [
        ['another Issue links it', true, 'IssueReferenced'],
        ['the Issue does not exist', false, 'DocumentNotFound'],
-     ] as const) await t.test(row, () => {
+     ] as const) await t.test(row, async () => {
        const root = createConsumer();
        try {
          if (linked) withRepository(root, repo => {
            for (const id of ['one', 'two']) createDocument(repo, 'issue', { id, title: id });
            linkIssue(repo, 'two', 'docs/issues/one.md', false, 'related');
          });
-         assert.equal(call(root, ['issue', 'close', 'one', '--reason', 'Done'], 1).error, expected);
+         assert.equal((await call(root, ['issue', 'close', 'one', '--reason', 'Done'], 1)).error, expected);
        } finally { rmSync(root, { recursive: true, force: true }); }
      });
    });
@@ -76,7 +75,7 @@
 
    这段代码就是仓库中的 `test/cli/issue-close-links.test.ts`。它的标记指向本教程；`issue close` 的业务行为由 Feedback 已有的测试关联。自己写测试时，标记指向要验证的 Use Case 步骤。
 
-   `call` 在退出码不符时把 args、status、signal、stdout 与 stderr 一起写进失败消息，满足[断言](../README.md#断言)对子进程诊断的要求。
+   `call` 在退出码不符时把 args、exitCode、stdout 与 stderr 一起写进失败消息，满足[断言](../README.md#断言)对调用诊断的要求。
 
 5. 让它失败一次。 {#fail-first}
 
@@ -107,7 +106,7 @@
 | 情形 | 处理 |
 | --- | --- |
 | 要守护的行为还不在 Spec 中 | 先写进 Use Case 或 cli 页，再写测试；测试不指向 Roadmap 或 Design |
-| CLI 子测试超过 2s，或在 CLI 层逐一枚举领域情形 | 准备步骤改用 `createDocument` 等进程内入口；领域情形下沉到 `test/domain/`，CLI 层只留映射 |
+| 不启动服务的 CLI 子测试超过 200ms，或在 CLI 层逐一枚举领域情形 | 准备步骤改用 `createDocument` 等进程内入口；领域情形下沉到 `test/domain/`，CLI 层只留映射 |
 | 测试按消息文本断言错误 | 改为断言 `error` 代码 |
 | 断言 `ok: false` 或“结果不为空” | 断言具体的错误码、文件内容或完整集合 |
 | 测试里手写 frontmatter、配置或 JSON | 改用格式 owner 生成，见[扩展 Fixture](extend-fixtures.md#owner) |

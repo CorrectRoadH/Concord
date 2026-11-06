@@ -29,7 +29,8 @@
    | 以 CLI 同一应用层执行查询或动作 | `query(root, request, schema)`、`action(root, input, schema)` | `test/support/application-fixture.ts` |
    | 等待真实状态 | `pollUntil(attempt, { description })`、`waitForWorkspaceProjection(base)` | `test/support/support.ts` |
    | 每次新连接的 HTTP 请求 | `fetchFresh(url, init)` | `test/support/support.ts` |
-   | 源码 CLI 入口 | `sourceCli()` | `test/support/source-consumer.ts` |
+   | 在测试进程内运行一条 CLI 命令（CLI 层） | `runCli({ argv, cwd, env })` 返回 `{ stdout, stderr, exitCode }` | `test/support/cli.ts` |
+   | 真实源码 CLI 入口（进程层的“运行环境”测试） | `sourceCli()` | `test/support/source-consumer.ts` |
 
    已有入口能表达时直接组合，不为它再包一层同名函数（[用现成的能力，不重写](../../../taste.md#t-10)）。
 
