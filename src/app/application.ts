@@ -10,7 +10,7 @@ import { Effect, Result, Predicate } from "effect";
 import { recoverLocalState } from "./recovery.ts";
 import { waitForPublication } from "../base/publication/index.ts";
 import { getGitStatus, type GitBaselineCache } from "./git-view.ts";
-import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../domain/tests/index.ts";
+import { cacheStatus, clearCache, closeFixedIssue, previewCacheClear, scanAnnotations } from "../domain/tests/index.ts";
 import { codeSnippet, locateCode } from "./code-commands.ts";
 import { scanCode } from "../domain/code/index.ts";
 import { adoptRoadmap } from "./adopt-roadmap.ts";
@@ -377,6 +377,13 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   if (action.action === 'recover') return yield* recoverLocalState(root);
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
   if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);
+  if (action.action === 'issue.close') {
+    if (action.fixed) {
+      if (action.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'fixed verification does not accept --dry-run'));
+      return yield* withRepository(root, repo => closeFixedIssue(repo, action.id, action.reason ?? 'Verified fix', action.defect, action.fix), {}, timing);
+    }
+    if (action.defect !== undefined || action.fix !== undefined) return yield* Effect.fail(new ConcordError('InvalidOption', '--defect and --fix require --fixed'));
+  }
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action, environment.env))), { access: actionAccess(action.action), dryRun }, timing);
 });

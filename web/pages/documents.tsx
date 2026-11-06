@@ -513,7 +513,7 @@ function DocumentLayout({
 }) {
   const { snapshot } = useWorkspace()
   const { params, update } = useUrlNavigation()
-  const showsLifecycle = ["roadmap", "memory", "issue"].includes(document.metadata.kind)
+  const showsLifecycle = ["roadmap", "design", "memory", "issue"].includes(document.metadata.kind)
   const requested = background && extra ? "use-cases" : params.get("tab") === "pages" ? "body" : params.get("tab") ?? "body"
   const requestedTab = requested === "actions" && !showsLifecycle ? "metadata" : requested
   const [editorToolbar, setEditorToolbar] = React.useState<HTMLDivElement | null>(null)
@@ -839,7 +839,7 @@ function HeadingEditor({ path }: { path: string }) {
 }
 
 // @concord-begin
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
+// @concord-implements docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md
 function Lifecycle({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   return (
@@ -847,9 +847,12 @@ function Lifecycle({ document }: { document: WorkspaceDocument }) {
       <ContentSection title="当前状态">
           <dl>
             {metadata.kind === "roadmap" && <Definition label="状态">{metadata.state}</Definition>}
+            {metadata.kind === "design" && <Definition label="状态">待定取舍</Definition>}
+            {metadata.kind === "roadmap" && metadata.adoptedAs && <Definition label="采用为 Feature">{metadata.adoptedAs}</Definition>}
             {(metadata.kind === "memory" || metadata.kind === "issue") && (metadata.relations ?? []).map(relation => <Definition key={`${relation.role}:${relation.target}`} label={relation.role}>{relation.target}</Definition>)}
             {metadata.kind === "roadmap" && metadata.cancellation && <><Definition label="取消理由">{metadata.cancellation.reason}</Definition>{metadata.cancellation.source && <Definition label="原文来源">{metadata.cancellation.source.path}</Definition>}</>}
           </dl>
+          {metadata.kind === "design" && <p>决定后将规则写入 Spec，并删除 Design。</p>}
       </ContentSection>
       <LifecycleActions document={document} />
 
@@ -858,30 +861,42 @@ function Lifecycle({ document }: { document: WorkspaceDocument }) {
 }
 
 function LifecycleActions({ document }: { document: WorkspaceDocument }) {
-  const { act, snapshot } = useWorkspace()
+  const { act } = useWorkspace()
   const metadata = document.metadata
   const [reason, setReason] = React.useState("")
   const [target, setTarget] = React.useState("")
-  const [selected, setSelected] = React.useState("")
+  const [defect, setDefect] = React.useState("")
+  const [fix, setFix] = React.useState("")
+  const [pending, setPending] = React.useState(false)
   function invoke(action: ViewAction, text: string): void {
-    fire(act(action, text).then(() => setReason("")))
+    if (pending) return
+    setPending(true)
+    fire(act(action, text).then(() => setReason("")).finally(() => setPending(false)))
   }
-  if (!["roadmap", "memory", "issue"].includes(metadata.kind)) {
+  if (!["roadmap", "memory", "issue"].includes(metadata.kind) || metadata.kind === "roadmap" && metadata.state !== "planned") {
     return null
   }
   return (
     <ContentSection title="可用操作" className="form-section">
       <div className="form-grid">
         {metadata.kind === "roadmap" && metadata.state === "planned" && (
-          <><Field label="采用为 Feature ID"><Input aria-label="采用为 Feature ID" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button onClick={() => invoke({ action: "roadmap.start", id: metadata.id, ...(target ? { feature: target } : {}) }, "Roadmap 已采用为 Feature。")}>采用 Roadmap</Button></>
+          <><Field label="采用为 Feature ID"><Input aria-label="采用为 Feature ID" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button disabled={pending} onClick={() => invoke({ action: "roadmap.start", id: metadata.id, ...(target ? { feature: target } : {}) }, "Roadmap 已采用为 Feature。")}>采用 Roadmap</Button></>
         )}
         {metadata.kind === "memory" && (
           <>
-            <Field label="Spec 目标"><Input aria-label="Memory 目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "memory.link", id: document.path, target }, "Memory 已关联。")}>关联 Spec</Button>
+            <Field label="Spec 目标"><Input aria-label="Memory 目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button variant="outline" disabled={pending} onClick={() => invoke({ action: "memory.link", id: document.path, target }, "Memory 已关联。")}>关联 Spec</Button>
           </>
         )}
         {metadata.kind === "issue" && (
-          <><Field label="关联 Memory"><Input aria-label="关联 Memory" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "issue.link", id: metadata.id, memory: target }, "Issue 已关联 Memory。") }><Link2 /> 关联 Memory</Button><Field label="关闭理由"><Textarea aria-label="Issue 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "issue.close", id: metadata.id, reason }, "Issue 已关闭。")}>关闭草稿</Button></>
+          <>
+            <Field label="关联 Memory"><Input aria-label="关联 Memory" value={target} onChange={(event) => setTarget(event.target.value)} /></Field>
+            <Button variant="outline" disabled={pending} onClick={() => invoke({ action: "issue.link", id: metadata.id, memory: target }, "Issue 已关联 Memory。") }><Link2 data-icon="inline-start" />关联 Memory</Button>
+            <Field label="关闭理由"><Textarea aria-label="Issue 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+            <Button disabled={pending || !reason.trim()} onClick={() => invoke({ action: "issue.close", id: metadata.id, reason }, "Issue 已关闭。")}>关闭草稿</Button>
+            <Field label="缺陷提交" hint="留空时从回归测试历史推导"><Input aria-label="缺陷提交" value={defect} onChange={(event) => setDefect(event.target.value)} /></Field>
+            <Field label="修复提交" hint="留空使用 HEAD"><Input aria-label="修复提交" value={fix} onChange={(event) => setFix(event.target.value)} /></Field>
+            <Button disabled={pending} onClick={() => invoke({ action: "issue.close", id: metadata.id, fixed: true, ...(reason.trim() ? { reason } : {}), ...(defect.trim() ? { defect: defect.trim() } : {}), ...(fix.trim() ? { fix: fix.trim() } : {}) }, "修复已核验，Issue 已关闭。")}>{pending ? "正在处理…" : "核验修复并关闭"}</Button>
+          </>
         )}
       </div>
     </ContentSection>

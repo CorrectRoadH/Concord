@@ -185,7 +185,7 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('issue.search'), query: Text }),
   Schema.Struct({ action: Schema.Literal('issue.edit'), id: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.remove'), id: Text, expectedDigest: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('issue.close'), id: Text, reason: Schema.optional(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.close'), id: Text, reason: Schema.optional(Text), fixed: Schema.optional(Schema.Boolean), defect: Schema.optional(Text), fix: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('feedback.sync'), connection: Text, url: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('feedback.check'), connection: Text }),
   Schema.Struct({ action: Schema.Literal('feedback.link'), id: Text, feature: Text, ...DryRun }),
