@@ -77,7 +77,7 @@ runner 在消费者 cwd 下执行。argv 逐参数替换 `{file}`、`{name}`、`
 
 命令助手与 Web 保存都走这条管线。Web 保存以整文件摘要作为前像；源码保存只替换配置范围内既有的 JS/TS 文件，使用完整文件摘要与受限恢复日志。
 
-人与 agent 的直接编辑不经过这条管线，由 `concord check` 检查，`--since` 另读基线差异（[操作依赖](#操作依赖)）。
+人与 agent 的直接编辑不经过这条管线，由 `concord check` 检查（[操作依赖](#操作依赖)）。
 
 新增配置、来源和写入口必须同时定义资源所有权与恢复授权，写入的可观察保证见[写入保护](use-case/recover-local-state.md#写入保护)。
 
@@ -302,7 +302,7 @@ Repository 负责安全读取、配置身份、依赖观察和发布，文档模
 | memory link；issue link、unlink、close | 指定 owner、当前摘要与关系目标 | 独占 publication | 目标或关系目标缺陷、写入资源障碍 |
 | code/test marker | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源快照 | 指定依赖缺陷，不加载全局 Trace |
 | trace、review | 展示的关系图 | 乐观来源快照 | 输出 findings；需要完整图的结论拒绝不完整输入 |
-| check | 全仓库事实与关联；`--since` 另读基线差异 | 乐观来源快照 | 各 owner 解析错误累计为 findings，`ok: false` |
+| check | 全仓库事实与关联 | 乐观来源快照 | 各 owner 解析错误累计为 findings，`ok: false` |
 | issue close、roadmap start | 核验与保证关系完整所需的集合 | 独占 publication；fixed 另持 runner 租约 | 保留严格身份、修复核验和逆向关系要求 |
 
 集合查询先按类别的固定目录限定路径，再解码。
