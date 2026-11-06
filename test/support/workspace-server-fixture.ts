@@ -16,7 +16,7 @@ export const fixture = () => {
   return root;
 };
 export const command = (root: string, args: readonly string[], entry = installedConcordCli()) => new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-  const child = spawn(process.execPath, [entry, '--root', root, '--json', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [...(entry.endsWith('.ts') ? ['--import', import.meta.resolve('tsx'), '--import', new URL('./source-runtime.ts', import.meta.url).href] : []), entry, '--root', root, '--json', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '', stderr = '';
   child.stdout.on('data', data => { stdout += String(data); }); child.stderr.on('data', data => { stderr += String(data); });
   child.once('error', reject); child.once('close', status => resolve({ status, stdout, stderr }));

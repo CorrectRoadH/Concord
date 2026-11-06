@@ -140,7 +140,7 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhNotAuthenticated') && !String(cause).includes('SECRET-DO-NOT-PRINT'));
     writeFileSync(scenario, '{}');
     const entry = installedConcordCli();
-    const cli = (...args: readonly string[]): unknown => JSON.parse(execFileSync(process.execPath, ['--import', 'tsx', entry, '--root', consumer, '--json', ...args], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 })) as unknown;
+    const cli = (...args: readonly string[]): unknown => JSON.parse(execFileSync(process.execPath, [entry, '--root', consumer, '--json', ...args], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 })) as unknown;
     const added = cli('feedback', 'connection', 'add', '--id', 'gh-cli', '--provider', 'github', '--transport', 'gh', '--owner', 'acme', '--repo', 'widgets');
     assert.ok(added);
     const cliCheck = cli('feedback', 'connection', 'check', 'gh-cli') as { target: string; transport: string };
@@ -148,7 +148,7 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     const actionPath = join(root, 'check-action.json');
     writeFileSync(actionPath, JSON.stringify({ action: 'feedback.check', connection: 'gh-cli' }));
     assert.equal((cli('action', '--input', actionPath) as { target: string }).target, 'acme/widgets');
-    const rejected = spawnSync(process.execPath, ['--import', 'tsx', entry, '--root', consumer, '--json', 'feedback', 'connection', 'add', '--id', 'bad-gh', '--provider', 'github', '--transport', 'gh', '--credential-env', 'BAD', '--owner', 'acme', '--repo', 'widgets'], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 });
+    const rejected = spawnSync(process.execPath, [entry, '--root', consumer, '--json', 'feedback', 'connection', 'add', '--id', 'bad-gh', '--provider', 'github', '--transport', 'gh', '--credential-env', 'BAD', '--owner', 'acme', '--repo', 'widgets'], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 });
     assert.notEqual(rejected.status, 0);
     assert.equal((JSON.parse(rejected.stderr.trim()) as { error: string }).error, 'InvalidOption');
     writeFileSync(scenario, JSON.stringify({ oversize: true }));

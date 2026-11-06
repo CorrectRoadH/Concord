@@ -1,7 +1,7 @@
-import { fileURLToPath } from 'node:url';
 import { tmpdir } from './temporary.js';
 import { after as nodeAfter, before as nodeBefore } from 'node:test';
 import { Effect, Schema } from 'effect';
+import { installedPackageRoot, packageBin } from './installed-package.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
@@ -195,7 +195,7 @@ export const waitForWorkspaceNotModified = async (base: string, options: PollOpt
   return etag!;
 };
 
-/** The compatibility name now resolves the current checkout's source CLI. */
+/** Every product subprocess uses this gate's installed public bin. */
 export function installedConcordCli(): string {
-  return fileURLToPath(new URL('../../src/entry/cli/entry.ts', import.meta.url));
+  return packageBin(installedPackageRoot());
 }

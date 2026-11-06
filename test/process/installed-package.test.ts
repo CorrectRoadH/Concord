@@ -18,12 +18,15 @@ import { replaceInstalledNativeBinary } from '../../scripts/verify-installed-nat
 
 import { pollUntil } from '../support/support.js';
 
+// @feature docs/engineering/testing/README.md#检查入口
 test('parallel consumers share the build while damage stays in a private copy', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const root = yield* Effect.sync(() => mkdtempSync(join(tmpdir(), 'concord-install-sharing-')));
   const original = process.env.CONCORD_TEST_INSTALLS;
   const installs = join(root, 'installs');
   try {
     const artifact = yield* Effect.sync(() => sourceConcord());
+    assert.equal(realpathSync(artifact.filename), realpathSync(process.env.CONCORD_TEST_PACKAGE_ROOT!));
+    assert.equal(existsSync(join(artifact.filename, 'src/entry/cli/entry.ts')), false, 'installed consumers must not execute checkout source');
     const manifest = join(root, 'artifact.json');
     const consumers = ['one', 'two', 'three'].map(name => join(root, name));
     yield* Effect.sync(() => {
@@ -38,6 +41,8 @@ test('parallel consumers share the build while damage stays in a private copy', 
       ['--import', 'tsx', resolve('test/fixtures/install-consumer.ts'), consumer, manifest],
       { env: { ...process.env, CONCORD_TEST_INSTALLS: installs }, stdout: 'inherit', stderr: 'inherit' }))), { concurrency: 'unbounded' });
     assert.deepEqual(codes.map(Number), [0, 0, 0]);
+    const version = execFileSync(process.execPath, [packageBin(join(consumers[0]!, 'node_modules/concord-sdlc')), '--version'], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } });
+    assert.equal(version.trim(), `concord v${artifact.version}`);
     assert.equal(new Set(consumers.map(consumer => realpathSync(join(consumer, 'node_modules/concord-sdlc')))).size, 1);
     assert.equal(existsSync(join(consumers[0]!, 'node_modules/effect')), false, 'consumers cannot import undeclared transitive dependencies');
     assert.notEqual(realpathSync(join(consumers[0]!, 'node_modules')), realpathSync(join(consumers[1]!, 'node_modules')));

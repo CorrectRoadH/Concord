@@ -2,7 +2,7 @@ import { installationResources } from "../../src/base/installation/index.js";
 import { packageBin } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFile, spawnSync } from 'node:child_process';
-import { appendFileSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
@@ -12,6 +12,7 @@ const environment: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', TERM: 'd
 delete environment.FORCE_COLOR;
 export async function verifyInstalledStartup(packageRoot: string, scratch: string): Promise<void> {
 const entry = packageBin(packageRoot);
+const replace = (path: string, bytes: string | Buffer) => { writeFileSync(`${path}.pending`, bytes); renameSync(`${path}.pending`, path); };
 const checks: { name: string; run: () => void | Promise<void> }[] = [];
 const test = (name: string, run: () => void | Promise<void>) => { checks.push({ name, run }); };
 const invoke = (args: readonly string[]) => Effect.tryPromise(() => new Promise<{ stdout: string; stderr: string; status: number }>((accept, reject) => {
@@ -51,7 +52,7 @@ test('installed static help enumerates the actual commands and matches the publi
 test('installed help and version load the generated data without Effect, commands or native modules', () => {
   for (const args of [[], ['--version'], ['--help'], ['memory', 'search', '--help'], ['test', 'verify', '--help'], ['check', '--help']]) {
     const path = join(scratch, 'loaded.json');
-    const result = spawnSync(process.execPath, ['--import', 'tsx', '--import', resolve('test/support/cli-load-probe.ts'), entry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
+    const result = spawnSync(process.execPath, ['--import', resolve('test/support/cli-load-probe.ts'), entry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, args.length === 0 ? 1 : 0, JSON.stringify({ args, stdout: result.stdout, stderr: result.stderr }));
     const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(readFileSync(path, 'utf8'));
     assert.ok(loaded.includes(pathToFileURL(realpathSync(entry)).href), JSON.stringify(loaded));
@@ -69,7 +70,7 @@ test('installed help and version load the generated data without Effect, command
 test('installed ordinary commands load only their selected command group', () => {
   for (const [group, args] of [['memory', ['--json', '--root', scratch, 'memory', 'search', 'cache']], ['template', ['template', 'list', '--json']]] as const) {
     const path = join(scratch, 'loaded.json');
-    const result = spawnSync(process.execPath, ['--import', 'tsx', '--import', resolve('test/support/cli-load-probe.ts'), entry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
+    const result = spawnSync(process.execPath, ['--import', resolve('test/support/cli-load-probe.ts'), entry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.error, undefined);
     const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(readFileSync(path, 'utf8'));
     assert.ok(loaded.some(url => url === pathToFileURL(realpathSync(installationResources(packageRoot).command(group))).href));
@@ -106,8 +107,8 @@ test('missing or changed installed startup assets preserve public command result
     finally { renameSync(`${path}.saved`, path); }
   }
   const path = installationResources(packageRoot).command('template'); const before = readFileSync(path);
-  try { appendFileSync(path, '\n// changed installed module\n'); assert.deepEqual(yield* invoke(args), expected); }
-  finally { writeFileSync(path, before); }
+  try { replace(path, Buffer.concat([before, Buffer.from('\n// changed installed module\n')])); assert.deepEqual(yield* invoke(args), expected); }
+  finally { replace(path, before); }
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
@@ -137,18 +138,18 @@ test('help preserves terminal rendering and rejects mismatched generated data', 
   const fallback = installationResources(packageRoot).fallback;
   const fallbackBytes = readFileSync(fallback);
   try {
-    appendFileSync(fallback, '\n// changed complete fallback bytes\n');
+    replace(fallback, Buffer.concat([fallbackBytes, Buffer.from('\n// changed complete fallback bytes\n')]));
     assert.deepEqual(run(['--help'], environment, false), expected, 'complete fallback identity');
-  } finally { writeFileSync(fallback, fallbackBytes); }
+  } finally { replace(fallback, fallbackBytes); }
   const start = original.indexOf('export default ') + 'export default '.length;
   const payload = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(original.slice(start).trim().replace(/;$/u, ''));
   const receipts = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Struct({ stdout: Schema.String, stderr: Schema.String, status: Schema.Int })))(payload.receipts);
   const corrupted = `export default ${JSON.stringify({ ...payload, receipts: { ...receipts, '["--help"]': { ...receipts['["--help"]']!, stdout: 'CORRUPTED_HELP\n' } } })};\n`;
   for (const key of ['packageDigest', 'dataDigest', 'receipt']) {
     try {
-      writeFileSync(manifest, key === 'receipt' ? corrupted : original.replace(new RegExp(`"${key}":"[a-f0-9]+"`, 'u'), `"${key}":"${'0'.repeat(64)}"`));
+      replace(manifest, key === 'receipt' ? corrupted : original.replace(new RegExp(`"${key}":"[a-f0-9]+"`, 'u'), `"${key}":"${'0'.repeat(64)}"`));
       assert.deepEqual(run(['--help'], environment, false), expected, key);
-    } finally { writeFileSync(manifest, original); }
+    } finally { replace(manifest, original); }
   }
 });
 

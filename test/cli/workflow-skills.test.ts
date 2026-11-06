@@ -7,9 +7,10 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { digest, SkillsInstallReceiptSchema, workflowSkillPaths } from '../../src/model/index.js';
 import { tmpdir } from '../support/temporary.js';
+import { installedConcordCli } from '../support/support.js';
 
 type Requirements = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
-const entry = resolve('src/entry/cli/entry.ts');
+const entry = installedConcordCli();
 const runCase = (body: (root: string) => Effect.Effect<void, unknown, Requirements>) => Effect.runPromise(
   Effect.scoped(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
@@ -21,7 +22,7 @@ const runCase = (body: (root: string) => Effect.Effect<void, unknown, Requiremen
 );
 const cli = Effect.fn('test.workflowSkills.cli')(function*(root: string, args: string[], status = 0, json = true, executableEntry = entry) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), executableEntry, ...(args.includes('--skill') ? [] : ['--root', root]), ...(json ? ['--json'] : []), ...args], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [executableEntry, ...(args.includes('--skill') ? [] : ['--root', root]), ...(json ? ['--json'] : []), ...args], {
     cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
   }));
   const [stdout, stderr, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.stdout)), Stream.mkString(Stream.decodeText(child.stderr)), child.exitCode], { concurrency: 'unbounded' });
@@ -144,16 +145,6 @@ test('all four workflow topics are available outside a project through the sourc
   }
   assert.equal(yield* fs.exists(join(root, '.git')), false);
   assert.equal(yield* fs.exists(join(root, '.agents')), false);
-})));
-
-// @use-case docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
-test('the lightweight command loader routes skills install to the same managed publication', { timeout: 30_000 }, () => runCase(root => Effect.gen(function*() {
-  const fs = yield* FileSystem.FileSystem;
-  const bootstrap = join(root, 'light-entry.mts');
-  yield* fs.writeFileString(bootstrap, `import { loadCommand } from ${JSON.stringify(pathToFileURL(resolve('src/entry/cli/cli.ts')).href)};
-loadCommand('skills', { format: 'concord.startup/v1', packageDigest: '', dataDigest: '', files: {}, sourceFiles: {}, receipts: {}, groups: [{ name: 'skills' }] }).then(run => run());\n`);
-  const result = receipt(yield* cli(root, ['skills', 'install'], 0, true, bootstrap));
-  assert.deepEqual(result.createdPaths, workflowSkillPaths);
 })));
 
 // @use-case docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install

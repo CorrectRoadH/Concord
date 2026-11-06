@@ -11,7 +11,7 @@ import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { packConcord } from '../../scripts/release-package.js';
-import { packageBin } from '../support/installed-package.js';
+import { installedPackageRoot, packageBin } from '../support/installed-package.js';
 import { hawdbTarget, installationResources } from '../../src/base/installation/index.js';
 import { builtConcord } from '../support/installed-package.js';
 import { tmpdir } from '../support/temporary.js';
@@ -44,9 +44,7 @@ test('release packing preserves source identity bytes and tar contents without a
 test('one release archive contains the declared distribution and starts from its installed bin', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-release-test-'));
   try {
-    const output = join(root, 'build');
-    const build = spawnSync('pnpm', ['exec', 'vp', 'build', '--outDir', output], { encoding: 'utf8', timeout: 180_000, env: { ...process.env, NODE_OPTIONS: '' } });
-    assert.equal(build.status, 0, `${build.stdout}\n${build.stderr}`);
+    const output = installedPackageRoot();
     const beforePack = performance.now();
     const artifact = await Effect.runPromise(packConcord(root, output).pipe(Effect.provide(NodeServices.layer)));
     const packMs = performance.now() - beforePack;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema, Stream } from 'effect';
@@ -10,6 +10,8 @@ import { installedConcordCli, pollUntil } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
 import { startViewServer } from '../e2e/server.js';
 import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
+import { packageBin } from '../support/installed-package.js';
+import { privateSourceInstallation } from '../support/private-source.js';
 
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
 
@@ -77,9 +79,8 @@ test('C23 another installation reports a version conflict and preserves the exis
     writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
     prepareSourceConsumer(installation, sourceConcord(), [], { private: true });
     const installed = join(installation, 'node_modules/concord-sdlc');
-    writeFileSync(join(installed, 'src/handoff-identity-fixture.ts'), 'export {};\n');
-    const manifest = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
-    const entry = join(installed, 'src/entry/cli/entry.ts');
+    const entry = packageBin(installed);
+    writeFileSync(join(dirname(entry), 'handoff-identity-fixture.js'), 'export {};\n');
     const before = record(root);
     for (const args of [['server', 'start'], ['check']]) {
       const rejected = await command(root, args, entry);
@@ -105,10 +106,8 @@ test('source edits replace the same checkout service only after the previous own
   const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-source-reload-'));
   let entry = '';
   try {
-    writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
-    prepareSourceConsumer(installation, sourceConcord(), [], { private: true });
-    const tool = join(installation, 'node_modules/concord-sdlc');
-    entry = join(tool, 'src/entry/cli/entry.ts');
+    const tool = join(installation, 'source');
+    entry = privateSourceInstallation(tool);
     const start = await command(root, ['server', 'start'], entry);
     assert.equal(start.status, 0, start.stderr);
     const before = record(root);

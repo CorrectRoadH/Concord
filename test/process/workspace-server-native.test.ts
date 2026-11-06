@@ -18,7 +18,7 @@ test('runtime native validation degrades the locked service and a repaired artif
     writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
     prepareSourceConsumer(install, sourceConcord(), [], { private: true });
     const packageRoot = join(install, 'node_modules/concord-sdlc');
-    const entry = join(packageRoot, 'src/entry/cli/entry.ts');
+    const entry = installationResources(packageRoot).bin;
     const native = installationResources(packageRoot).native;
     metadata = join(native, readdirSync(native)[0]!, 'artifact.json'); hidden = `${metadata}.hidden`;
     assert.equal((await command(root, ['server', 'start'], entry)).status, 0);
