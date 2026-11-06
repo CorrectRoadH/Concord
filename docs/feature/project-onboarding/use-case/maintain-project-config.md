@@ -4,49 +4,105 @@
 
 维护者只在需要 runner 或偏离约定时写配置，获得 TypeScript 类型提示，并保持读取、编辑、验证和恢复行为一致。
 
-## 配置项
+## 起始状态
 
-`concord.config.ts` 可以不存在，此时全部配置项取默认值。
-
-| 项 | 默认 | 何时配置 |
-| --- | --- | --- |
-| `runner` | 无 | 需要 `test run` 或修复核验时 |
-| `testRoots` | 存在的 `test/`、`tests/` | 测试在其它位置 |
-| `sourceRoots` | 存在的 `src/` | 实现在其它位置 |
-| `sourceIgnore` | 无；另外始终排除 `.env`、`.env.*` 与 `dist` | vendor、生成文件 |
-| `testAdapters`、`languageServers`、`feedbackConnections`、`p5`、`docsWork` | 无 | 按需 |
-
-`runner` 包含不经 shell 的 `argv`、可选的 `sourceFiles` 与 `prepare`。`prepare` 是命令 argv 的列表，只在[修复核验](../../local-sdlc/architecture.md#修复核验)的每个临时检出中先于 runner 依次执行，用于准备检出中没有的依赖与构建产物；`test run` 在当前工作树运行，不执行它。
-
-显式的 `testRoots` 或 `sourceRoots` 替换对应默认值，不与默认值合并。发现范围、runner 输入与 Web 的源码写入范围分别定义；默认值不扩大 Web 的源码写入范围。`sourceIgnore` 的匹配与显式来源优先级见[发现测试](../../local-sdlc/use-case/discover-annotated-tests.md)。
+- 项目已初始化，没有 `concord.config.ts`；测试在 `spec/`，实现在 `src/`。
+- 文件语法与全部配置项见[项目配置文件](../format.md)。
 
 ## 完整路径
 
-1. 直接创建或编辑 `concord.config.ts`：一个 `export default` 字面对象，可带类型导入、`as const` 与 `satisfies`；不执行消费者模块。
-2. Web 设置页读取配置原文与摘要，保存时以 `config.set` action 按相同前像提交，拒绝覆盖外部编辑。
-3. 新命令读取新配置；已有文档不被隐式重写。
-4. 若 Concord 的写入中断，按冻结配置快照恢复；不依据外部新配置扩大权限。
+1. 看实际生效的配置，决定要不要写。 {#配置项}
 
-## 无效输入
+   ```sh
+   concord doctor
+   ```
 
-运行时只读取 `concord.config.ts`，按当前 Schema 严格解码（[当前格式](../../../architecture.md#当前格式)）；未列出的字段是无效输入，其它文件不是配置，不被读取或检测。所有入口（CLI、init、dry-run、recover、workspace）对同一现场给出同一结果：
+   输出（节选）：
 
-| 错误 | 触发条件 |
+   ```text
+   configuration:
+     testRoots: 
+       test
+     sourceRoots: 
+       src
+   missingTestRoots: none
+   missingSourceRoots: none
+   ```
+
+   没有配置文件时全部配置项取[默认值](../format.md#配置项)。默认值够用就不写配置；本例测试不在 `test/`，需要覆盖 `testRoots`。
+
+2. 直接创建 `concord.config.ts`。 {#write}
+
+   ```ts
+   import type { ProjectConfig } from 'concord-sdlc/config';
+
+   export default {
+     testRoots: ['spec'],
+   } as const satisfies ProjectConfig;
+   ```
+
+   再运行 `concord doctor`：
+
+   ```text
+   configuration:
+     testRoots: 
+       spec
+     sourceRoots: 
+       src
+   ```
+
+   显式的 `testRoots` 替换默认值，只发现 `spec/`。Concord 只静态读取这个文件，不执行它。
+
+3. 写错时看到具名错误，原文不变。 {#invalid}
+
+   ```ts
+   export default { testRoots: ['spec'], extra: 1 };
+   ```
+
+   ```text
+   ok: false
+   error: InvalidData
+   message: concord.config.ts: Expected no excess property
+     at ["extra"]
+   ```
+
+   写成运行时表达式，例如 `export default { runner: makeRunner() };`：
+
+   ```text
+   ok: false
+   error: InvalidConfigSyntax
+   message: concord.config.ts: runtime expressions are not permitted in static configuration
+   ```
+
+4. 在 Web 工作台的设置页修改。 {#web}
+
+   设置页显示配置原文与摘要。保存时以 `config.set` action 按读取时的原文作为前像提交；这期间文件被外部编辑过，保存被拒绝，不覆盖外部编辑。
+
+5. 新命令读取新配置。 {#reload}
+
+   之后运行的命令使用新配置；已有文档不被隐式重写。
+
+6. 写入被中断时恢复。 {#recover}
+
+   ```sh
+   concord recover
+   ```
+
+   恢复按写入开始时冻结的配置快照授权，不依据外部新写入的配置扩大权限。
+
+## 结果
+
+| 情形 | 结果 |
 | --- | --- |
-| `InvalidConfigSyntax` | 重复键、spread、computed key、调用、其它运行时表达式或额外语句 |
-| `InvalidData` | 配置或未完成事务不符合当前 Schema |
+| 没有配置的仓库 | `test/` 与 `src/` 下的标记被发现 |
+| 配置了 `testRoots` | 只发现配置的根 |
+| 重复键、spread、调用等运行时表达式，或不安全路径 | 返回 `InvalidConfigSyntax` 或 `InvalidData`，不执行消费者代码，保留原文 |
+| 配置中出现未列出的字段 | 返回 `InvalidData`，保留原文 |
+| JS 调用方绕过类型传入非法配置 | 同样拒绝 |
+| 保存时文件已被外部编辑 | 拒绝覆盖；比较与提交使用同一次读取的原文 |
+| `config.set` 保存 | 可以把 TS 全文规范化；恢复时逐字节还原 |
+| init 配置发布、`config.set` 发布或源码写入在前后任一处中断 | 都能恢复；恢复再次中断可以重试 |
+| journal 无法解码，或 TS scope 残缺 | 拒绝早于任何锁删除；无法解码的 journal 阻断写入 |
+| 配置畸形或品味文件缺失时运行 `recover` | 不阻断 `recover`，恢复也不覆盖未知内容 |
 
-拒绝不改变配置、journal、锁、事务目标与临时文件的内容、存在性或权限；无法解码的 journal 阻断写入。
-
-## 可观察验收
-
-- 非法运行时表达式、重复键与不安全路径明确拒绝且不执行消费者代码；JS 调用方绕过类型传入非法配置同样拒绝。
-- CAS 使用同一次读取的 source，拒绝覆盖外部编辑；`config.set` 可规范化 TS 全文件，但恢复逐字节还原。
-- init 配置发布前后、`config.set` 发布前后与源码写入的中断都能恢复；恢复再次中断可以重试。
-- 没有配置的仓库中，`test/` 与 `src/` 下的标记被发现；配置 `testRoots` 后只发现配置的根。
-- 配置中出现未列出的字段时返回 `InvalidData`，保留原文。
-- 无法解码的 journal 与残缺 TS scope 的拒绝早于任何锁删除。畸形配置和品味缺失不使恢复覆盖未知内容，也不阻断 `recover`。
-
-## Spec 来源
-
-[目标与范围](../README.md)；实现边界见[架构](../architecture.md)。配置采用不执行消费者代码的静态 TS 数据。
+拒绝时配置、journal、锁、事务目标与临时文件都保持原样，见[校验错误](../format.md#校验错误)。快照与恢复授权的实现见[架构](../architecture.md)。
