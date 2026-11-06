@@ -16,7 +16,7 @@ import type { ReadonlyCacheSnapshot } from '../../base/cache/index.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
 import type { ChildProcessSpawner } from 'effect/unstable/process';
 import { NodeSocketServer } from '@effect/platform-node';
-import { Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Semaphore, Stream, SubscriptionRef } from 'effect';
+import { Cause, Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { RpcClient, RpcSerialization, RpcServer } from 'effect/unstable/rpc';
 import { Socket, SocketServer } from 'effect/unstable/socket';
 import { makeOwnedProcessService } from '../../app/index.ts';
@@ -267,7 +267,14 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
       if (reply.derived.length > 0 && !(operation.kind === 'query' && operation.cache === 'off')) yield* acceptDerived(reply.derived);
       return reply.value;
     });
-  }).pipe(Effect.timeout('60 seconds'), Effect.onError(() => close.pipe(Effect.orDie)))) };
+  }).pipe(Effect.timeout('60 seconds'), Effect.onError(cause => {
+    // A completed domain error leaves the RPC peer usable. Transport failures,
+    // malformed replies, resource limits and cancellation retire its owner.
+    const reusable = cause.reasons.length > 0 && cause.reasons.every(reason =>
+      Cause.isFailReason(reason) && reason.error instanceof WorkspaceServerError &&
+      !['WorkspaceServerProtocol', 'WorkspaceServerInputLimit', 'WorkspaceServerOutputLimit', 'WorkspaceComputeExited'].includes(reason.error.code));
+    return reusable ? Effect.void : close.pipe(Effect.orDie);
+  }))) };
 });
 
 const serverServices = Layer.mergeAll(Installation.layer, ServerRuntime.layer, Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provideMerge(NodeServices.layer));
