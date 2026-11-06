@@ -193,7 +193,7 @@ if (process.argv[2] === '--fixture-child') {
 } else {
   const entry = fileURLToPath(import.meta.url);
   const run = (scenario: Scenario): void => {
-    const result = spawnSync(process.execPath, ['--import', 'tsx', entry, '--fixture-child', scenario], { cwd: fileURLToPath(new URL('../..', import.meta.url)), encoding: 'utf8', timeout: 60_000 });
+    const result = spawnSync(process.execPath, [ entry, '--fixture-child', scenario], { cwd: fileURLToPath(new URL('../..', import.meta.url)), encoding: 'utf8', timeout: 60_000 });
     assert.equal(result.status, 0, `${scenario}: ${result.stderr || result.stdout || result.error?.message}`);
   };
 

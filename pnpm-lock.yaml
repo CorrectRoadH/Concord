@@ -35,9 +35,6 @@ importers:
       string-width:
         specifier: 8.3.0
         version: 8.3.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
       typescript:
         specifier: 7.1.0-beta
         version: 7.1.0-beta
@@ -10047,6 +10044,7 @@ snapshots:
       esbuild: 0.28.2
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   tunnel-agent@0.4.3:
     optional: true

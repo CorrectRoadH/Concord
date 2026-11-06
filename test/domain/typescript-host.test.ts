@@ -11,7 +11,7 @@ import { withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../..
 test('owned editor job timeout releases its real native compiler group', { skip: process.platform !== 'linux', timeout: 15000 }, () => Effect.runPromise(Effect.gen(function*() {
   const owner = makeOwnedProcessService();
   const ready = yield* Deferred.make<void>();
-  const running = yield* Effect.forkChild(Effect.scoped(owner.run([process.execPath, '--import', 'tsx', fileURLToPath(new URL('../fixtures/typescript-scope-worker.ts', import.meta.url))], {
+  const running = yield* Effect.forkChild(Effect.scoped(owner.run([process.execPath, fileURLToPath(new URL('../fixtures/typescript-scope-worker.ts', import.meta.url))], {
     cwd: process.cwd(), timeoutMs: 2500,
     stream: { ready: (_write, end) => end(), stdout: chunk => { if (chunk.toString().includes('compiler-ready')) Deferred.doneUnsafe(ready, Effect.void); } },
   })));

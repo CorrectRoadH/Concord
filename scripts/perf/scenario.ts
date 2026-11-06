@@ -62,7 +62,7 @@ export function runArguments(run: BenchRun): readonly string[] {
   return run;
 }
 // Source smoke tests still need a loader when a measured scenario clears NODE_OPTIONS.
-const nodeEntry = (entry: string) => [process.execPath, ...(entry.endsWith('.ts') ? ['--import', import.meta.resolve('tsx')] : []), entry];
+const nodeEntry = (entry: string) => [process.execPath, entry];
 export const cliCommand = (artifact: Artifact, root: string, argv: readonly string[]) => (argv[0] === 'repo' || argv.includes('--skill') || argv.includes('--help') || argv.includes('--version'))
   ? [...nodeEntry(artifact.entry), ...argv] : [...nodeEntry(artifact.entry), '--root', root, ...argv];
 export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: NodeJS.ProcessEnv, refreshLimitMs = 0): BenchContext => ({
@@ -138,7 +138,7 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
   }
   let result: TimedRun;
   if ('mod' in run) {
-    const captured = yield* timedRun([process.execPath, '--import', 'tsx', 'scripts/herdr-mod-host.ts', context.artifact.entry, context.consumer.root, run.mod], { cwd: process.cwd(), outputDir: context.outputDir, ...(timeoutMs ? { timeoutMs } : {}) });
+    const captured = yield* timedRun([process.execPath, 'scripts/herdr-mod-host.ts', context.artifact.entry, context.consumer.root, run.mod], { cwd: process.cwd(), outputDir: context.outputDir, ...(timeoutMs ? { timeoutMs } : {}) });
     yield* checkExpectation(scenario, captured);
     const timing = yield* io('Decode readable mod description measurement', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ms: Schema.Number, startedAtMs: Schema.Number, endedAtMs: Schema.Number })), { onExcessProperty: 'ignore' })(captured.stdout));
     result = { ...captured, ...timing };

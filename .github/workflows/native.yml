@@ -30,7 +30,7 @@ jobs:
           version: 11.18.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.19.0'
+          node-version-file: '.node-version'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: ./.github/actions/setup-native
@@ -38,7 +38,7 @@ jobs:
           platform: ${{ matrix.os }}-${{ matrix.target }}
           deployment-target: ${{ matrix.target == 'darwin-arm64' && '15.0' || 'none' }}
       - name: Build from pinned sources and verify portability
-        run: node --import tsx scripts/build-native.ts --output native-artifacts --require-portable
+        run: node scripts/build-native.ts --output native-artifacts --require-portable
       - name: Archive the validated target
         env:
           NATIVE_TARGET: ${{ matrix.target }}

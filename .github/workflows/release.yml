@@ -42,7 +42,7 @@ jobs:
           version: 11.18.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.19.0'
+          node-version-file: '.node-version'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: ./.github/actions/setup-native
@@ -52,10 +52,10 @@ jobs:
       - name: Verify native ownership, clear and recovery on the target host
         run: |
           export XDG_CACHE_HOME="$RUNNER_TEMP/hawdb-hooks-cache"
-          node --import tsx scripts/build-native.ts --test-hooks
-          node --import tsx --test test/process/hawdb-native.test.ts
+          node scripts/build-native.ts --test-hooks
+          node --test test/process/hawdb-native.test.ts
       - name: Build the pinned host engine
-        run: node --import tsx scripts/build-native.ts --output native-artifacts
+        run: node scripts/build-native.ts --output native-artifacts
       - uses: actions/upload-artifact@v4
         with:
           name: concord-hawdb-${{ matrix.target }}
@@ -78,13 +78,13 @@ jobs:
           version: 11.18.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.19.0'
+          node-version-file: '.node-version'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Prepare package version from release tag
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-        run: node --import tsx scripts/prepare-release.ts
+        run: node scripts/prepare-release.ts
       - uses: actions/download-artifact@v4
         with:
           pattern: concord-hawdb-*
@@ -98,7 +98,7 @@ jobs:
       - name: Pack once
         run: |
           mkdir release
-          node --import tsx scripts/release-package.ts release "$RUNNER_TEMP/concord-package"
+          node scripts/release-package.ts release "$RUNNER_TEMP/concord-package"
           test "$(find release -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
           cp install.sh release/install.sh
           sha256sum release/concord-sdlc-*.tgz release/install.sh > release/SHA256SUMS
@@ -110,7 +110,7 @@ jobs:
           tar -xzf release/concord-sdlc-*.tgz -C "$candidate"
           (cd "$candidate/package" && pnpm install --prod --frozen-lockfile --ignore-scripts)
           for name in package.json pnpm-lock.yaml pnpm-workspace.yaml; do cmp "$name" "$candidate/package/$name"; done
-          node --import tsx scripts/verify-installed-native.ts "$candidate/package"
+          node scripts/verify-installed-native.ts "$candidate/package"
       - uses: actions/upload-artifact@v4
         with:
           name: concord-release-package
@@ -196,7 +196,7 @@ jobs:
           version: 11.18.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.19.0'
+          node-version-file: '.node-version'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: actions/download-artifact@v4
@@ -210,7 +210,7 @@ jobs:
           sha256sum --check release/SHA256SUMS
           mkdir -p "$RUNNER_TEMP/herdr-package" "$RUNNER_TEMP/herdr-mirror"
           tar -xzf release/concord-sdlc-*.tgz -C "$RUNNER_TEMP/herdr-package"
-          node --import tsx scripts/herdr-mod-release.ts "$RUNNER_TEMP/herdr-package/package" "$RUNNER_TEMP/herdr-mirror" "$RELEASE_TAG"
+          node scripts/herdr-mod-release.ts "$RUNNER_TEMP/herdr-package/package" "$RUNNER_TEMP/herdr-mirror" "$RELEASE_TAG"
       - uses: actions/checkout@v4
         with:
           ref: master

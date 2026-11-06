@@ -55,7 +55,7 @@ test('Herdr catalog sync uses the tagged package after source publication even w
   assert.equal(checkouts[1]?.with?.token, '${{ github.token }}');
   assert.equal(checkouts[1]?.with?.path, 'herdr-mirror');
   assert.ok(mirror.steps.some(step => step.uses === 'pnpm/action-setup@v4' && step.with?.version === '11.18.0'));
-  assert.ok(mirror.steps.some(step => step.uses === 'actions/setup-node@v4' && step.with?.['node-version'] === '24.19.0'));
+  assert.ok(mirror.steps.some(step => step.uses === 'actions/setup-node@v4' && step.with?.['node-version-file'] === '.node-version'));
   assert.ok(mirror.steps.some(step => step.run === 'pnpm install --frozen-lockfile --ignore-scripts'));
   assert.ok(mirror.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
   const generation = mirror.steps.find(step => step.name === 'Generate Herdr mirror from the verified release package');
@@ -120,7 +120,7 @@ test('release builds two native targets and gates publication on the same commit
     const manifest = yield* Schema.decodeUnknownEffect(Schema.Struct({ scripts: Schema.Record(Schema.String, Schema.String) }))(
       JSON.parse(yield* fs.readFileString('package.json')),
     );
-    assert.equal(manifest.scripts.gate, 'node --import tsx scripts/gate.ts');
+    assert.equal(manifest.scripts.gate, 'node scripts/gate.ts');
     assert.equal(Object.hasOwn(manifest.scripts, 'check'), false);
     assert.equal(yield* fs.exists('scripts/gate.ts'), true);
     assert.equal(yield* fs.exists('scripts/check.ts'), false);
@@ -137,7 +137,7 @@ test('release builds two native targets and gates publication on the same commit
     assert.match(graph.jobs.gate.with.ref, /inputs.tag/);
     const build = 'pnpm exec vp build --outDir "$RUNNER_TEMP/concord-package" && pnpm exec vp exec tsc -p tsconfig.scripts.json';
     assert.ok(pack.steps.some(step => step.run === build));
-    assert.ok(pack.steps.findIndex(step => step.run === 'node --import tsx scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === build));
+    assert.ok(pack.steps.findIndex(step => step.run === 'node scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === build));
     const commands = pack.steps.map(step => step.run ?? '').join('\n');
     assert.match(commands, /cp install\.sh release\/install\.sh/);
     assert.match(commands, /sha256sum release\/concord-sdlc-\*\.tgz release\/install\.sh > release\/SHA256SUMS/);
@@ -213,7 +213,7 @@ test('release tag sets the manifest version while preserving and validating the 
     assert.ok(dispatch.on.push.tags.includes('concord-v*'));
     assert.ok(dispatch.jobs.dispatch?.steps.some(step => step.run?.includes('gh workflow run release.yml --ref "$RELEASE_BRANCH" --field "tag=$RELEASE_TAG"')));
     const script = workflow.jobs.package.steps.find(step => step.name === 'Prepare package version from release tag')?.run;
-    assert.equal(script, 'node --import tsx scripts/prepare-release.ts');
+    assert.equal(script, 'node scripts/prepare-release.ts');
     const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-release-identity-' });
     const cases = [
       { tag: 'v0.7.5', dependency: '1.0.0', override: '1.0.0', pass: true, version: '0.7.5' },
@@ -229,7 +229,7 @@ test('release tag sets the manifest version while preserving and validating the 
       const lock = stringify({ lockfileVersion: '9.0', overrides: { fixture: candidate.override }, importers: { ".": { dependencies: { fixture: { specifier: candidate.dependency } }, devDependencies: {} } } });
       yield* fs.writeFileString(join(root, 'pnpm-lock.yaml'), lock);
       yield* fs.writeFileString(join(root, 'pnpm-workspace.yaml'), stringify({ overrides: { fixture: '1.0.0' } }));
-      const status: number = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/prepare-release.ts')], {
+      const status: number = yield* spawner.exitCode(ChildProcess.make(process.execPath, [ resolve('scripts/prepare-release.ts')], {
         cwd: root, env: { RELEASE_TAG: candidate.tag }, extendEnv: true,
       }));
       assert.equal(Number(status) === 0, candidate.pass, JSON.stringify(candidate));
@@ -271,7 +271,7 @@ test('digest-native publication is manual and both release workflows compile nat
   }))(parse(yield* fs.readFileString('.github/workflows/native.yml')));
   assert.deepEqual(Object.keys(native.on), ['workflow_dispatch']);
   assert.equal(native.jobs.native.strategy?.matrix.include?.length, 2);
-  assert.ok(native.jobs.native.steps.some(step => step.run === 'node --import tsx scripts/build-native.ts --output native-artifacts --require-portable'));
+  assert.ok(native.jobs.native.steps.some(step => step.run === 'node scripts/build-native.ts --output native-artifacts --require-portable'));
   assert.ok(native.jobs.native.steps.every(step => !step.run?.includes('--reuse')));
   assert.equal(native.jobs.publish.needs, 'native');
   const publication = native.jobs.publish.steps.map(step => step.run ?? '').join('\n');
@@ -280,6 +280,6 @@ test('digest-native publication is manual and both release workflows compile nat
   assert.match(publication, /--prerelease --latest=false/u);
   assert.doesNotMatch(publication, /--clobber|gh release delete/u);
   const release = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job }) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
-  assert.ok(release.jobs.native.steps.some(step => step.run === 'node --import tsx scripts/build-native.ts --output native-artifacts'));
+  assert.ok(release.jobs.native.steps.some(step => step.run === 'node scripts/build-native.ts --output native-artifacts'));
   assert.ok(release.jobs.native.steps.every(step => !step.run?.includes('--reuse')));
 }).pipe(Effect.provide(NodeServices.layer))));

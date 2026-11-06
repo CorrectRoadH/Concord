@@ -1,15 +1,12 @@
 #!/usr/bin/env node
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
-import { startupData } from "../../app/startup/index.ts";
-import { enableCompileCache } from "node:module";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { startupData, initializeNodeCompileCache } from "../../app/startup/index.ts";
 import type { StartupData } from "../../model/index.ts";
 
 // Enable before any dynamic application import. Node treats disabled or
 // unwritable caches as an optimization failure, without changing CLI results.
-enableCompileCache(process.env.NODE_COMPILE_CACHE ?? join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'node-compile-cache'));
+initializeNodeCompileCache();
 
 const args = process.argv.slice(2);
 

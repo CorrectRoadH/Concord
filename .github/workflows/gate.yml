@@ -25,7 +25,7 @@ jobs:
           version: 11.18.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.19.0'
+          node-version-file: '.node-version'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: actions/setup-go@v6
@@ -44,8 +44,8 @@ jobs:
         if: matrix.shard == 1
         run: |
           export XDG_CACHE_HOME="$RUNNER_TEMP/hawdb-hooks-cache"
-          node --import tsx scripts/build-native.ts --test-hooks
-          node --import tsx --test test/process/hawdb-native.test.ts
+          node scripts/build-native.ts --test-hooks
+          node --test test/process/hawdb-native.test.ts
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec vp exec playwright install --with-deps chromium
       - run: pnpm exec vp run build:native

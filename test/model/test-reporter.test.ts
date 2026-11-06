@@ -17,7 +17,7 @@ const runnerTest = (name: string, body: (root: string) => Effect.Effect<void, un
 
 const run = Effect.fn('test.runner.integration')(function*(args: string[], env: Record<string, string | undefined> = {}, cwd?: string) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/test-built.ts'), ...args], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/test-built.ts'), ...args], {
     env: { ...process.env, CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_COMPILE_CACHE: undefined, ...env },
     cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
   }));
@@ -31,47 +31,51 @@ const Counts = Schema.Struct({ tests: Schema.Number, failed: Schema.Number, canc
 const Timing = Schema.Struct({ scope: Schema.String, counts: Counts });
 
 // @feature docs/engineering/testing/README.md#检查入口
-runnerTest('source tests run before the build receipt and release their Node budget before installed tests start', root => Effect.gen(function*() {
+runnerTest('all Node layers run source without a package and preserve the shared compile cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const source = join(root, 'test/model/source.test.ts'), installed = join(root, 'test/cli/installed.test.ts');
-  const packageRoot = join(root, 'package'), receipt = join(root, 'build-status.json'), released = join(root, 'source-released');
+  const source = join(root, 'test/model/source.test.ts'), cli = join(root, 'test/cli/source.test.ts');
+  const child = join(root, 'typed-child.ts');
+  const cacheHome = join(root, 'shared-cache'), compileCache = join(cacheHome, 'concord/node-compile');
   yield* fs.makeDirectory(join(root, 'test/model'), { recursive: true });
   yield* fs.makeDirectory(join(root, 'test/cli'), { recursive: true });
-  yield* fs.makeDirectory(packageRoot);
-  yield* fs.writeFileString(join(packageRoot, 'package.json'), '{"name":"build-boundary-fixture"}');
-  yield* fs.writeFileString(source, `import test from 'node:test'; import assert from 'node:assert/strict'; import { existsSync, writeFileSync, renameSync } from 'node:fs';
-test('source runs during the build', t => {
-  t.after(() => writeFileSync(${JSON.stringify(released)}, 'released'));
+  yield* fs.writeFileString(child, `const value: number = 42; console.log(JSON.stringify({value, options: process.env.NODE_OPTIONS, cache: process.env.NODE_COMPILE_CACHE}));\n`);
+  for (const file of [source, cli]) yield* fs.writeFileString(file, `import test from 'node:test'; import assert from 'node:assert/strict'; import { spawnSync } from 'node:child_process';
+test('source uses native type erasure', () => {
   assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, undefined);
-  assert.equal(existsSync(${JSON.stringify(receipt)}), false);
-  writeFileSync(${JSON.stringify(`${receipt}.pending`)}, '{"code":0}');
-  renameSync(${JSON.stringify(`${receipt}.pending`)}, ${JSON.stringify(receipt)});
-});\n`);
-  yield* fs.writeFileString(installed, `import test from 'node:test'; import assert from 'node:assert/strict'; import { existsSync } from 'node:fs'; import { spawnSync } from 'node:child_process';
-test('installed waits for the build', () => {
-  assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, ${JSON.stringify(packageRoot)});
-  assert.equal(existsSync(${JSON.stringify(receipt)}), true);
-  assert.equal(existsSync(${JSON.stringify(released)}), true, 'the source group must release its Node file budget');
-  const child = spawnSync(process.execPath, ['-e', 'console.log(process.env.NODE_OPTIONS ?? "")'], { encoding: 'utf8' });
+  assert.equal(process.env.CONCORD_TEST_PACKAGE_BUILD_STATUS, undefined);
+  assert.ok(process.execArgv.includes('--conditions=concord-source'));
+  assert.ok(process.execArgv.every(arg => !arg.includes('tsx')));
+  const child = spawnSync(process.execPath, [${JSON.stringify(child)}], { encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
-  assert.doesNotMatch(child.stdout, /tsx|concord-source|source-runtime/u);
+  const result = JSON.parse(child.stdout);
+  assert.equal(result.value, 42);
+  assert.match(result.options, /--conditions=concord-source/u);
+  assert.doesNotMatch(result.options, /tsx/u);
+  assert.equal(result.cache, ${JSON.stringify(compileCache)});
 });\n`);
-  const result = yield* run(['--suite=node', source, installed], {
-    NODE_OPTIONS: '', CONCORD_TEST_PACKAGE_ROOT: packageRoot, CONCORD_TEST_PACKAGE_BUILD_STATUS: receipt,
-  }, root);
+  yield* fs.writeFileString(join(root, 'absent-receipt'), '{"code":1}');
+  const env = { NODE_OPTIONS: '', XDG_CACHE_HOME: cacheHome, CONCORD_TEST_PACKAGE_ROOT: join(root, 'absent-package'), CONCORD_TEST_PACKAGE_BUILD_STATUS: join(root, 'absent-receipt') };
+  const result = yield* run(['--suite=node', source, cli], env, root);
   assert.equal(result.code, 0, result.text);
-  assert.ok(result.text.indexOf('# Source Node tests:') < result.text.indexOf('# Installed Node tests:'), result.text);
+  assert.match(result.text, /# Source Node tests:/u);
+  assert.doesNotMatch(result.text, /# Installed Node tests:/u);
   const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
-  assert.deepEqual(timings.map(timing => timing.file).sort(), [source, installed].sort());
+  assert.deepEqual(timings.map(timing => timing.file).sort(), [source, cli].sort());
+  assert.equal(yield* fs.exists(compileCache), true);
+  const sentinel = join(compileCache, 'retained');
+  yield* fs.writeFileString(sentinel, 'shared cache survives runner lifetime');
+  const again = yield* run(['--suite=node', source, cli], env, root);
+  assert.equal(again.code, 0, again.text);
+  assert.equal(yield* fs.readFileString(sentinel), 'shared cache survives runner lifetime');
 }));
 
 // @feature docs/engineering/build/architecture.md#脚本只写项目特有的规则
-runnerTest('cancelling gate reaps static task groups that ignore SIGTERM and releases its cache', root => Effect.gen(function*() {
+runnerTest('cancelling gate reaps static task groups and fixture scratch while preserving its shared cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.String, cgroup: Schema.String, packageRoot: Schema.optional(Schema.String), fixtureRoot: Schema.optional(Schema.String), task: Schema.String }));
   const fakePnpm = join(root, 'pnpm.ts');
-  yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env -S node --import ${import.meta.resolve('tsx')}
+  yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env node
 import { writeFileSync, readFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
 const task = process.argv[4] === 'build' ? 'build' : process.argv[5];
@@ -89,24 +93,21 @@ setInterval(() => {}, 1000);
       yield* fs.remove(cache, { recursive: true, force: true });
     }
   }).pipe(Effect.orDie));
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/gate.ts')], {
-    env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined, PATH: `${root}:${process.env.PATH}` },
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/gate.ts')], {
+    env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined, XDG_CACHE_HOME: join(root, 'shared-cache'), PATH: `${root}:${process.env.PATH}` },
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
   }));
   const ready = yield* Deferred.make<void>();
   let output = '';
   const drain = yield* Stream.runForEach(Stream.decodeText(child.all), text => Effect.gen(function*() {
     output += text;
-    if (output.split('TASK_READY').length === 8) yield* Deferred.succeed(ready, undefined);
+    if (output.split('TASK_READY').length === 7) yield* Deferred.succeed(ready, undefined);
   })).pipe(Effect.forkScoped);
-  yield* Deferred.await(ready).pipe(Effect.timeout(Duration.seconds(20)));
+  yield* Deferred.await(ready).pipe(Effect.timeout(Duration.seconds(20)), Effect.catch(() => Effect.sync(() => assert.fail(`Gate tasks did not become ready:\n${output}`))));
   const processes = yield* Effect.forEach((yield* fs.readDirectory(root)).filter(file => file.endsWith('.json')), file => fs.readFileString(join(root, file)).pipe(Effect.map(Schema.decodeUnknownSync(record))));
-  assert.equal(processes.length, 7);
-  assert.equal(processes.filter(process => process.task === 'build').length, 1);
-  const packageRoot = processes.find(process => process.task === 'build')!.packageRoot;
-  assert.ok(packageRoot, output);
-  assert.equal(processes.find(process => process.task === 'test:source')!.packageRoot, packageRoot);
-  assert.equal(yield* fs.exists(resolve(packageRoot, '..')), true);
+  assert.equal(processes.length, 6);
+  assert.equal(processes.filter(process => process.task === 'build').length, 0);
+  for (const process of processes) assert.equal(process.packageRoot, undefined);
   const resourcePath = /# Gate resource report: ([^\n]+)/u.exec(output)?.[1];
   assert.ok(resourcePath, output);
   const resources = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ memoryIsolation: Schema.String, unit: Schema.NullOr(Schema.String), cgroup: Schema.NullOr(Schema.String) })))(yield* fs.readFileString(resourcePath));
@@ -118,11 +119,11 @@ setInterval(() => {}, 1000);
   yield* child.kill({ killSignal: 'SIGTERM', forceKillAfter: Duration.seconds(10) });
   yield* Fiber.join(drain).pipe(Effect.timeout(Duration.seconds(1)), Effect.ignore);
   if (resources.cgroup !== null) assert.equal(yield* fs.exists(resources.cgroup), false, `leaked scope ${resources.unit}`);
-  assert.equal(yield* fs.exists(resolve(packageRoot, '..')), false, `leaked temporary package ${packageRoot}`);
   assert.equal(yield* fs.exists(processes.find(process => process.task === 'test:source')!.fixtureRoot!), false, 'the gate owns and removes its fixture scratch directory');
   for (const { pid, cache } of processes) {
     assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `leaked task PID ${pid}\n${output}`);
-    assert.equal(yield* fs.exists(cache), false, `leaked compile cache ${cache}`);
+    assert.equal(cache, join(root, 'shared-cache/concord/node-compile'));
+    assert.equal(yield* fs.exists(cache), true, `shared compile cache removed ${cache}`);
   }
 }));
 
@@ -218,7 +219,7 @@ runnerTest('Node and browser failures leave the other suite running and retain o
   const browserArgs = join(root, 'browser-args.json'), nodeDone = join(root, 'node-done');
   yield* fs.writeFileString(browser, 'export {};\n');
   const fakePnpm = join(root, 'pnpm.ts');
-  yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env -S node --import ${import.meta.resolve('tsx')}\nimport { writeFileSync } from 'node:fs';\nsetTimeout(() => { writeFileSync(${JSON.stringify(browserArgs)}, JSON.stringify(process.argv.slice(2))); console.log('BROWSER_EXECUTED'); process.exitCode = Number(process.env.BROWSER_EXIT); }, 150);\n`);
+  yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env node\nimport { writeFileSync } from 'node:fs';\nsetTimeout(() => { writeFileSync(${JSON.stringify(browserArgs)}, JSON.stringify(process.argv.slice(2))); console.log('BROWSER_EXECUTED'); process.exitCode = Number(process.env.BROWSER_EXIT); }, 150);\n`);
   yield* fs.chmod(fakePnpm, 0o755);
   yield* fs.symlink(fakePnpm, join(root, 'pnpm'));
   const env = { PATH: `${root}:${process.env.PATH}`, CONCORD_E2E_WORKERS: '2', CONCORD_TEST_PACKAGE_ROOT: root };
@@ -241,7 +242,7 @@ runnerTest('cancelling the source runner reaps test processes and descendants th
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const file = join(root, 'cancel.test.ts'), pids = join(root, 'pids.json');
   yield* fs.writeFileString(file, `import { spawn } from 'node:child_process';\nimport { writeFileSync } from 'node:fs';\nimport test from 'node:test';\nprocess.on('SIGTERM', () => {});\nconst child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{}); process.stdout.write("READY"); setInterval(()=>{},1000)'], {stdio:['ignore','pipe','ignore']});\nchild.stdout.once('data', () => { writeFileSync(${JSON.stringify(pids)}, JSON.stringify([process.ppid, process.pid, child.pid])); console.log('FIXTURE_READY'); });\ntest('hang until cancelled', () => new Promise(()=>{setInterval(()=>{},1000)}));\n`);
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', 'tsx', 'scripts/test-built.ts', '--suite=node', file], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['scripts/test-built.ts', '--suite=node', file], {
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
     env: { ...process.env, CONCORD_TEST_COMPILE_CACHE: undefined, CONCORD_TEST_TIMINGS: undefined },
   }));

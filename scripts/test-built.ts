@@ -2,50 +2,20 @@
 // @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { Deferred, Duration, Effect, FileSystem, Schema } from 'effect';
-import { dirname, join, resolve } from 'node:path';
-import { existsSync, readFileSync, watch } from 'node:fs';
+import { Duration, Effect, FileSystem, Schema } from 'effect';
+import { join, resolve } from 'node:path';
 import { availableParallelism, loadavg } from 'node:os';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { initializeNodeCompileCache } from '../src/base/installation/startup/index.ts';
 import { runNodeTests } from './test-reporter.ts';
 import { currentGateMemoryMax, gateConcurrency } from './gate-resources.ts';
-import { auditTestLayers, classifyTestLayer, summarizeTestLayers } from './test-layers.ts';
+import { auditTestLayers, summarizeTestLayers } from './test-layers.ts';
 
 const Concurrency = Schema.NumberFromString.pipe(Schema.check(Schema.isInt(), Schema.isGreaterThan(0)));
 class TestArgumentsInvalid extends Schema.TaggedError<TestArgumentsInvalid>()('TestArgumentsInvalid', {
   detail: Schema.String,
 }) {}
-class TestPackageBuildFailed extends Schema.TaggedError<TestPackageBuildFailed>()('TestPackageBuildFailed', { detail: Schema.String }) {}
-const BuildStatus = Schema.fromJsonString(Schema.Struct({ code: Schema.Int }));
-
-// Watch the round's completion receipt, rather than guessing how long a build takes.
-const awaitPackage = Effect.fn('test.awaitPackage')(function*() {
-  const root = process.env.CONCORD_TEST_PACKAGE_ROOT;
-  if (root === undefined) return yield* new TestPackageBuildFailed({ detail: 'Installed tests require CONCORD_TEST_PACKAGE_ROOT from pnpm gate.' });
-  const status = process.env.CONCORD_TEST_PACKAGE_BUILD_STATUS;
-  if (status !== undefined) {
-    const code = yield* Effect.callback<number, TestPackageBuildFailed>(resume => {
-      const check = () => {
-        try {
-          if (existsSync(status)) {
-            const code = Schema.decodeUnknownSync(BuildStatus, { onExcessProperty: 'error' })(readFileSync(status, 'utf8')).code;
-            watcher.close();
-            resume(Effect.succeed(code));
-          }
-        } catch (cause) { watcher.close(); resume(Effect.fail(new TestPackageBuildFailed({ detail: String(cause) }))); }
-      };
-      const watcher = watch(dirname(status), check);
-      watcher.on('error', cause => { watcher.close(); resume(Effect.fail(new TestPackageBuildFailed({ detail: String(cause) }))); });
-      check();
-      return Effect.sync(() => watcher.close());
-    });
-    if (code !== 0) return yield* new TestPackageBuildFailed({ detail: `The gate package build exited ${code}; installed suites cannot start.` });
-  }
-  const fs = yield* FileSystem.FileSystem;
-  if (!(yield* fs.exists(join(root, 'package.json')))) return yield* new TestPackageBuildFailed({ detail: `Package missing at ${root}` });
-});
-
 const main = Effect.scoped(Effect.gen(function* () {
   // Only the gate's immediate test task owns this destination; nested runners don't.
   const gateOutput = process.env.CONCORD_GATE_TEST_OUTPUT;
@@ -97,7 +67,7 @@ const main = Effect.scoped(Effect.gen(function* () {
       isolation: 'process', concurrency, shard,
       testNamePatterns: values['test-name-pattern'],
       timeout: Duration.toMillis(Duration.minutes(5)),
-      execArgv: ['--conditions=concord-source', '--import', import.meta.resolve('tsx'), '--import', new URL('../test/support/source-runtime.ts', import.meta.url).href],
+      execArgv: ['--conditions=concord-source', '--import', new URL('../test/support/source-runtime.ts', import.meta.url).href],
     }, output);
     yield* Effect.sync(() => { process.exitCode = failed ? 1 : 0; });
     return;
@@ -109,12 +79,10 @@ const main = Effect.scoped(Effect.gen(function* () {
   const started = performance.now();
   yield* fs.makeDirectory('.test-results', { recursive: true });
   const output = resolve(gateOutput ?? (yield* fs.makeTempDirectory({ directory: '.test-results', prefix: 'run-' })));
-  // Compiled modules may be reused within this gate, never test verdicts.
-  const compileCache = process.env.CONCORD_TEST_COMPILE_CACHE ?? join(output, 'node-compile-cache');
-  if (process.env.CONCORD_TEST_COMPILE_CACHE === undefined) yield* Effect.addFinalizer(() => fs.remove(compileCache, { recursive: true, force: true }).pipe(Effect.orDie));
+  const compileCache = yield* Effect.sync(initializeNodeCompileCache);
   const env: NodeJS.ProcessEnv = { ...process.env,
-    // Load test TypeScript through execArgv. Product children inherit no source loader.
-    NODE_OPTIONS: process.env.NODE_OPTIONS ?? '',
+    // Public source exports are inherited by product and adapter children.
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --conditions=concord-source`.trim(),
     NODE_COMPILE_CACHE: compileCache, CONCORD_TEST_COMPILE_CACHE: compileCache,
     // A nested runner is a new parent, not an official isolated test child.
     NODE_TEST_CONTEXT: undefined,
@@ -140,18 +108,13 @@ const main = Effect.scoped(Effect.gen(function* () {
     yield* Effect.sync(() => console.error(`# ${name} tests: ${((performance.now() - suiteStarted) / 1000).toFixed(3)}s; exit=${code}`));
     return Number(code) !== 0;
   }, Effect.catch(cause => Effect.sync(() => { console.error(`# Test suite failed: ${String(cause)}`); return true; })));
-  const sourceFiles = nodeFiles.filter(file => !['cli', 'process'].includes(classifyTestLayer(file) ?? 'model'));
-  const installedFiles = nodeFiles.filter(file => !sourceFiles.includes(file));
-  const split = !browserOnly && sourceFiles.length > 0 && installedFiles.length > 0;
   const runnerFlags = [
     ...(values['test-name-pattern'] === undefined ? [] : [`--test-name-pattern=${values['test-name-pattern']}`]),
     ...(values['test-shard'] === undefined ? [] : [`--test-shard=${values['test-shard']}`]),
   ];
-  const nodeSuite = (name: string, group: readonly string[], installed: boolean) => !browserOnly && group.length > 0
-    ? suite(name, process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(import.meta.url), '--node-worker', '--suite=node', ...runnerFlags, ...group], {
-      ...env, CONCORD_NODE_OUTPUT: split ? join(output, installed ? 'node-installed' : 'node-source') : output,
-      CONCORD_TEST_PACKAGE_ROOT: installed ? env.CONCORD_TEST_PACKAGE_ROOT : undefined,
-      CONCORD_TEST_PACKAGE_BUILD_STATUS: undefined,
+  const nodeTests = !browserOnly && nodeFiles.length > 0
+    ? suite('Source Node', process.execPath, [fileURLToPath(import.meta.url), '--node-worker', '--suite=node', ...runnerFlags, ...nodeFiles], {
+      ...env, CONCORD_NODE_OUTPUT: output, CONCORD_TEST_PACKAGE_ROOT: undefined, CONCORD_TEST_PACKAGE_BUILD_STATUS: undefined,
     }) : Effect.succeed(false);
   const browserTests = values.suite !== 'node' && browserFiles.length > 0
     ? suite('Browser', 'pnpm', ['exec', 'e2e', 'run', '--config', values.suite === 'agent' ? 'e2e.agent.config.ts' : 'e2e.config.ts', '--no-cache', '--workers', String(browserConcurrency),
@@ -159,27 +122,8 @@ const main = Effect.scoped(Effect.gen(function* () {
       ...(values['test-name-pattern'] === undefined ? [] : ['--grep', values['test-name-pattern']]),
       ...(values['test-shard'] === undefined ? [] : ['--shard', values['test-shard']]), ...browserFiles])
     : Effect.succeed(false);
-  const sourceDone = yield* Deferred.make<void>();
-  const sourceTests = nodeSuite('Source Node', sourceFiles, false).pipe(Effect.ensuring(Deferred.succeed(sourceDone, undefined)));
-  const installedTests = Effect.gen(function*() {
-    if ((!browserOnly && installedFiles.length > 0) || (values.suite !== 'node' && browserFiles.length > 0)) yield* awaitPackage();
-    // Each official runner owns the complete Node file budget. Browser workers
-    // may overlap either group, but two Node runners must never multiply it.
-    const installedNode = Deferred.await(sourceDone).pipe(Effect.andThen(nodeSuite('Installed Node', installedFiles, true)));
-    return (yield* Effect.all([installedNode, browserTests], { concurrency: 'unbounded' })).some(Boolean);
-  }).pipe(Effect.catch(cause => Effect.sync(() => { console.error(String(cause)); return true; })));
-  const failures = yield* Effect.all([sourceTests, installedTests], { concurrency: 'unbounded' });
-  if (split) {
-    const Timing = Schema.Struct({ file: Schema.String, duration_ms: Schema.Number, success: Schema.Boolean, cases: Schema.optional(Schema.Number) });
-    const timings = [];
-    for (const group of ['node-source', 'node-installed']) {
-      const path = join(output, group, 'file-timings.json');
-      if (yield* fs.exists(path)) timings.push(...yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Timing)))(yield* fs.readFileString(path)));
-    }
-    yield* fs.writeFileString(join(output, 'file-timings.json'), `${JSON.stringify(timings.sort((left, right) => right.duration_ms - left.duration_ms), null, 2)}\n`);
-  } else if (browserOnly || nodeFiles.length === 0) {
-    yield* fs.writeFileString(join(output, 'file-timings.json'), '[]\n');
-  }
+  const failures = yield* Effect.all([nodeTests, browserTests], { concurrency: 'unbounded' });
+  if (browserOnly || nodeFiles.length === 0) yield* fs.writeFileString(join(output, 'file-timings.json'), '[]\n');
   const Timing = Schema.Struct({ file: Schema.String, duration_ms: Schema.Number, success: Schema.Boolean, cases: Schema.optional(Schema.Number) });
   const timings = [];
   for (const path of [join(output, 'file-timings.json'), join(output, 'e2e', 'file-timings.json')]) {

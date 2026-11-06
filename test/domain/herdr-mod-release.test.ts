@@ -46,7 +46,7 @@ test('Herdr mirror maps an installed package to the catalog directory without re
   yield* prepareHerdrModMirror(input, output, 'concord-v1.2.3');
   assert.equal(yield* fs.exists(join(catalog, 'mods/concord/stale.js')), false);
   const cliOutput = yield* spawner.string(ChildProcess.make(process.execPath, [
-    '--import', import.meta.resolve('tsx'), resolve('scripts/herdr-mod-release.ts'), input, join(root, 'cli-mirror'), 'v1.2.3',
+    resolve('scripts/herdr-mod-release.ts'), input, join(root, 'cli-mirror'), 'v1.2.3',
   ]));
   assert.match(cliOutput, /Prepared Concord Herdr mod 1\.2\.3/u);
   assert.deepEqual(yield* fs.readFile(join(root, 'cli-mirror/concord/preview.png')), yield* fs.readFile(join(assets, 'preview.png')));

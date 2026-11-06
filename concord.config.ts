@@ -16,8 +16,6 @@ export default {
     ],
     "argv": [
       "node",
-      "--import",
-      "tsx",
       "scripts/test-built.ts",
       "--test-name-pattern",
       "{pattern}",
@@ -43,6 +41,7 @@ export default {
       "scripts/test-built.ts",
       "scripts/test-reporter.ts",
       "tsconfig.test.json",
+      ".node-version",
       "package.json",
       "pnpm-lock.yaml"
     ],

@@ -1,6 +1,17 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { StartupData } from "../../../model/index.ts";
+import { enableCompileCache } from 'node:module';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
+/** Cache compiled files across source commands, workers and gate invocations. */
+export function initializeNodeCompileCache(): string {
+  const directory = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'node-compile');
+  process.env.NODE_COMPILE_CACHE = directory;
+  enableCompileCache(directory);
+  return directory;
+}
 
 const source = import.meta.url.endsWith('.ts');
 const installation = new URL('../../../../', import.meta.url);

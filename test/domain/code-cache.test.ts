@@ -147,7 +147,7 @@ test('a warm code and config cache hit does not load the TypeScript compiler', (
     } finally { db.close(); }
     const script = `
       import { createRequire } from 'node:module';
-      import { LocalRepository } from ${JSON.stringify(fileURLToPath(new URL('../support/repository.js', import.meta.url)))};
+      import { LocalRepository } from ${JSON.stringify(fileURLToPath(new URL('../support/repository.ts', import.meta.url)))};
       import { scanCode } from ${JSON.stringify(fileURLToPath(new URL('../../src/domain/code/index.ts', import.meta.url)))};
       const repo = new LocalRepository(${JSON.stringify(root)});
       try {
@@ -157,7 +157,7 @@ test('a warm code and config cache hit does not load the TypeScript compiler', (
       const loaded = Object.keys(createRequire(import.meta.url).cache).some(key => key.replaceAll('\\\\', '/').endsWith('/typescript/dist/api/sync/api.js'));
       if (loaded) process.exit(3);
     `;
-    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], { encoding: 'utf8', timeout: 30_000 });
+    const child = spawnSync(process.execPath, [ '--input-type=module', '-e', script], { encoding: 'utf8', timeout: 30_000 });
     assert.equal(child.status, 0, `${child.stdout}\n${child.stderr}`);
     assert.equal(createRequire(import.meta.url).resolve('typescript/package.json').endsWith('package.json'), true);
   } finally { rmSync(root, { recursive: true, force: true }); }
