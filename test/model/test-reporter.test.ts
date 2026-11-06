@@ -69,13 +69,13 @@ test('installed waits for the build', () => {
 runnerTest('cancelling gate reaps static task groups that ignore SIGTERM and releases its cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.String, cgroup: Schema.String, packageRoot: Schema.optional(Schema.String), task: Schema.String }));
+  const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.String, cgroup: Schema.String, packageRoot: Schema.optional(Schema.String), fixtureRoot: Schema.optional(Schema.String), task: Schema.String }));
   const fakePnpm = join(root, 'pnpm.ts');
   yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env -S node --import ${import.meta.resolve('tsx')}
 import { writeFileSync, readFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
 const task = process.argv[4] === 'build' ? 'build' : process.argv[5];
-writeFileSync(${JSON.stringify(root)} + '/' + task + '.json', JSON.stringify({task, pid: process.pid, cache: process.env.CONCORD_TEST_COMPILE_CACHE, packageRoot: process.env.CONCORD_TEST_PACKAGE_ROOT, cgroup: process.platform === 'linux' ? readFileSync('/proc/self/cgroup', 'utf8') : ''}));
+writeFileSync(${JSON.stringify(root)} + '/' + task + '.json', JSON.stringify({task, pid: process.pid, cache: process.env.CONCORD_TEST_COMPILE_CACHE, packageRoot: process.env.CONCORD_TEST_PACKAGE_ROOT, fixtureRoot: process.env.TMPDIR, cgroup: process.platform === 'linux' ? readFileSync('/proc/self/cgroup', 'utf8') : ''}));
 console.log('TASK_READY');
 setInterval(() => {}, 1000);
 `);
@@ -119,6 +119,7 @@ setInterval(() => {}, 1000);
   yield* Fiber.join(drain).pipe(Effect.timeout(Duration.seconds(1)), Effect.ignore);
   if (resources.cgroup !== null) assert.equal(yield* fs.exists(resources.cgroup), false, `leaked scope ${resources.unit}`);
   assert.equal(yield* fs.exists(resolve(packageRoot, '..')), false, `leaked temporary package ${packageRoot}`);
+  assert.equal(yield* fs.exists(processes.find(process => process.task === 'test:source')!.fixtureRoot!), false, 'the gate owns and removes its fixture scratch directory');
   for (const { pid, cache } of processes) {
     assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `leaked task PID ${pid}\n${output}`);
     assert.equal(yield* fs.exists(cache), false, `leaked compile cache ${cache}`);
