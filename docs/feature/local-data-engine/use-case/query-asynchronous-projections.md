@@ -1,61 +1,174 @@
 # 读取异步刷新的诊断投影
 
-用户执行 trace show、trace gaps 或 review 时，CLI 立即读取最近完成的诊断投影，并请求后台刷新。首次无缓存返回 QueryPending，退出码为 1；该状态不表示没有问题。--fresh 使用当前来源并等待扫描结果，--dry-run 不启动后台刷新。
+## 用户目标
 
-JSON 的 `projection` 对象如下（预期输出，时间为示例）：
+维护者或 agent 在持续编辑时运行 `trace gaps`、`trace show` 或 `review`，想立即拿到诊断结果，并清楚这份结果构建于何时、是否完整；需要当前结果时再等待扫描。
 
-```json
-{
-  "projection": {
-    "current": false,
-    "builtAt": "2026-10-06T03:12:40.311Z",
-    "builtFrom": "2026-10-06T03:11:02.904Z",
-    "builtUntil": "2026-10-06T03:12:40.118Z",
-    "consistent": false,
-    "complete": false,
-    "changedPaths": ["docs/feature/npc/README.md"],
-    "unknownRelations": true,
-    "unknown": [],
-    "refresh": "requested",
-    "lastAttempt": { "scannedAt": 1791256801000, "at": "2026-10-06T03:20:01.000Z", "complete": false, "changedPaths": ["docs/feature/npc/README.md"] },
-    "bodyChanged": []
-  }
-}
-```
+## 起始状态
 
-`current` 恒为 false。`builtFrom` 与 `builtUntil` 是扫描区间，`builtAt` 是发布时间。`consistent` 只回答构建期间观察到的来源是否保持不变；不一致时 `complete` 为 false、`unknownRelations` 为 true，`changedPaths` 列出变化路径，`.` 表示范围未知。代码来源无法稳定读取时 `unknown` 为 `["code"]`。
+- 项目已初始化，含一个 Feature `docs/feature/cart/README.md`，还没有任何诊断投影。
+- 诊断投影是后台构建的历史结果，只回答构建时的诊断问题，不承诺当前文件有效。`check`、`trace check`、Memory 与 Issue 检索、作者读取和证据裁决总是使用当前来源。
 
-最近一次刷新失败时附 `lastError`（含 `code`、`message`、`scannedAt`，超时另含 `elapsedMs` 与 `limitMs`）。`lastError.code` 是开放集合，以 `lastError` 是否存在判断最近一次刷新是否失败。
+## 完整路径
 
-已知码有 `QueryRefreshTimedOut`、`QueryRefreshOutputLimit`、`QueryRefreshFailed`、`QueryRefreshCleanupUnconfirmed`，扫描的具名失败保留原码，例如 `TraceInvalid`、`InvalidConfig`。无投影时 QueryPending 的 `details.refresh` 为同一失败对象，尚无失败时为 `"requested"`。历史结果只回答构建时的诊断问题，不承诺当前文件有效。
+1. 第一次运行。 {#first-run}
 
-consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap 不表示没有缺口；unknown 非空时对应关系类别整体未知。消费者须检查 `projection.consistent` 后再使用列表。已有一致投影不被不一致结果替换，此后的不一致尝试只记录在 `lastAttempt`。check、trace check、Memory/Issue 检索、作者读取和证据裁决使用当前来源。
+   ```sh
+   concord trace gaps
+   ```
 
-人类输出展示历史快照、一致性与刷新状态。`consistent: false` 时于结果前打印 `历史投影，构建期间来源变化（N 个路径），关系可能不完整；使用 --fresh 获取当前结果。`；已有一致投影且 `lastAttempt.complete` 为 false 时打印 `一致结果构建于 <builtAt>，此后的刷新在编辑中未能取得一致结果（最近 <lastAttempt.at>）。`
+   ```text
+   ok: false
+   error: QueryPending
+   message: No readable diagnostic snapshot; background refresh requested. Use --fresh to wait for current sources.
+   details:
+     refresh: requested
+   ```
 
-投影不复用于不同的 worktree、命令参数、配置字节或安装；扫描期间这些身份变化时丢弃结果并按新身份刷新，不记为失败。恢复待处理、配置无效、路径安全失败和无法形成结构的扫描不发布投影。缓存严格解码失败报告 `QueryCacheInvalid`，数据库占用时报告暂不可用；两者都不在查询进程执行全量扫描。前台缓存读取暂不可用时最多重试 500ms，每次重新执行完整路径和 Schema 核验，仍不可读则具名报告；该等待不取得发布租约，也不执行来源扫描。
+   命令退出 1。`QueryPending` 只表示还没有投影，不表示没有问题。CLI 已请求后台刷新；终端退出后刷新进程继续完成，不持有文档发布租约。
 
-后台刷新合并同键请求，只合并开始于请求之后的扫描；等待同键刷新与来源扫描共用[刷新上限](../performance.md#刷新上限)，超时不声明刷新成功。成功以事务替换完整结果，失败保留上一代，数据库可写时记录具名错误。进程在终端退出后可继续完成刷新，不持有文档发布租约。发布阶段的数据库占用最多重试三秒，进程终止后的清理以清理宽限为界，二者不计入刷新上限。扫描消息输出上限为 4MiB。
+2. 刷新完成后再运行。 {#historical}
 
-投影不保存 owner 正文与远端 Issue 正文。trace show 与 review 在服务时读取当前正文（单文件上限 32MiB）。摘要与投影记录一致时，输出排除 `projection` 与 `cache` 后与同源 `--fresh --dry-run` 逐字节相同。摘要变化时省略该正文并在 `projection.bodyChanged` 列出路径，读取失败时列入 `projection.bodyUnavailable` 并附错误码。review 中变化的品味片段输出 `(taste changed since projection; use --fresh)`。
+   ```sh
+   concord trace gaps
+   ```
 
-缓存清理只删除可丢弃投影。没有原生产物或数据库不可用时，--fresh 仍可通过现有回源能力执行诊断。
+   ```text
+   Diagnostic snapshot: 2026-11-06T07:14:48.049Z (historical; refresh requested)
+   trace gaps
+   semantics: missing-explicit-relationships-not-coverage
+   …
+   contracts:
+     docs/feature/cart/README.md — cart (feature)
+   ```
 
-快照内条目被按大小写改名时，当前来源查询在快照结束时报 FileChangedSinceRead，历史投影把该条目列入变化路径；非普通文件在初次读取或扫描时报 InvalidFile，核验阶段报 UnsafePath；symlink 与越界在任何阶段都报 UnsafePath（[路径安全](../../local-sdlc/architecture.md#路径安全)）。
+   命令立即读取最近完成的投影，同时请求下一次后台刷新。人读输出先展示这是哪一时刻的历史快照、是否一致以及刷新状态。
 
-## 验收
+3. 读取 JSON 中的 `projection`。 {#json}
 
-采用打包后安装到隔离 Git 仓库的 CLI：
+   ```sh
+   concord trace gaps --json
+   ```
 
-- 首次构建返回 QueryPending，退出后刷新完成；历史命中、刷新失败保留结果、--fresh、check 使用当前来源、并发文档写入不被扫描阻塞、进程超时和缓存清理。
-- 冷缓存仓库中，后台写者在整个刷新扫描期间每隔几毫秒改写一个已观察的 docs、测试或代码文件：`trace gaps --json` 退出码 0，`consistent` 为 false，`changedPaths` 含该文件，`unknownRelations` 为 true。代码文件情形 `unknown` 为 `["code"]`，人类输出带不完整提示。
+   ```json
+   {
+     "projection": {
+       "current": false,
+       "builtAt": "2026-11-06T07:14:50.668Z",
+       "scannedAt": 1793949290571,
+       "builtFrom": "2026-11-06T07:14:50.571Z",
+       "builtUntil": "2026-11-06T07:14:50.620Z",
+       "consistent": true,
+       "complete": true,
+       "changedPaths": [],
+       "unknownRelations": false,
+       "unknown": [],
+       "refresh": "requested",
+       "lastAttempt": { "scannedAt": 1793949290571, "at": "2026-11-06T07:14:50.620Z", "complete": true, "changedPaths": [] },
+       "bodyChanged": []
+     }
+   }
+   ```
+
+   `current` 恒为 false。`builtFrom` 与 `builtUntil` 是扫描区间，`builtAt` 是发布时间。`consistent` 只回答构建期间观察到的来源是否保持不变。
+
+4. 在编辑过程中读取。 {#drift}
+
+   后台扫描期间文件被改写时，投影仍会发布，但标为不一致（预期输出，时间为示例）：
+
+   ```json
+   {
+     "projection": {
+       "current": false,
+       "builtAt": "2026-10-06T03:12:40.311Z",
+       "builtFrom": "2026-10-06T03:11:02.904Z",
+       "builtUntil": "2026-10-06T03:12:40.118Z",
+       "consistent": false,
+       "complete": false,
+       "changedPaths": ["docs/feature/npc/README.md"],
+       "unknownRelations": true,
+       "unknown": [],
+       "refresh": "requested",
+       "lastAttempt": { "scannedAt": 1791256801000, "at": "2026-10-06T03:20:01.000Z", "complete": false, "changedPaths": ["docs/feature/npc/README.md"] },
+       "bodyChanged": []
+     }
+   }
+   ```
+
+   不一致时 `complete` 为 false、`unknownRelations` 为 true，`changedPaths` 列出变化的路径，`.` 表示范围未知。代码来源无法稳定读取时 `unknown` 为 `["code"]`，表示这类关系整体未知。
+
+   命令仍退出 0，但 gap 列表可能偏大，零 gap 也不表示没有缺口。消费者先检查 `projection.consistent`，再使用列表。人读输出在结果前打印：
+
+   ```text
+   历史投影，构建期间来源变化（N 个路径），关系可能不完整；使用 --fresh 获取当前结果。
+   ```
+
+   已有一致投影时，它不被不一致的结果替换；此后的不一致尝试只记录在 `lastAttempt`。`lastAttempt.complete` 为 false 时，人读输出打印：
+
+   ```text
+   一致结果构建于 <builtAt>，此后的刷新在编辑中未能取得一致结果（最近 <lastAttempt.at>）。
+   ```
+
+5. 需要当前结果时加 `--fresh`。 {#fresh}
+
+   ```sh
+   concord trace gaps --fresh
+   ```
+
+   ```text
+   trace gaps
+   semantics: missing-explicit-relationships-not-coverage
+   …
+   contracts:
+     docs/feature/cart/README.md — cart (feature)
+   ```
+
+   `--fresh` 使用当前来源并等待扫描结果。`--dry-run` 不启动后台刷新。没有原生产物或数据库不可用时，`--fresh` 仍通过回源执行诊断。
+
+6. 刷新失败时查看原因。 {#refresh-error}
+
+   最近一次刷新失败时，`projection` 附 `lastError`，含 `code`、`message` 与 `scannedAt`；超时另含 `elapsedMs` 与 `limitMs`。以 `lastError` 是否存在判断最近一次刷新是否失败。
+
+   `lastError.code` 是开放集合。已知码有 `QueryRefreshTimedOut`、`QueryRefreshOutputLimit`、`QueryRefreshFailed`、`QueryRefreshCleanupUnconfirmed`；扫描的具名失败保留原码，例如 `TraceInvalid`、`InvalidConfig`。
+
+   还没有投影时，`QueryPending` 的 `details.refresh` 是同一个失败对象；尚无失败时为 `"requested"`。
+
+## 结果
+
+| 情形 | 看到什么 |
+| --- | --- |
+| 刷新成功 | 以事务替换完整结果 |
+| 刷新失败 | 保留上一代投影；数据库可写时记录具名错误 |
+| 等待同键刷新与扫描合计超过[刷新上限](../performance.md#刷新上限) | 刷新终止，`lastError.code` 为 `QueryRefreshTimedOut`，不声明刷新成功 |
+| 同一查询的多个刷新请求 | 合并，只合并开始于请求之后的扫描 |
+| 发布阶段数据库被占用 | 最多重试三秒；进程终止后的清理以清理宽限为界，二者不计入刷新上限 |
+| 扫描消息超过 4MiB | 刷新失败，`lastError.code` 为 `QueryRefreshOutputLimit` |
+| 换了 worktree、命令参数、配置字节或安装 | 不复用投影；扫描期间这些身份变化时丢弃结果，按新身份刷新，不记为失败 |
+| 恢复待处理、配置无效、路径安全失败，或扫描无法形成结构 | 不发布投影 |
+| 缓存严格解码失败 | 报告 `QueryCacheInvalid`，查询进程不执行全量扫描 |
+| 数据库被占用 | 报告暂不可用，查询进程不执行全量扫描 |
+| 前台缓存读取暂不可用 | 最多重试 500ms，每次重新核验完整路径与 Schema；仍不可读则具名报告。等待不取得发布租约，也不扫描来源 |
+| 投影建成后 owner 正文摘要未变 | `trace show` 与 `review` 读取当前正文（单文件上限 32MiB）；排除 `projection` 与 `cache` 后，输出与同源 `--fresh --dry-run` 逐字节相同 |
+| 投影建成后 owner 正文摘要变化 | 省略该正文，路径列入 `projection.bodyChanged` |
+| 读取 owner 正文失败 | 路径列入 `projection.bodyUnavailable`，附错误码 |
+| `review` 中的品味片段在投影后变化 | 输出 `(taste changed since projection; use --fresh)` |
+| `cache clear` | 只删除可丢弃的投影；投影不保存 owner 正文与远端 Issue 正文 |
+| 快照内条目按大小写改名 | 当前来源查询在快照结束时报 `FileChangedSinceRead`，历史投影把该条目列入变化路径 |
+| 非普通文件 | 初次读取或扫描时报 `InvalidFile`，核验阶段报 `UnsafePath` |
+| symlink 或越界路径 | 任何阶段都报 `UnsafePath`（[路径安全](../../local-sdlc/architecture.md#路径安全)） |
+
+刷新、漂移分拣与替换规则的实现见[诊断投影](../architecture.md#诊断投影)，读取预算见[性能预算](../performance.md)。
+
+### 验收方式
+
+验收使用打包后安装到隔离 Git 仓库的 CLI，覆盖：
+
+- 首次构建返回 `QueryPending`，退出后刷新完成；历史命中、刷新失败保留结果、`--fresh`、`check` 使用当前来源、并发文档写入不被扫描阻塞、进程超时和缓存清理。
+- 冷缓存仓库中，后台写者在整个刷新扫描期间每隔几毫秒改写一个已观察的 docs、测试或代码文件：`trace gaps --json` 退出 0，`consistent` 为 false，`changedPaths` 含该文件，`unknownRelations` 为 true。
+- 上一条的代码文件情形 `unknown` 为 `["code"]`，人读输出带不完整提示。
 - 已有一致投影时下一次刷新被编辑：继续服务原投影，`lastAttempt` 记录时间、不完整与变化路径，不写 `lastError`。
-- 扫描超过刷新上限：`lastError.code` 为 `QueryRefreshTimedOut` 并含 `elapsedMs` 与 `limitMs`；无投影时 QueryPending 的 `details.refresh` 给出同一错误。测试以短上限参数直接调用内部刷新入口，不新增用户可触发的环境变量。
+- 扫描超过刷新上限：`lastError.code` 为 `QueryRefreshTimedOut` 并含 `elapsedMs` 与 `limitMs`；无投影时 `QueryPending` 的 `details.refresh` 给出同一错误。测试以短上限参数直接调用内部刷新入口，不新增用户可触发的环境变量。
 - 扫描以具名错误失败（例如 `InvalidConfig`）或存在非漂移 finding：保留原错误码，非漂移 finding 记为 `TraceInvalid`；`RecoveryRequired` 不发布投影。
 - 扫描期间改写 `concord.config.ts`：候选丢弃，不发布、不记为失败，按新身份重新刷新。
 - 同一 worktree 的工作区投影与 trace gaps 投影在同一编辑下构建：`consistent`、`complete`、`changedPaths`、`unknownRelations`、`lastAttempt` 与替换结果一致，`builtAt` 不参与比较。
 - 投影建成后修改 owner 正文：持久 payload 不含 owner 正文与远端正文字节；摘要未变时输出与同源 `--fresh --dry-run` 相同，摘要变化时出现在 `bodyChanged`。
-
-## 性能
-
-高频操作的性能预算见[统一的本地缓存与检索引擎的性能预算](../performance.md)。
