@@ -1,10 +1,11 @@
+import { createConsumer } from '../support/consumer.ts';
 import { initialize } from '../support/operations.ts';
 import { sourceCli } from '../support/source-consumer.ts';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -12,17 +13,15 @@ import { setConfig, showConfig } from "../../src/app/index.ts";
 import { LocalRepository } from "../support/repository.ts";
 
 
-// @use-case docs/feature/feedback/use-case/triage-feedback.md
+// @feature docs/feature/feedback/cli.md
 test('packed public CLI adds gh connection, checks scope, and executes shared feedback action offline', { skip: process.platform === 'win32' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-gh-packed-'));
   try {
 
     const entry = sourceCli();
     const consumer = join(scratch, 'consumer');
-    mkdirSync(consumer);
-    execFileSync('git', ['init', '-q', consumer]);
-    const initial = new LocalRepository(consumer, { initialize: true });
-    try { initialize(initial); } finally { initial.close(); }
+    const template = createConsumer();
+    try { cpSync(template, consumer, { recursive: true }); } finally { rmSync(template, { recursive: true, force: true }); }
     const fakeBin = join(scratch, 'bin');
     mkdirSync(fakeBin);
     writeFileSync(join(fakeBin, 'gh'), `#!${process.execPath}\nconst args=process.argv.slice(2);if(args[0]==='--version'){console.log('gh version 2.98.0 (fixture)');return;}if(args[1]==='--help'){console.log('--hostname --method --include');return;}const endpoint=args.at(-1);const value=endpoint==='repos/acme/widgets'?{id:42,full_name:'acme/widgets'}:[];process.stdout.write('HTTP/2 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n'+JSON.stringify(value));`, { mode: 0o755 });

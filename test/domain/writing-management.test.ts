@@ -1,3 +1,5 @@
+import { createConsumer } from '../support/consumer.ts';
+import { writeProjectConfig } from '../support/support.ts';
 import { writeWritingFile } from '../support/writing-files.ts';
 import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
@@ -12,14 +14,12 @@ import { showWriting, checkWriting } from '../../src/domain/writing/index.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('ordinary Markdown saves create, repair and compare writing file preimages', () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-writing-management-'));
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: [] });
   const path = 'docs/writing.md';
   const policy = { bannedTerms: [{ term: 'Resolve', use: '修复', why: '统一写法' }] };
   const withRepo = <T>(run: (repo: LocalRepository) => T) => { const repo = new LocalRepository(root); try { return run(repo); } finally { repo.close(); } };
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
     rmSync(join(root, path));
     assert.equal(withRepo(showWriting).state, 'missing');
     withRepo(repo => writeWritingFile(repo, policy, null, true));

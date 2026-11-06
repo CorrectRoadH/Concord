@@ -1,10 +1,10 @@
+import { writeProjectConfig } from '../support/support.ts';
+import { createConsumer } from '../support/consumer.ts';
 import { recoverLocalState } from '../../src/app/index.ts';
-import { createDocument, initialize } from '../support/operations.ts';
+import { createDocument } from '../support/operations.ts';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
@@ -20,22 +20,18 @@ import { buildTrace } from "../../src/domain/trace/index.ts";
 import { renderReview, traceGaps, traceShow } from "../../src/app/index.ts";
 import { clearCache, parseTestDeclarations } from "../../src/domain/tests/index.ts";
 import { digest } from "../../src/model/index.ts";
-import { genericPrivateDirectorySync } from "../../src/base/publication/index.ts";
 import { checkWriting } from "../../src/domain/writing/index.ts";
-import { runCase } from "../../src/domain/tests/index.ts";
-import { OwnedProcess, type OwnedProcessResult } from "../../src/base/process/index.ts";
 
 const path = 'docs/feature/sample/use-case/flow.md';
 function document(body: string, kind: 'use-case' | 'feature' = 'use-case') {
   return renderDocument(kind === 'use-case' ? { format: 'concord.document/v1', kind, id: 'flow', title: 'Flow', feature: 'docs/feature/sample/README.md' } : { format: 'concord.document/v1', kind, id: 'sample', title: 'Sample' }, body);
 }
 function consumer(run: (repo: LocalRepository, root: string) => void) {
-  const root = mkdtempSync(join(tmpdir(), 'concord-steps-'));
+  const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
   let repo: LocalRepository | undefined;
   try {
-    execFileSync('git', ['init', '-q', root]);
-    repo = new LocalRepository(root, { initialize: true });
-    initialize(repo, false, { sourceRoots: ['src'], testRoots: ['test'] });
+    repo = new LocalRepository(root);
     createDocument(repo, 'feature', { id: 'sample', title: 'Sample', pages: [] });
     createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample' });
     for (const dir of ['src', 'test']) mkdirSync(join(root, dir));
@@ -182,11 +178,10 @@ test('steps rename updates single-page Design Markdown references', () => Effect
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#rename-step
 // @name steps-recovery-authorization
 test('steps C19 recovery rejects a forged postimage even when its digest matches', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-steps-recovery-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
+  const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
+  const repo = new LocalRepository(root);
   try {
-  initialize(repo, false, { sourceRoots: ['src'], testRoots: ['test'] });
   createDocument(repo, 'feature', { id: 'sample', title: 'Sample', pages: [] });
   createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample' });
   for (const dir of ['src', 'test']) mkdirSync(join(root, dir));

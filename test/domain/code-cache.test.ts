@@ -1,9 +1,10 @@
-import { createDocument, initialize } from '../support/operations.ts';
+import { writeProjectConfig } from '../support/support.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { createDocument } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -19,12 +20,12 @@ import { traceGaps } from "../../src/app/index.ts";
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 
 function consumer(existingCache = true): string {
-  const root = mkdtempSync(join(tmpdir(), 'concord-code-cache-'));
-  execFileSync('git', ['init', '-q', root]);
+  const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'] });
   execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
   execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord test']);
-  const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial, false, { sourceRoots: ['src'] }); if (existingCache) PersistentCache.repository(initial).prepareWrite({ create: true }); } finally { initial.close(); }
+  const initial = new LocalRepository(root);
+  try { if (existingCache) PersistentCache.repository(initial).prepareWrite({ create: true }); } finally { initial.close(); }
   return root;
 }
 function write(root: string, path: string, contents: string): void {

@@ -1,25 +1,28 @@
-import { initialize } from '../support/operations.ts';
-import { parseTaste } from "../../src/domain/taste/index.ts";
+import { type OwnedProcessResult } from "../../src/base/process/index.ts";
+import { type Repository } from "../../src/model/index.ts";
+import { type Finding } from "../../src/model/index.ts";
+import { type buildTrace } from "../../src/domain/trace/index.ts";
+import { type QueryUpdate } from "../../src/app/index.ts";
+import { writeProjectConfig } from '../support/support.ts';
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
-import { execFileSync } from 'node:child_process';
 import { scanCode } from "../../src/domain/code/index.ts";
 import { LocalRepository } from "../support/repository.ts";
 
 import { Effect, Schema } from 'effect';
-import { QueryCacheEnvelope, queryRequestSatisfied, replaceQueryEnvelope, type QueryUpdate } from "../../src/app/index.ts";
+import { QueryCacheEnvelope, queryRequestSatisfied, replaceQueryEnvelope } from "../../src/app/index.ts";
 import { classifyQueryRefresh, classifyQueryScan } from "../../src/app/index.ts";
 import { decodeQueryScanMessage } from "../../src/model/index.ts";
 import { hydrateQueryValue } from "../../src/app/index.ts";
 import { TraceShowValue, stripQueryBodies } from "../../src/model/index.ts";
-import { requireValidTrace, type buildTrace } from "../../src/domain/trace/index.ts";
+import { requireValidTrace } from "../../src/domain/trace/index.ts";
 import { siftQueryDrift } from "../../src/app/index.ts";
-import { ConcordError, digest, type Finding, type Repository } from "../../src/model/index.ts";
+import { digest } from "../../src/model/index.ts";
 import { renderDocument } from "../../src/model/index.ts";
-import { type OwnedProcessResult } from "../../src/base/process/index.ts";
 
 const value = { operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } };
 function candidate(at: number, paths: string[] = [], publicationChanged = false): QueryUpdate {
@@ -176,10 +179,8 @@ test('owner and remote bodies are stripped and restored only after safe matching
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('real code scanner distinguishes unstable recompilation from stable deletion of every file', () => Effect.runPromise(Effect.sync(() => {
   for (const unstable of [false, true]) {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-code-unknown-')));
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial, false, { sourceRoots: ['src'], testRoots: [] }); } finally { initial.close(); }
+    const root = realpathSync(createConsumer());
+    writeProjectConfig(root, { sourceRoots: ['src'], testRoots: [] });
     mkdirSync(join(root, 'src'));
     const path = 'src/sample.ts';
     const source = '// @concord-file\n// @concord-implements docs/feature/sample/README.md\nexport const old = 1;\n';

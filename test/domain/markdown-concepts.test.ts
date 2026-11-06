@@ -1,9 +1,9 @@
+import { writeProjectConfig } from '../support/support.ts';
+import { createConsumer } from '../support/consumer.ts';
 import { writeConceptFile, writeWritingFile } from '../support/writing-files.ts';
-import { initialize, createDocument, addPage } from '../support/operations.ts';
+import { createDocument, addPage } from '../support/operations.ts';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.ts';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
@@ -14,17 +14,13 @@ import { indexConcepts, readConceptCatalog, showConcepts } from "../../src/domai
 import { checkWriting } from "../../src/domain/writing/index.ts";
 import { showWriting } from "../../src/domain/writing/index.ts";
 import { checkProject } from "../../src/app/index.ts";
-import { setAuthor } from "../../src/domain/documents/index.ts";
 
-import { setPage } from "../../src/domain/documents/index.ts";
 import { setMarkdown } from "../../src/app/index.ts";
 import { digest } from "../../src/model/index.ts";
 
 const fixture = () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-markdown-concepts-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true, persistentCache: 'off' });
-  try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: [] });
   return root;
 };
 const withRepo = <T>(root: string, run: (repo: LocalRepository) => T): T => {

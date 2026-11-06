@@ -207,7 +207,7 @@ test('publication retry reuses identical assets and refuses a different digest',
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 });
 
-// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
+// @feature docs/feature/cross-platform-release/cli.md
 test('release tag sets the manifest version while preserving and validating the pnpm lock', async () => {
   await Effect.runPromise(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;

@@ -1,11 +1,10 @@
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { doctor, uninitializedDoctor } from '../../src/app/index.ts';
-import { initialize } from '../support/operations.ts';
 import { LocalRepository } from '../support/repository.ts';
 import { tmpdir } from '../support/temporary.ts';
 
@@ -13,11 +12,9 @@ const cliVersion = JSON.parse(readFileSync(new URL('../../package.json', import.
 
 // @feature docs/feature/local-sdlc/library.md
 test('doctor diagnoses installed library versions without changing project health', () => Effect.runPromise(Effect.sync(() => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-library-version-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
+  const root = createConsumer();
+  const repo = new LocalRepository(root);
   try {
-    initialize(repo);
     const baseline = doctor(repo);
     assert.equal(baseline.findings.some(finding => finding.code === 'LibraryVersionMismatch'), false);
     const manifest = join(root, 'node_modules/concord-sdlc/package.json');
@@ -40,6 +37,7 @@ test('doctor diagnoses installed library versions without changing project healt
 
 // @feature docs/feature/local-sdlc/library.md
 test('uninitialized doctor preserves init as the first step alongside a library mismatch', () => Effect.runPromise(Effect.sync(() => {
+  // Doctor's uninitialized input is the subject, so this directory has no consumer template.
   const root = mkdtempSync(join(tmpdir(), 'concord-library-uninitialized-'));
   try {
     mkdirSync(join(root, 'node_modules/concord-sdlc'), { recursive: true });

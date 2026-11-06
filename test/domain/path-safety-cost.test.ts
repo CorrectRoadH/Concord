@@ -1,7 +1,8 @@
+import { createConsumer } from '../support/consumer.ts';
 import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import fs, { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
+import fs, { cpSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from '../support/temporary.ts';
 import { dirname, join, sep } from 'node:path';
@@ -17,9 +18,9 @@ function fixture(t: TestContext): { container: string; parent: string; root: str
   const parent = join(container, 'parent');
   const root = join(parent, 'repo');
   mkdirSync(root, { recursive: true });
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+  const consumer = createConsumer();
+  try { cpSync(consumer, root, { recursive: true }); } finally { rmSync(consumer, { recursive: true, force: true }); }
+  writeProjectConfig(root, { testRoots: [] });
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src/a.ts'), 'a');
   writeFileSync(join(root, 'src/b.ts'), 'b');

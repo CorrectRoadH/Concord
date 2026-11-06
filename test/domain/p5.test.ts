@@ -1,12 +1,10 @@
-import { createDocument, initialize } from '../support/operations.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { createDocument } from '../support/operations.ts';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.ts';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { Effect, Schema } from 'effect';
-import { P5BundleSchema } from '../../src/model/p5/index.ts';
+import { Effect } from 'effect';
 import { compileP5 } from '../../src/app/index.ts';
 import { runApplication } from '../support/repository.ts';
 
@@ -16,14 +14,14 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/web-workbench/use-case/embed-p5-sketch.md
 test('p5 compiler checks captured modules, resources, options and repository boundaries without executing code', () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-p5-compiler-'));
+  const root = createConsumer();
   const document = 'docs/feature/sketch/README.md';
   const write = (path: string, source: string | Buffer) => { const target = join(root, 'docs/feature/sketch', path); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, source); };
   const compile = (code: string, meta = '') => runApplication(compileP5(root, { document, code, meta }));
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const repo = new LocalRepository(root, { initialize: true });
-    try { initialize(repo, false, { testRoots: [] }); createDocument(repo, 'feature', { id: 'sketch', title: 'Sketch' }); }
+    writeProjectConfig(root, { testRoots: [] });
+    const repo = new LocalRepository(root);
+    try { createDocument(repo, 'feature', { id: 'sketch', title: 'Sketch' }); }
     finally { repo.close(); }
     const before = readFileSync(join(root, document), 'utf8');
     const inline = await compile('p.setup = () => { p.createCanvas(20, 20); p.noLoop(); }; p.draw = () => p.background(30);');

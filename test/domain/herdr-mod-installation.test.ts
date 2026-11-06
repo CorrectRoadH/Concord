@@ -49,7 +49,7 @@ test('source mod installation builds outside the checkout, updates its bytes and
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-// @use-case docs/feature/herdr-mod/use-case/install-with-cli.md#install
+// @feature docs/feature/herdr-mod/cli.md
 test('missing Herdr returns its installer and next step without creating any files, including dry-run', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-herdr-missing-'));
   try {

@@ -28,7 +28,7 @@ test('installed init previews configuration, preserves existing docs, and never 
 })));
 
 
-// @feature docs/feature/project-onboarding/README.md
+// @feature docs/feature/taste/cli.md
 test('packed boundaries reject non-current formats and preserve configuration, owners, receipts, journals and locks', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('current-formats-only');
  const taste = 'docs/taste.md';

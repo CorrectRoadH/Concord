@@ -1,3 +1,5 @@
+import { createConsumer } from '../support/consumer.ts';
+import { writeProjectConfig } from '../support/support.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -47,13 +49,12 @@ function naiveGaps(repo: LocalRepository) {
 }
 
 function withTraceConsumer(run: (repo: LocalRepository, root: string) => void) {
-  const root = mkdtempSync(join(tmpdir(), 'concord-derived-trace-'));
+  const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
   let repo: LocalRepository | undefined;
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
+    const initial = new LocalRepository(root);
     try {
-      initialize(initial, false, { sourceRoots: ['src'], testRoots: ['test'] });
       createDocument(initial, 'feature', { id: 'shared', title: 'Shared', pages: ['cli', 'architecture'] });
       createDocument(initial, 'use-case', { id: 'flow', title: 'Flow', feature: 'shared' });
       createDocument(initial, 'feature', { id: 'empty', title: 'Empty', pages: ['cli'] });
@@ -138,12 +139,12 @@ test('memoized owners retain target-kind and anchor gates, and a rewrite during 
 
 // @use-case docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md
 test('trace gaps distinguishes aggregate contract relations from direct documented CLI page relations', () => Effect.runPromise(Effect.sync(() => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-trace-gaps-'));
+  const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
   let repo: LocalRepository | undefined;
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial, false, { sourceRoots: ['src'], testRoots: ['test'] }); } finally { initial.close(); }
+    const initial = new LocalRepository(root);
+    initial.close();
     repo = new LocalRepository(root);
     createDocument(repo, 'feature', { id: 'orders', title: 'Orders', pages: ['cli'] });
     createDocument(repo, 'use-case', { id: 'create-order', title: 'Create order', feature: 'orders' });
@@ -171,11 +172,10 @@ test('trace gaps distinguishes aggregate contract relations from direct document
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
 test('shared reference targets are read once and reverified, including external edits and symlink replacement', () => Effect.runPromise(Effect.sync(() => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-reference-batch-'));
-  execFileSync('git', ['init', '-q', root]);
-  const initial = new LocalRepository(root, { initialize: true });
+  const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
+  const initial = new LocalRepository(root);
   try {
-    initialize(initial, false, { sourceRoots: ['src'], testRoots: [] });
     createDocument(initial, 'feature', { id: 'shared', title: 'Shared', pages: ['architecture'] });
   } finally { initial.close(); }
   const path = 'docs/feature/shared/architecture.md';

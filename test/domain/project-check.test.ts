@@ -1,3 +1,5 @@
+import { createConsumer } from '../support/consumer.ts';
+import { writeProjectConfig } from '../support/support.ts';
 import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
 import { initialize } from '../support/operations.ts';
 import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.ts';
@@ -20,9 +22,9 @@ import { ConcordError } from "../../src/model/index.ts";
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('project check combines relation and writing findings and reports incomplete writing inputs', async t => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-project-check-'));
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: [] });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  execFileSync('git', ['init', '-q', root]);
   const withRepo = <T>(run: (repo: LocalRepository) => T): T => {
     const repo = new LocalRepository(root);
     try { return run(repo); } finally { repo.close(); }
@@ -31,8 +33,6 @@ test('project check combines relation and writing findings and reports incomplet
     const result = await runApplication(executeQuery(root, { name: 'check', input: {} }, 'off'));
     return { status: result.exitCode, output: result.value as unknown as ReturnType<typeof checkProject> };
   };
-  const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
   assert.equal(withRepo(checkProject).ok, true);
 
   const page = join(root, 'docs/_template/README.md');
@@ -73,11 +73,9 @@ test('project check combines relation and writing findings and reports incomplet
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('current check retries real observed edits, closes attempts and refuses persistent drift', async t => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-check-retry-'));
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: [] });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  execFileSync('git', ['init', '-q', root]);
-  const setup = new LocalRepository(root, { initialize: true });
-  try { initialize(setup, false, { testRoots: [] }); } finally { setup.close(); }
   const original = RepositoryBase.prototype.read;
   const page = join(root, 'docs/architecture.md');
   let changes = 1; let changed = 0;

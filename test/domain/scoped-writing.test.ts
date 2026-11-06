@@ -1,9 +1,10 @@
+import { writeProjectConfig } from '../support/support.ts';
+import { createConsumer } from '../support/consumer.ts';
 import { writeConceptFile, writeWritingFile } from '../support/writing-files.ts';
 import { initialize } from '../support/operations.ts';
-import { installedConcordCli } from '../support/support.ts';
 import { EMPTY_CONCEPT_CATALOG } from "../../src/model/index.ts";
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
@@ -15,17 +16,15 @@ import { renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
 import { digest } from "../../src/model/index.ts";
 import { indexConcepts, readConceptCatalog, showConcepts } from "../../src/domain/concepts/index.ts";
 import { checkWriting } from "../../src/domain/writing/index.ts";
-import { showWriting, writingIndex } from "../../src/domain/writing/index.ts";
+import { writingIndex } from "../../src/domain/writing/index.ts";
 
 const json = (value: unknown): string => typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`;
 const policy = (extra: Record<string, unknown> = {}) => ({ bannedTerms: [], ...extra });
 const concept = (id: string, term: string, deprecated: string[] = []) => ({ id, term, definition: `${id} meaning`, deprecated });
 const catalog = (concepts: ReturnType<typeof concept>[]) => `# Terms\n${concepts.map(item => `\n## ${item.term} {#${item.id}}\n\n${item.definition}\n${item.deprecated.length ? `\n旧写法：${item.deprecated.map(word => `\`${word}\``).join('、')}\n` : ''}`).join('')}`;
 const fixture = () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-scoped-writing-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: [] });
   rmSync(join(root, 'docs/writing.md'));
   return root;
 };
@@ -145,6 +144,7 @@ test('init creates only the exact empty global catalog and preserves a pre-exist
     withRepo(fresh, repo => repo.publish('set-markdown', [{ path: 'docs/concepts.md', before: repo.read('docs/concepts.md')!, after: json(catalog([])) }]));
     assert.equal(readFileSync(join(fresh, 'docs/concepts.md'), 'utf8'), json(catalog([])));
   } finally { rmSync(fresh, { recursive: true, force: true }); }
+  // Initial catalogs and initialization recovery are the inputs under test, before any template exists.
   const root = mkdtempSync(join(tmpdir(), 'concord-init-existing-catalog-'));
   try {
     execFileSync('git', ['init', '-q', root]);

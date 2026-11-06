@@ -1,3 +1,5 @@
+import { createConsumer } from '../support/consumer.ts';
+import { writeProjectConfig } from '../support/support.ts';
 import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -13,12 +15,10 @@ import { LocalRepository } from "../support/repository.ts";
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 function consumer(): string {
-  const root = mkdtempSync(join(tmpdir(), 'concord-code-boundary-'));
-  execFileSync('git', ['init', '-q', root]);
+  const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src', 'src'] });
   execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
   execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord test']);
-  const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial, false, { sourceRoots: ['src', 'src'] }); } finally { initial.close(); }
   return root;
 }
 function write(root: string, path: string, contents: string): void {

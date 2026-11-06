@@ -1,8 +1,7 @@
-import { initialize } from '../support/operations.ts';
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.ts';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
@@ -12,11 +11,10 @@ import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests
 import { openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
 
 function consumer() {
-  const root = mkdtempSync(join(tmpdir(), 'concord-annotations-'));
-  execFileSync('git', ['init', '-q', root]);
+  const root = createConsumer();
   execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
   execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord test']);
-  const initial = new LocalRepository(root, { initialize: true }); initialize(initial); PersistentCache.repository(initial).prepareWrite({ create: true }); initial.close();
+  const initial = new LocalRepository(root); try { PersistentCache.repository(initial).prepareWrite({ create: true }); } finally { initial.close(); }
   return root;
 }
 function write(root: string, relative: string, contents: string) { const path = join(root, relative); mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, contents); }

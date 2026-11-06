@@ -29,7 +29,7 @@ async function recover(root: string, status = 0) {
 function digestFor(root: string, path: string): string { const record = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8')); assert.ok(record); return record.digest; }
 function saveBody(root: string, path: string, body: string, expectedDigest: string, status = 0) { const record = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8'))!; return result(root, repo => setMarkdown(repo, path, renderDocument(record.metadata, body), expectedDigest), status); }
 
-// @use-case docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
+// @use-case docs/feature/local-data-engine/use-case/query-current-projections.md#edit
 test('packed Memory index and recall return current owner text and digest; edit enforces CAS', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('memory');
   create(root, 'memory', 'case-note', 'Case note', { body: '# Initial\n\nNeedle in the body.\n' });

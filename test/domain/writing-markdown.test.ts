@@ -1,3 +1,5 @@
+import { createConsumer } from '../support/consumer.ts';
+import { writeProjectConfig } from '../support/support.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,12 +34,11 @@ test('Markdown rules round-trip escaped cells, limits, roots and longer exceptio
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('scopes inherit declared lengths, accumulate bans and exclude rule files from prose and concept usage', () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-writing-markdown-'));
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: [] });
   const write = (path: string, source: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), source); };
   const check = () => { const repo = new LocalRepository(root, { persistentCache: 'off' }); try { return checkWriting(repo); } finally { repo.close(); } };
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true }); try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
     write('docs/writing.md', renderWritingPolicy({ roots: ['docs/page.md', 'docs/cart'], sentenceLength: 8, paragraphLength: 12, bannedTerms: [{ term: 'bad', use: 'good', why: 'global', allowIn: ['badger'] }] }));
     write('docs/cart/writing.md', renderWritingPolicy({ bannedTerms: [{ term: 'old', use: 'new', why: 'RuleOnly forbidden bad', roots: ['docs/cart/deep'] }] }));
     write('docs/cart/deep/writing.md', renderWritingPolicy({ sentenceLength: 30, bannedTerms: [] }));

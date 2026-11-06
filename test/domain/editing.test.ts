@@ -1,10 +1,11 @@
+import { createConsumer } from '../support/consumer.ts';
 import type * as SharedTypes from '../../src/model/shared.ts';
-import { createDocument, initialize } from '../support/operations.ts';
+import { createDocument } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 
@@ -15,10 +16,8 @@ import { LocalRepository } from "../support/repository.ts";
 import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 function fixture(): string {
-  const root = mkdtempSync(join(tmpdir(), 'concord-editing-'));
-  execFileSync('git', ['init', '-q', root]);
-  const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial, false, { sourceRoots: ['src'] }); } finally { initial.close(); }
+  const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'] });
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src', 'main.ts'), 'export const answer = 1;\n');
   return root;
@@ -105,12 +104,10 @@ test('config editing rejects retired fields and validates source roots', () => E
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('editing includes existing JS/TS files from testRoots without treating runner source files as roots', () => Effect.runPromise(Effect.sync(() => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-editing-test-root-'));
+  const root = createConsumer();
   let repo: LocalRepository | undefined;
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial, false, { testRoots: ['test'] }); } finally { initial.close(); }
+    writeProjectConfig(root, { testRoots: ['test'] });
     mkdirSync(join(root, 'test'), { recursive: true });
     mkdirSync(join(root, 'runner-only'), { recursive: true });
     writeFileSync(join(root, 'test', 'association.ts'), 'export const association = 1;\n');
@@ -179,6 +176,7 @@ test('Markdown save publishes the complete owner and catalog bytes using only th
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('default source discovery does not authorize Web source writes', () => Effect.runPromise(Effect.sync(() => {
+  // The absent configuration is the input under test; an initialized template would authorize writes.
   const root = mkdtempSync(join(tmpdir(), 'concord-default-source-write-'));
   let repo: LocalRepository | undefined;
   try {

@@ -35,6 +35,7 @@ function throwsCode(code: string, operation: () => unknown): void {
   assert.throws(operation, error => typeof error === 'object' && error !== null && 'code' in error && error.code === code);
 }
 
+// @use-case docs/feature/document-packages/use-case/discover-managed-documents.md
 test('shared owner decoding refuses frontmatter on a Spec owner', () => {
   const invalid = '---\nformat: concord.document/v1\nid: example\nkind: feature\n---\n# Body\n';
   throwsCode('InvalidData', () => parseDocumentRecord('docs/feature/示例/README.md', invalid));

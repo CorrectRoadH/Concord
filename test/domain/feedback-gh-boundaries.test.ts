@@ -1,8 +1,9 @@
+import { createConsumer } from '../support/consumer.ts';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -87,14 +88,14 @@ async function child(scenario: Scenario): Promise<void> {
   const evilMarker = join(temporary, 'evil-marker');
   const readyPath = join(temporary, 'ready');
   const releasePath = join(temporary, 'release');
-  mkdirSync(consumer);
+  const template = createConsumer();
+  try { cpSync(template, consumer, { recursive: true }); } finally { rmSync(template, { recursive: true, force: true }); }
   mkdirSync(join(consumer, 'bin'));
   mkdirSync(trusted);
   mkdirSync(gitBin);
   mkdirSync(relative);
   mkdirSync(linkedExecutable);
   mkdirSync(modules, { recursive: true });
-  execFileSync('git', ['init', '-q', consumer]);
   symlinkSync(execFileSync('which', ['git'], { encoding: 'utf8' }).trim(), join(gitBin, 'git'));
   writeFileSync(modePath, scenario);
   writeFileSync(join(trusted, 'gh'), fakeGhSource(modePath, callsPath, readyPath, releasePath), { mode: 0o755 });
@@ -107,11 +108,9 @@ async function child(scenario: Scenario): Promise<void> {
   try {
     process.chdir(temporary);
     process.env.PATH = ['', 'relative', modules, join(consumer, 'bin'), symlinkDirectory, linkedExecutable, gitBin, ...(scenario === 'missing' ? [] : [trusted])].join(delimiter);
-    const [{ syncFeedback, listFeedback }, { initialize, LocalRepository, runApplication }, { setConfig, showConfig }, { ConcordError }] = await Promise.all([
+    const [{ syncFeedback, listFeedback }, { LocalRepository, runApplication }, { setConfig, showConfig }, { ConcordError }] = await Promise.all([
       import("../../src/domain/feedback/feedback.ts"), import("../support/repository.ts"), import("../../src/app/editing.ts"), import("../../src/model/index.ts"),
     ]);
-    const first = new LocalRepository(consumer, { initialize: true });
-    try { initialize(first); } finally { first.close(); }
     const withRepo = <A>(use: (repo: InstanceType<typeof LocalRepository>) => A): A => {
       const repo = new LocalRepository(consumer);
       try { return use(repo); } finally { repo.close(); }

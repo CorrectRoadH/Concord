@@ -1,24 +1,22 @@
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { tmpdir } from '../support/temporary.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
-import { initialize, createDocument } from '../support/operations.ts';
+import { createDocument } from '../support/operations.ts';
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 import { collectNativeTests } from '../../src/domain/tests/index.ts';
 import { traceGaps } from '../../src/app/index.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/find-unlinked-tests.md#list
 test('trace gaps uses real collected inventories, exact bindings, retired and Engineering exclusions, and stale file fallback', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-unlinked-tests-'));
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: ['test'], sourceRoots: [] });
   const gaps = () => { const repo = new LocalRepository(root); try { return traceGaps(repo, 'off'); } finally { repo.close(); } };
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
+    const initial = new LocalRepository(root);
     try {
-      initialize(initial, false, { testRoots: ['test'], sourceRoots: [] });
       createDocument(initial, 'feature', { id: 'cart', title: 'Cart' });
       createDocument(initial, 'engineering', { id: 'testing', title: 'Testing' });
     } finally { initial.close(); }

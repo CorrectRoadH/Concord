@@ -1,12 +1,16 @@
+import { Effect } from 'effect';
+import { withConsumer } from '../support/consumer.ts';
+import { createDocument } from '../support/operations.ts';
+import { digest } from '../../src/model/index.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { tmpdir } from '../support/temporary.ts';
 import { LocalRepository } from '../support/repository.ts';
 import { parseTaste, tasteShow, inspectTaste } from '../../src/domain/taste/index.ts';
-import { checkProject } from '../../src/app/index.ts';
+import { checkProject, setMarkdown } from '../../src/app/index.ts';
 
 const source = '# Taste\n\n## General {#general}\n\n1. Read first. {#general-read}\n\n## T-1 Keep one owner {#t-1}\n\nPrefer one source.\n\n## T-8 Read clearly {#t-8}\n';
 const code = (name: string) => (error: unknown) => error instanceof Error && 'code' in error && error.code === name;
@@ -59,3 +63,21 @@ test('missing taste is advisory and removed entries fail Feature and Design page
   write('docs/feature/cart/README.md', '# Cart\n\nUse [invalid](../../taste.md?query#t-1).\n');
   assert.throws(() => tasteShow(repo), code('TasteLinkInvalid'));
 }));
+
+// @use-case docs/feature/taste/use-case/change-taste.md
+test('editing a cited taste preserves its ID and immediately changes current results without side records', () => Effect.runPromise(Effect.sync(() => withConsumer((repo, root) => {
+  const path = 'docs/taste.md';
+  const initialized = readFileSync(join(root, path), 'utf8');
+  setMarkdown(repo, path, source, digest(initialized));
+  const entry = tasteShow(repo).entries.find(entry => entry.kind === 'taste')!;
+  createDocument(repo, 'feature', { id: 'cart', title: 'Cart', body: `# Cart\n\nUse [taste](../../taste.md#${entry.id}).\n` });
+  const before = repo.files('docs').sort();
+  const updated = source.replace(entry.title, 'A revised project preference');
+  setMarkdown(repo, path, updated, digest(source));
+  const result = tasteShow(repo);
+  assert.equal(result.entries.find(candidate => candidate.id === entry.id)?.title, 'A revised project preference');
+  assert.deepEqual(result.references, [{ path: 'docs/feature/cart/README.md', line: 3, entry: entry.id }]);
+  assert.equal(checkProject(repo, 'off').ok, true);
+  assert.equal(readFileSync(join(root, path), 'utf8'), updated);
+  assert.deepEqual(repo.files('docs').sort(), before);
+}))));
