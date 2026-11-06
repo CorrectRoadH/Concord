@@ -310,7 +310,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'issue.edit': return editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun);
     case 'issue.remove': return removeIssue(repo, action.id, action.expectedDigest, dryRun);
     case 'issue.close': return closeIssue(repo, action.id, action.reason, dryRun);
-    case 'feedback.link': throw new ConcordError('CommandRetired', 'Use concord issue adopt --to', { command: 'concord feedback link', replacement: 'concord issue adopt --to' });
+    case 'feedback.link': throw new ConcordError('CommandRetired', 'Use concord issue link <id> --role spec <target>', { command: 'concord feedback link', replacement: 'concord issue link <id> --role spec <target>' });
     case 'source.set': return setSource(repo, action.path, action.body, action.expectedDigest, dryRun);
     case 'writing.index': return writingIndex(repo);
     case 'writing.show': return showWriting(repo, action.path);

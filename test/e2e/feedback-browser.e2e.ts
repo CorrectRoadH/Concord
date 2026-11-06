@@ -94,11 +94,20 @@ test('feedback browser separates remote observations from local editing and prot
     await page.getByRole('link').filter({hasText:'Browser local feedback'}).click();
     await expect(page.getByRole('button',{name:'关联 Feature',exact:true})).toHaveCount(0);
     await page.getByRole('tab',{name:'来源与关联',exact:true}).click();
-    const featureLinked = browserActionReceipt(page, 'issue.link', input => input.id === 'docs/issues/browser-local.md');
+    const featureLinked = browserActionReceipt(page, 'issue.link', input => {
+      if (input.id !== 'docs/issues/browser-local.md') return false;
+      assert.equal(input.role, 'spec');
+      assert.equal(input.memory, 'docs/feature/target/README.md');
+      assert.equal('target' in input, false);
+      return true;
+    });
     await page.getByRole('button',{name:'关联 Feature',exact:true}).click();
     await expect(page.getByRole('button',{name:'删除本地草稿'})).toHaveCount(0);
     await featureLinked;
     await expect.poll(()=>readFileSync(join(root,'docs/issues/browser-local.md'),'utf8')).toContain('docs/feature/target/README.md');
+    assert.match(readFileSync(join(root,'docs/issues/browser-local.md'),'utf8'), /role: spec/u);
+    await expect(page.locator('.feedback-feature-card code')).toHaveText('docs/feature/target/README.md');
+    await expect(page.getByRole('button',{name:'关联 Feature',exact:true})).toHaveCount(0);
     await page.getByRole('tab',{name:'正文',exact:true}).click();
     const editor=page.getByRole('textbox',{name:'Markdown 原文',exact:true});
     const editedFeedback = browserActionReceipt(page, 'document.set', input => input.path === 'docs/issues/browser-local.md' && String(input.body).includes('Edited through feedback workbench.'));

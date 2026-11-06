@@ -133,7 +133,7 @@ export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonl
       availability = remote === null ? 'unavailable' : 'cached';
       if (cacheWarning !== undefined) warnings.push(cacheWarning);
     }
-    const features = document.metadata.relations.filter(relation => relation.role === 'adopts');
+    const features = document.metadata.relations.filter(relation => relation.role === 'spec');
     const triage: FeedbackItem['triage'] = features.length > 0 || document.metadata.relations.length > 0 ? 'linked' : 'pending';
     return { document: issueRecord(document), provider: source?.provider ?? 'local', triage, remote, availability, warnings };
   }).filter(item => matchesFeedback(item, selected));

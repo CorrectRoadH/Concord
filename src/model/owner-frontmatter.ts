@@ -3,7 +3,7 @@
 import { Schema } from "effect";
 import { stringify } from './markdown-dependencies.ts';
 import { FeedbackSourceSchema } from "./feedback-schema.ts";
-import { Text, decode, type DocumentMeta } from "./shared.ts";
+import { ConcordError, IssueRelationSchema, Text, decode, type DocumentMeta } from "./shared.ts";
 
 const NonEmpty = Text.check(Schema.isTrimmed());
 const Path = NonEmpty.check(Schema.isPattern(/^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[^\r\n\0]+$/u));
@@ -12,7 +12,7 @@ const Memory = Path.check(Schema.isPattern(/^memory\/[^/#]+\.md$/u));
 const Issue = Path.check(Schema.isPattern(/^docs\/issues\/[^/#]+\.md$/u));
 const Relation = Schema.Union([
   Schema.Struct({ role: Schema.Literals(['investigation', 'root-cause']), target: Memory }),
-  Schema.Struct({ role: Schema.Literal('adopts'), target: Spec }),
+  Schema.Struct({ role: Schema.Literal('spec'), target: Spec }),
   Schema.Struct({ role: Schema.Literal('related'), target: Issue }),
 ]);
 const MemoryRelation = Schema.Union([
@@ -24,12 +24,21 @@ const MemoryRelations = Schema.NonEmptyArray(MemoryRelation).check(Schema.makeFi
 export const IssueFrontmatterSchema = Schema.Struct({ relations: Schema.optional(Relations), source: Schema.optional(FeedbackSourceSchema) });
 export const MemoryFrontmatterSchema = Schema.Struct({ relations: Schema.optional(MemoryRelations) });
 
+/** Union diagnostics may show one branch; always include the complete current role set. */
+export function decodeIssueFrontmatter(value: unknown, source: string) {
+  try { return decode(IssueFrontmatterSchema, value, source); }
+  catch (cause) {
+    if (!(cause instanceof ConcordError) || cause.code !== 'InvalidData') throw cause;
+    throw new ConcordError('InvalidData', `${cause.message}; allowed relation roles: ${IssueRelationSchema.fields.role.literals.join(', ')}`);
+  }
+}
+
 /** Only irreducible declarations are serialized; the other metadata is a projection. */
 export function ownerFrontmatter(metadata: DocumentMeta): Record<string, unknown> | undefined {
   if (metadata.kind !== 'memory' && metadata.kind !== 'issue') return undefined;
   const fields = { ...(metadata.relations.length === 0 ? {} : { relations: metadata.relations }), ...(metadata.kind === 'issue' && metadata.source !== undefined ? { source: metadata.source } : {}) };
   if (Object.keys(fields).length === 0) return undefined;
-  return metadata.kind === 'memory' ? decode(MemoryFrontmatterSchema, fields, metadata.id) : decode(IssueFrontmatterSchema, fields, metadata.id);
+  return metadata.kind === 'memory' ? decode(MemoryFrontmatterSchema, fields, metadata.id) : decodeIssueFrontmatter(fields, metadata.id);
 }
 
 export function renderOwnerFrontmatter(metadata: DocumentMeta): string {

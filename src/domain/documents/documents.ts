@@ -252,7 +252,7 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
     if (metadata.kind === 'memory') for (const relation of metadata.relations) checkRef(findings, repo, documents, document, relation.target, CONTRACT_KINDS, 'supports');
     if (metadata.kind === 'issue') {
       for (const relation of metadata.relations) {
-        const linked = checkRef(findings, repo, documents, document, relation.target, relation.role === 'related' ? ['issue'] : relation.role === 'adopts' ? CONTRACT_KINDS : ['memory'], `relation (${relation.role})`);
+        const linked = checkRef(findings, repo, documents, document, relation.target, relation.role === 'related' ? ['issue'] : relation.role === 'spec' ? CONTRACT_KINDS : ['memory'], `relation (${relation.role})`);
         if (relation.role === 'related' && linked?.path === document.path) finding(findings, 'InvalidState', document.path, 'related requires another Issue');
       }
     }

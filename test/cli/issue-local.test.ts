@@ -25,6 +25,13 @@ test('local Issue links and deletion preserve inbound reference guards', t => {
   call(root, ['new', 'memory', 'investigation', '--title', 'Investigation']);
   for (const id of ['canonical', 'observation']) call(root, ['new', 'issue', id]);
   const path = 'docs/issues/observation.md';
+  call(root, ['new', 'feature', 'target']);
+  call(root, ['issue', 'link', 'observation', 'docs/feature/target/README.md', '--role', 'spec']);
+  assert.match(readFileSync(join(root, path), 'utf8'), /role: spec/u);
+  const invalidRole = spawnSync(process.execPath, [cli, '--root', root, '--json', 'issue', 'link', 'observation', 'docs/feature/target/README.md', '--role', 'adopts'], { encoding: 'utf8', timeout: 30_000 });
+  assert.notEqual(invalidRole.status, 0);
+  assert.match(invalidRole.stdout + invalidRole.stderr, /spec/u);
+  call(root, ['issue', 'unlink', 'observation', 'docs/feature/target/README.md', '--role', 'spec']);
   call(root, ['issue', 'link', 'observation', 'memory/investigation.md']);
   call(root, ['issue', 'link', 'observation', 'memory/investigation.md'], 1);
   call(root, ['issue', 'link', 'canonical', path, '--role', 'related']);

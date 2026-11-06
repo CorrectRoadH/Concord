@@ -11,12 +11,12 @@ test('packed feedback commands persist connections and local triage without remo
  assert.deepEqual(project.feedbackConnections?.map(connection=>connection.provider),['github','linear']);
  call(root,['new', 'feature','feedback-target','--title','Feedback target'],Ack);
  call(root,['new', 'issue','observation','--title','Local observation'],Ack);
- call(root,['issue','link','observation','--role','adopts','docs/feature/feedback-target/README.md'],Ack);
+ call(root,['issue','link','observation','--role','spec','docs/feature/feedback-target/README.md'],Ack);
  const relative='docs/issues/observation.md';
  const linked=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
  assert.equal(linked?.metadata.kind,'issue');
  if(linked?.metadata.kind!=='issue')assert.fail('feedback must retain the local issue owner');
- assert.deepEqual(linked.metadata.relations.filter(relation => relation.role === 'adopts').map(relation => relation.target),['docs/feature/feedback-target/README.md']);
+ assert.deepEqual(linked.metadata.relations.filter(relation => relation.role === 'spec').map(relation => relation.target),['docs/feature/feedback-target/README.md']);
  assert.equal(linked.metadata.source,undefined);
  const listed=call(root,['feedback','list'],Schema.Unknown);
  assert.match(JSON.stringify(listed),/observation/);

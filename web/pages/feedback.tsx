@@ -206,14 +206,14 @@ function FeatureLinker({ item }: { item: WorkspaceFeedback }) {
   const { snapshot, projection, act, busy } = useWorkspace()
   const conclusive = projectionIsConclusive(projection)
   const features = snapshot.documents.filter((document) => document.metadata.kind === "feature")
-  const linked = item.document.metadata.kind === "issue" ? (item.document.metadata.relations ?? []).filter(relation => relation.role === "adopts").map(relation => relation.target) : []
+  const linked = item.document.metadata.kind === "issue" ? (item.document.metadata.relations ?? []).filter(relation => relation.role === "spec").map(relation => relation.target) : []
   const available = features.filter((candidate) => !linked.some((reference) => reference === candidate.path || reference === candidate.metadata.id))
   const [feature, setFeature] = React.useState(available[0]?.path ?? "")
   const [error, setError] = React.useState("")
   React.useEffect(() => { if (!available.some((candidate) => candidate.path === feature)) setFeature(available[0]?.path ?? "") }, [available, feature])
   async function linkFeature(): Promise<void> {
     setError("")
-    try { const action: ViewAction = { action: "issue.link", id: item.document.path, memory: feature, role: "adopts" }; await act(action, "反馈已关联 Feature。") }
+    try { const action: ViewAction = { action: "issue.link", id: item.document.path, memory: feature, role: "spec" }; await act(action, "反馈已关联 Feature。") }
     catch (cause) { setError(errorMessage(cause)) }
   }
   return <Card className="feedback-feature-card"><CardHeader><CardTitle>Feature 关联</CardTitle><CardDescription>关联后处理状态会变为“已关联”；Memory 关系和关闭操作在生命周期页签中维护。</CardDescription></CardHeader><CardContent>{linked.length > 0 && <div className="tag-list">{linked.map((reference) => <code key={reference}>{reference}</code>)}</div>}{available.length > 0 ? <><div className="feedback-link-row"><Select value={feature} onValueChange={setFeature}><SelectTrigger aria-label="关联 Feature"><SelectValue placeholder="选择 Feature" /></SelectTrigger><SelectContent>{available.map((candidate) => <SelectItem key={candidate.path} value={candidate.path}>{candidate.metadata.title} · {candidate.metadata.id}</SelectItem>)}</SelectContent></Select><Button variant="outline" disabled={!conclusive || busy || !feature} onClick={() => fire(linkFeature())}><Link2 /> 关联 Feature</Button></div>{!conclusive && <p className="muted">当前投影不完整或关系未知，暂不能确认可关联的 Feature。</p>}</> : <p className="muted">{!conclusive ? "当前结果无法确认 Feature 列表或关联状态。" : features.length === 0 ? "项目中还没有 Feature。" : "已关联所有可用 Feature。"}</p>}{error && <div className="form-error" role="alert">{error}</div>}</CardContent></Card>

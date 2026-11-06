@@ -28,8 +28,8 @@ test('installed new and relation helpers persist only current owner fields', () 
   run(root, ['new', 'issue', 'bug']);
   run(root, ['issue', 'link', 'bug', 'memory/choice.md', '--role', 'investigation']);
   run(root, ['issue', 'unlink', 'bug', 'memory/choice.md', '--role', 'investigation']);
-  run(root, ['issue', 'link', 'bug', 'docs/feature/cart/README.md', '--role', 'adopts']);
-  run(root, ['issue', 'unlink', 'bug', 'docs/feature/cart/README.md', '--role', 'adopts']);
+  run(root, ['issue', 'link', 'bug', 'docs/feature/cart/README.md', '--role', 'spec']);
+  run(root, ['issue', 'unlink', 'bug', 'docs/feature/cart/README.md', '--role', 'spec']);
   assert.match(readFileSync(join(root, 'memory/choice.md'), 'utf8'), /role: supports/u);
   assert.doesNotMatch(readFileSync(join(root, 'docs/issues/bug.md'), 'utf8'), /relations:|history:|format:|draft/u);
   assert.equal(run(root, ['list', 'issue']).documents.length, 1);

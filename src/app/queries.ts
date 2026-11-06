@@ -86,8 +86,9 @@ const queryValue = (repo: WorkspaceTypes.LocalRepository, request: QueryRequest,
     case 'concepts.index': return indexConcepts(repo);
     case 'feedback.list': return { operation: 'feedback-list', feedback: listFeedback(repo, undefined, request.input.filter) };
     case 'feedback.show': {
-      const item = listFeedback(repo).find(candidate => candidate.document.metadata.id === request.input.id);
-      if (!item) throw new ConcordError('DocumentNotFound', `No feedback matches ${request.input.id}`);
+      const reference = request.input.id.includes('/') ? request.input.id : `docs/issues/${request.input.id}.md`;
+      const selected = readDocumentReference(repo, reference, ['issue']);
+      const item = listFeedback(repo, [selected])[0]!;
       const relations = documentShow(repo, item.document.path, 'issue', cache);
       return { operation: 'feedback-show', feedback: { ...item, document: relations.document }, incoming: relations.incoming, outgoing: relations.outgoing, complete: relations.complete, findings: relations.findings };
     }

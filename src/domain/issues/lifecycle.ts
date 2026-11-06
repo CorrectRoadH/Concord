@@ -10,7 +10,7 @@ export function linkIssue(repo: Repository, selector: string, reference: string,
   return inRepositorySnapshot(repo, () => {
     const record = readDocumentSelector(repo, selector, 'issue');
     if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-    const target = readDocumentReference(repo, reference, role === 'related' ? ['issue'] : role === 'adopts' ? CONTRACT_KINDS : ['memory']);
+    const target = readDocumentReference(repo, reference, role === 'related' ? ['issue'] : role === 'spec' ? CONTRACT_KINDS : ['memory']);
     if (role === 'related' && target.path === record.path) throw new ConcordError('InvalidReferenceTarget', 'related requires another Issue');
     const canonical = parseReference(reference).ref;
     if (record.metadata.relations.some(item => item.role === role && item.target === canonical)) throw new ConcordError('DuplicateLink', `${role}: ${canonical}`);
@@ -27,8 +27,6 @@ export function unlinkIssue(repo: Repository, selector: string, reference: strin
     return changed(repo, 'unlink-issue', record, { ...record.metadata, relations }, record.body, dryRun);
   });
 }
-export function adoptIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt { return linkIssue(repo, selector, reference, dryRun, 'adopts'); }
-export function retireIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt { return unlinkIssue(repo, selector, reference, dryRun, 'adopts'); }
 
 /** Only authored links and owner relations retain an Issue; regression markers retain historical evidence. */
 export function issueReferences(repo: Repository, target: string): readonly { path: string; line?: number }[] {

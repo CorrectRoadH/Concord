@@ -12,7 +12,7 @@ import { headingAnchorsFromTree, inlineLinksFromTree, inspectTreeSteps } from ".
 import { ConcordError, decode, DocumentSchema } from "../../model/index.ts";
 
 /** Bump when Markdown/YAML parsers, schemas, masking, or path rules change. */
-export const DOCUMENT_PARSER_VERSION = 'concord-document-memory/v9:engineering-use-cases:mdast-2.0.3:yaml-2.9.0';
+export const DOCUMENT_PARSER_VERSION = 'concord-document-memory/v10:issue-spec-relations:mdast-2.0.3:yaml-2.9.0';
 const Record = Schema.Struct({ path: Schema.String, metadata: DocumentSchema, body: Schema.String, digest: Schema.String });
 const Marker = Schema.Struct({ line: Schema.Int, startColumn: Schema.Int, endColumn: Schema.Int });
 const Steps = Schema.Struct({

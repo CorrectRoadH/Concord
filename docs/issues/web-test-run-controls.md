@@ -1,6 +1,6 @@
 ---
 relations:
-  - role: adopts
+  - role: spec
     target: docs/feature/web-workbench/use-case/inspect-implementation-and-tests.md
 ---
 

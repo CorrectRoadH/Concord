@@ -123,7 +123,7 @@ export const MemoryRelationSchema = Schema.Struct({ role: Schema.Literal('suppor
 export const MemorySchema = Schema.Struct({ ...declarative, kind: Schema.Literal('memory'), relations: Schema.Array(MemoryRelationSchema) });
 export type MemoryMeta = typeof MemorySchema.Type;
 export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'related'] as const;
-export const IssueRelationSchema = Schema.Struct({ role: Schema.Literals([...MEMORY_RELATION_KINDS, 'adopts']), target: Text });
+export const IssueRelationSchema = Schema.Struct({ role: Schema.Literals([...MEMORY_RELATION_KINDS, 'spec']), target: Text });
 export type IssueRelation = typeof IssueRelationSchema.Type;
 export const FixVerificationSchema = Schema.Struct({ defect: GitCommit, fix: GitCommit, tests: Schema.NonEmptyArray(Text).check(Schema.makeFilter(values => new Set(values).size === values.length)), runner: Sha256, concord: Text });
 export const IssueSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('issue'), relations: Schema.Array(IssueRelationSchema), source: Schema.optional(FeedbackSourceSchema) });

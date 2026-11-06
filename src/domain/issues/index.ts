@@ -27,6 +27,4 @@ export type { IssueCommandRunner } from './issue-project.ts';
 export { linkIssue } from './lifecycle.ts';
 export { unlinkIssue } from './lifecycle.ts';
 export { closeIssue } from './lifecycle.ts';
-export { adoptIssue } from './lifecycle.ts';
-export { retireIssue } from './lifecycle.ts';
 export { issueReferences } from './lifecycle.ts';

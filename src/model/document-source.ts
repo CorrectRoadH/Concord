@@ -3,7 +3,7 @@
 import { parseDocument } from './markdown-dependencies.ts';
 import type { Nodes, Root } from "mdast";
 import { fromMarkdown } from "./markdown-parser.ts";
-import { IssueFrontmatterSchema, MemoryFrontmatterSchema } from "./owner-frontmatter.ts";
+import { decodeIssueFrontmatter, MemoryFrontmatterSchema } from "./owner-frontmatter.ts";
 import { ConcordError, DocumentSchema, decode, digest, type DocumentKind, type DocumentRecord } from "./shared.ts";
 
 function text(node: Nodes): string {
@@ -56,7 +56,7 @@ export function decodeUncachedDocumentSource(path: string, source: string, tree?
       const metadata = decode(MemoryFrontmatterSchema, value, path);
       fields = { ...metadata, relations: metadata.relations ?? [] };
     } else {
-      const metadata = decode(IssueFrontmatterSchema, value, path);
+      const metadata = decodeIssueFrontmatter(value, path);
       fields = { ...metadata, relations: metadata.relations ?? [] };
     }
     } else fields = { relations: [] };

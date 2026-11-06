@@ -12,7 +12,7 @@ import { getViewFile, getWorkspaceSnapshot } from "../../src/app/index.ts";
 import { cacheStatus, scanAnnotations, clearCache } from "../../src/domain/tests/index.ts";
 import { checkDocuments, loadDocuments, setAuthor } from "../../src/domain/documents/index.ts";
 
-import { adoptIssue, closeIssue } from "../../src/domain/issues/index.ts";
+import { linkIssue, closeIssue } from "../../src/domain/issues/index.ts";
 import { renderDocument } from "../../src/model/index.ts";
 import { mergeFeedbackCache, readFeedbackCache, PersistentCache } from "../../src/base/cache/index.ts";
 import { openHawdb } from "../../src/base/cache/index.ts";
@@ -160,7 +160,7 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
       assert.equal(item.remote?.title, 'Changed remote title');
       assert.equal(item.triage, 'pending');
       createDocument(repo, 'feature', { id: 'feedback-home', title: 'Feedback home' });
-      adoptIssue(repo, item.document.metadata.id, 'docs/feature/feedback-home/README.md');
+      linkIssue(repo, item.document.metadata.id, 'docs/feature/feedback-home/README.md', false, 'spec');
       assert.equal(listFeedback(repo)[0]?.triage, 'linked');
       closeIssue(repo, item.document.metadata.id, 'Triaged');
       clearCache(repo);
