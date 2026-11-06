@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { cpSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import { Effect, Schema } from 'effect';
 import { ContentCache, ContentCacheOwner, inheritContentCacheOwner, withContentCacheOwner, type HawdbDatabase } from '../../src/base/cache/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
@@ -11,12 +13,41 @@ import { nativeArtifactRoot, hawdbTarget } from '../../src/base/installation/ind
 const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @feature docs/engineering/code/architecture.md#基础服务
+// @issue docs/issues/test-architecture-gaps.md
+test('an unchanged verified parse handle avoids metadata rereads while replacements remain authoritative', () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-parse-validation-'));
+  const selected = makeRuntimeEnvironment(root, { ...runtime.env, XDG_CACHE_HOME: root });
+  const owner = new ContentCacheOwner();
+  let probe: ReturnType<typeof mock.method> | undefined;
+  try {
+    cpSync(nativeArtifactRoot(runtime), nativeArtifactRoot(selected), { recursive: true });
+    const database = owner.database(selected, root, 'metadata-probe')!;
+    const manifest = join(nativeArtifactRoot(selected), hawdbTarget(), 'artifact.json');
+    const original = fs.readFileSync;
+    let reads = 0;
+    probe = mock.method(fs, 'readFileSync', function(...args: unknown[]) {
+      if (String(args[0]) === manifest) reads++;
+      return Reflect.apply(original, fs, args);
+    });
+    syncBuiltinESMExports();
+    assert.equal(owner.database(selected, root, 'metadata-probe'), database);
+    assert.equal(reads, 0, 'unchanged validated bytes need no repeated manifest decoding');
+    writeFileSync(`${manifest}.replacement`, '{}'); renameSync(`${manifest}.replacement`, manifest);
+    assert.throws(() => owner.database(selected, root, 'metadata-probe'), /HawdbIncompatible|HawdbUnavailable/u);
+    assert.ok(reads > 0, 'changed identity requires current metadata validation');
+    assert.throws(() => database.scan('document_parse'), /closed/iu);
+  } finally {
+    probe?.mock.restore(); syncBuiltinESMExports();
+    owner.close(); rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// @feature docs/engineering/code/architecture.md#基础服务
 test('entry-owned parse caches partition projects, parsers and verified installations with A→B→A reuse', () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-parse-owner-'));
   const owner = new ContentCacheOwner();
   const a = makeRuntimeEnvironment(root, { ...runtime.env, XDG_CACHE_HOME: join(root, 'a') });
   const b = makeRuntimeEnvironment(root, { ...runtime.env, XDG_CACHE_HOME: join(root, 'b') });
-  for (const snapshot of [a, b]) cpSync(nativeArtifactRoot(runtime), nativeArtifactRoot(snapshot), { recursive: true });
   let parses = 0;
   const read = (snapshot: typeof runtime, project = root, parser = 'parse/v1') => {
     const bound = owner.bind(snapshot, project);
@@ -26,6 +57,7 @@ test('entry-owned parse caches partition projects, parsers and verified installa
     finally { cache.close(); }
   };
   try {
+    for (const snapshot of [a, b]) cpSync(nativeArtifactRoot(runtime), nativeArtifactRoot(snapshot), { recursive: true });
     assert.equal(read(a), 'parsed');
     assert.equal(read(b), 'parsed');
     assert.equal(parses, 2, 'each verified installation has its own parse handle');
