@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import test from 'node:test';
+import { Effect, Result } from 'effect';
 import { queryContext, queryRequestSatisfied, readQuery, storeQuery } from '../../src/app/index.ts';
+import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
+import { nativeArtifactRoot } from '../../src/base/installation/index.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { createDocument } from '../support/operations.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
@@ -43,5 +46,34 @@ test('diagnostic query identity binds configuration appearing after an absent co
     assert.notEqual((await runApplication(queryContext(root, missing.query))).key, missing.key);
     rmSync(join(root, 'concord.config.ts'));
     assert.equal((await runApplication(queryContext(root, missing.query))).key, missing.key);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/engineering/testing/architecture.md#进程内-cli
+// @issue docs/issues/test-architecture-gaps.md
+test('diagnostic query identity follows each caller environment without falling back to the host', async () => {
+  const root = createConsumer();
+  const source = nativeArtifactRoot(makeRuntimeEnvironment(process.cwd(), process.env));
+  try {
+    const callers = ['a', 'b'].map(name => {
+      const cwd = join(root, name);
+      const runtime = makeRuntimeEnvironment(cwd, { ...process.env, XDG_CACHE_HOME: 'cache' });
+      const destination = join(cwd, 'cache/concord/native', basename(source));
+      mkdirSync(destination, { recursive: true });
+      cpSync(source, destination, { recursive: true });
+      writeFileSync(join(destination, 'caller-identity.txt'), name);
+      return runtime;
+    });
+    const operation = queryContext(root, ['trace', 'gaps']);
+    const contexts = [];
+    for (const index of [0, 1, 0]) {
+      contexts.push(await runApplication(operation.pipe(Effect.provideService(RuntimeEnvironment, callers[index]!))));
+    }
+    assert.notEqual(contexts[0]!.key, contexts[1]!.key);
+    assert.equal(contexts[0]!.key, contexts[2]!.key);
+    const missing = makeRuntimeEnvironment(join(root, 'missing'), { ...process.env, XDG_CACHE_HOME: 'cache' });
+    const rejected = await runApplication(operation.pipe(Effect.provideService(RuntimeEnvironment, missing), Effect.result));
+    assert.ok(Result.isFailure(rejected));
+    assert.equal(rejected.failure.code, 'HawdbUnavailable');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
