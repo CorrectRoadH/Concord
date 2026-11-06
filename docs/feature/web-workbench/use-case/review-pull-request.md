@@ -17,7 +17,7 @@
 
    消费者拥有 PR 身份、Git 历史与托管，须满足：
 
-   - PR head 等于构建提交与 checkout 的 HEAD，拒绝 merge checkout。构建前与发布前各查询一次 PR，base ref、base SHA 或 head SHA 变化即失败。
+   - PR head 等于构建提交与 checkout 的 HEAD，拒绝 merge checkout。构建前与部署前各查询一次 PR，base ref、base SHA 或 head SHA 变化即失败。
    - 补全 shallow 历史与缺失的对象后再导出，历史中要包含 base 与 head 的共同祖先。
    - 用[安装脚本](../../cross-platform-release/use-case/install-with-script.md)加 `CONCORD_VERSION` 安装固定版本的 Concord 发版归档，按 Release 的 `SHA256SUMS` 校验。解码器取自同一版本的[库包](../../local-sdlc/library.md#安装)。不依赖相邻源码或未发版的版本，不手改归档。
 
@@ -42,13 +42,13 @@
 
    比较范围是 `merge-base(base, head)` 到 head。`--out` 必须是还不存在的新目录；参数、`--json` 输出与错误见 [PR 静态预览导出](../cli.md#pr-静态预览导出)。
 
-3. 发布前核对产物。 {#check}
+3. 部署前核对产物。 {#check}
 
    用[库包解码器](../library.md)读取 `concord-preview/changes.json`，核对 base、head 与 baseLabel，再独立计算 merge-base 与 `comparison.mergeBase` 比对。产物的结构见 [PR 预览产物](../format.md#pr-预览产物)。
 
 4. 接入静态 Preview，从 PR 链接过去。 {#publish}
 
-   把输出目录交给已有的静态 Preview 托管，可以部署在子路径下。发布哪些内容由消费者审阅：输出包含所比较的已提交内容。
+   把输出目录交给已有的静态 Preview 托管，可以部署在子路径下。部署哪些内容由消费者审阅：输出包含所比较的已提交内容。
 
 5. 审阅者打开预览。 {#review}
 

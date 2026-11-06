@@ -1,6 +1,6 @@
 # 库接口
 
-PR 预览的消费者在发布前用[库包](../local-sdlc/library.md) `concord-sdlc` 中的解码器核对 `changes.json`，浏览器阅读器使用同一个解码器。字段见 [PR 预览产物格式](format.md#changesjson)。
+PR 预览的消费者在部署前用[库包](../local-sdlc/library.md) `concord-sdlc` 中的解码器核对 `changes.json`，浏览器阅读器使用同一个解码器。字段见 [PR 预览产物格式](format.md#changesjson)。
 
 ```ts
 import { decodeChangePreview } from 'concord-sdlc/change-preview';
