@@ -13,6 +13,7 @@ export function createFixConsumer(options: { greenAtDefect?: boolean; runnerSour
   gitCommand(root, 'init', '-q');
   mkdirSync(join(root, 'docs/feature/cart'), { recursive: true });
   mkdirSync(join(root, 'docs/issues'), { recursive: true });
+  writeFileSync(join(root, 'docs/taste.md'), readFileSync(new URL('../../templates/taste.md', import.meta.url), 'utf8'));
   writeFileSync(join(root, 'docs/feature/cart/README.md'), '# Cart\n');
   writeFileSync(join(root, 'docs/issues/sku.md'), '# SKU accumulation\n');
   const repo = new LocalRepository(root);

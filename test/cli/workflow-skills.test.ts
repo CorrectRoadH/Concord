@@ -71,15 +71,27 @@ test('init and skills install publish eight ordinary skills, preserve managed fi
 // @use-case docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
 test('skills install previews creation without private state and init accepts existing managed skills', { timeout: 60_000 }, () => runCase(root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
+  const taste = yield* fs.readFileString(resolve('templates/taste.md'));
+  yield* fs.makeDirectory(join(root, 'docs'));
+  yield* fs.writeFileString(join(root, 'docs/taste.md'), taste);
   const planned = receipt(yield* cli(root, ['--dry-run', 'skills', 'install']));
   assert.deepEqual(planned.createdPaths, workflowSkillPaths);
   assert.equal(yield* fs.exists(join(root, '.agents')), false);
   assert.equal(yield* fs.exists(join(root, '.git/concord')), false);
+  assert.deepEqual(yield* fs.readDirectory(join(root, 'docs')), ['taste.md']);
+  assert.equal(yield* fs.readFileString(join(root, 'docs/taste.md')), taste);
   const human = yield* cli(root, ['skills', 'install'], 0, false);
   assert.match(human.stdout, /^Created:\n/u);
   for (const path of workflowSkillPaths) assert.ok(human.stdout.includes(path));
-  yield* cli(root, ['init']);
-  assert.equal(yield* fs.exists(join(root, 'docs/concord.md')), true);
+  const uninitialized = join(root, 'uninitialized');
+  yield* fs.makeDirectory(uninitialized);
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  yield* spawner.exitCode(ChildProcess.make('git', ['init', '-q', uninitialized]));
+  for (const directory of ['.agents', '.claude']) yield* fs.copy(join(root, directory), join(uninitialized, directory));
+  assert.equal(yield* fs.exists(join(uninitialized, 'docs')), false);
+  assert.equal(yield* fs.exists(join(uninitialized, '.git/concord')), false);
+  yield* cli(uninitialized, ['init']);
+  assert.equal(yield* fs.exists(join(uninitialized, 'docs/concord.md')), true);
 })));
 
 // @use-case docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
@@ -107,12 +119,21 @@ test('occupied skill files, directories, broken links and ancestors reject init 
       else if (scenario === 'link') yield* fs.writeFileString(outside, '<!-- concord-managed -->\nexternal');
       yield* fs.symlink(outside, absolute);
     }
-    for (const args of [['skills', 'install'], ['--dry-run', 'skills', 'install'], ['init']]) {
+    const taste = yield* fs.readFileString(resolve('templates/taste.md'));
+    for (const args of [['init'], ['skills', 'install'], ['--dry-run', 'skills', 'install']]) {
+      if (!args.includes('init') && !(yield* fs.exists(join(project, 'docs')))) {
+        yield* fs.makeDirectory(join(project, 'docs'));
+        yield* fs.writeFileString(join(project, 'docs/taste.md'), taste);
+      }
       const error = readError(yield* cli(project, args, 1));
       assert.equal(error.error, 'SkillPathOccupied', scenario);
       assert.equal(error.details?.path, target, scenario);
       assert.equal(yield* fs.readFileString(first), old);
-      assert.equal(yield* fs.exists(join(project, 'docs')), false);
+      if (args.includes('init')) assert.equal(yield* fs.exists(join(project, 'docs')), false);
+      else {
+        assert.deepEqual(yield* fs.readDirectory(join(project, 'docs')), ['taste.md']);
+        assert.equal(yield* fs.readFileString(join(project, 'docs/taste.md')), taste);
+      }
       assert.equal(yield* fs.exists(join(project, '.agents/skills/concord-implement')), false);
       assert.equal(yield* fs.exists(join(project, '.git/concord')), false);
     }

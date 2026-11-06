@@ -35,6 +35,7 @@ test('packed PR export compares the actual target and serves a safe static revie
  const root = join(scratch, 'pr-export'); mkdirSync(root);
  const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], {encoding:'utf8'}).trim();
  git('init', '-q', '-b', 'release'); git('config','user.name','Fixture'); git('config','user.email','fixture@example.invalid');
+ write(root,'docs/taste.md',readFileSync(new URL('../../templates/taste.md',import.meta.url),'utf8'));
  write(root,'docs/old.md','# Before\n\nShared text.\n');
  write(root,'source.ts','export const value = 1;\n');
  git('add',"."); git('commit','-qm','ancestor'); const ancestor = git('rev-parse','HEAD');

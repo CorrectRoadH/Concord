@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { installedConcordCli } from '../support/support.js';
@@ -17,6 +17,7 @@ test('show enumerates sorted package pages and their current headings before rel
   };
   try {
     execFileSync('git', ['init', '-q', root]);
+    write('docs/taste.md', readFileSync(new URL('../../templates/taste.md', import.meta.url), 'utf8'));
     const pages = [
       ['README.md', 'readme', 'Cart'], ['architecture.md', 'architecture', 'Mechanism'], ['cli.md', 'cli', 'Commands'],
       ['library.md', 'library', 'Library'], ['notes.md', 'unknown', 'Notes'], ['use-case/add.md', 'use-case', 'Add item'],

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from './temporary.js';
 import { join } from 'node:path';
 import { after } from 'node:test';
@@ -13,6 +13,7 @@ function buildFixture(docsWork?: unknown, initialConfig = true) {
   mkdirSync(join(root, 'docs/a'), { recursive: true }); mkdirSync(join(root, 'docs/b'));
   writeFileSync(join(root, 'docs/a/one.md'), '# One\n\nClear text.\n'); writeFileSync(join(root, 'docs/b/two.md'), '# Two\n\nClear text.\n');
   writeFileSync(join(root, 'docs/README.md'), '# Documentation\n');
+  if (initialConfig) writeFileSync(join(root, 'docs/taste.md'), readFileSync(new URL('../../templates/taste.md', import.meta.url), 'utf8'));
   writeFileSync(join(root, 'docs/input.md'), '# Input\n'); writeFileSync(join(root, 'outside.txt'), 'Outside\n');
   if (initialConfig) writeProjectConfig(root, { testRoots: [], sourceRoots: [], runner: { kind: 'command', argv: [process.execPath, '-e', 'process.exit(0)'], sourceFiles: [], timeoutMs: 1000 }, ...(docsWork === undefined ? {} : { docsWork }) });
   writeFileSync(join(root, 'docs/writing.md'), defaultWritingSource);

@@ -44,6 +44,7 @@ test('packed PR export preserves Git object types and refuses unsafe or incomple
  const root=join(scratch,'pr-export-boundaries');mkdirSync(root);
  const git=(...args:string[])=>execFileSync('git',['-C',root,...args],{encoding:'utf8'}).trim();
  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
+ write(root,'docs/taste.md',readFileSync(new URL('../../templates/taste.md',import.meta.url),'utf8'));
  write(root,'empty.md','');write(root,'type.txt','ordinary content\n');write(root,'executable.sh','echo hello\n');write(root,'old.md','# Kept\n');
  git('add',".");git('commit','-qm','base');const base=git('rev-parse','HEAD');
  rmSync(join(root,'empty.md'));rmSync(join(root,'type.txt'));symlinkSync('/etc/passwd',join(root,'type.txt'));
