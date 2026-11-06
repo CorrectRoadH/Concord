@@ -13,6 +13,7 @@
 5. 构建、身份核验与完整检查通过后发布源码 GitHub Release 与 tgz。
 6. macOS Homebrew 安装必须保留原生产物字节。动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`；安装时压缩原生 addon，待 Homebrew 链接处理结束后在 post-install 解压还原原始字节。公开 tap 自动发现发布，核验版本、标签、资产与哈希，准备 Formula 与 Linux Nix 元数据。候选必须通过 Homebrew 与 Linux Nix 安装运行检查；通过后提交、打 recipe 标签并创建渠道完成记录。
 7. 用户通过 `brew install CorrectRoadH/tap/concord` 或文档中的 Nix flake 安装，看到对应标签的版本。
+8. 源码 Release 成功后发布同版本的 Herdr mod：把安装包中构建好的 `mods/concord/`、`RECIPE.md` 与真实 Herdr 主机上的截图 `preview.png` 推到公开仓库 `CorrectRoadH/concord-herdr-mod`。仓库带 topic `herdr-mod`，mod 出现在 herdr.dev/mods/CorrectRoadH/concord；`mod.json` 写明要求的最低 Concord 版本，即本次发布的版本。
 
 ## 结果
 

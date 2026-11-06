@@ -12,7 +12,15 @@
 
 ## 上手
 
-以下为预期输出。安装 mod：
+Herdr 用户和其它 mod 一样安装：把下面这句话交给自己的 agent。
+
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: herdr.dev/mods/CorrectRoadH/concord
+```
+
+agent 读完 mod 的全部文件，说明它会运行 `concord` 命令、读写当前仓库的文件，再把它复制到 Herdr 的 `mods/` 并检查。mod 依赖本机的 Concord；没有安装或版本不匹配时，mod 显示安装或升级 Concord 的命令，不显示文档。详见[从 Herdr 安装 Concord mod](use-case/install-from-herdr.md)。
+
+已经装了 Concord 的用户也可以直接运行（以下为预期输出）：
 
 ```sh
 concord herdr install
@@ -23,7 +31,7 @@ Installed Concord mod: ~/.config/herdr-app/mods/concord
 Herdr loads it on save; open it with the "Concord" command.
 ```
 
-在 Herdr 中打开 Concord mod，它出现在右侧。当前 pane 所在目录还没有初始化时，mod 显示“在这里初始化 Concord”；点一下，mod 运行 `concord init`，列出新建的文档，并给出让 agent 读的写作指南。已经初始化的仓库直接显示 Feature 列表。
+在 Herdr 中打开 Concord mod，它在当前 pane 的右侧分出一个面板，已经打开时聚焦它；没有 pane 时以浮层打开，只显示目录提示与“选择目录”。安装与打开都不改变你的布局。当前 pane 所在目录还没有初始化时，mod 显示“在这里初始化 Concord”；点一下，mod 运行 `concord init`，列出新建的文档，并给出让 agent 读的写作指南。已经初始化的仓库直接显示 Feature 列表。
 
 ## 怎样工作
 
