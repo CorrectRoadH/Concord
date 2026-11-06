@@ -2,7 +2,7 @@
 
 Concord 用 Node 文件租约协调一个 worktree 的写入，HawDB 只是可丢弃的缓存。本页负责乐观的来源访问、独占提交与恢复结果。用户路径见[协调本地发布](use-case/coordinate-local-publications.md)。
 
-每种操作的依赖矩阵见[本地 SDLC 架构](../local-sdlc/architecture.md#操作依赖)。runner 租约与证据定稿见[项目架构](../../architecture.md#发布协调)。理由：操作边界。
+每种操作的依赖矩阵见[本地 SDLC 架构](../local-sdlc/architecture.md#操作依赖)。runner 租约与证据定稿，以及按操作声明依赖的理由，见[项目架构](../../architecture.md#发布协调)。
 
 ## 实体归属 {#entity-ownership}
 
@@ -45,7 +45,7 @@ dry-run 决定计划是否发布，与 access 无关；它复用乐观快照，�
 ## 不变量 {#invariants}
 
 - read 访问拒绝发布。dry-run 表示预览，从不发布来源改动，也不启动后台刷新。
-- 来源读取不取得共享所有权，而是核对观察记录与发布修订号。部分解析遵循同一规则。
+- 来源读取不取得共享所有权，而是核对观察记录与发布修订号。只解析部分来源的读取也按这条规则核对。
 - 处于 prepared 与 committed 的 journal 保持可恢复；未知编辑不能被覆盖。
 - HawDB 目录所有权与 runner 清理不依赖查询投影。
 - 恢复成功描述的是经过核对的协调状态，而不只是没有 journal。
