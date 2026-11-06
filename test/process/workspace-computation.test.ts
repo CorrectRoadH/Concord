@@ -1,10 +1,12 @@
 // 跨进程保证：进程终止与信号——真实计算进程被暂停后取消队列不杀活任务，取消owner确认子进程退出且后续generation可继续。
 import assert from 'node:assert/strict';
+import { channel } from 'node:diagnostics_channel';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { Effect, Fiber, Schema } from 'effect';
+import { Deferred, Effect, Fiber, Schema } from 'effect';
+import { runCli } from '../support/cli.ts';
 import { acquireTraceLeaseSync, releaseTraceLeaseSync } from '../../src/base/publication/index.ts';
 import { digest, WorkspaceProjectionSchema } from '../../src/model/index.ts';
 import { installedConcordCli, pollUntil } from '../support/support.ts';
@@ -39,17 +41,30 @@ const projection = (rpc: Awaited<ReturnType<typeof rpcModule>>, connection: Effe
 test('cancelling a queued computation preserves the active child and cancelling its owner confirms group cleanup', { timeout: 30_000 }, async () => {
   const root = fixture();
   const lease = acquireTraceLeaseSync(root, 'shared', 'unrelated-computation-reader')!;
+  const controller = new AbortController();
+  let server: Promise<Awaited<ReturnType<typeof runCli>> | undefined> | undefined;
+  let serverFailure: unknown;
   let pid: number | undefined;
   try {
-    const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
+    // Keep the RPC owner here so the diagnostic barrier observes actual mutex
+    // acquisition. A hello reply alone cannot prove a query owns the child.
+    server = runCli({ argv: ['--root', root, '--json', 'server', 'run'], cwd: root, env: process.env, stdin: '', signal: controller.signal }).catch(cause => { serverFailure = cause; return undefined; });
+    await pollUntil(async () => { try { return record(root); } catch { return undefined; } }, { description: 'foreground RPC service publishes its real socket', timeoutMs: 10_000 });
     const running = record(root), rpc = await rpcModule();
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
       yield* Effect.promise(() => projection(rpc, connection));
       pid = yield* Effect.promise(() => workerPid(root));
       process.kill(pid, 'SIGSTOP');
+      const acquired = yield* Deferred.make<void>();
+      const events = channel('concord.workspace.computation');
+      const observe = (message: unknown) => {
+        const event = Schema.decodeUnknownSync(Schema.Struct({ root: Schema.String, kind: Schema.String }), { onExcessProperty: 'error' })(message);
+        if (event.root === root && event.kind === 'query') Deferred.doneUnsafe(acquired, Effect.void);
+      };
+      yield* Effect.acquireRelease(Effect.sync(() => { events.subscribe(observe); }), () => Effect.sync(() => { events.unsubscribe(observe); }));
       const active = yield* Effect.forkScoped(rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, cwd: root, environment, cache: 'use' }));
-      yield* connection.client.hello({ protocol: 'concord.workspace/v1', installation: running.installation });
+      yield* Deferred.await(acquired);
       const queued = yield* Effect.forkScoped(rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, cwd: root, environment, cache: 'use' }));
       yield* connection.client.hello({ protocol: 'concord.workspace/v1', installation: running.installation });
       yield* Fiber.interrupt(queued);
@@ -66,8 +81,12 @@ test('cancelling a queued computation preserves the active child and cancelling 
   } finally {
     if (pid !== undefined) try { process.kill(pid, 'SIGCONT'); } catch { /* confirmed reaped */ }
     await stop(root);
+    controller.abort();
+    const result = await server;
     releaseTraceLeaseSync(lease, 'unrelated-computation-reader');
     rmSync(root, { recursive: true, force: true });
+    assert.equal(serverFailure, undefined);
+    assert.equal(result?.exitCode, 0, result?.stderr);
   }
 });
 

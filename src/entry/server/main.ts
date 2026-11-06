@@ -26,6 +26,7 @@ import { Git } from '../../base/git/index.ts';
 import { OwnedProcess, OwnedProcessLive, ProcessEventsLive } from '../../base/process/index.ts';
 import { recordProcessEvent } from '../../app/index.ts';
 import { existsSync } from 'node:fs';
+import { channel } from 'node:diagnostics_channel';
 import { join } from 'node:path';
 import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.ts';
 import { CacheSnapshotUnavailable, ConcordError, failure, objectDigest } from '../../model/index.ts';
@@ -258,6 +259,8 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
   yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
   return { close, run: (operation: Computation, snapshot: Parameters<typeof CacheSnapshot.layer>[0] = {}) => mutex.withPermit(Effect.gen(function*() {
     const worker = active ?? (yield* start);
+    const acquired = channel('concord.workspace.computation');
+    if (acquired.hasSubscribers) acquired.publish({ root, kind: operation.kind });
     const text = JSON.stringify(snapshot ?? {}), id = worker.snapshot?.text === text ? worker.snapshot.id : crypto.randomUUID();
     const bytes = new TextEncoder().encode(text);
     if (bytes.byteLength > 32 * FRAME_LIMIT) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Cache snapshot exceeds 32 MiB'));
