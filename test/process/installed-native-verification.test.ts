@@ -10,7 +10,6 @@ import { prepareSourceConsumer, sourceConcord } from '../support/installed-packa
 import { tmpdir } from '../support/temporary.js';
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('the gate package operates native projections without compilers and restores private damage', () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-installed-native-'));
   try {

@@ -3,11 +3,12 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { queryContext } from '../../src/app/index.js';
+import { queryContext, readQuery, storeQuery } from '../../src/app/index.js';
+import { PersistentCache } from '../../src/base/cache/index.js';
 import { setAuthor } from '../../src/domain/documents/index.js';
 import { digest } from '../../src/model/index.js';
 import { LocalRepository, runApplication } from '../support/repository.js';
-import { createDocument, readQuery, storeQuery } from '../support/operations.js';
+import { createDocument } from '../support/operations.js';
 import { createConsumer } from '../support/consumer.js';
 import { writeProjectConfig } from '../support/support.js';
 const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
@@ -19,16 +20,22 @@ test('failed refresh retains a full oldest snapshot at namespace capacity and su
   const root = consumer();
   try {
     const context = await runApplication(queryContext(root, ['trace', 'gaps']));
-    storeQuery(context, candidate());
-    for (let i = 0; i < 63; i++) storeQuery({ ...context, key: `other-${i}` }, candidate(String(i)));
-    storeQuery(context, { kind: 'failure', error: { failedAt: new Date().toISOString(), scannedAt: Date.now(), code: 'QueryRefreshFailed', message: 'failed scan' } });
-    const failed = readQuery(context);
-    assert.deepEqual(failed.record?.value, gaps());
-    assert.equal(failed.error?.code, 'QueryRefreshFailed');
-    storeQuery(context, candidate('refreshed'));
-    const succeeded = readQuery(context);
-    assert.deepEqual(succeeded.record?.value, gaps('refreshed'));
-    assert.equal(succeeded.error, undefined);
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const owner = yield* PersistentCache.owner(context.privateDir);
+      yield* owner.open;
+      yield* Effect.gen(function*() {
+        yield* storeQuery(context, candidate());
+        for (let i = 0; i < 63; i++) yield* storeQuery({ ...context, key: `other-${i}` }, candidate(String(i)));
+        yield* storeQuery(context, { kind: 'failure', error: { failedAt: new Date().toISOString(), scannedAt: Date.now(), code: 'QueryRefreshFailed', message: 'failed scan' } });
+        const failed = yield* readQuery(context);
+        assert.deepEqual(failed.record?.value, gaps());
+        assert.equal(failed.error?.code, 'QueryRefreshFailed');
+        yield* storeQuery(context, candidate('refreshed'));
+        const succeeded = yield* readQuery(context);
+        assert.deepEqual(succeeded.record?.value, gaps('refreshed'));
+        assert.equal(succeeded.error, undefined);
+      }).pipe(Effect.provideService(PersistentCache, owner.service));
+    })).pipe(Effect.provide(PersistentCache.layer)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
