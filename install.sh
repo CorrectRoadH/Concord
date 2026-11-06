@@ -35,16 +35,26 @@ trap cleanup 0
 trap 'exit 1' 1 2 3 15
 release='https://github.com/CorrectRoadH/Concord/releases'
 version=${CONCORD_VERSION:-}
+tag="v$version"
 if [ -z "$version" ]; then
   latest=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$release/latest") || fail 'Could not find the latest release.'
-  case "$latest" in "$release/tag/v"*) version=${latest#"$release/tag/v"} ;; *) fail 'Invalid latest release URL.' ;; esac
+  case "$latest" in
+    "$release/tag/concord-v"*) version=${latest#"$release/tag/concord-v"}; tag="concord-v$version" ;;
+    "$release/tag/v"*) version=${latest#"$release/tag/v"}; tag="v$version" ;;
+    *) fail 'Invalid latest release URL.' ;;
+  esac
 fi
 # Versions are path components, never arbitrary filesystem paths or URL fragments.
 node -e 'if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(process.argv[1])) process.exit(1)' "$version" || fail 'Invalid CONCORD_VERSION; use a release version such as 0.9.0.'
 archive="concord-sdlc-$version.tgz"
 printf 'Installing Concord %s for %s...\n' "$version" "$platform"
-curl -fsSL "$release/download/v$version/SHA256SUMS" -o "$scratch/SHA256SUMS" || fail 'Could not download release checksums.'
-curl -fsSL "$release/download/v$version/$archive" -o "$scratch/$archive" || fail 'Could not download the release package.'
+if ! curl -fsSL "$release/download/$tag/SHA256SUMS" -o "$scratch/SHA256SUMS"; then
+  # The release workflow also accepts the documented concord-v tag prefix.
+  [ "$tag" = "v$version" ] || fail 'Could not download release checksums.'
+  tag="concord-v$version"
+  curl -fsSL "$release/download/$tag/SHA256SUMS" -o "$scratch/SHA256SUMS" || fail 'Could not download release checksums.'
+fi
+curl -fsSL "$release/download/$tag/$archive" -o "$scratch/$archive" || fail 'Could not download the release package.'
 expected=$(node -e '
   const fs = require("node:fs"), path = require("node:path");
   const rows = fs.readFileSync(process.argv[1], "utf8").trim().split(/\r?\n/).map(row => /^([a-fA-F0-9]{64})\s+\*?(.+)$/.exec(row)).filter(row => row && path.posix.basename(row[2]) === process.argv[2]);
