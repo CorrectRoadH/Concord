@@ -11,11 +11,15 @@
 - `self`、`scale` 与 fixture 消费者及进程输出位于临时工作目录，结束后删除（`--keep` 除外）。
 - 路径消费者原地测量，只改动其 Git-private 目录中的可丢弃 HawDB 缓存；`--out` 指定测量或 profile 输出位置。
 
-测量不修改 Spec、不写 Memory，测量者审阅记录后用 Concord 的 Memory 命令保存结论。macOS 的临时目录位于 symlink 之后，Concord 会拒绝该路径；所有工作目录先取 realpath。
+测量不修改 Spec、不写 Memory，测量者审阅记录后用 Concord 的 Memory 命令保存结论。
+
+所有工作目录先取 realpath，因为 macOS 的临时目录位于 symlink 之后，Concord 会拒绝该路径。
 
 ## 基线
 
-`--compare` 自动准备基线产物，位置为 `${XDG_CACHE_HOME:-~/.cache}/concord/bench/baseline/<commit>/`。准备时把基线提交克隆为该目录下独立的 Git clone，执行 `pnpm install --frozen-lockfile --offline`，再用该提交自带的构建入口构建；clone 内出现 `dist/` 不违反开发 worktree 没有 `dist/` 的规则。原生产物按[原生绑定复用](../build/architecture.md#原生绑定复用)取得，不需要 Cargo。
+`--compare` 自动准备基线产物，位置为 `${XDG_CACHE_HOME:-~/.cache}/concord/bench/baseline/<commit>/`。准备时把基线提交克隆为该目录下独立的 Git clone，执行 `pnpm install --frozen-lockfile --offline`，再用该提交自带的构建入口构建。原生产物按[原生绑定复用](../build/architecture.md#原生绑定复用)取得，不需要 Cargo。
+
+这个 clone 不是开发 worktree，其中出现 `dist/` 不违反开发 worktree 没有 `dist/` 的规则。
 
 同一提交的基线产物在后续测量中复用，构建前后都校验产物身份；保留最近 3 个基线，更早的 clone 直接删除。候选产物可以有未提交改动，记录中 `dirty` 为 true。
 

@@ -20,7 +20,9 @@
 
 测量工具只扫描 `docs/feature/*/performance.md` 派生预算行，不维护 owner 列表。README、Use Case 与 Engineering 页面中的数字不是预算；它们链接对应的 `performance.md`。理解阈值所需的参照消费者、参照环境与负载前提写在同一页。
 
-场景 ID 的格式为 `<feature-id>/<名称>`，`feature-id` 必须是该 `performance.md` 所属的 Feature。场景引用的 owner 不存在于所测消费者时，该场景在记录中标为 `skipped` 并写明原因，不参与通过判定；`self` 消费者上出现 `skipped` 视为场景或预算表失效，判失败。
+场景 ID 的格式为 `<feature-id>/<名称>`，`feature-id` 必须是该 `performance.md` 所属的 Feature。
+
+场景引用的 owner 不存在于所测消费者时，该场景在记录中标为 `skipped` 并写明原因，不参与通过判定。`self` 消费者上出现 `skipped`，视为场景或预算表失效，判失败。
 
 ## 基准场景
 
@@ -30,15 +32,29 @@
 | --- | --- |
 | `id` | 场景 ID，在全仓唯一，必须被恰好一个预算行引用 |
 | `consumer` | `self`、`scale` 或 `fixture:<名称>`；fixture 由 `bench/fixtures/` 下的生成函数通过公开 CLI 建立并提交冻结 |
-| `state` | `warm`（采样前执行一次同一场景并确认缓存 `ready`）或 `cold`（每次采样前 `concord cache clear`） |
+| `state` | `warm` 或 `cold`，见下文 |
 | `prepare` | 每个产物采样前执行一次的准备步骤，不计时 |
-| `beforeEach` | 每次采样前执行的步骤（例如修改 k 个文件），不计时，结束后消费者必须可以恢复到冻结状态 |
-| `run` | 计时的 Concord argv；`{ argv, concurrency }` 同时启动 n 个进程，计时到全部退出；`{ request }` 对 `prepare` 启动的 view 服务发出一次 HTTP 请求，计时到响应体读完 |
+| `beforeEach` | 每次采样前执行的步骤（例如修改 k 个文件），不计时；结束后消费者必须可以恢复到冻结状态 |
+| `run` | 计时的操作，形式见下文 |
 | `expect` | 期望的退出码，以及可选的 `--json` 输出 Schema；不符即该样本失败 |
 
-只计 `run` 进程从启动到退出的 wall time（`request` 形式计请求发出到响应体读完），`prepare` 与 `beforeEach` 不计时。场景只能通过公开 CLI 与文件系统操作消费者，不导入 `src/` 内部模块。
+`state` 的两个取值：
 
-刷新上限场景以 `{ scan }` 形式运行安装目录内的扫描入口 `query-scan-worker.js <root> <query-json>`，即后台刷新进程实际执行的扫描，按最大值对照上限。读取异步投影的 `warm` 场景在采样前等待投影发布，等待不超过刷新上限加 30 秒；等不到投影时测量失败，记录最后一次输出的 `QueryPending` 及 `refresh` 详情。
+- `warm`：采样前执行一次同一场景，并确认缓存 `ready`。
+- `cold`：每次采样前执行 `concord cache clear`。
+
+`run` 有四种形式，都只计时这一步，`prepare` 与 `beforeEach` 不计时：
+
+- Concord argv：计 `run` 进程从启动到退出的 wall time。
+- `{ argv, concurrency }`：同时启动 n 个进程，计时到全部退出。
+- `{ request }`：对 `prepare` 启动的 view 服务发出一次 HTTP 请求，计时从请求发出到响应体读完。
+- `{ scan }`：刷新上限场景使用，见下文。
+
+场景只能通过公开 CLI 与文件系统操作消费者，不导入 `src/` 内部模块。
+
+刷新上限场景以 `{ scan }` 形式运行安装目录内的扫描入口 `query-scan-worker.js <root> <query-json>`，即后台刷新进程实际执行的扫描，按最大值对照上限。
+
+读取异步投影的 `warm` 场景在采样前等待投影发布，等待不超过刷新上限加 30 秒。等不到投影时测量失败，记录最后一次输出的 `QueryPending` 及 `refresh` 详情。
 
 ## 覆盖规则
 
