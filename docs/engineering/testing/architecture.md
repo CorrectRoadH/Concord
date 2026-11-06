@@ -8,7 +8,7 @@
 
 同步测试体使用 `Effect.sync`，Node adapter 回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
 
-`test/support.ts`、e2e fixture、调度脚本与确定性配置进入 sourceFiles；owner 测试直接写出声明，不通过包装函数隐藏。`tsx` 负责 Node 测试期加载严格 TypeScript；`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 共同进入 evidence definition digest。
+`test/support.ts`、e2e fixture、调度脚本与确定性配置进入 sourceFiles；owner 测试直接写出声明，不通过包装函数隐藏。Node 测试期由 Node 自带的类型擦除加载 TypeScript（[从源码运行](../build/architecture.md#从源码运行)）；`.node-version`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 共同进入 evidence definition digest。
 
 ## 架构守护
 
