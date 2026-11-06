@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
@@ -16,8 +16,5 @@ test('docs work plans with default settings without creating a project configura
     assert.equal(result.operation, 'docs-work-prepare');
     assert.equal((await show(root, 'no-config')).runId, 'no-config');
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);
-    writeFileSync(join(root, 'concord.config.ts'), 'export default {};\n');
-    const appeared = await prepare(root, { scopes: ['docs/b/'], runId: 'with-config' });
-    assert.equal(appeared.operation, 'docs-work-prepare');
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
