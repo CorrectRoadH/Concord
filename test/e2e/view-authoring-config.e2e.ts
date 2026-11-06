@@ -106,7 +106,18 @@ test('browser preserves project configuration conflicts and navigates test evide
   await page.getByRole('tab',{name:'实现',exact:true}).click();
   await page.getByRole('button',{name:/^src\/demo\.ts · 第 /}).click();
   const source=page.getByLabel('源码原文',{exact:true});
+  await expect(source).toContainText('export const demo = 1;');
+  const sourceSaved = page.waitForResponse(response => {
+    if (!response.url().endsWith('/api/action')) return false;
+    const input = response.request().postDataJSON() as { action?: string; path?: string; body?: string };
+    return input.action === 'source.set' && input.path === 'src/demo.ts' && input.body === 'export const demo = 2;\n';
+  });
+  const sourceStarted = performance.now();
   await source.fill('export const demo = 2;\n');
+  const sourceReceipt = await sourceSaved;
+  assert.equal(sourceReceipt.status(), 200);
+  await sourceReceipt.finished();
+  console.info('Source autosave receipt', { elapsedMs: performance.now() - sourceStarted, timing: sourceReceipt.request().timing() });
   await expect.poll(()=>readFileSync(join(root,'src/demo.ts'),'utf8')).toBe('export const demo = 2;\n');
   await page.getByRole('button',{name:'Close',exact:true}).click();
   await sidebar.getByRole('link',{name:'Git 变更',exact:true}).click();

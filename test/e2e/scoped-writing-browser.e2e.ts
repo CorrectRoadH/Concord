@@ -36,7 +36,22 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
   await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
   await page.setViewportSize({ width: 1440, height: 950 });
+  const catalogResponse = (path: string) => page.waitForResponse(response => {
+    if (!response.url().endsWith('/api/action')) return false;
+    const input = response.request().postDataJSON() as { action?: string; path?: string };
+    return input.action === 'concepts.show' && input.path === path;
+  });
+  const confirmCatalog = async (response: Awaited<ReturnType<typeof catalogResponse>>) => {
+    assert.equal(response.status(), 200, `catalog load: ${await response.text()}`);
+    await response.finished();
+    console.info('Catalog load receipt', response.request().postDataJSON(), response.request().timing());
+  };
+  const initialCatalog = catalogResponse('docs/concepts.md');
+  const initialScopes = page.waitForResponse(response => response.url().endsWith('/api/action') &&
+    (response.request().postDataJSON() as { action?: string }).action === 'writing.index');
   await page.goto(`http://127.0.0.1:${server.port}/terms`);
+  assert.equal((await initialScopes).status(), 200);
+  await confirmCatalog(await initialCatalog);
   await expect(page.getByRole('complementary', { name: '术语 侧栏' })).toBeVisible();
   const terms = page.getByRole('list', { name: '术语列表' });
   const source = page.getByLabel('源码原文', { exact: true });
@@ -45,11 +60,15 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
   await expect(page.getByRole('button', { name: '管理术语', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '编辑术语', exact: true })).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: '源码原文' })).toBeVisible();
+  const betaLoaded = catalogResponse(`${b}/concepts.md`);
   await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
+  await confirmCatalog(await betaLoaded);
   await expect(source).toContainText('Beta definition');
   await page.getByLabel('筛选术语').fill('Global');
   await expect(terms.getByRole('button')).toHaveCount(1);
+  const globalLoaded = catalogResponse('docs/concepts.md');
   await terms.getByRole('button', { name: /Global/ }).click();
+  await confirmCatalog(await globalLoaded);
   await expect(source).toContainText('Global definition');
   await expect(page.locator('.terminology-editor .cm-activeLine')).toHaveText('## Global {#global}');
   await page.getByLabel('筛选术语').fill('');
@@ -62,10 +81,14 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
   assert.match(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), /Global definition/u);
   await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
+  const betaReloaded = catalogResponse(`${b}/concepts.md`);
   await page.getByRole('button', { name: '丢弃并切换' }).click();
+  await confirmCatalog(await betaReloaded);
   await expect(source).toContainText('Beta definition');
   await page.getByLabel('筛选术语').fill('Second');
+  const secondLoaded = catalogResponse('docs/concepts.md');
   await terms.getByRole('button', { name: /Second/ }).click();
+  await confirmCatalog(await secondLoaded);
   await expect(source).toContainText('Second definition');
   await page.getByLabel('筛选术语').fill('');
 

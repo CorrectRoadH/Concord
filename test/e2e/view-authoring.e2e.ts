@@ -148,12 +148,57 @@ test('browser creates a Feature, edits Markdown, preserves conflicts and opens G
   await page.locator('.feature-use-cases').getByRole('link').filter({hasText:'Nested browser flow'}).click();
   const drawerEditor=drawer.locator('[contenteditable="true"]').first();
   await expect(drawerEditor).toBeVisible();
+  let releaseFirst!: () => void;
+  let releaseLatest!: () => void;
+  let firstEntered!: () => void;
+  let latestEntered!: () => void;
+  const firstGate = new Promise<void>(resolve => { releaseFirst = resolve; });
+  const latestGate = new Promise<void>(resolve => { releaseLatest = resolve; });
+  const firstRequest = new Promise<void>(resolve => { firstEntered = resolve; });
+  const latestRequest = new Promise<void>(resolve => { latestEntered = resolve; });
+  const drawerWrites: string[] = [];
+  // Hold real requests at the network boundary to observe the queue without a delay.
+  await page.route('**/api/action', async route => {
+    const input = route.request().postDataJSON() as { action?: string; path?: string; body?: string };
+    if (input.action === 'document.set' && input.path === 'docs/feature/browser-feature/use-case/browser-flow.md') {
+      drawerWrites.push(input.body ?? '');
+      if (drawerWrites.length === 1) { firstEntered(); await firstGate; }
+      else if (drawerWrites.length === 2) { latestEntered(); await latestGate; }
+    }
+    await route.continue();
+  });
+  const savedBody = page.waitForResponse(response => {
+    if (!response.url().endsWith('/api/action')) return false;
+    const input = response.request().postDataJSON() as { action?: string; path?: string; body?: string };
+    return input.action === 'document.set' && input.path === 'docs/feature/browser-feature/use-case/browser-flow.md' && Boolean(input.body?.includes('Saved Use Case body.'));
+  });
   await drawerEditor.locator('p').first().fill('Saved Use Case body.');
-  await expect.poll(()=>readFileSync(join(root,'docs/feature/browser-feature/use-case/browser-flow.md'),'utf8')).toContain('Saved Use Case body.');
-  await drawerEditor.locator('p').first().fill('Saved on drawer close.');
-  await drawer.getByRole('button',{name:'Close',exact:true}).click();
+  await firstRequest;
+  const savedOnClose = page.waitForResponse(response => {
+    if (!response.url().endsWith('/api/action')) return false;
+    const input = response.request().postDataJSON() as { action?: string; path?: string; body?: string };
+    return input.action === 'document.set' && input.path === 'docs/feature/browser-feature/use-case/browser-flow.md' && Boolean(input.body?.includes('Saved on drawer close.'));
+  });
+  const closeStarted = performance.now();
+  try {
+    await drawerEditor.locator('p').first().fill('Saved on drawer close.');
+    await drawer.getByRole('button',{name:'Close',exact:true}).click();
+    await expect(drawer).toBeVisible();
+    assert.equal(drawerWrites.length, 1, 'closing must queue the latest draft behind the active save');
+    releaseFirst();
+    assert.equal((await savedBody).status(), 200);
+    await expect.poll(()=>readFileSync(join(root,'docs/feature/browser-feature/use-case/browser-flow.md'),'utf8')).toContain('Saved Use Case body.');
+    await latestRequest;
+    assert.equal(drawerWrites.length, 2);
+    releaseLatest();
+    const closeReceipt = await savedOnClose;
+    assert.equal(closeReceipt.status(), 200);
+    await closeReceipt.finished();
+    console.info('Drawer close save receipt', { writes: drawerWrites.length, elapsedMs: performance.now() - closeStarted, timing: closeReceipt.request().timing() });
+  } finally { releaseFirst(); releaseLatest(); }
   await expect(drawer).toHaveCount(0);
   assert.ok(readFileSync(join(root,'docs/feature/browser-feature/use-case/browser-flow.md'),'utf8').includes('Saved on drawer close.'));
+  await page.unroute('**/api/action');
   await nestedCase.click();
   await page.reload();
   await expect(drawer).toBeVisible();
