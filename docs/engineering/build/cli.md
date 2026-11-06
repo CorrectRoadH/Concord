@@ -11,7 +11,7 @@
 | `vp run build:native` | 准备原生绑定，按[原生绑定复用](architecture.md#原生绑定复用)的顺序取得 |
 | `vp dev` | 只启动 Web 开发服务器，不运行发行准备 |
 
-`pnpm check` 是检查入口，不是构建命令，见[检查入口](../testing/README.md#检查入口)。Vite+ 内置的 `vp check` 和 `vp test` 不调用本项目脚本。任务结果不缓存。
+`pnpm gate` 是检查入口，不是构建命令，见[检查入口](../testing/README.md#检查入口)。Vite+ 内置的 `vp check` 和 `vp test` 不调用本项目脚本。任务结果不缓存。
 
 ## 环境变量
 

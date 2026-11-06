@@ -1,6 +1,6 @@
 # Concord 自举维护
 
-本主题规定 Concord 怎样用当前检出的源码 CLI（`pnpm concord`）维护本仓库的 Spec。仓库中的 Markdown 与真实测试标记共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是 [`pnpm check`](../testing/README.md#检查入口)。
+本主题规定 Concord 怎样用当前检出的源码 CLI（`pnpm concord`）维护本仓库的 Spec。仓库中的 Markdown 与真实测试标记共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是 [`pnpm gate`](../testing/README.md#检查入口)。
 
 构建与源码运行见[构建与开发环境](../build/README.md)，测试规则见[测试](../testing/README.md)，性能测量见[性能测量](../performance/README.md)。
 
@@ -9,7 +9,7 @@
 Concord 用自己的流程开发和验收自己。
 
 1. 新功能先声明目标 Feature 与完整 Use Case，重要方案经 Design 比较和裁决。
-2. 验收测试在声明旁关联 Spec。交付必须通过 `pnpm check`，测试运行源码并验证公开 CLI。
+2. 验收测试在声明旁关联 Spec。交付必须通过 `pnpm gate`，测试运行源码并验证公开 CLI。
 3. Concord 的 check、trace 与 review 用于检查自身关系，不虚构测试关联或完成状态。
 
 ## 目标
@@ -25,7 +25,7 @@ Concord 用自己的流程开发和验收自己。
 2. 直接编辑 `docs/` 与 `memory/` 下的文件，编辑后运行 `pnpm concord check`。
 3. 新增或调整真实测试时，在声明正上方维护标记；先为 Feature 或 Use Case 写好 Spec，再在已有真实测试中选择最接近的验收声明添加关系，不为了数字注册空测试。
 4. 运行类型检查和目标测试，再运行 Concord 的 doctor、check、trace 与 review。
-5. 交付前执行完整 `pnpm check`。
+5. 交付前执行完整 `pnpm gate`。
 
 | 情形 | 做法 |
 | --- | --- |

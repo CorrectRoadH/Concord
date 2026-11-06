@@ -4,7 +4,7 @@
 
 ## Runner 适配
 
-`pnpm check` 的测试阶段统一调度 Node 测试与浏览器测试，两类测试都运行当前检出的源码。CLI 层与进程层以源码入口启动子进程，与 `pnpm concord` 相同；原生产物取自共享缓存。只有打包测试构建到自己的临时目录。
+`pnpm gate` 的测试阶段统一调度 Node 测试与浏览器测试，两类测试都运行当前检出的源码。CLI 层与进程层以源码入口启动子进程，与 `pnpm concord` 相同；原生产物取自共享缓存。只有打包测试构建到自己的临时目录。
 
 同步测试体使用 `Effect.sync`，Node adapter 回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
 

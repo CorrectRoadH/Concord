@@ -24,7 +24,7 @@
 
 ## 验收方式
 
-使用打包后的公开 CLI 在隔离 Git 消费仓库中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `pnpm check`，并使用 Concord 的 check、trace 与 review 检查自身 Spec 关联。
+使用打包后的公开 CLI 在隔离 Git 消费仓库中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `pnpm gate`，并使用 Concord 的 check、trace 与 review 检查自身 Spec 关联。
 
 ## 性能
 

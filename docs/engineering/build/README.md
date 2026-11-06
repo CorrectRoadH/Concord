@@ -12,7 +12,7 @@ cd Concord
 pnpm install --frozen-lockfile # 安装项目固定版本的 vp
 rustup toolchain install 1.97.1 --profile minimal
 pnpm exec vp run concord --help
-pnpm exec vp run check
+pnpm exec vp run gate
 ```
 
 没有全局安装 Vite+ 时使用 `pnpm exec vp`。之后用 `vp install` 通过固定版本的 pnpm 管理依赖。

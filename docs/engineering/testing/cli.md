@@ -5,7 +5,7 @@
 ## 完整门禁
 
 ```sh
-pnpm check [--test-name-pattern=<表达式>] [--test-shard=<序号>/<总数>] [<测试文件>...]
+pnpm gate [--test-name-pattern=<表达式>] [--test-shard=<序号>/<总数>] [<测试文件>...]
 ```
 
 | 参数 | 作用 |
@@ -16,7 +16,7 @@ pnpm check [--test-name-pattern=<表达式>] [--test-shard=<序号>/<总数>] [<
 
 退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Node 测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
 
-CI 每个分片运行 `pnpm check --test-shard=<序号>/4`。报告写入每次调用独立的 `.test-results/run-*`，其中有按耗时排序的测试文件与子进程启动次数；CI 按分片上传。
+CI 每个分片运行 `pnpm gate --test-shard=<序号>/4`。报告写入每次调用独立的 `.test-results/run-*`，其中有按耗时排序的测试文件与子进程启动次数；CI 按分片上传。
 
 `test/*.test.ts` 交给 Node test，`test/e2e/*.e2e.ts` 交给浏览器 runner。按文件执行与按标题过滤路由到相应 runner。
 
@@ -24,14 +24,14 @@ CI 每个分片运行 `pnpm check --test-shard=<序号>/4`。报告写入每次�
 
 | 变量 | 默认值 | 规则 |
 | --- | --- | --- |
-| `CONCORD_TEST_CONCURRENCY` | `min(8, max(1, floor(可用 CPU / 2)))` | Node 测试的文件进程并发，必须为正整数 |
-| `CONCORD_E2E_WORKERS` | `min(4, Node 并发)` | 浏览器测试的 worker 数 |
+| `CONCORD_TEST_CONCURRENCY` | `min(8, floor(可用 CPU / 2), floor(可用内存 / 1 GiB))`，至少 1 | Node 测试的文件进程并发，必须为正整数；可用内存取门禁 scope 的 `MemoryMax` 减去浏览器 worker 的预算 |
+| `CONCORD_E2E_WORKERS` | `min(4, Node 并发, floor(MemoryMax / 4 / 2.5 GiB))`，至少 1 | 浏览器测试的 worker 数；每个 worker 的预算 2.5 GiB 含它的浏览器与工作区服务 |
 
 本地与 CI 使用相同的默认值。默认值改变时，用同一冻结快照按[性能测量](../performance/README.md#测量方法)测量前后两种设置。
 
 ## 浏览器环境
 
-`pnpm check` 包含真实 Chromium 的界面验收。
+`pnpm gate` 包含真实 Chromium 的界面验收。
 
 | 方式 | 作用 |
 | --- | --- |
