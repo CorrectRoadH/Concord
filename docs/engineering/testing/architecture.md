@@ -8,7 +8,7 @@
 
 同步测试体使用 `Effect.sync`，Node adapter 回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
 
-`test/support/support.ts`、e2e fixture、调度脚本与确定性配置进入 `runner.sourceFiles`；owner 测试直接写出声明，不通过包装函数隐藏。Node 测试期由 Node 自带的类型擦除加载 TypeScript（[从源码运行](../build/architecture.md#从源码运行)）；`.node-version`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 共同进入 evidence definition digest。
+`runner.sourceFiles` 列出测试运行依赖、修复核验期间不得改变的全部非产品文件：从全部测试文件沿相对导入可达、且不在 `src/` 下的文件（测试文件本身除外），加上 `e2e.config.ts` 与 runner 命令直接执行的脚本。列表留在 `concord.config.ts`，`test/model/runner-source-files.test.ts` 从导入图推导期望集合并与列表比较，缺项或多出的项都失败。owner 测试直接写出声明，不通过包装函数隐藏。Node 测试期由 Node 自带的类型擦除加载 TypeScript（[从源码运行](../build/architecture.md#从源码运行)）；`.node-version`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 共同进入 evidence definition digest。
 
 ## 架构守护
 
@@ -22,7 +22,7 @@
 
 ## Fixture
 
-测试仓库由 `test/support/consumer.ts` 构造。每次测试运行先构建一个已初始化的模板消费者，每个测试复制模板得到自己的仓库，不在每个测试中重新执行 `git init` 与 `concord init`。需要不同初始状态的测试在复制后通过公开入口修改。可用的 Fixture 与新增方式见[扩展 Fixture](use-case/extend-fixtures.md)。
+测试仓库由 `test/support/consumer.ts` 构造。每次测试运行先构建一个已初始化的模板消费者，每个测试复制模板得到自己的仓库，不在每个测试中重新执行 `git init` 与 `concord init`。需要不同初始状态的测试在复制后通过公开入口修改。例外是被测对象本身就是仓库初始状态的测试：未初始化仓库、非 Git 目录、shallow clone、特定提交历史或 merge 结构，这类测试自己构造仓库，并在用例中写明原因。可用的 Fixture 与新增方式见[扩展 Fixture](use-case/extend-fixtures.md)。
 
 受管文件的内容只由格式的 owner 生成：Spec 与 Memory 通过领域写入入口或 `renderDocument`，品味由 `initialize` 写入的模板生成，配置通过 `renderTypeScriptConfig`，写作政策与 concepts 通过各自的写入入口。格式改变时只改格式 owner，测试不随之修改（[当前格式](../../architecture.md#当前格式)）。
 

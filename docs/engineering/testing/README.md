@@ -196,7 +196,7 @@ fake 只用于外部边界：GitHub 与其它远端服务、模型、系统浏�
 
 测试与 Spec 的关系由测试标记拥有，`concord trace gaps` 从标记派生没有测试的 Use Case。本仓库的目标是零缺口：新增或修改 Use Case 的交付同时提交对应测试。
 
-尚未实现的 Use Case 留在缺口列表中，由一个打开的 Issue 跟踪实现，该 Issue 链接这个 Use Case 或其所属 Feature。自举测试检查每个缺口都有这样的 Issue。测试不指向 Roadmap、Design 或已删除的行为；行为删除时，对应测试在同一次交付中删除。
+尚未实现的 Use Case 留在缺口列表中，由一个打开的 Issue 跟踪实现：该 Issue 的 `adopts` 关系指向这个 Use Case 或其所属 Feature 的 README（`concord issue link <id> --role adopts <路径>`）。自举测试 `test/domain/trace-gap-issues.test.ts` 对本仓库派生 `trace gaps` 的 `contracts`，任一项没有这样的 Issue 即失败，失败信息列出缺少 Issue 的路径。已有测试能观察某个 Use Case 的结果时，给该测试加标记，不另写重复测试。测试不指向 Roadmap、Design 或已删除的行为；行为删除时，对应测试在同一次交付中删除。
 
 ## 成本与稳定
 
@@ -205,6 +205,8 @@ fake 只用于外部边界：GitHub 与其它远端服务、模型、系统浏�
 | 完整门禁 | 参照机器空闲时单机不超过 5 分钟；CI 四个分片每片不超过 2 分钟 |
 | 单个测试文件 | 不超过 60 秒 |
 | 单个测试 | 所在层的 p50 上限 |
+
+门禁报告列出耗时超出上限的文件，但不因此以失败退出：耗时随机器负载波动，以耗时判失败会制造不稳定的门禁。上限由交付与[验收](#验收)执行。Runner 另给每个 Node 测试文件 5 分钟的超时，只用来终止挂起的文件，不是成本上限。
 
 交付使某个文件超出上限时，把领域情形下移一层，或拆分文件以便并发，不提高上限（[拆分慢测试](use-case/split-slow-test.md)）。
 
