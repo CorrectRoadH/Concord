@@ -18,17 +18,17 @@ clear 只删除 cache.hawdb 内的数据，不删除同级协调锁。clear --dr
 
 缓存只对写入它的引擎版本有效，换用不同引擎版本的 Concord 时缓存按不可用处理并重建。短期解析及 Git baseline 使用进程内 HawDB；清理本进程不表示其它进程的短期缓存已清空，它们仍须核对当前来源。
 
-Concord 自己的写入（命令助手与 Web 保存）对文档、配置、Issue、Memory 与源码使用短 publication lease、preimage journal 和逐文件原子 rename。查询声明 `access: read`，使用乐观 snapshot，并拒绝真正发布。普通写入仅在提交阶段取得独占所有权；外部执行、恢复、cache rebuild 与 cache clear 保留各自的独占边界。dry-run 预览使用乐观 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
+Concord 自己的写入（命令助手与 Web 保存）对文档、配置、Issue、Memory 与源码使用短 publication lease、记录前像的 journal 和逐文件原子 rename。查询声明 `access: read`，使用乐观 snapshot，并拒绝真正发布。普通写入仅在提交阶段取得独占所有权；外部执行、恢复、cache rebuild 与 cache clear 保留各自的独占边界。dry-run 预览使用乐观 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
 
 ```sh
 concord recover --json
 ```
 
-恢复先记录并回收观察到的已死 publication token，再在独占保护下选择唯一 journal。后续引擎不隐式回收新到达的 owner；即使该 owner 已死，本次也返回 Busy，留待下一次显式恢复记录。只在当前内容等于 preimage 或 planned digest 时回滚或完成。`RecoveryConflict` 保留外部编辑和 journal，多 journal 冲突先于 runner 报告。不要删 journal、抢锁或用 cache 命令绕过恢复。
+恢复先记录并回收观察到的已死 publication token，再在独占保护下选择唯一 journal。后续引擎不隐式回收新到达的持有者；即使该持有者已死，本次也返回 Busy，留待下一次显式恢复记录。只在当前内容等于前像或 planned digest 时回滚或完成。`RecoveryConflict` 保留外部编辑和 journal，多 journal 冲突先于 runner 报告。不要删 journal、抢锁或用 cache 命令绕过恢复。
 
-同 worktree、同 host、最多一个 exclusive 加多个 shared 是合法加入暂态。全部 owner 均已确认 ESRCH 时，recover 逐 token 回收该暂态。任一活 owner、第二个 exclusive、未知文件、host 不匹配、EPERM、PID 复用或未知 owner 都保留现场。恢复不以年龄推断死亡。回收死 token 只证明这些 token 的 ESRCH，不解释未复现的 macOS 现场原因。
+同 worktree、同 host、最多一个 exclusive 加多个 shared 是合法加入暂态。全部持有者均已确认 ESRCH 时，recover 逐 token 回收该暂态。任一活着的持有者、第二个 exclusive、未知文件、host 不匹配、EPERM、PID 复用或未知持有者都保留现场。恢复不以年龄推断死亡。回收死 token 只证明这些 token 的 ESRCH，不解释未复现的 macOS 现场原因。
 
-共享 token 加入现有目录后，须重读完整 owner 集合。只有自己的 token 存在，且全部 owner 为同 worktree 的 shared，才开始受保护读取。writer 已替换目录时，加入者撤销自己的 token 并报告 Busy，不能开始读取。writer 释放时只删除自己的 owner。尚未通过准入的 shared 记录不授予读取，也不阻止 writer 释放。
+共享 token 加入现有目录后，须重读完整的持有者集合。只有自己的 token 存在，且全部持有者为同 worktree 的 shared，才开始受保护读取。writer 已替换目录时，加入者撤销自己的 token 并报告 Busy，不能开始读取。writer 释放时只删除自己的持有者记录。尚未通过准入的 shared 记录不授予读取，也不阻止 writer 释放。
 
 只有当前格式（C-009）。无法解码的 journal 或配置返回 `InvalidData`：保留 journal、锁和目标文件，不反复调用普通 recover；配置改写为当前格式。
 

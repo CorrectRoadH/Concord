@@ -1,6 +1,6 @@
-# 统一项目治理术语
+# 统一项目治理术语表
 
-本页定义统一项目治理的术语。全局术语 [Spec](../../concepts.md#spec)、[Issue](../../concepts.md#issue) 与 [修复核验](../../concepts.md#fix-verification) 自动适用于本目录。
+本页定义统一项目治理的概念。[全局术语表](../../concepts.md)中的 [Spec](../../concepts.md#spec)、[Issue](../../concepts.md#issue) 与 [修复核验](../../concepts.md#fix-verification) 自动适用于本目录。
 
 ## Docs Work {#docs-work}
 
@@ -14,7 +14,7 @@ Docs Work 中交给一个 Agent 的一份工作，声明目标、write 与 read 
 
 `docs work check` 为一个 item 写下的检查结果，绑定 base、配置、read 与 write 的摘要。reported 收据是 Agent 的自报，verified 收据是父 Agent 重跑检查后的结论。
 
-## receipt {#issue-receipt}
+## 远端写入计划 {#issue-receipt}
 
 `issue remote preview` 签发的一次性远端写入计划，记录连接、动作、目标、payload 与远端前像的摘要，由 `issue remote apply` 消费。
 

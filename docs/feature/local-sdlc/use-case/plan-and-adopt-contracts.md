@@ -34,7 +34,7 @@
 
 2. 编辑页面。 {#edit-page}
 
-   直接编辑 `docs/` 下的任何 Markdown 页面。新增页面时使用对应种类的文件名，例如在包目录中新建 `ui.md`；一种页面写不下时，把 `<种类>.md` 换成 `<种类>/` 目录，入口为 `<种类>/README.md`，其余页面自由命名。Spec 没有 frontmatter。编辑后运行 `concord check`，种类以外的页面报告 `UnknownPageKind`。
+   直接编辑 `docs/` 下的任何 Markdown 页面。新增页面时使用对应种类的文件名，例如在文档包目录中新建 `ui.md`；一种页面写不下时，把 `<种类>.md` 换成 `<种类>/` 目录，入口为 `<种类>/README.md`，其余页面自由命名。Spec 没有 frontmatter。编辑后运行 `concord check`，种类以外的页面报告 `UnknownPageKind`。
 
 3. 把尚未采用的方向写成 Roadmap。 {#roadmap}
 
@@ -71,14 +71,14 @@ Design 只允许一次裁决，裁决方式见[逐项比较方案并明确裁决
 ## 路径与身份
 
 - 路径、类别与短选择器的规则见[文档与标记格式](../format.md#owner)。
-- Feature、Roadmap 与 Engineering 位于各自分类下的单层目录，入口是 `README.md`；Design 是 `docs/design/` 下的单个文件。Use Case 位于所属包的 `use-case/` 目录，一个文件是一个旅程，不嵌套；`use-case/README.md` 是导航页。Issue 是 `docs/issues/` 下的 `.md` 文件，Memory 是 `memory/` 下的 `.md` 文件。
-- 包内其它页面按[路径与识别](../../../document-model.md#路径与识别)归入页面种类。种类目录不产生新的 Feature 或 Engineering，其中的页面仍以精确路径引用。命令不会自动把一页拆成种类目录，也不会自动移动无法归类的页面。
+- Feature、Roadmap 与 Engineering 位于各自分类下的单层目录，入口是 `README.md`；Design 是 `docs/design/` 下的单个文件。Use Case 位于所属文档包的 `use-case/` 目录，一个文件是一个旅程，不嵌套；`use-case/README.md` 是导航页。Issue 是 `docs/issues/` 下的 `.md` 文件，Memory 是 `memory/` 下的 `.md` 文件。
+- 文档包内其它页面按[路径与识别](../../../document-model.md#路径与识别)归入页面种类。种类目录不产生新的 Feature 或 Engineering，其中的页面仍以精确路径引用。命令不会自动把一页拆成种类目录，也不会自动移动无法归类的页面。
 - 采用、关系与修复核验都使用实际路径，发布和恢复不会按名称重新猜路径（[文档身份](../architecture.md#文档身份)）。
 - 包内页面可以按精确路径或 anchor 归到所属 Feature，相邻目录不会因目录名前缀相似而混入。
 
 ## 名称
 
-包目录名、Use Case 文件名、Design 候选名和种类目录内的页面名支持 Unicode 字母、组合标记和数字，可以用单个连字符分隔。种类单页与种类目录使用固定的英文种类名。
+文档包目录名、Use Case 文件名、Design 候选名和种类目录内的页面名支持 Unicode 字母、组合标记和数字，可以用单个连字符分隔。种类单页与种类目录使用固定的英文种类名。
 
 ```sh
 concord new use-case 扩展NPC动作 --feature npc --title "扩展 NPC 动作"

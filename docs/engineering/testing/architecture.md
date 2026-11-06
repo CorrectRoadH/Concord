@@ -4,7 +4,7 @@
 
 ## Runner 适配
 
-`pnpm gate` 的测试阶段统一调度 Node 测试与浏览器测试，全部运行当前检出的源码：子进程以[从源码运行](../build/architecture.md#从源码运行)的方式启动，Web 页面来自共享的 Web 产物，原生产物来自共享缓存。只有打包测试使用安装包。
+`pnpm gate` 的测试阶段统一调度 Node 测试与浏览器测试，全部运行当前检出的源码：子进程以[从源码运行](../build/architecture.md#从源码运行)的方式启动，Web 页面来自共享的 Web 产物，原生产物来自共享缓存。只有打包测试使用归档。
 
 同步测试体使用 `Effect.sync`，Node adapter 回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
 
@@ -46,7 +46,7 @@
 
 测试仓库由 `test/support/consumer.ts` 构造。每次测试运行先构建一个已初始化的模板消费者，每个测试复制模板得到自己的仓库，不在每个测试中重新执行 `git init` 与 `concord init`。需要不同初始状态的测试在复制后通过公开入口修改。例外是被测对象本身就是仓库初始状态的测试：未初始化仓库、非 Git 目录、shallow clone、特定提交历史或 merge 结构，这类测试自己构造仓库，并在用例中写明原因。可用的 Fixture 与新增方式见[扩展 Fixture](use-case/extend-fixtures.md)。
 
-受管文件的内容只由格式的 owner 生成：Spec 与 Memory 通过领域写入入口或 `renderDocument`，品味由 `initialize` 写入的模板生成，配置通过 `renderTypeScriptConfig`，写作政策与 concepts 通过各自的写入入口。格式改变时只改格式 owner，测试不随之修改（[当前格式](../../architecture.md#当前格式)）。
+受管文件的内容只由格式的 owner 生成：Spec 与 Memory 通过领域写入入口或 `renderDocument`，品味由 `initialize` 写入的模板生成，配置通过 `renderTypeScriptConfig`，写作规则与 concepts 通过各自的写入入口。格式改变时只改格式 owner，测试不随之修改（[当前格式](../../architecture.md#当前格式)）。
 
 ## 浏览器与诊断
 

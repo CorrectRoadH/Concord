@@ -21,7 +21,7 @@
 | `memory` | `link`、`search`；摘要列表用 `list memory` |
 | `roadmap` | `start <roadmap> [--feature <id>]`：移入 `docs/feature/`，省略 `--feature` 时 Feature ID 与 Roadmap 同名；取消方向即删除目录，历史在 Git |
 | `taste` | 列出品味条目与依据它们的页面 |
-| `concepts`、`writing` | 概念与写作政策的查看与受管写入 |
+| `concepts`、`writing` | 概念与写作规则的查看与受管写入 |
 | `docs` | `docs check` 与 `docs work` |
 | `feedback` | 外部来源的同步与导入 |
 | `view` | Web 工作台 |
@@ -48,7 +48,7 @@
 
 ## 接入
 
-`concord --skill` 输出 Agent 入口：主题列表、设计理由与工作原则。`concord --skill <topic>` 输出一个主题，`concord --skill all` 输出全部主题。主题包括两份[写作指南](../../concepts.md#writing-guide)：`docs-from-scratch` 与 `docs-from-code`。这个入口在任意 cwd 可用，不读取项目，也不写文件。未知主题返回 `SkillTopicUnknown`。
+`concord --skill` 输出 Agent 入口：[skill 主题](../../concepts.md#skill-topic)列表、设计理由与工作原则。`concord --skill <topic>` 输出一个 skill 主题，`concord --skill all` 输出全部 skill 主题。其中包括两份[写作指南](../../concepts.md#writing-guide)：`docs-from-scratch` 与 `docs-from-code`。这个入口在任意 cwd 可用，不读取项目，也不写文件。未知主题返回 `SkillTopicUnknown`。
 
 `concord init` 在 Git worktree 顶层初始化项目，人读输出列出创建的文件，最后给出下一步和推荐的写作指南（预期输出）：
 
@@ -141,7 +141,7 @@ concord --json new use-case add-item --feature cart --title "加入商品"
 
 ### 查看一个文档包
 
-`show` 一个 Feature、Engineering 或 Roadmap 时，结果另有 `pages`，列出包内的全部页面，按路径排序。以下为预期输出：
+`show` 一个 Feature、Engineering 或 Roadmap 时，结果另有 `pages`，列出文档包内的全部页面，按路径排序。以下为预期输出：
 
 ```sh
 concord --json show cart
@@ -165,11 +165,11 @@ concord --json show cart
 
 | `kind` | 页面 |
 | --- | --- |
-| `readme` | 包入口 `README.md` |
+| `readme` | 文档包入口 `README.md` |
 | `use-case-index` | `use-case/README.md` 导航页 |
 | `use-case` | `use-case/<u>.md` 旅程 |
 | `cli`、`library`、`api`、`format`、`ui`、`performance`、`architecture`、`data-model` | 种类单页，或该种类目录中的页面，包括目录入口 `<种类>/README.md` |
-| `concepts`、`writing` | 包内各层的 `concepts.md` 与 `writing.md` |
+| `concepts`、`writing` | 文档包内各层的 `concepts.md` 与 `writing.md` |
 | `unknown` | 无法归类的页面；`check` 同时报告 [`UnknownPageKind`](../documentation-quality/cli.md#页面种类) |
 
 种类目录中的页面取目录的种类，例如 `docs/feature/cart/architecture/checkout-flow.md` 的 `kind` 为 `architecture`。
@@ -204,7 +204,7 @@ concord test marker --contract docs/feature/cart/use-case/add-item.md --issue do
 
 ## 检查关系
 
-`concord check` 检查引用、生命周期与写作政策，不运行测试。
+`concord check` 检查引用、生命周期与写作规则，不运行测试。
 
 ```text
 Check
@@ -237,7 +237,7 @@ codeDeclarations: 1
 }
 ```
 
-适用范围与规则见[聚合门禁](../documentation-quality/cli.md#合并检查)。
+适用范围与规则见[合并检查](../documentation-quality/cli.md#合并检查)。
 
 `ok` 为 false 表示发现违规。`complete` 为 false 表示有必需输入没能读取，结论不完整。`advisories` 是提示，不影响退出码。
 

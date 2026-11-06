@@ -1,6 +1,6 @@
-# 来源与工程知识术语
+# 来源与工程知识术语表
 
-本页定义反馈来源的术语。全局术语 [Issue](../../concepts.md#issue)、[Memory](../../concepts.md#memory) 与 [Spec](../../concepts.md#spec) 自动适用于本目录。
+本页定义反馈来源的概念。[全局术语表](../../concepts.md)中的 [Issue](../../concepts.md#issue)、[Memory](../../concepts.md#memory) 与 [Spec](../../concepts.md#spec) 自动适用于本目录。
 
 ## Provider {#provider}
 

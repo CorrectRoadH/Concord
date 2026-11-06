@@ -31,7 +31,7 @@
    Inspect configuration: concord doctor
    ```
 
-   `--json` 输出在 `guide` 字段给出同一个主题，字段定义见 [CLI](../../local-sdlc/cli.md#接入)。Herdr mod 在新建文件的数量下方显示同一条命令。
+   `--json` 输出在 `guide` 字段给出同一个 [skill 主题](../../../concepts.md#skill-topic)，字段定义见 [CLI](../../local-sdlc/cli.md#接入)。Herdr mod 在新建文件的数量下方显示同一条命令。
 
 3. 让 agent 读指南。 {#read-guide}
 
@@ -41,7 +41,7 @@
    concord --skill docs-from-code
    ```
 
-   输出是随安装包的指南正文，不读取项目，也不写文件。
+   输出是随归档提供的指南正文，不读取项目，也不写文件。
 
 4. 按指南写第一批 Spec，然后检查。 {#write}
 
@@ -97,7 +97,7 @@ init 检查 Git 跟踪的文件与未被忽略的未跟踪文件。`docs/`、`me
 | --- | --- |
 | 初始化被拒绝，例如 `InitializationConflict` | 不输出指南，错误见[接入并取得模板](../../local-sdlc/use-case/onboard-from-template.md#结果) |
 | 推荐与维护者的判断不同 | 直接读另一份指南，init 不需要重跑 |
-| 未知的主题名 | `concord --skill` 返回 `SkillTopicUnknown` |
+| 未知的 skill 主题 | `concord --skill` 返回 `SkillTopicUnknown` |
 
 ## Spec 来源
 

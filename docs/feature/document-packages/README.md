@@ -51,9 +51,9 @@ useCases:
 
 ## 怎样工作
 
-Feature、Engineering 与 Roadmap 是目录，由目录和其中 `README.md` 的一级标题确定；Design 与 Issue 各是单个文件。包内其它页面使用固定的[页面种类](../../document-model.md#页面种类)文件名；项目的说明性文档放在包外，用链接连到 Spec。
+Feature、Engineering 与 Roadmap 是目录，由目录和其中 `README.md` 的一级标题确定；Design 与 Issue 各是单个文件。文档包内其它页面使用固定的[页面种类](../../document-model.md#页面种类)文件名；项目的说明性文档放在包外，用链接连到 Spec。
 
-发现只读不写：无法读取的文档产生带路径的诊断，结果标为不完整，原文件保持不动。目录归属与编辑期间重试的实现见[架构](architecture.md)。
+发现只读不写：无法读取的文档产生带路径的 [finding](../../concepts.md#finding)，结果标为不完整，原文件保持不动。目录归属与编辑期间重试的实现见[架构](architecture.md)。
 
 ## 用户路径
 

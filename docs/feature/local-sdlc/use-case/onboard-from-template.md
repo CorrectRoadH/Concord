@@ -48,7 +48,7 @@
    - 品味：`docs/taste.md`，只有写法说明和示例，没有状态字段。
    - 配置：给出 `--test-root`、`--source-root` 或 `--docs-only` 时写入 `concord.config.ts`，只含这些项。
    - 入口与说明：`docs/concord.md`、`docs/README.md`、`docs/architecture.md`。
-   - 术语与写作政策：随包空 catalog `docs/concepts.md`、预设的 `docs/writing.md`。
+   - 术语与写作规则：随包空 catalog `docs/concepts.md`、预设的 `docs/writing.md`。
    - 模板与目录：`docs/_template/`、各分类目录的 README。
    - `AGENTS.md` 中的 Concord 区块。
    - 工作流 skill：`.agents/skills/concord-*/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，见[用斜杠命令走开发流程](../../project-onboarding/use-case/run-workflow-from-agent.md)。
@@ -68,7 +68,7 @@
    concord --skill document
    ```
 
-   `concord --skill` 输出入口、主题列表、设计理由和工作原则。`--skill <topic>` 输出一个主题，`--skill all` 输出全部主题。开始写第一批 Spec 时读 init 推荐的写作指南。
+   `concord --skill` 输出入口、skill 主题列表、设计理由和工作原则。`--skill <topic>` 输出一个 skill 主题，`--skill all` 输出全部 skill 主题。开始写第一批 Spec 时读 init 推荐的写作指南。
 
 ## 结果
 
@@ -91,8 +91,8 @@
 
 ## 已有文件
 
-- 已有的 `docs/README.md`、`docs/concepts.md`、`docs/architecture.md` 与写作政策原样保留，不算冲突；不合法的 `docs/concepts.md` 由之后的检查报告。
-- `AGENTS.md` 只创建或刷新带边界标记的 Concord 区块，区块外的内容保留。
+- 已有的 `docs/README.md`、`docs/concepts.md`、`docs/architecture.md` 与写作规则原样保留，不算冲突；不合法的 `docs/concepts.md` 由之后的检查报告。
+- `AGENTS.md` 只创建或刷新带托管标记的 Concord 区块，区块外的内容保留。
 - Concord 区块和 `docs/concord.md` 把 Agent 引到当前安装版本的 `concord --skill`。
 
 ## 页面选择
@@ -111,11 +111,11 @@ Feature、Engineering 与 Roadmap 只要求 README。`concord new` 的 `--pages`
 
 ## Agent 指引的边界
 
-`concord --skill` 来自安装包，不读取消费仓库的配置。未知主题返回 `SkillTopicUnknown`，与其它参数混用返回 `SkillArgumentsInvalid`，两者都不写文件。
+`concord --skill` 来自安装目录，不读取消费仓库的配置。未知的 skill 主题返回 `SkillTopicUnknown`，与其它参数混用返回 `SkillArgumentsInvalid`，两者都不写文件。
 
 ## 可执行 quick start
 
-项目 README 提供从空 Git 仓库到第一次 `test run` 的完整命令：创建 Feature 与 Use Case、三种代码声明和一个真实 Node 测试。打包验收直接执行安装包内 README 的 quick start，核对 3 条实现声明、1 条测试、一次 `Command pass` 和按行定位结果。
+项目 README 提供从空 Git 仓库到第一次 `test run` 的完整命令：创建 Feature 与 Use Case、三种代码声明和一个真实 Node 测试。打包验收直接执行归档内 README 的 quick start，核对 3 条实现声明、1 条测试、一次 `Command pass` 和按行定位结果。
 
 ## Spec 来源
 

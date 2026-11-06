@@ -131,9 +131,9 @@
 | 没有选择 runner 或覆盖 | 不创建 `concord.config.ts`；`check`、`trace` 与 Web 工作台按[默认值](../format.md#配置项)工作 |
 | 没有 `AGENTS.md` | 创建它 |
 | 已有 `AGENTS.md` | 只追加或刷新边界明确的托管区块，区块外的原字节保留 |
-| `AGENTS.md` 中的标记残缺 | 原子拒绝，不覆盖未知内容 |
+| `AGENTS.md` 中的托管标记残缺 | 原子拒绝，不覆盖未知内容 |
 | `docs/architecture.md` 已存在 | 保留原文 |
-| 已有全局写作政策 | 保留原文；新项目生成的指南和模板通过随包预设 |
+| 已有全局写作规则 | 保留原文；新项目生成的指南和模板通过随包预设 |
 | 交互中取消、选项非法或文件冲突 | 不留下部分初始化，例如再次 init 时返回 `InitializationConflict`，不覆盖已有文件 |
 | 已有 `concord.config.ts` 时再次 init | 不覆盖既有项目配置，例如返回 `ProjectExists` |
 | 非 TTY | 不等待交互，结果确定 |

@@ -168,10 +168,10 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 | 服务 | 职责 |
 | --- | --- |
-| Installation | 安装包根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自包根）、模板与 skill 资源、工作进程入口，以及安装身份。安装身份是安装目录全部 JS 与原生产物的内容摘要，按各文件的 device、inode、大小、mtime、ctime 与目录成员组成的元数据指纹缓存在用户缓存目录；指纹任一变化时重新计算内容摘要，因此产物被替换时仍能发现 |
+| Installation | 安装目录根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自安装目录）、模板与 skill 资源、工作进程入口，以及安装身份。安装身份是安装目录全部 JS 与原生产物的内容摘要，按各文件的 device、inode、大小、mtime、ctime 与目录成员组成的元数据指纹缓存在用户缓存目录；指纹任一变化时重新计算内容摘要，因此产物被替换时仍能发现 |
 | Workspace | 项目目录、对应的 Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
 | Sources | 路径安全的读取、乐观快照与返回前核验 |
-| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作政策、概念目录、步骤重命名与 Issue 关闭的规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
+| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作规则、概念目录、步骤重命名与 Issue 关闭的规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
 | Cache | 解析缓存（内存或持久）、只读快照（`CacheSnapshot`，进程内不可写的行，不经内存 HawDB）、持久命名空间的独占写入，三种能力分开提供；计算进程另有 `CacheDerivations`，只在请求内收集新产生的派生行，随结果交回主进程写入，不持有句柄或写入能力 |
 | Git | 状态、diff、提交与 worktree 操作 |
 | OwnedProcess | 用 `unstable/process` 的 ChildProcess 启动与发送信号；Concord 负责后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出也核对后代 |
@@ -234,7 +234,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 
 `concord.config.ts` 可以不存在；存在时运行时只读取这一个静态 TS 配置文件，不执行模块。配置项与默认值见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#配置项)，journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)。配置快照拥有原文前像、路径与摘要，写入与恢复使用同一协议。
 
-Memory 固定位于项目目录的 `memory/`。`docs/taste.md` 存在即生效，没有状态字段；docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `taste` 派生。品味不充当测试 Spec 或自动合规证据。设计说明按[文档模型](document-model.md#页面职责)放在所属 Spec 中。
+Memory 固定位于项目目录的 `memory/`。`docs/taste.md` 存在即生效，没有状态字段；docs 下的页面在依据规则的句子旁链接品味条目或款的 ID，`check` 校验这些链接，反向引用由 `taste` 派生。品味不充当测试 Spec 或自动合规证据。设计说明按[文档模型](document-model.md#页面职责)放在所属 Spec 中。
 
 ## 领域与 CLI
 
@@ -307,7 +307,7 @@ publication owner 通过临时目录 fsync 与 rename 公布，正常释放与�
 
 trace show、trace gaps 与 review 默认读取 HawDB 中已完成的诊断投影，并请求后台刷新。输出明确标记历史性、构建时间及刷新错误；首次无缓存返回 QueryPending。--fresh 等待当前来源结果。完整 Spec 见[异步诊断投影](feature/local-data-engine/use-case/query-asynchronous-projections.md)。check、trace check、当前来源检索及证据裁决不使用历史投影授权成功。
 
-`concord recover` 先回收已死 token，再在独占保护下选择唯一的普通或 Trace journal。多 journal 冲突先于 runner 具名拒绝并保留现场。恢复入口获锁后重查类型和现场，只在内容符合 preimage 或 planned digest 时恢复。
+`concord recover` 先回收已死 token，再在独占保护下选择唯一的普通或 Trace journal。多 journal 冲突先于 runner 具名拒绝并保留现场。恢复入口获锁后重查类型和现场，只在内容符合前像或 planned digest 时恢复。
 
 恢复完成后重新取得短独占快照，核验协调路径上的 journal 与 runner。init 回滚后不要求配置文件仍在。并发发布可使核验 Busy，此时 journal 结果不能称为恢复完成。返回值保留 `journalStatus` 并附带 coordination。
 
@@ -323,7 +323,7 @@ run 结束时在新快照中核对起止 candidate、配置、定义、Spec、�
 
 来源读者不创建 publication token。返回当前结果前，重新核对读过的每个文件摘要与目录集合，并确认没有未完成的 journal。完整发布即使发生在一次读取之内，也会因文件摘要变化被发现。普通提交只删除自身 owner。
 
-未知文件、其它 exclusive token 或身份改变时保留现场并拒绝。任一活 owner、host 不匹配、EPERM、PID 复用或未知 owner 都保留现场。fsync 或核验失败时保留具名错误和可恢复现场。
+未知文件、其它 exclusive token 或身份改变时保留现场并拒绝。任一活着的持有者、host 不匹配、EPERM、PID 复用或未知持有者都保留现场。fsync 或核验失败时保留具名错误和可恢复现场。
 
 recover 返回 operation、journal 结果、changedPaths 和 coordination；publication 列出 reclaimedTokens。runner 状态为 absent、running 或 blocked，blocked 带具名原因。无事务且 runner 为 absent 或健康 running 时返回 clean。
 
@@ -339,7 +339,7 @@ Design 是一页还没定下来的取舍，见[记下一个还没定的取舍](f
 
 项目配置中的 runner 命令是用户声明的验收单元。Concord 报告命令的退出结果与可观察到的执行数量，不声称收集或证明 runner 的每个子 case，不构成正式 E2E、可靠性证书或覆盖证明（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。runner 在消费者 cwd 下以 shell=false 执行，有 timeout；取消或超时清理进程组，信号或启动失败不记为通过。命令由项目作者信任与维护。
 
-Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷候选上以非零结果结束、在被接受的快照上通过；通过后删除 Issue，结论输出给提交说明，可在声明的输入与环境下重放（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。
+Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷提交上以非零结果结束、在修复提交上通过；通过后删除 Issue，结论输出给提交说明，可在声明的输入与环境下重放（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。
 
 ## 测试标记与缓存身份
 
@@ -385,7 +385,7 @@ Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文�
 
 ## 文档写作检查
 
-写作政策、术语作用域与聚合门禁由[文档写作 Spec](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/format.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
+写作规则、术语表作用域与合并检查由[文档写作 Spec](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/format.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
 
 ## 工程知识与本地观察
 

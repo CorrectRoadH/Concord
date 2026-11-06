@@ -49,7 +49,7 @@
        UnknownPageKind: Page kind is unknown: notes.md
    ```
 
-   包内每个 Markdown 页面按[路径与识别](../../../document-model.md#路径与识别)得到页面种类。无法归类的页面照常被发现，种类为 `unknown`，可以阅读与编辑；`check` 报告 `UnknownPageKind`，见[页面种类检查](../../documentation-quality/cli.md#页面种类)。这类页面已经读到，不使结果不完整。
+   文档包内每个 Markdown 页面按[路径与识别](../../../document-model.md#路径与识别)得到页面种类。无法归类的页面照常被发现，种类为 `unknown`，可以阅读与编辑；`check` 报告 `UnknownPageKind`，见[页面种类检查](../../documentation-quality/cli.md#页面种类)。这类页面已经读到，不使结果不完整。
 
 3. 检查一篇写错的文档。 {#invalid}
 
@@ -69,7 +69,7 @@
    …
    ```
 
-   诊断给出出错的路径，结果标为不完整。Concord 不改动 `broken.md`。
+   finding 给出出错的路径，结果标为不完整。Concord 不改动 `broken.md`。
 
 4. 写错一篇文档时照常列出其余文档。 {#partial-list}
 
@@ -92,10 +92,10 @@
 | 情形 | 看到什么 |
 | --- | --- |
 | 当前格式的全部文档 | CLI 与 Web 都完整发现，清单一致；两者共用同一套发现与解析，Web 页面另外显示的检查结果不属于清单 |
-| 文档格式无效 | 带路径的诊断，结果标为不完整；不猜测已采用或已裁决的状态，不转换或重写原文件 |
+| 文档格式无效 | 带路径的 finding，结果标为不完整；不猜测已采用或已裁决的状态，不转换或重写原文件 |
 | 列表中有一篇文档格式无效 | 其余文档照常列出，`complete: false`，`findings` 给出 `InvalidData` 或 `InvalidPlacement` 与路径，退出 0 |
 | 文件无法读取、路径不安全或有未完成的写入需要恢复 | 整个命令以对应错误失败，不给出部分清单 |
 | `memory search`、`issue search`、按短 ID 选择文档的命令遇到写错的文档 | 行为不变：仍以错误失败，避免在不完整的集合上选错目标 |
 | 包内页面的文件名不是已知种类 | 照常发现，种类为 `unknown`；`check` 报告 `UnknownPageKind`，结果仍完整 |
-| owner 目录嵌套在另一个 owner 之内 | 嵌套 owner 截断祖先的归属，其中的材料仍可从主题树访问 |
+| owner 目录嵌套在另一个 owner 之内 | 嵌套 owner 截断祖先的归属，其中的材料仍可从目录树访问 |
 | 运行结构检查 | 只检查文档结构，不产生测试执行证据 |

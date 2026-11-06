@@ -52,7 +52,7 @@
    Next: edit the pages, then run concord check.
    ```
 
-   观察到的每个 owner 都属于本 worktree 与本主机、并确认 ESRCH 时，普通写入准入回收这些 token 并重试一次。它不恢复 journal，也不回收 runner 所有权；之后到达的新 owner 不会被回收。
+   观察到的每个持有者都属于本 worktree 与本主机、并确认 ESRCH 时，普通写入准入回收这些 token 并重试一次。它不恢复 journal，也不回收 runner 所有权；之后到达的新持有者不会被回收。
 
 4. 发布被打断，或想确认协调状态时，运行恢复。 {#recover}
 
@@ -73,7 +73,7 @@
    {"operation":"recover","status":"clean","changedPaths":[],"journalStatus":"clean","coordination":{"publication":{"reclaimedTokens":[]},"runner":{"status":"absent"}}}
    ```
 
-   恢复在独占保护下核对 journal 与 runner 状态，发布完整计划或回到前像，并只释放观察到的那个 token。显式恢复保留 token 收据，不自动回收新到达的 owner。未知元数据与外部编辑保持原样。
+   恢复在独占保护下核对 journal 与 runner 状态，发布完整计划或回到前像，并只释放观察到的那个 token。显式恢复保留回收记录，不自动回收新到达的持有者。未知元数据与外部编辑保持原样。
 
 ## 结果
 
@@ -88,9 +88,9 @@
 | 有未完成的 journal | 普通读取返回 `RecoveryRequired` |
 | 授权依赖、缺失文件或扫描的目录变化，写入目标没变 | 计划失效 |
 | 不同 worktree，包括 linked worktree | 不共享所有权 |
-| 死亡 owner 的恢复与新到达的写者并发 | 不删除新 owner |
+| 已死亡持有者的恢复与新到达的写者并发 | 不删除新持有者 |
 | 持有者被 SIGKILL 且没有 journal | `recover` 回收它的精确 token 并在 `reclaimedTokens` 报告；之后 Memory 的 list 与 annotate 成功 |
-| 活着或身份未知的 owner | 永不回收 |
+| 活着或身份未知的持有者 | 永不回收 |
 | 发布期间进程被杀 | 留下可恢复的 journal；`recover` 保留未知的外部编辑 |
 | 内容既不匹配前像也不匹配计划摘要 | 保留现场，交给人判断 |
 | 存在多个 journal | 具名冲突，先于 runner 结果报告；保留现场 |
@@ -102,7 +102,7 @@
 | `recover` 的输出 | `operation`、journal 结果、`changedPaths` 与 `coordination`；`coordination.publication.reclaimedTokens` 列出回收的 token，`coordination.runner.status` 为 absent、running 或 blocked |
 | `recover` 与 runner 文件 | 不删除 `runner.lease`、运行状态、证据或未知文件 |
 | 测试执行期间发布无关文档 | 不被阻塞；输入变化或清理不确定时不能产生通过的证据 |
-| 认领或释放失败、owner 元数据未知、PID 是否存在不确定 | 失败并保留现场 |
+| 认领或释放失败、持有者元数据未知、PID 是否存在不确定 | 失败并保留现场 |
 | 删除缓存 | 只影响可丢弃的缓存状态 |
 | 不安全路径 | 按[路径安全](../../local-sdlc/architecture.md#路径安全)拒绝 |
 

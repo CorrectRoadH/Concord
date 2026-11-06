@@ -38,7 +38,7 @@
 
 只计 `run` 进程从启动到退出的 wall time（`request` 形式计请求发出到响应体读完），`prepare` 与 `beforeEach` 不计时。场景只能通过公开 CLI 与文件系统操作消费者，不导入 `src/` 内部模块。
 
-刷新上限场景以 `{ scan }` 形式运行安装包的内部扫描入口 `query-scan-worker.js <root> <query-json>`，即后台刷新进程实际执行的扫描，按最大值对照上限。读取异步投影的 `warm` 场景在采样前等待投影发布，等待不超过刷新上限加 30 秒；等不到投影时测量失败，记录最后一次输出的 `QueryPending` 及 `refresh` 详情。
+刷新上限场景以 `{ scan }` 形式运行安装目录内的扫描入口 `query-scan-worker.js <root> <query-json>`，即后台刷新进程实际执行的扫描，按最大值对照上限。读取异步投影的 `warm` 场景在采样前等待投影发布，等待不超过刷新上限加 30 秒；等不到投影时测量失败，记录最后一次输出的 `QueryPending` 及 `refresh` 详情。
 
 ## 覆盖规则
 
@@ -60,6 +60,6 @@
 | `show` | 与 `trace show` 读取同一份文档与关系，由 `local-sdlc/trace-show-fresh` 覆盖 |
 | `use-case` | 步骤查看与改写是低频操作，解析路径与 `docs check` 相同 |
 | `skills` | 安装工作流 skill 是低频写入 |
-| `writing` | 写作政策的查看与受管写入是低频操作，解析路径与 `docs check` 相同 |
+| `writing` | 写作规则的查看与受管写入是低频操作，解析路径与 `docs check` 相同 |
 | `herdr-mod` | Herdr 中的原生界面，通过公开 CLI 读取，见 [Herdr mod](../../feature/herdr-mod/README.md) |
 | `server` | 工作区服务的启动、停止与状态控制；经由服务的请求耗时由声明 `server: running` 的查询场景与面板场景测量 |

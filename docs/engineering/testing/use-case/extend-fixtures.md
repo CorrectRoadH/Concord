@@ -41,7 +41,7 @@
    writeFileSync(join(root, 'docs/writing.md'), renderWritingPolicy({ ...policy, bannedTerms: [{ term: 'buffer', use: 'document', why: 'Precise noun' }] }));
    ```
 
-   `writeProjectConfig` 先按 `ProjectSchema` 严格解码再渲染；写作政策用 `src/model/index.ts` 的 `parseWritingPolicy` 与 `renderWritingPolicy`。格式改变时只改格式 owner，Fixture 与测试不随之修改。
+   `writeProjectConfig` 先按 `ProjectSchema` 严格解码再渲染；写作规则用 `src/model/index.ts` 的 `parseWritingPolicy` 与 `renderWritingPolicy`。格式改变时只改格式 owner，Fixture 与测试不随之修改。
 
 3. 写出 Fixture 并写清资源回收。 {#create}
 

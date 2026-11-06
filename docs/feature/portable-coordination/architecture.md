@@ -110,7 +110,7 @@ dry-run 决定计划是否发布，与 access 无关；它复用乐观快照，�
 3. **committed**：全部目标就位后，把 journal 的阶段 durable 改为 `committed`。这是唯一 commit point。
 4. **cleanup**：删除 journal。
 
-写者在 commit point 之后首次清理失败时，在同一独占租约内保守恢复。恢复证明 planned owner 完整后返回成功 receipt，不出现“已提交却报告未提交”的重试歧义。
+写者在 commit point 之后首次清理失败时，在同一独占租约内保守恢复。恢复证明 planned owner 完整后返回成功结果，不出现“已提交却报告未提交”的重试歧义。
 
 ### 目录发布
 

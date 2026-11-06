@@ -33,7 +33,7 @@
 
 3. 不保存，直接改正。 {#edit}
 
-   `didChange` 用递增的版本 2 把 `#checkout` 改成 `#add`。服务按顺序应用全文或 UTF-16 增量，步骤、源码标记、引用与写作政策都使用同一版输入：
+   `didChange` 用递增的版本 2 把 `#checkout` 改成 `#add`。服务按顺序应用全文或 UTF-16 增量，步骤、源码标记、引用与写作规则都使用同一版输入：
 
    ```json
    {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///tmp/cart/test/cart.test.ts","version":2,"diagnostics":[]}}

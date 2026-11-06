@@ -40,7 +40,7 @@ concord issue close expired-token-accepted --fixed --defect <commit> --json
 concord test verify expired-token-accepted --json
 ```
 
-缺陷候选默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交，所有回归测试必须在同一提交中首次出现，否则用 `--defect` 指定 HEAD 的 first-parent 祖先。命令在临时 worktree 中运行缺陷候选、在当前工作树运行 HEAD：前者以非零码结束、后者以零结束才写入 `verification`，内容是两个提交、回归测试、runner 配置摘要与 Concord 版本。
+缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交，所有回归测试必须在同一提交中首次出现，否则用 `--defect` 指定 HEAD 的 first-parent 祖先。命令在临时 worktree 中运行缺陷提交、在当前工作树运行 HEAD：前者以非零码结束、后者以零结束才写入 `verification`，内容是两个提交、回归测试、runner 配置摘要与 Concord 版本。
 
 同一提交同时加入测试与修复、缺少测试或提交（包括 shallow clone）、区间含 merge 提交、超时，都返回 `FixUnverifiable`；command runner 不区分断言失败与构建失败。`test verify` 在两个提交上重放已记录的结论，提交、依赖或运行环境不可获得时报告无法重放，不改变结论。
 

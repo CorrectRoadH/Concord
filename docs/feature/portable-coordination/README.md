@@ -1,12 +1,12 @@
 # 用短发布租约协调本地写入
 
-多个 agent 和命令同时在一个 worktree 里读写文档时，维护者希望它们互不覆盖、中断后能恢复，而且不依赖 flock、diskutil、plutil 或 stat 这类外部程序，打包后的 CLI 在 Linux 与 macOS 上都能直接运行。Concord 只用 Node 文件 API 协调本地 Markdown 的发布；HawDB 只是可丢弃的解析缓存，不拥有发布[租约](../../concepts.md#lease)、源文件事务或 journal 恢复。
+多个 agent 和命令同时在一个 worktree 里读写文档时，维护者希望它们互不覆盖、中断后能恢复，而且不依赖 flock、diskutil、plutil 或 stat 这类外部程序，打包后的 CLI 在 Linux 与 macOS 上都能直接运行。Concord 只用 Node 文件 API 协调本地 Markdown 的发布；HawDB 只是可丢弃的解析缓存，不拥有发布[租约](../../concepts.md#lease)、源文件的 journal 或[恢复](../../concepts.md#recovery)。
 
 ## 你可以做什么
 
 - 在没有 flock、diskutil、plutil 或 stat 子进程的机器上运行 Concord。
 - 读取和准备互不相关的修改，不需要持有贯穿整个命令的写锁。
-- 只在一致快照和发布提交这两段串行，同一时刻只有一个活跃的文件事务。
+- 只在一致快照和发布提交这两段串行，同一时刻只有一个活跃的 journal。
 - 写入中断后按完整前像恢复；计划依赖的文件变了，计划被拒绝。
 - 长时间运行的测试不占用文档发布。
 
@@ -61,7 +61,7 @@ Runner: absent
 
 支持同一主机、同一 PID 命名空间内的 Linux 与 macOS 本地 worktree。Git 仍是仓库身份的前提。网络与多主机协调不在保证范围内，不认证任何存储设备。支持的平台由[跨平台标签发版](../cross-platform-release/README.md)拥有。
 
-只支持当前协调协议：不迁移旧的锁格式，不协调混用的可执行版本。当前协议合法的加入过渡状态只在每个 owner 都确认 ESRCH 后回收。
+只支持当前协调协议：不迁移旧的锁格式，不协调混用的可执行版本。当前协议合法的加入过渡状态只在每个[持有者](../../concepts.md#holder)都确认 ESRCH 后回收。
 
 文档与证据源文件是各自的事实，不能当作缓存删除 journal 或证据。回收一个已死亡的发布 token 只证明这个 token 的 ESRCH，不能用来识别一个未复现的 macOS 现场。
 

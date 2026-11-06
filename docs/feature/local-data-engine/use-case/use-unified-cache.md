@@ -50,7 +50,7 @@
    installation: sha256:7baa718a…
    ```
 
-   `--json` 在顶层给出同名字段 `owner`、`pid`（整数）与 `installation`（字符串）。状态检查同时验证安装包的原生产物，缓存目录缺失不掩盖安装故障。
+   `--json` 在顶层给出同名字段 `owner`、`pid`（整数）与 `installation`（字符串）。状态检查同时验证安装目录的原生产物，缓存目录缺失不掩盖安装故障。
 
 4. 预览清理。 {#preview}
 

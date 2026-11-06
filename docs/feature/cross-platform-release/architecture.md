@@ -19,7 +19,7 @@ tap 定期或经通知发现新的公开发版，核验标签、归档与资产�
 - 只有 ESRCH 证明所拥有的 POSIX 进程组已结束。清理不确定时不能产生 green 证据。
 - 发版与渠道同步共享精确的候选归档和 SHA-256；发版的字节就是验证过的候选。自动化成功不表示已完成渠道安装后的验收。
 - 版本不回退，已有身份不能被不同字节覆盖。
-- 应用只使用包内的 Node.js 运行时与 ripgrep，不读取 `PATH` 中的 `node` 或 `rg`；Linux 上的动态库解析不依赖 `LD_LIBRARY_PATH`。
+- 应用只使用归档内的 Node.js 运行时与 ripgrep，不读取 `PATH` 中的 `node` 或 `rg`；Linux 上的动态库解析不依赖 `LD_LIBRARY_PATH`。
 
 ## 错误
 
@@ -36,7 +36,7 @@ tap 定期或经通知发现新的公开发版，核验标签、归档与资产�
 | `runtime/node` | 仓库[运行时版本](../../engineering/build/README.md#运行时版本)指定的该目标官方 Node.js 发行包，先按 nodejs.org 的 `SHASUMS256.txt` 校验整个发行包，再取出 `node` 与其 `LICENSE`；Node.js 的摘要不另存，不从构建机 `PATH` 中的 `node` 推定版本 |
 | `runtime/rg` | 仓库根目录的 `runtime-deps.json` 唯一记录 ripgrep 版本与每个目标的官方发行资产（文件名与 SHA-256），按它校验后取出 `rg` 与许可证；Linux 使用官方静态链接的 musl 版本，不设 RPATH；macOS 的 `rg` 由 macOS 原生任务校验、ad-hoc 签名后随原生产物交给组装，签名后的摘要记在该任务的产物清单 |
 | `runtime/lib/` | 仅 Linux：Ubuntu 24.04 构建环境中的 `libatomic.so.1` 与 `libstdc++.so.6`，以及检查发现的其它 glibc 之外的 `DT_NEEDED` 库 |
-| `app/` 中的应用 | 一次构建得到的 JavaScript，与包根布局相同 |
+| `app/` 中的应用 | 一次构建得到的 JavaScript，与归档根布局相同 |
 | `app/` 中的依赖 | 按 `pnpm-lock.yaml` 冻结、`--ignore-scripts` 安装的运行依赖；平台相关的可选依赖按目标平台选择 |
 | `app/` 中的原生绑定 | 该目标经身份校验的 HawDB N-API 引擎 |
 | `licenses/` | Node.js、ripgrep、`runtime/lib/` 中的运行库与运行依赖的许可证文本 |
@@ -66,7 +66,7 @@ Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`li
 
 Formula 按平台引用对应归档与 SHA-256，没有 `depends_on` 的 node、pnpm 或 ripgrep，也不编译原生引擎。安装把归档内容放入 `libexec`，在 `bin` 链接 `libexec/bin/concord`。
 
-macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`。安装时压缩包内全部 Mach-O 文件（原生 addon、`runtime/node` 与 `runtime/rg`），待 Homebrew 链接处理结束后在 post-install 解压还原原始字节，不重签、不改写。tap 的 Homebrew 检查逐文件比对还原后的摘要与归档相同，对全部 Mach-O 运行 `codesign --verify`，并确认没有 `com.apple.quarantine`。
+macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`。安装时压缩包内全部 Mach-O 文件（原生绑定、`runtime/node` 与 `runtime/rg`），待 Homebrew 链接处理结束后在 post-install 解压还原原始字节，不重签、不改写。tap 的 Homebrew 检查逐文件比对还原后的摘要与归档相同，对全部 Mach-O 运行 `codesign --verify`，并确认没有 `com.apple.quarantine`。
 
 ### Nix
 
@@ -87,7 +87,7 @@ Nix 只支持 `x86_64-linux`。原始发版身份与渠道安装身份分开：
 3. 新链接先写到临时名，再 rename 到目标位置。每次链接指向某个版本，都更新该版本的 `.activated` 时间。旧版本目录不被改写。
 4. 清理只考虑同一父目录下的版本目录：跳过当前版本与使用中的版本，其余按 `.activated` 时间保留最近两个，删除更早的。
 
-安装包模式的工作区服务启动时在其安装根下创建 `.in-use/<pid>`，正常退出时删除；安装根不可写（例如 Nix store）时不写标记，这些目录也不归安装脚本清理。安装脚本用 `kill -0` 判断标记中的进程是否存活：存活即视为使用中，进程已不存在时删除该标记。PID 被复用时只会多保留一个版本。`.archive-sha256`、`.activated` 与 `.in-use/` 不属于[安装身份](../../architecture.md#基础服务)摘要的内容。安装脚本不向任何服务发信号。
+从安装目录运行的工作区服务启动时在其安装根下创建 `.in-use/<pid>`，正常退出时删除；安装根不可写（例如 Nix store）时不写标记，这些目录也不归安装脚本清理。安装脚本用 `kill -0` 判断标记中的进程是否存活：存活即视为使用中，进程已不存在时删除该标记。PID 被复用时只会多保留一个版本。`.archive-sha256`、`.activated` 与 `.in-use/` 不属于[安装身份](../../architecture.md#基础服务)摘要的内容。安装脚本不向任何服务发信号。
 
 ### tap 同步
 
@@ -97,7 +97,7 @@ Nix 只支持 `x86_64-linux`。原始发版身份与渠道安装身份分开：
 
 ## 生命周期
 
-### Owner
+### 归属
 
 Concord 拥有源码校验、归档字节与源码 Release，tap 拥有包管理器元数据与渠道同步。短运行时作用域拥有发布文件租约；runner 作用域另行拥有分离的 POSIX 进程组与持久清理状态。
 

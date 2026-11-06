@@ -7,7 +7,7 @@ Concord 管理的文档按回答的问题分组。身份、类别、所属关系
 | Spec | Feature：使用者能用的一项功能，页面见[页面种类](#页面种类) | `docs/feature/<f>/` | 无 |
 | Spec | Engineering：维护者用来开发本项目的一项能力，例如构建、测试、性能测量与发版；页面种类同 Feature | `docs/engineering/<t>/` | 无 |
 | 提案 | Roadmap：还没开始实现的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
-| 项目规则 | 品味、术语、写作政策 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 无 |
+| 项目规则 | 品味、术语、写作规则 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 无 |
 | 待定的取舍 | Design：一个还没定下来的取舍，列出几种做法和各自的代价 | `docs/design/<d>.md` | 无 |
 | 待处理 | Issue：还要处理的缺陷、请求或观察 | `docs/issues/<i>.md` | `relations`、`source` |
 | 经验 | Memory：开发中可复用的经验 | `memory/<m>.md` | `relations` |
@@ -44,7 +44,7 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 
 每项事实只由自己的来源维护（[一件事只写一次，其余推导](taste.md#t-3)）。
 
-1. 每项事实只有一个 owner。Spec 正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作政策由同目录的 `writing.md` 拥有；测试定义与正向关系由测试源码拥有。Issue 拥有还要处理的问题的正文与关系，Memory 拥有经验的正文与关系；历史在 Git。
+1. 每项事实只有一个 owner。Spec 正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作规则由同目录的 `writing.md` 拥有；测试定义与正向关系由测试源码拥有。Issue 拥有还要处理的问题的正文与关系，Memory 拥有经验的正文与关系；历史在 Git。
 2. 目录确定术语与政策的局部作用域，docs 根拥有全局定义。术语的定义与解释写在同一 `concepts.md`；其它 Markdown 链接到定义，不重复维护。
 3. 反向关系、聚合索引与引用反查从来源派生，不维护第二份登记表。
 4. 人与 Agent 直接编辑 `docs/` 与 `memory/` 下的文件，包括 Memory 与 Issue；索引、检索与反向关系由 Concord 从文件派生，不维护人工 INDEX。关系由 `concord check` 检查，Concord 命令是执行需要运行的步骤的助手。
@@ -63,7 +63,7 @@ Feature 的页面按读者的问题分工（[读得懂胜过写得全](taste.md#
 
 ## 页面种类
 
-Feature、Engineering 与 Roadmap 的目录是同一种包，使用同一组页面，文件名就是页面种类。每种页面回答一个读者问题，同一事实只写在回答它的那一页，其它页面链接过去（[一件事只写一次，其余推导](taste.md#t-3)）。Feature 声明产品向使用者提供的能力；Engineering 声明开发本仓库所需的维护能力，例如测试方案写成 `docs/engineering/testing/`，构建方案写成 `docs/engineering/build/`。
+Feature、Engineering 与 Roadmap 的目录是同一种[文档包](concepts.md#package)，使用同一组页面，文件名就是页面种类。每种页面回答一个读者问题，同一事实只写在回答它的那一页，其它页面链接过去（[一件事只写一次，其余推导](taste.md#t-3)）。Feature 声明产品向使用者提供的能力；Engineering 声明开发本仓库所需的维护能力，例如测试方案写成 `docs/engineering/testing/`，构建方案写成 `docs/engineering/build/`。
 
 | 文件 | 类别 | 回答 | 写什么 | 不写什么 |
 | --- | --- | --- | --- | --- |
@@ -81,25 +81,25 @@ Feature、Engineering 与 Roadmap 的目录是同一种包，使用同一组页�
 
 ### 路径与识别
 
-1. 包的入口是 `README.md`，必需，不拆分。其余页面按需要创建。
+1. 文档包的入口是 `README.md`，必需，不拆分。其余页面按需要创建。
 2. `use-case/` 是 Use Case 的集合：`use-case/<u>.md` 是一个用户旅程，`use-case/README.md` 是可选的导航页，不是旅程。Use Case 不嵌套，也不跨多个文件。
 3. 除 `README.md`、`use-case/`、`performance.md`、`concepts.md` 与 `writing.md` 外，一种页面写不下时，把 `<种类>.md` 换成 `<种类>/` 目录：入口是 `<种类>/README.md`，其余页面自由命名，种类都与目录相同。同一种类的单页与目录不能并存。种类目录不产生新的 Feature 或 Engineering，其中的页面与锚点仍以精确路径引用。
-4. 识别顺序：包入口，`use-case/` 下的页面，各层的 `concepts.md` 与 `writing.md`，种类单页与种类目录。包内仍无法归类的 Markdown 页面由 `concord check` 报告 `UnknownPageKind`；它是 `relation` 类 finding，使检查失败，页面照常被发现、阅读与编辑。拼写接近某个种类时，finding 给出该种类，否则列出全部种类。
-5. 分类目录的 README、包外的 `docs/` 普通文档（例如 `docs/guides/<g>.md`）、`docs/_template/` 与非 Markdown 文件不受种类限制。项目的说明性文档放在包外，用链接连到 Spec。
+4. 识别顺序：文档包入口，`use-case/` 下的页面，各层的 `concepts.md` 与 `writing.md`，种类单页与种类目录。文档包内仍无法归类的 Markdown 页面由 `concord check` 报告 `UnknownPageKind`；它是 `relation` 类 finding，使检查失败，页面照常被发现、阅读与编辑。拼写接近某个种类时，finding 给出该种类，否则列出全部种类。
+5. 分类目录的 README、文档包外的 `docs/` 普通文档（例如 `docs/guides/<g>.md`）、`docs/_template/` 与非 Markdown 文件不受种类限制。项目的说明性文档放在包外，用链接连到 Spec。
 
 ### 重叠时的归属
 
 - 同一个领域结构或错误被多个入口使用时，只在一个行为页定义，其它页面只写自己入口的映射，例如 HTTP 状态码。
 - 公开文件约定在 `format.md`，内部存储在 `data-model.md`；能被打开阅读不等于公开格式。存储结构简单时可以只写在 `architecture.md`，拆出后只链接。
-- 性能预算只在 Feature 的 `performance.md`，Use Case 与 README 只链接。测量方法归 Engineering 的性能主题；测试时限、输出上限这类资源上限写在所属的行为页或实现页，不是预算。
+- 性能预算只在 Feature 的 `performance.md`，Use Case 与 README 只链接。测量方法归[性能测量](engineering/performance/README.md)这个 Engineering 文档包；测试时限、输出上限这类资源上限写在所属的行为页或实现页，不是预算。
 
 ## 只写当前声明
 
 声明式页面只写现在（[写现在，不写过去](taste.md#t-4)）。
 
 1. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。
-2. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交收据和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。
-3. 声明式 owner（Feature、Use Case、Engineering、品味、`concepts.md` 与写作政策）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git 保存。
+2. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交记录和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。
+3. 声明式 owner（Feature、Use Case、Engineering、品味、`concepts.md` 与写作规则）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git 保存。
 
 ## 术语与语言
 

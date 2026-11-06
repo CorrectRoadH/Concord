@@ -24,7 +24,7 @@
    {"operation":"issue-plan","receiptId":"8d0f3c52-1a7e-4b9d-9c11-2f6e5a0b7c34","connection":"product-gh","issueOperation":"close","target":"example/product#12","payloadDigest":"sha256:3f9a1c2b7d4e…","remotePreimageDigest":"sha256:…","expiresAt":"2026-11-05T08:05:00.000Z","authorize":"close:example/product#12@3f9a1c2b7d4e"}
    ```
 
-   preview 只读取远端，不写 docs，也不发写请求。receipt 5 分钟内有效，只能用一次。
+   preview 只读取远端，不写 docs，也不发写请求。远端写入计划 5 分钟内有效，只能用一次。
 
 2. 把计划交给有权限的人确认。 {#authorize}
 
@@ -46,20 +46,20 @@
 
 4. 结果不确定时重新计划，不重试 apply。 {#uncertain}
 
-   写请求超时、被信号中断或响应无法解析时返回 `IssueMutationUncertain`，receipt 已消费。重新运行第 1 步：close 已生效时返回 `IssueNoChange`。
+   写请求超时、被信号中断或响应无法解析时返回 `IssueMutationUncertain`，远端写入计划已消费。重新运行第 1 步：close 已生效时返回 `IssueNoChange`。
 
 ## 结果
 
 | 情形 | 结果 |
 | --- | --- |
 | preview 成功 | 没有写请求 |
-| 目标状态已等于计划结果，例如 Issue 已关闭 | `IssueNoChange`，不签发 receipt |
+| 目标状态已等于计划结果，例如 Issue 已关闭 | `IssueNoChange`，不签发远端写入计划 |
 | 连接没有记录 `repositoryId` | `IssueConnectionUnbound` |
 | 仓库 ID 与连接不符，例如仓库改名或转移 | `ConnectionIdentityMismatch` |
 | 目标是 Pull Request | `IssueTargetIsPullRequest` |
-| 每个 preview 拒绝条件 | 具名失败，不签发 receipt，见 [preview](../cli.md#preview) |
-| `--authorize` 或 `--connection` 与 receipt 不符 | `IssueAuthorizationMismatch`，不消费 receipt，零远端调用 |
-| receipt 过期或已用过 | `IssuePlanExpired` 或 `IssuePlanConsumed`，零写请求 |
+| 每个 preview 拒绝条件 | 具名失败，不签发远端写入计划，见 [preview](../cli.md#preview) |
+| `--authorize` 或 `--connection` 与远端写入计划不符 | `IssueAuthorizationMismatch`，不消费远端写入计划，零远端调用 |
+| 远端写入计划过期或已用过 | `IssuePlanExpired` 或 `IssuePlanConsumed`，零写请求 |
 | 远端在 preview 后变化 | `IssuePlanDrifted`，零写请求 |
 | 远端拒绝写请求 | `IssueRemoteRejected`，`details.status` 是 HTTP 状态 |
 | 写请求超时 | `IssueMutationUncertain`；重新 preview close 返回 `IssueNoChange` |
@@ -70,6 +70,6 @@
 
 用只模拟外部边界的 fake gh 可执行文件记录请求，在打包后公开 CLI 与隔离 Git 消费者中验证：
 
-- preview 没有写请求；每个 preview 拒绝条件具名失败且不签发 receipt。
+- preview 没有写请求；每个 preview 拒绝条件具名失败且不签发远端写入计划。
 - apply 的每个拒绝条件都零写请求；带一致授权串的 apply 恰好一次写请求，正文经 stdin 传入。
 - 写请求超时返回 `IssueMutationUncertain`，重新 preview close 返回 `IssueNoChange`。

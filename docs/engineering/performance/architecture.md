@@ -4,10 +4,10 @@
 
 ## 写入范围
 
-被测产物是当前 checkout 构建出的安装包，默认消费者是本仓库某个 commit 的独立 clone。写入范围按对象区分：
+被测产物是当前 checkout 构建出的归档，默认消费者是本仓库某个 commit 的独立 clone。写入范围按对象区分：
 
-- 入口把候选安装包构建到临时目录。
-- `--compare` 的基线安装包位于用户缓存目录。
+- 入口把被测归档构建到临时目录。
+- `--compare` 的基线归档位于用户缓存目录。
 - `self`、`scale` 与 fixture 消费者及进程输出位于临时工作目录，结束后删除（`--keep` 除外）。
 - 路径消费者原地测量，只改动其 Git-private 目录中的可丢弃 HawDB 缓存；`--out` 指定测量或 profile 输出位置。
 
@@ -24,7 +24,7 @@
 ```mermaid
 flowchart TD
   subgraph Repo[当前仓库]
-    Src[源码，构建为临时目录中的候选安装包]
+    Src[源码，构建为临时目录中的被测归档]
     Docs[Feature performance.md 预算表]
     Benches[bench/*.bench.ts 场景]
     Fixtures[bench/fixtures/ 生成函数]
@@ -87,7 +87,7 @@ flowchart TD
 - `stats.ts` 只做 p50、有效性、回退和上限判定，是纯函数。
 - `process.ts` 以文件描述符重定向 stdout 与 stderr 并计时，失败使用具名 `PerfError`。
 - `consumer.ts` 准备 `self`、`scale`、fixture 与路径消费者，返回带 commit 的冻结描述，并在每次 `beforeEach` 后恢复冻结状态。
-- `artifact.ts` 读取产物 commit、源码是否有未提交改动及安装包摘要，摘要覆盖 `.js`、`.node` 与 `artifact.json`。
+- `artifact.ts` 读取产物 commit、源码是否有未提交改动及安装目录摘要，摘要覆盖 `.js`、`.node` 与 `artifact.json`。
 - `cpu-profile.ts` 严格解码 `.cpuprofile` 并按函数和层汇总自身耗时。
 - `fs-counter.ts` 由 `NODE_OPTIONS` 预加载，包装 `node:fs` 调用后执行 `syncBuiltinESMExports()`，退出时按 pid 写出计数与 `process.resourceUsage()`；它不改变调用结果，未设置输出目录环境变量时不做任何事。
 

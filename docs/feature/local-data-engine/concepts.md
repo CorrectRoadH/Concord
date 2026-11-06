@@ -1,6 +1,6 @@
-# 本地数据引擎术语
+# 本地数据引擎术语表
 
-本页定义统一数据引擎中的术语。[投影](../../concepts.md#projection)与[快照](../../concepts.md#snapshot)由全局术语定义。
+本页定义统一数据引擎中的概念。[投影](../../concepts.md#projection)与[快照](../../concepts.md#snapshot)由[全局术语表](../../concepts.md)定义。
 
 ## Cache {#cache}
 

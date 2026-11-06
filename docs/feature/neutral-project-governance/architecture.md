@@ -16,8 +16,8 @@ Concord 拥有路径身份推导、源码标记与测试支持文件映射、稳
 
 ## 远端 Issue 写入
 
-- receipt 写入 Git-private `concord/issue-plan/v1/planned/<receipt-id>.json`（mode 0600），记录 connection ID 与 repositoryId。execute 消费后写 `consumed/<receipt-id>.outcome.json`（mode 0600），不含凭据或响应正文。
-- 每个已消费 receipt 恰有一个 outcome：`applied`、`drifted`、`aborted`（写请求前失败，`code` 记录具名错误）、`rejected`（`status` 记录 HTTP 状态）或 `uncertain`；只有 `uncertain` 表示远端可能已改变。outcome 写入失败不改变命令返回的错误。receipt store 防止误用与并发重放，不防御能直接改写 Git-private 目录的本地进程。
+- 远端写入计划写入 Git-private `concord/issue-plan/v1/planned/<receipt-id>.json`（mode 0600），记录 connection ID 与 repositoryId。execute 消费后写 `consumed/<receipt-id>.outcome.json`（mode 0600），不含凭据或响应正文。
+- 每个已消费远端写入计划恰有一个 outcome：`applied`、`drifted`、`aborted`（写请求前失败，`code` 记录具名错误）、`rejected`（`status` 记录 HTTP 状态）或 `uncertain`；只有 `uncertain` 表示远端可能已改变。outcome 写入失败不改变命令返回的错误。写入计划存储防止误用与并发重放，不防御能直接改写 Git-private 目录的本地进程。
 - gh 调用沿用 Feedback gh 读取的可信可执行文件、环境裁剪与进程组回收（[接入 Spec](../feedback/architecture.md#接入与信任约束)）。写请求的 JSON 正文只经 stdin 传给 `gh api --input -`，不使用 `-f`、`-F`、`--field` 或 `--raw-field`，因为 `-F` 会把以 `@` 开头的值当作本地文件读取。
 - 写方法只在 execute 路径开放，路径限定为 `repos/<owner>/<repo>/issues...`。请求为 `POST issues`、`POST issues/<n>/labels`、`DELETE issues/<n>/labels/<name>`、`POST issues/<n>/comments` 与 `PATCH issues/<n>`。PATCH 时 body-set 只带 `body`，close 只带 `state: "closed"` 与可选 `state_reason`，reopen 只带 `state: "open"`。路径段经 `encodeURIComponent` 编码。
 

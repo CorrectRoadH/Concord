@@ -26,20 +26,20 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 只支持线性路径：先提交会失败的回归测试，再提交修复。可观察行为见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 
-1. 回归测试由 `@issue` 标记选出。修复候选默认是核验开始时的 HEAD，`--fix` 可以指定其 first-parent 历史中缺陷候选之后的提交；工作树中他人的未提交改动不参与核验，只要求该 Issue 文件没有未提交改动。
-2. 缺陷候选默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
-3. 从缺陷候选到修复候选之间，测试文件、`runner.sourceFiles` 与测试指向的 Spec 字节不变，严格解码后的项目配置除 `runner.prepare` 外不变；配置文件的空白与格式不参与比较。区间中有 merge 提交时不支持。
-4. 以 detached worktree 分别检出缺陷候选与修复候选。检出位于仓库目录树之外：系统临时目录下属于当前用户、权限 0700 的私有目录，不跟随符号链接。检出若在仓库目录之下，依赖解析会向上找到主工作树的依赖，使构建结果不同于干净检出。
+1. 回归测试由 `@issue` 标记选出。修复提交默认是核验开始时的 HEAD，`--fix` 可以指定其 first-parent 历史中缺陷提交之后的提交；工作树中他人的未提交改动不参与核验，只要求该 Issue 文件没有未提交改动。
+2. 缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
+3. 从缺陷提交到修复提交之间，测试文件、`runner.sourceFiles` 与测试指向的 Spec 字节不变，严格解码后的项目配置除 `runner.prepare` 外不变；配置文件的空白与格式不参与比较。区间中有 merge 提交时不支持。
+4. 以 detached worktree 分别检出缺陷提交与修复提交。检出位于仓库目录树之外：系统临时目录下属于当前用户、权限 0700 的私有目录，不跟随符号链接。检出若在仓库目录之下，依赖解析会向上找到主工作树的依赖，使构建结果不同于干净检出。
 
    每个检出先依次执行 `runner.prepare` 的命令（例如安装依赖与构建），再运行 runner。`prepare` 只准备环境，取核验开始时 HEAD 的配置用于两个检出（重放同样取当时 HEAD 的配置），不属于第 3 步的冻结输入，因此早于它出现的提交也能核验；准备命令以非零码结束、超时或清理未知时核验报 `FixUnverifiable`，不计为 red。全部命令在 runner 租约与 OwnedProcess 下执行，结束后删除临时 worktree；清理无法确认时按 runner 阻断处理。
-5. 缺陷候选上同一冻结命令以非零码结束，修复候选上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果；runner 结果判定为零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
+5. 缺陷提交上同一冻结命令以非零码结束，修复提交上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果；runner 结果判定为零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
 6. 发布前重新核对 Issue 文件与回归测试文件的前像，变化则拒绝。在同一次发布中删除 Issue 文件，并删除回归测试源码中指向它的 `@issue` 行；测试本身与其它标记保留。输出的结论包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本，供写进提交说明。
 
 `test verify --defect <D> --fix <F> <test-id>...` 在 D 与 F 的临时检出上重放，核对结论的主张：回归测试在 D 上失败、在 F 上通过。之后的提交改动测试、runner 输入或 Spec 不使这个结论失效，之后的回归由完整测试发现。提交、依赖或运行环境不可获得时报告无法重放。
 
 ## 写入管线
 
-文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整 preimage，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配 preimage 也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由 `concord check` 检查，`--since` 另读基线差异（[操作依赖](#操作依赖)）。
+文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整前像，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配前像也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由 `concord check` 检查，`--since` 另读基线差异（[操作依赖](#操作依赖)）。
 
 新增配置、来源和写入口必须同时定义资源所有权与恢复授权，写入的可观察保证见[写入保护](use-case/recover-local-state.md#写入保护)。
 
@@ -133,7 +133,7 @@ Memory 没有生命周期状态，过时就改写或删除，历史在 Git。
 
 核心流程不需要账号、模型 API 或云服务。
 
-- Concord 作为独立安装包工作，只需要本地 Git 仓库，不依赖其它仓库的 checkout、全局安装、provider 凭据或部署服务。
+- Concord 作为独立安装的程序工作，只需要本地 Git 仓库，不依赖其它仓库的 checkout、全局安装、provider 凭据或部署服务。
 - 可选外部接入必须有明确边界，不成为基础本地流程的前提。
 - 本地 Issue 不依赖外部服务。远端写入需单独授权，本地操作不自动投射为远端变更；Concord 不自动发版、push、调用付费模型或操作远端 Issue。
 

@@ -95,6 +95,6 @@ concord view export --base <ref> [--head <ref>] [--base-label <label>] --out <ne
 | `PreviewUnsafeOutput` | 输出为仓库根、Git-private 路径或祖先不是真实目录 |
 | `PreviewOutputExists` | 输出目录已存在 |
 | `PreviewOutputChanged` | 写入期间输出目录或祖先被替换 |
-| `PreviewAssetsInvalid` | 安装包内的阅读器资源缺失或超出发布预算 |
+| `PreviewAssetsInvalid` | 安装目录内的阅读器资源缺失或超出发布预算 |
 | `PreviewPublicationFailed` | 写入失败；不完整输出保留在 `details.output` |
 | `PreviewExportFailed` | 整体超过 120 秒或其它导出失败 |

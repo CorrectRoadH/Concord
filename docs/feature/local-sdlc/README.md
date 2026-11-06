@@ -213,8 +213,8 @@ export default function (p: P5) {
 
 证据只表达实际证明的范围（[只声称证明过的](../../taste.md#t-5)）。
 
-- 源码声明不等于执行，命令成功收据不等于逐 case 覆盖或正式 E2E 可靠性。Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal E2E。
-- Issue 标记为 fixed 时，同一冻结命令必须在缺陷候选上以非零结果结束、在被接受的快照上通过，两者之间测试、runner 输入与所指 Spec 不变。通过后删除 Issue，结论输出给提交说明，可用 `test verify` 在声明的输入与环境下重放；command 结果不证明逐 case 执行。完整路径见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
+- 源码声明不等于执行，命令成功不等于逐 case 覆盖或正式 E2E 可靠性。Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal E2E。
+- Issue 标记为 fixed 时，同一冻结命令必须在缺陷提交上以非零结果结束、在修复提交上通过，两者之间测试、runner 输入与所指 Spec 不变。通过后删除 Issue，结论输出给提交说明，可用 `test verify` 在声明的输入与环境下重放；command 结果不证明逐 case 执行。完整路径见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 - 文档、品味结构或关系检查不得被展示为实现合规、功能完成或测试覆盖的证明。
 
 ### 测试的边界
@@ -228,7 +228,7 @@ Concord 用源码标记把测试关联到 Spec，通过配置的 `runner` 运行
 
 发现范围默认取存在的 `test/`、`tests/`，测试在其它位置时配置 `testRoots`。Concord 不读取 Nx metadata，也没有固定 e2e 目录、host/provider 分类或 pr/main/nightly/release 通道。所有权划分见[治理边界](../neutral-project-governance/architecture.md#所有权)。
 
-逐 case 的原生证据、可靠性观察与政策下限不属于 Concord，需要它们的项目在自己的 CI 中实现，其结论不参与 Issue 的关闭判定。仓库中已有的治理配置与原生收据原地保留，Concord 不读取、不删除。接入验收见[按 Concord 规范接入软件项目](../neutral-project-governance/use-case/adopt-neutral-governance.md#验收)。
+逐 case 的原生证据、可靠性观察与政策下限不属于 Concord，需要它们的项目在自己的 CI 中实现，其结论不参与 Issue 的关闭判定。仓库中已有的治理配置与原生测试证据原地保留，Concord 不读取、不删除。接入验收见[按 Concord 规范接入软件项目](../neutral-project-governance/use-case/adopt-neutral-governance.md#验收)。
 
 ## 依据的品味
 

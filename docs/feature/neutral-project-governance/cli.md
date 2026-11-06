@@ -117,23 +117,23 @@ concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 ### preview
 
 - 只读取远端，不写 docs。连接未记录 `repositoryId` 返回 `IssueConnectionUnbound`；plan 与 execute 先读取仓库并核对仓库 ID，不符返回 `ConnectionIdentityMismatch`，改名或转移后的旧名称不会把写入导向另一个仓库。
-- 目标状态已等于计划结果时返回 `IssueNoChange`，不签发 receipt：close 已关闭、reopen 已打开、labels-add 的标签全已存在、labels-remove 的标签不存在、body-set 正文相同。目标是 Pull Request 返回 `IssueTargetIsPullRequest`。
+- 目标状态已等于计划结果时返回 `IssueNoChange`，不签发远端写入计划：close 已关闭、reopen 已打开、labels-add 的标签全已存在、labels-remove 的标签不存在、body-set 正文相同。目标是 Pull Request 返回 `IssueTargetIsPullRequest`。
 - create 完整分页列出 open 与 closed Issues 并排除 Pull Request。带 `--origin-key` 的 machine-origin create 要求正文含 `payload-sha256:` 标记，前像是带同一 origin-key 的 Issue 集合，已存在时返回 `IssueCreateConflict`；manual create 的前像是标题完全相同的 Issue 集合。其它 Issue 的变化不构成漂移。
-- labels-remove 每个 receipt 只移除一个标签，重复 `--label` 返回 `InvalidInput`。标签名含控制字符或超过 50 个字符时拒绝。
-- receipt 有效期 5 分钟，只能消费一次。`authorize` 绑定动作、目标与 payload：编号目标为 `<operation>:<owner>/<repo>#<number>@<payload>`，create 为 `create:<owner>/<repo>@<payload>`。`<payload>` 是 `payloadDigest` 十六进制部分的前 12 位；同一目标重新计划不同正文或标签后，旧授权串不再匹配。
+- labels-remove 每个远端写入计划只移除一个标签，重复 `--label` 返回 `InvalidInput`。标签名含控制字符或超过 50 个字符时拒绝。
+- 远端写入计划有效期 5 分钟，只能消费一次。`authorize` 绑定动作、目标与 payload：编号目标为 `<operation>:<owner>/<repo>#<number>@<payload>`，create 为 `create:<owner>/<repo>@<payload>`。`<payload>` 是 `payloadDigest` 十六进制部分的前 12 位；同一目标重新计划不同正文或标签后，旧授权串不再匹配。
 
 ### apply
 
-1. 读取并严格解码 receipt。`--connection` 必须是签发 receipt 的同一连接，`--authorize` 与 receipt 目标完全相等；不等返回 `IssueAuthorizationMismatch`，不消费 receipt，零远端调用。
-2. 原子消费 receipt：过期返回 `IssuePlanExpired`，已消费返回 `IssuePlanConsumed`。
+1. 读取并严格解码远端写入计划。`--connection` 必须是签发它的同一连接，`--authorize` 与它的目标完全相等；不等返回 `IssueAuthorizationMismatch`，不消费该计划，零远端调用。
+2. 原子消费远端写入计划：过期返回 `IssuePlanExpired`，已消费返回 `IssuePlanConsumed`。
 3. 重新读取远端前像，不符返回 `IssuePlanDrifted`，零写请求。
-4. 恰好执行一次写请求。确定的 4xx 或 5xx 返回 `IssueRemoteRejected`（`details.status`）。结果不确定（超时、信号、无法解析响应）返回 `IssueMutationUncertain`，`details` 含 receiptId、issueOperation、target 与请求的 method 和 path。两者都保持 receipt 已消费，不自动重试。
+4. 恰好执行一次写请求。确定的 4xx 或 5xx 返回 `IssueRemoteRejected`（`details.status`）。结果不确定（超时、信号、无法解析响应）返回 `IssueMutationUncertain`，`details` 含 receiptId、issueOperation、target 与请求的 method 和 path。两者都保持远端写入计划已消费，不自动重试。
 
 不确定之后必须重新 plan：已生效的 close、reopen、标签与正文写入返回 `IssueNoChange`；machine-origin create 重新完整扫描 origin-key，已生效时返回 `IssueCreateConflict`。manual create 与 comment-add 没有幂等键，错误消息要求人工核对远端后再计划。
 
 ### 预算
 
-单次 gh 输出不超过 2 MiB；一次 plan 或 execute 的列表最多 200 页（每页 100 条）、累计 64 MiB，整个命令截止 120 秒。超出返回 `IssueRemoteBudgetExceeded` 或 `GhTimeout`，不签发 receipt，execute 不发出写请求。该预算不改变 Feedback 读取的预算。
+单次 gh 输出不超过 2 MiB；一次 plan 或 execute 的列表最多 200 页（每页 100 条）、累计 64 MiB，整个命令截止 120 秒。超出返回 `IssueRemoteBudgetExceeded` 或 `GhTimeout`，不签发远端写入计划，execute 不发出写请求。该预算不改变 Feedback 读取的预算。
 
 ### 输出与错误
 
@@ -142,4 +142,4 @@ concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 | `issue remote preview` | `operation: "issue-plan"`、`receiptId`、`connection`、`issueOperation`、`target`、`payloadDigest`、`remotePreimageDigest`、`expiresAt`（ISO 8601 UTC）、`authorize` |
 | `issue remote apply` | `operation: "issue-execute"`、`receiptId`、`issueOperation`、`issue`（`number`、`url`、`state`、`title`、`labels`） |
 
-除上文错误码外，API token 连接返回 `IssueRemoteTransportUnsupported`，receipt 不存在或损坏返回 `IssuePlanNotPlanned` 或 `IssuePlanCorrupt`，gh 失败沿用 Feedback 读取的 `Gh*` 错误。内部 receipt store、outcome 与写请求边界见[架构](architecture.md#远端-issue-写入)，gh 读取适配见 [Feedback 架构](../feedback/architecture.md#gh-读取适配)。
+除上文错误码外，API token 连接返回 `IssueRemoteTransportUnsupported`，远端写入计划不存在或损坏返回 `IssuePlanNotPlanned` 或 `IssuePlanCorrupt`，gh 失败沿用 Feedback 读取的 `Gh*` 错误。内部写入计划存储、outcome 与写请求边界见[架构](architecture.md#远端-issue-写入)，gh 读取适配见 [Feedback 架构](../feedback/architecture.md#gh-读取适配)。

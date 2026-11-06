@@ -14,7 +14,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 ## 按需读取
 
 - 首次接入、配置或模板：运行 `concord --skill init`。
-- 开发流程的四步：写 Spec 运行 `concord --skill spec`，照着 Spec 实现运行 `concord --skill implement`，按 Spec 验收运行 `concord --skill review`，修复缺陷运行 `concord --skill fix`。项目中的 `concord-spec` 等 skill 就是这四个主题的入口。
+- 开发流程的四步：写 Spec 运行 `concord --skill spec`，照着 Spec 实现运行 `concord --skill implement`，按 Spec 验收运行 `concord --skill review`，修复缺陷运行 `concord --skill fix`。项目中的 `concord-spec` 等 skill 就是这四个 skill 主题的入口。
 - 为项目写第一批 Spec：还没有代码时运行 `concord --skill docs-from-scratch`，已有代码时运行 `concord --skill docs-from-code`。
 - Feature、Use Case、Engineering、Roadmap、Design 的布局、写法与采用：运行 `concord --skill document`。
 - 整文件、函数和代码段的实现关联与位置查询：运行 `concord --skill code`。
@@ -36,7 +36,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 | `docs/design/<d>.md` | Design：一个还没定下来的取舍，定下后删除 |
 | `docs/issues/<i>.md` | Issue：缺陷、请求与观察 |
 | `memory/<m>.md` | Memory：开发中可复用的经验 |
-| `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 品味、概念与写作政策 |
+| `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 品味、概念与写作规则 |
 
 包内页面的文件名就是页面种类，种类以外的页面由 `check` 报告 `UnknownPageKind`；项目的说明性文档放在包外，例如 `docs/guides/<g>.md`。仓库相对路径是文档的唯一身份，名称取自正文唯一的一级标题。目录名与文件名可以作短选择器，同类中有歧义时命令具名拒绝并要求写出路径。移动文件即改变身份，`check` 报告全部失效的精确引用。
 
@@ -58,4 +58,4 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 
 Spec 正文声明目标、行为、约束和验收条件；产品流程属于 Spec。写 Feature README 或 Use Case 前先读 `concord --skill document` 的「让第一次读的人读懂」。README 与 cli、library、api、format、ui、performance 页是产品功能，architecture 与 data-model 页是技术实现；Use Case 按用户目标与处理路径拆分，同一路径中的输入变化与错误结果可以用表格说明。复杂过程配 p5 图解，领域名词先进入 `concepts.md` 再使用。开发日志、排障经过、实施进度与临时计划归 Memory，待调查的观察与缺陷归 Issue，采用后的目标归 Feature。
 
-索引与反向关系从文件派生：用 `concord list` 与 `concord show` 读取文档及其关系，不手工维护 INDEX 或反向列表。领域术语写在所在目录的 `concepts.md`，写作政策写在 `writing.md`；所在目录决定作用域，`check` 校验结构、作用域与被引用的定义，全项目视图只汇总来源。格式见 `concord --skill document`。
+索引与反向关系从文件派生：用 `concord list` 与 `concord show` 读取文档及其关系，不手工维护 INDEX 或反向列表。领域术语写在所在目录的 `concepts.md`，写作规则写在 `writing.md`；所在目录决定作用域，`check` 校验结构、作用域与被引用的定义，全项目视图只汇总来源。格式见 `concord --skill document`。

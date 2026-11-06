@@ -2,7 +2,7 @@
 
 每次运行 `concord check`、`trace gaps` 或检索 Memory，Concord 都要读取项目里的文档、测试和代码。本 Feature 把读取和解析的结果存进一份可以随时删除的本地[缓存](concepts.md#cache)，让连续的命令更快。
 
-Spec、Memory、Issue 和证据仍是仓库里的普通文件，删除缓存不会删除它们，也不改变任何检查结论或 fixed 判定。缓存引擎随 Concord 安装包发版，不需要另装数据库或服务。
+Spec、Memory、Issue 和证据仍是仓库里的普通文件，删除缓存不会删除它们，也不改变任何检查结论或 fixed 判定。缓存引擎随 Concord [归档](../../concepts.md#archive)发版，不需要另装数据库或服务。
 
 ## 你可以做什么
 
@@ -95,7 +95,7 @@ state: absent
 ## 范围与验收
 
 - 缓存只加速：删除缓存不能删除 Spec、Memory、Issue 或证据，也不能改变 fixed 判定。
-- 安装包在支持的 Linux 与 macOS 上携带所需运行产物。目标平台缺少产物时明确诊断，不用另一个数据库冒充缓存引擎。
+- 归档在支持的 Linux 与 macOS 上携带所需运行产物。目标平台缺少产物时明确诊断，不用另一个数据库冒充缓存引擎。
 - 验收使用打包后安装到隔离 Git 仓库的 CLI，各 Use Case 的结果表列出要观察的情形。
 
 高频操作的性能预算见[性能预算](performance.md)。

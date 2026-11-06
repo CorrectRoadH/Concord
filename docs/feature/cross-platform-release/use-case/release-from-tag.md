@@ -46,10 +46,10 @@
    | 核对 | 通过条件 |
    | --- | --- |
    | 启动 | `bin/concord --version` 输出标签版本，`bin/concord --help` 以零退出 |
-   | 原生绑定 | 包内 HawDB 绑定通过身份校验并被实际加载 |
+   | 原生绑定 | 归档内的 HawDB 绑定通过身份校验并被实际加载 |
    | 项目闭环 | 在临时 Git 仓库中 `concord init` 与 `concord check` 成功，退出后没有残留的服务进程 |
-   | Web 资源 | 包内 Web 资源存在 |
-   | Linux 依赖 | 所有 ELF 只依赖 glibc 与 `runtime/lib/` 中的库，RPATH 指向包内，GLIBC 符号版本不高于 2.39 |
+   | Web 资源 | 归档内的 Web 资源存在 |
+   | Linux 依赖 | 所有 ELF 只依赖 glibc 与 `runtime/lib/` 中的库，RPATH 指向归档内，GLIBC 符号版本不高于 2.39 |
    | macOS 签名 | 全部 Mach-O 通过 `codesign --verify`；`runtime/node` 保留 Node.js 官方签名；用 `curl` 下载并解压的文件没有 `com.apple.quarantine` |
 
 6. 全部通过后创建源码 GitHub Release。 {#publish}
@@ -111,7 +111,7 @@
 | Formula 或 Nix 候选失败 | 可见，停止渠道更新；源码 Release 保持不变 |
 | 第 9 步失败 | 报告失败，不影响源码 Release 与 Homebrew、Nix 渠道 |
 | 缺少通知凭据或通知重试耗尽 | 通知步骤非零退出，保留已上传的不可变资产；源码 Release 存在不表示渠道完成 |
-| 重跑失败的发版任务 | 复用相同资产，识别已有渠道回执 |
+| 重跑失败的发版任务 | 复用相同资产，识别已有的渠道完成记录 |
 
 ### 渠道通知与恢复
 
@@ -123,6 +123,6 @@ Concord Actions Secret `HOMEBREW_TAP_WORKFLOW_TOKEN` 使用仅授权 homebrew-ta
 gh workflow run concord-release-sync.yml --repo CorrectRoadH/homebrew-tap --ref main --field tag=v0.9.0
 ```
 
-确认 tap 的同名 Release 完成回执后，再重跑失败的发版任务。
+确认 tap 已创建同名 Release 作为渠道完成记录后，再重跑失败的发版任务。
 
 发版资产与错误见 [CLI](../cli.md)，产物与渠道的实现见[发版产物与渠道](../architecture.md#发布产物与渠道)与[生命周期](../architecture.md#生命周期)，协调边界见[可移植协调架构](../../portable-coordination/architecture.md)。

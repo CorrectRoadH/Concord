@@ -1,10 +1,10 @@
 # 文档目录的实现
 
-本页声明文档目录的归属与编辑期间聚合检查的重试实现。可观察行为见 [README](README.md)与[编辑期间的聚合检查](../documentation-quality/use-case/inspect-writing.md#编辑期间的聚合检查)。
+本页声明文档目录的归属与编辑期间合并检查的重试实现。可观察行为见 [README](README.md)与[编辑期间的合并检查](../documentation-quality/use-case/inspect-writing.md#编辑期间的合并检查)。
 
 ## 目录归属
 
-Feature、Engineering 与 Roadmap 的 owner 是目录的 README，附页按最深的合法 owner 归属；嵌套 owner 截断祖先归属。顶层主题只从物理目录派生，不建立注册表。Design 与 Issue 各是单个文件。
+Feature、Engineering 与 Roadmap 的 owner 是目录的 README，附页按最深的合法 owner 归属；嵌套 owner 截断祖先归属。顶层文档包只从物理目录派生，不建立注册表。Design 与 Issue 各是单个文件。
 
 ## 编辑期间的检查
 

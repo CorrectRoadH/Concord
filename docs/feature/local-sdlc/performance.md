@@ -19,9 +19,9 @@
 | `local-sdlc/feature-list`、`local-sdlc/use-case-list`、`local-sdlc/design-list`、`local-sdlc/roadmap-list`、`local-sdlc/engineering-list` | 文档类别列表 | 600ms |
 | `local-sdlc/docs-check` | 写作检查 | 1000ms |
 | `local-sdlc/trace-show-fresh`、`local-sdlc/trace-check` | 当前关系读取与检查 | 1300ms |
-| `local-sdlc/check` | 聚合检查 | 2300ms |
+| `local-sdlc/check` | 合并检查 | 2300ms |
 | `local-sdlc/trace-show-fresh-server`、`local-sdlc/trace-check-server` | 经由运行中的工作区服务读取与检查当前关系 | 1300ms |
-| `local-sdlc/check-server` | 经由运行中的工作区服务的聚合检查 | 2300ms |
+| `local-sdlc/check-server` | 经由运行中的工作区服务的合并检查 | 2300ms |
 | `local-sdlc/code-list` | 代码声明列表 | 2460ms |
 | `local-sdlc/test-list` | 测试声明列表 | 1910ms |
 | `local-sdlc/template-list` | 随包模板列表 | 430ms |

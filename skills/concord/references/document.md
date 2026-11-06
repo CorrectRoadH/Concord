@@ -10,7 +10,7 @@ Feature 目录包含 README（必需）与按需选用的固定页面种类，�
 
 - `use-case/<u>.md` 是一个用户旅程，`use-case/README.md` 是可选的导航页；Use Case 不嵌套，也不跨文件。
 - 除 README、`use-case/`、`performance.md`、`concepts.md` 与 `writing.md` 外，一种页面写不下时，把 `<种类>.md` 换成 `<种类>/` 目录：入口是 `<种类>/README.md`，其余页面自由命名，种类与目录相同。单页与目录不能并存。
-- 包内无法归类的页面由 `check` 报告 `UnknownPageKind`，页面照常可读可编辑；按内容把它拆到对应种类，不靠改名凑合。项目的说明性文档放在包外，例如 `docs/guides/<g>.md`。
+- 文档包内无法归类的页面由 `check` 报告 `UnknownPageKind`，页面照常可读可编辑；按内容把它拆到对应种类，不靠改名凑合。项目的说明性文档放在包外，例如 `docs/guides/<g>.md`。
 Spec、Roadmap 与 Design 没有 frontmatter：身份是仓库相对路径，名称是正文唯一的一级标题（代码块中的标题不计），Use Case 属于所在目录的 Feature。
 
 直接创建目录与文件即可。`concord new` 按随包模板创建，页面在创建时选择，README 必需，其余可选：

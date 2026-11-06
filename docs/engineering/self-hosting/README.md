@@ -1,6 +1,6 @@
 # Concord 自举维护
 
-本主题规定 Concord 怎样用当前检出的源码 CLI（`pnpm concord`）维护本仓库的 Spec。仓库中的 Markdown 与真实测试标记共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是 [`pnpm gate`](../testing/README.md#检查入口)。
+本文档包规定 Concord 怎样用当前检出的源码 CLI（`pnpm concord`）维护本仓库的 Spec。仓库中的 Markdown 与真实测试标记共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是 [`pnpm gate`](../testing/README.md#检查入口)。
 
 构建与源码运行见[构建与开发环境](../build/README.md)，测试规则见[测试](../testing/README.md)，性能测量见[性能测量](../performance/README.md)。
 
@@ -31,7 +31,7 @@ Concord 用自己的流程开发和验收自己。
 | --- | --- |
 | 调整 runner | runner argv 或 sourceFiles 变化会使旧的 [command evidence](concepts.md#command-evidence) 不再代表当前定义。先用 doctor 与 check 验证配置，再按需重新采集 |
 | 修复中断写入 | 读取遇到 `RecoveryRequired` 时停止其它写入，检查 journal 与文件内容后运行 `recover`；出现未知编辑时保留现场，由维护者裁决 |
-| 审阅交接 | reviewer 用 trace 与 review 输出定位 Spec、测试和 Memory，再直接审阅正文与源码。命令收据是可复核输入，不替代测试设计判断 |
+| 审阅交接 | reviewer 用 trace 与 review 输出定位 Spec、测试和 Memory，再直接审阅正文与源码。Command evidence 是可复核输入，不替代测试设计判断 |
 
 ## 仓库文档入口
 

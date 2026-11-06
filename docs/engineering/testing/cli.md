@@ -20,8 +20,8 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 | 涉及的页面 | 选中的测试 |
 | --- | --- |
 | 一个 Use Case | 标记指向该 Use Case 的测试，以及标记指向它所属 Feature 或 Engineering 整体的测试 |
-| 包内其它页面（README、cli、architecture 等） | 标记指向该 Feature 或 Engineering，或指向其中任一页面的测试 |
-| 包外的项目规则与普通文档 | 不因此选中测试；`concord check` 仍完整执行 |
+| 文档包内其它页面（README、cli、architecture 等） | 标记指向该 Feature 或 Engineering，或指向其中任一页面的测试 |
+| 文档包外的项目规则与普通文档 | 不因此选中测试；`concord check` 仍完整执行 |
 
 退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Node 测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
 

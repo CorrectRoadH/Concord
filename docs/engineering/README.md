@@ -7,4 +7,4 @@ Engineering 声明开发本仓库所需的维护能力，页面种类与 Feature
 - [性能测量](performance/README.md)
 - [Concord 自举维护](self-hosting/README.md)
 
-使用 `concord list engineering` 查看全部主题，`concord new engineering <名称>` 创建。
+使用 `concord list engineering` 查看全部 Engineering 文档包，`concord new engineering <名称>` 创建。

@@ -1,6 +1,6 @@
 # 测量命令
 
-测量与 profile 都在本仓库自举：被测产物是当前 checkout 的构建，默认消费者是当前仓库某个 commit 的独立 clone。入口先构建候选安装包，结果以 JSON 输出到 stdout，可用 `--out` 另存。测量方法见[性能测量](README.md#测量方法)。
+测量与 profile 都在本仓库自举：被测产物是当前 checkout 的构建，默认消费者是当前仓库某个 commit 的独立 clone。入口先构建被测归档，结果以 JSON 输出到 stdout，可用 `--out` 另存。测量方法见[性能测量](README.md#测量方法)。
 
 ```text
 vp run bench [<场景 ID | feature-id> ...] [--changed [<base>]] [--compare [<rev>]] [--quick] [--reference]
@@ -93,7 +93,7 @@ vp run bench --changed --compare
 }
 ```
 
-`concord.profile/v2` 标明场景 ID 或命令，按进程列出 CPU 自身耗时最高的函数、按层（安装包内模块、依赖包、`node:internal`、原生）汇总的耗时，以及 user/system CPU、最大 RSS 和各 `node:fs` 调用的次数与同步耗时。原始 `.cpuprofile` 留在输出目录，可用 Chrome DevTools 或 speedscope 打开。
+`concord.profile/v2` 标明场景 ID 或命令，按进程列出 CPU 自身耗时最高的函数、按层（安装目录内模块、依赖包、`node:internal`、原生）汇总的耗时，以及 user/system CPU、最大 RSS 和各 `node:fs` 调用的次数与同步耗时。原始 `.cpuprofile` 留在输出目录，可用 Chrome DevTools 或 speedscope 打开。
 
 ```json
 {

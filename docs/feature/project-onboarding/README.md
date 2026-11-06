@@ -49,7 +49,7 @@ findings: none
 - 品味文件存在即生效，没有状态字段；其中的条目都是现行规则。Feature 可以推动品味新增、修订条目：直接编辑 `docs/taste.md`，理由写在提交说明或 Memory 中（[总则](../../taste.md#general-amend)），不把功能细节无限追加为全局规则。
 - 创建 Feature 时以参数选择页面：README 必需，其余页面可选。
 - 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，`check` 检查结果是否一致。
-- init 在根 `AGENTS.md` 中维护有边界标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
+- init 在根 `AGENTS.md` 中维护带托管标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
 - init 结束时按仓库有没有项目文件推荐一份写作指南：新项目读 `docs-from-scratch`，已有代码的项目读 `docs-from-code`。
 - init 与 `concord skills install` 在项目中安装四个工作流 skill（`concord-spec`、`concord-implement`、`concord-review`、`concord-fix`），Claude Code 与 Codex 共用同一份文件。
 - 还没有初始化的仓库里，CLI、Web 工作台与 Herdr mod 都提示先初始化，不给出空的通过结果。
@@ -78,7 +78,7 @@ findings: none
 
 1. Concord 规定一套工作范式，接入项目必须采用：统一 Spec 布局；Spec 先于实现；每项事实一个 owner；`docs/` 只写声明（[页面职责](../../document-model.md#页面职责)）；测试与实现通过显式源码标记关联 Spec。工程过程进入 Memory 与 Issue；Issue 按关闭种类的规则关闭，fixed 经过修复核验；写入遵守前像与恢复 Spec。
 2. 不提供关闭事实归属、关系解释、生命周期、证据下限及安全写入不变量的配置。项目可以配置来源位置、执行适配、文档页面和写作规则参数，配置不得绕过已采用的不变量。
-3. `concord check` 必须执行关系、生命周期及项目写作政策检查；检查失败或必需输入缺失时返回非零退出码，并区分违规与输入不完整。必查范围、必需规则与接入条件由[文档写作的聚合门禁](../documentation-quality/cli.md#合并检查)声明；定向检查或独立 profile 的结果不能替代聚合门禁。聚合检查不成为局部读取和修复操作的前提。
+3. `concord check` 必须执行关系、生命周期及项目写作规则检查；检查失败或必需输入缺失时返回非零退出码，并区分违规与输入不完整。必查范围、必需规则与接入条件由[文档写作的合并检查](../documentation-quality/cli.md#合并检查)声明；定向检查或独立 profile 的结果不能替代合并检查。合并检查不成为局部读取和修复操作的前提。
 4. 范式不规定技术栈。产品构建与部署、原生 runner、运行环境、语言与包管理器由接入项目拥有；通用模型不要求产品包名、私有 HTTP 接口、Nx metadata 或 host/provider 分类。可选执行能力缺失只阻断需要它的操作，不使静态 Spec 与关联失效。
 5. 关闭种类的要求是关闭结论的下限，不能通过换入口或删除配置绕过。修复核验由 Concord 统一执行；runner 与 adapter 负责真实执行与资源终结，范式不要求所有项目采用同一 runner。
 6. 政策变更与跨仓库切换必须保留历史原件、互斥和恢复边界，不得形成并行授权域或降低既有关闭要求。

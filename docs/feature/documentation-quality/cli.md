@@ -14,7 +14,7 @@
 
 ## 页面种类
 
-Feature、Engineering 与 Roadmap 包内的每个 Markdown 页面必须属于[页面种类](../../document-model.md#页面种类)中的一种。按[路径与识别](../../document-model.md#路径与识别)仍无法归类的页面产生 `UnknownPageKind`：
+Feature、Engineering 与 Roadmap 文档包内的每个 Markdown 页面必须属于[页面种类](../../document-model.md#页面种类)中的一种。按[路径与识别](../../document-model.md#路径与识别)仍无法归类的页面产生 `UnknownPageKind`：
 
 - `category` 为 `relation`，`path` 为该页面，`checks.relations.ok` 与总的 `ok` 为 false，退出 1。
 - `complete` 不受影响：页面已经读到，结论完整。
@@ -28,8 +28,8 @@ Feature、Engineering 与 Roadmap 包内的每个 Markdown 页面必须属于[�
 | `docs/feature/cart/architecture/checkout-flow.md` | architecture 页，种类取自目录 |
 | `docs/feature/cart/use-case/README.md` | Use Case 导航页，不是旅程 |
 | `docs/engineering/testing/performance.md` | performance 页 |
-| `docs/feature/cart/concepts.md` | 术语，按[文件格式](format.md#conceptsmd)检查 |
-| `docs/guides/release.md` | 包外的普通文档，不检查种类 |
+| `docs/feature/cart/concepts.md` | 术语表，按[文件格式](format.md#conceptsmd)检查 |
+| `docs/guides/release.md` | 文档包外的普通文档，不检查种类 |
 | `docs/feature/cart/scope.md` | `UnknownPageKind`，列出全部种类 |
 | `docs/feature/cart/archtecture.md` | `UnknownPageKind`，建议 `architecture` |
 | `docs/feature/cart/cli/README.md` 已存在时的 `docs/feature/cart/cli.md` | 单页产生 `UnknownPageKind`：同一种类的单页与目录不能并存 |

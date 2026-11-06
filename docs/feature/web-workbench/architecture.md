@@ -1,6 +1,6 @@
 # Web 工作台架构
 
-React Router 管理人用导航，安装包内带有 Vite 编译结果；从源码运行时由 Vite 即时编译 `web/`。HTTP 由该 Git 工作区的[工作区服务](../local-data-engine/architecture.md#工作区服务)托管，见[服务托管](#服务托管)。HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
+React Router 管理人用导航，归档内带有 Vite 编译结果；从源码运行时由 Vite 即时编译 `web/`。HTTP 由该 Git 工作区的[工作区服务](../local-data-engine/architecture.md#工作区服务)托管，见[服务托管](#服务托管)。HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
 
 工作台根地址进入 `/git`，总览位于 `/overview`。Git 页默认列出全部未提交文件，文档与测试作为筛选；Git 读取失败独立显示错误和重试入口，不伪装为空列表。PR 静态产物的比较身份与发布边界见 [PR 静态导出](#pr-静态导出)。
 
@@ -16,7 +16,7 @@ React Router 管理人用导航，安装包内带有 Vite 编译结果；从源�
 
 参考模板树从现有 inventory 的路径派生，由共享 ContentSidebar 渲染；不新增存储索引。树形导航采用 [WAI 折叠导航模式](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/examples/disclosure-navigation/) 的嵌套列表、aria-expanded 按钮和 aria-current 链接。目录展开是展示状态，文件选择由 URL 拥有；筛选和当前文件定位不建立另一份导航来源。
 
-每次领域操作独立取得、释放 LocalRepository；读取与规划不持锁，提交短暂取得独占发布租约。写入、恢复与证据终结在服务拥有的操作进程中执行，HTTP handler 只转交严格解码的操作并返回回执。测试由服务拥有的单槽 job 管理，浏览器断开不取消任务。取消须确认子进程组退出，才能释放租约和运行槽，失败时保留租约并提供诊断。
+每次领域操作独立取得、释放 LocalRepository；读取与规划不持锁，提交短暂取得独占发布租约。写入、恢复与证据终结在服务拥有的操作进程中执行，HTTP handler 只转交严格解码的操作并返回写入结果。测试由服务拥有的单槽 job 管理，浏览器断开不取消任务。取消须确认子进程组退出，才能释放租约和运行槽，失败时保留租约并提供诊断。
 
 工作区导航读取[工作区投影](#工作区投影)，不在请求内扫描来源。
 
@@ -56,19 +56,19 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 独立 `workspace_projection` 命名空间只有 key 为 `workspace` 的一行，payload 格式为 `concord.workspace-projection/v1`。它含 `identity`、可选 `record`（构建区间、完整性字段与结构 `snapshot`）、`lastAttempt`（不含快照）与 `error`。一次 put 原子替换该行，新身份覆盖旧行；损坏记录不提供给前台，writer 可直接覆盖。身份由 worktree root、Git-private 目录、配置原文摘要（无配置为 absent，非法配置仍取安全读取的字节摘要）、安装目录全部 JS 与 native 产物摘要及类型 `workspace` 组成。读取前先验证原生模块，缺失为不可用而非尚无结果。
 
-快照由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写都拒绝额外字段。它只含路径、摘要、metadata、单行 derivedTitle、关系、诊断、反馈分诊与概念目录；概念目录列出每个 `concepts.md` 的路径与其中每个概念的术语、锚点、弃用名与现行写法，定义与解释正文不进入。正文、`source.body`、远端 body、配置原文、证据与发布日志不进入 Schema。搜索只索引标题、ID、路径与 URL。
+快照由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写都拒绝额外字段。它只含路径、摘要、metadata、单行 derivedTitle、关系、诊断、反馈分诊与概念目录；概念目录列出每个 `concepts.md` 的路径与其中每个概念的写法、锚点与旧写法，定义与解释正文不进入。正文、`source.body`、远端 body、配置原文、证据与发布日志不进入 Schema。搜索只索引标题、ID、路径与 URL。
 
 配额 1 行、8 MiB，计入命名空间、key 与完整 envelope；`query_cache` 写入不淘汰该行。超限报 `WorkspaceProjectionOutputLimit`，不截断、不回源；实测后只允许收紧。原生侧只提供命名空间与资源预算。
 
 ### 刷新所有权
 
-`ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移的候选被丢弃后一秒再申请一次。刷新失败不改变已完成写入的回执。
+`ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移的候选被丢弃后一秒再申请一次。刷新失败不改变已完成写入的结果。
 
 服务锁保证每个 worktree 只有一个刷新者。扫描在服务的计算进程中执行，60 秒上限与超时整组终止沿用 `ViewScanManager` 的规则，计算进程只返回候选；主进程确认回复、身份与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
 
 多个浏览器与 `view` 进程共享同一个服务；服务重启后能读到已有的完整结果。
 
-遇到 journal 时，若它已移除或本工作区发布 owner 仍存活，丢弃本次扫描并重新调度；否则记录 RecoveryRequired。服务持有持久句柄，发布不与其它进程争用数据库。
+遇到 journal 时，若它已移除或本工作区的发布持有者仍存活，丢弃本次扫描并重新调度；否则记录 RecoveryRequired。服务持有持久句柄，发布不与其它进程争用数据库。
 
 | 状态 | 恢复条件 | 呈现 |
 | --- | --- | --- |
@@ -91,7 +91,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 正文、设置、元数据与反馈详情的前像只来自 `/api/file`。`ViewFile` 在同一次严格读取内可附目标的 `document`、`project` 或 `feedback`，不扫描全仓库；解析失败的原文仍可读，不制造有效 owner。定向 `feedback.warnings` 只报告该对象可确认的状态，跨文件告警来自投影。
 
-投影 digest 只触发核对：与编辑器基线不同且未处理过时，至多发起一次定向读取；读回仍不同且草稿干净才替换，有草稿则进入 external 对比。编辑器基线只在服务端确认的文件摘要等于读回的摘要时更新，旧事件不会覆盖较新的基线；提交使用建立草稿时的 digest；保存后定向读取确认。导航在下一份结果到达前显示正在更新，新建对象短暂缺席不是创建失败。不同安装的服务按[启动与裁决](../local-data-engine/architecture.md#启动与裁决)交接同一 worktree，只保留最近身份，不提供兼容读取或第二份缓存。
+投影 digest 只触发核对：与编辑前像不同且未处理过时，至多发起一次定向读取；读回仍不同且草稿干净才替换，有草稿则进入 external 对比。编辑前像只在服务端确认的文件摘要等于读回的摘要时更新，旧事件不会覆盖较新的前像；提交使用建立草稿时的 digest；保存后定向读取确认。导航在下一份结果到达前显示正在更新，新建对象短暂缺席不是创建失败。不同安装的服务按[启动与裁决](../local-data-engine/architecture.md#启动与裁决)交接同一 worktree，只保留最近身份，不提供兼容读取或第二份缓存。
 
 ### 模块
 
@@ -125,7 +125,7 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 
 差异阅读区样式由本地 StyleX 定义，第三方 diff 基础样式由库提供。`data-git-diff` 与 `data-testid="git-diff-scroll"` 是浏览器回归的稳定定位点。
 
-正文、源码、元数据和项目设置共用 `useAutoSave` 实现[自动保存](ui.md#自动保存)。包内文件树把包目录与种类目录都绑定到其 `README.md`，与目录名同一行点击打开。
+正文、源码、元数据和项目设置共用 `useAutoSave` 实现[自动保存](ui.md#自动保存)。文档包文件树把文档包目录与种类目录都绑定到其 `README.md`，与目录名同一行点击打开。
 
 ### 共享组件
 
@@ -174,7 +174,7 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 - Effect：领域执行与外部输入 Schema；严格版本与 CLI 一致。
 - pele 1.13.0：把 Mermaid 代码块渲染为 SVG，按图类型按需加载，没有运行时依赖；颜色与字体取自工作台主题的 CSS 变量，阅读页首屏不加载它。
 - KaTeX：渲染行内与独立数学公式，随包提供。
-- Fontsource Noto Sans SC：随安装包提供中文字体，不依赖外部 CDN。
+- Fontsource Noto Sans SC：随归档提供中文字体，不依赖外部 CDN。
 - p5.js 2.3.4：完整核心运行库，仅在运行图解时加载，支持实例与全局模式。
 - p5.sound 0.4.1：显式声明后离线加载，提供声音播放、合成和分析；音频启动仍要求沙箱内的用户手势，麦克风权限不开放。
 - p5.brush 2.2.3：显式声明后离线加载，提供笔刷、自然填充和排线；按扩展要求使用 WebGL 画布。项目启用后每个图块都会加载该库，作者须统一满足它的画布要求。

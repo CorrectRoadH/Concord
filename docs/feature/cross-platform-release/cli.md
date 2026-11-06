@@ -30,7 +30,7 @@ git push origin v0.9.0
 | `bin/concord` | POSIX 启动脚本，解析符号链接后相对自身定位，用 `runtime/node` 启动应用入口 |
 | `runtime/node` | 固定版本的官方 Node.js 运行时 |
 | `runtime/rg` | 固定版本的 ripgrep |
-| `runtime/lib/` | 仅 Linux：包内 ELF 需要的 glibc 之外的运行库（libatomic、libstdc++） |
+| `runtime/lib/` | 仅 Linux：归档内 ELF 需要的 glibc 之外的运行库（libatomic、libstdc++） |
 | `licenses/` | Node.js、ripgrep、Linux 运行库与运行依赖的许可证文本 |
 | `app/` | 构建好的应用、运行依赖、该目标的 HawDB 原生绑定与随包资源（Web、Preview、skills、templates） |
 
