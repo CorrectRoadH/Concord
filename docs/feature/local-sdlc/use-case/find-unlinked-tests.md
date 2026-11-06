@@ -58,7 +58,7 @@ agent 写了一大堆测试，维护者想知道哪些测试没有说明自己�
 | 没有配置 adapter，或还没运行 `test discover` | `unlinkedTests` 不出现，`limitations` 说明需要先收集原生测试清单 |
 | 原生清单是上一次收集的结果，测试文件之后变过 | `stale` 为 true，不做位置绑定，只按文件判断：列出当前源码中整个文件都没有 `@use-case` 或 `@feature` 标记的那些文件里的原生用例；`limitations` 说明精确判断需要先重新运行 `test discover` |
 | 测试只关联了 Engineering | 不算没关联；守护仓库维护机制的测试指向 Engineering |
-| 测试带 `@concord-status retired` | 不列出 |
+| 测试带 `@status retired` | 不列出 |
 
 `unlinkedTests` 只说明没有观察到关联，不说明测试没用。是否删除由维护者判断。
 

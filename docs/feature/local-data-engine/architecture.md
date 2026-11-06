@@ -77,7 +77,7 @@ Repository 的只读属性 `persistentCache: 'use' | 'off'` 独立于来源访�
 2. 异步取得独占发布租约，最多等待 3 秒；超时则重新打开并返回 `RepositoryBusy`。
 3. 执行下述清理，释放租约后重新打开，并从头刷新。
 
-服务全程持有服务锁，当前版本的其它进程不会在此期间打开持久库。没有服务时，清理在本进程执行。
+服务全程持有服务锁，其它 Concord 进程不会在此期间打开持久库。没有服务时，清理在本进程执行。
 
 ### 取锁
 
@@ -114,7 +114,7 @@ Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git
 | 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动 | 执行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库 |
 | 服务锁 | `<privateDir>/server/lock`，原生排他文件锁，单链接普通文件，按 device/inode 校验 | 服务存活期间一直持有，清理期间也不释放；进程死亡时由操作系统释放 |
 | 运行记录 | `<privateDir>/server/current.json`：`{state, pid, startedAt, token, lock, installation, protocol, socket}`，严格解码 | 只由服务锁持有者在锁内原子写入与按 token 删除 |
-| socket | `<runtime>/concord-<uid>/<privateDir 的 sha256 前 32 位>.sock`，0600；Windows 为同名 named pipe | 只由服务锁持有者在锁内创建；删除前核对其 inode 与运行记录一致 |
+| socket | `<runtime>/concord-<uid>/<privateDir 的 sha256 前 32 位>.sock`，0600 | 只由服务锁持有者在锁内创建；删除前核对其 inode 与运行记录一致 |
 | HTTP 监听 | `(host, port)`，每次开启返回绑定实例 token 的租约 | 按租约计数，见 [Web 工作台架构](../web-workbench/architecture.md#服务托管) |
 
 - 服务主进程只在清理时、关闭持久库之后持有发布租约。
@@ -293,7 +293,7 @@ CLI 默认自动启动或复用同安装身份、同协议的服务，再发送 
 ### 不变量
 
 1. 一个 worktree 任一时刻最多一个工作区服务，由服务锁裁决；服务锁在清理期间也不释放。
-2. 当前版本的 Concord 进程在发现运行中的服务后，不打开该 worktree 的持久库；任一时刻最多一个打开者，由数据库协调锁保证。
+2. Concord 进程在发现运行中的服务后，不打开该 worktree 的持久库；任一时刻最多一个打开者，由数据库协调锁保证。
 3. 持有发布租约的进程不打开持久库；服务主进程只在清理时持有发布租约，且此时已关闭持久库。
 4. 客户端不取得数据库句柄；经由服务的查询结果与本进程计算相同。
 5. 写入、发布、恢复与证据仍由来源及 journal 决定；缓存回写失败不改变已完成的来源结果，也不重跑操作。

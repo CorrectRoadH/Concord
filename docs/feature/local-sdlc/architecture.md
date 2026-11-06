@@ -96,7 +96,7 @@ runner 在消费者 cwd 下执行。argv 逐参数替换 `{file}`、`{name}`、`
 
 规划在同一次来源快照中记录引用扫描所需的文件、目录成员和受管引用检查；受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。
 
-正常发布与恢复共用范围校验：从前像复算允许的改写，拒绝超出授权的后像。旧版本 CLI 不降级处理该范围（[写入保护](use-case/recover-local-state.md#写入保护)）。
+正常发布与恢复共用范围校验：从前像复算允许的改写，拒绝超出授权的后像（[写入保护](use-case/recover-local-state.md#写入保护)）。
 
 ## 代码声明
 
@@ -274,7 +274,7 @@ Memory 没有生命周期状态，过时就改写或删除，历史在 Git。
 
 ### 退役与恢复
 
-测试关系用 `@concord-status retired` 明示退役。缓存可随时 clear/rebuild。未完成写入由 recover 根据 journal 恢复；未知编辑导致具名冲突，必须由维护者裁决。
+测试关系用 `@status retired` 明示退役。缓存可随时 clear/rebuild。未完成写入由 recover 根据 journal 恢复；未知编辑导致具名冲突，必须由维护者裁决。
 
 ## 独立与本地
 
