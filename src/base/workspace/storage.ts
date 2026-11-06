@@ -485,7 +485,7 @@ export class LocalRepository implements Repository {
   private allowedOwner(path: string, _config: ProjectConfig = this.config): boolean { return fixedOwner(path) || isWorkflowSkillPath(path) || path.startsWith('memory/') && path.endsWith('.md') || path.startsWith('docs/') && path.endsWith('/writing.md'); }
   private currentSnapshot(): ConfigSnapshot {
     const source = this.read('concord.config.ts');
-    return snapshot('concord.config.ts', source ?? '', this.privateDir, source === undefined, this.runtime, this.configContentCache);
+    return snapshot('concord.config.ts', source ?? '', this.persistentCache === 'off' ? undefined : this.privateDir, source === undefined, this.runtime, this.configContentCache);
   }
   private validateConfiguredRoot(root: string): void {
       canonicalPath(root);
@@ -898,7 +898,7 @@ export class LocalRepository implements Repository {
       const frozenPath = journal.scope.configPath;
       const current = this.currentSnapshot();
       if (current.path !== frozenPath || current.digest !== journal.scope.configDigest) fail('Project configuration changed since source publication');
-      const config = snapshot(frozenPath, journal.scope.configSource, this.privateDir, true, this.runtime, this.configContentCache).config;
+      const config = snapshot(frozenPath, journal.scope.configSource, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache).config;
       const change = journal.changes[0]!;
       const roots = this.sourceScopeRoots(config);
       this.sourcePath(change.path, roots);
@@ -917,10 +917,10 @@ export class LocalRepository implements Repository {
           const plannedSource = plannedConfigChange?.after ?? '';
           const typed = this.read('concord.config.ts');
           if (!recovering && typed !== undefined) fail('Project configuration appeared since init planning');
-          authorizationConfig = snapshot('concord.config.ts', plannedSource as string, this.privateDir, true, this.runtime, this.configContentCache).config;
+          authorizationConfig = snapshot('concord.config.ts', plannedSource as string, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache).config;
           this.validateProjectConfig(authorizationConfig);
         } else {
-          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.privateDir, true, this.runtime, this.configContentCache).config;
+          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache).config;
           this.validateProjectConfig(authorizationConfig);
           const current = this.currentSnapshot();
           const recoveringPlannedConfig = recovering && plannedConfigChange?.path === journal.scope.configPath && plannedConfigChange.after !== null && current.source === plannedConfigChange.after;
@@ -928,7 +928,7 @@ export class LocalRepository implements Repository {
         }
       }
       if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
-        const next = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir, false, this.runtime, this.configContentCache).config;
+        const next = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache).config;
         this.validateProjectConfig(next);
       }
       if (plannedConfigChange?.after === null) fail('A journal cannot delete the runtime configuration');

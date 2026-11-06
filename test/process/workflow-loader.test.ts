@@ -26,7 +26,11 @@ test('the lightweight command loader routes skills install to the same managed p
   const bootstrap = join(root, 'light-entry.mts');
   // Internal loader protocol is a source-process exception, not a domain test.
   yield* fs.writeFileString(bootstrap, `import { loadCommand } from ${JSON.stringify(pathToFileURL(resolve('src/entry/cli/cli.ts')).href)};
-loadCommand('skills', { format: 'concord.startup/v1', packageDigest: '', dataDigest: '', files: {}, sourceFiles: {}, receipts: {}, groups: [{ name: 'skills' }] }).then(run => run());\n`);
+import { runCommand, cliEnvironmentLayer } from ${JSON.stringify(pathToFileURL(resolve('src/entry/cli/main.ts')).href)};
+import { Effect } from ${JSON.stringify(import.meta.resolve('effect'))};
+import { NodeRuntime, NodeServices } from ${JSON.stringify(import.meta.resolve('@effect/platform-node'))};
+const command = await loadCommand('skills', { format: 'concord.startup/v1', packageDigest: '', dataDigest: '', files: {}, sourceFiles: {}, receipts: {}, groups: [{ name: 'skills' }] });
+NodeRuntime.runMain(runCommand(command, process.argv.slice(2)).pipe(Effect.tap(code => Effect.sync(() => { process.exitCode = code; })), Effect.provide(cliEnvironmentLayer(process.cwd(), process.env)), Effect.provide(NodeServices.layer)));\n`);
   const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [bootstrap, '--root', root, '--json', 'skills', 'install'], {
     cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
   }));

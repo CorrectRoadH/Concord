@@ -9,6 +9,7 @@ import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import type { FeedbackTransport } from "../../src/domain/feedback/index.ts";
 import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../../src/model/index.ts";
 
@@ -124,7 +125,7 @@ async function child(scenario: Scenario): Promise<void> {
     const originalConfig = readFileSync(configPath, 'utf8');
     const issuePath = join(consumer, 'docs', 'issues', 'feedback-github-1001.md');
     const { OwnedProcess, makeOwnedProcessService } = await import('../../src/base/process/index.ts');
-    const startupOwner = makeOwnedProcessService();
+    const startupOwner = makeOwnedProcessService({ environment: makeRuntimeEnvironment(process.cwd(), process.env) });
     if (scenario === 'trusted-path') process.env.PATH = [join(consumer, 'bin'), modules, gitBin].join(delimiter);
     if (scenario === 'trusted-path' || scenario === 'normal') {
       const result = await runApplication(syncFeedback(consumer, connection.id).pipe(Effect.provideService(OwnedProcess, startupOwner)));

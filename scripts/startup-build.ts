@@ -30,7 +30,7 @@ delete environment.FORCE_COLOR;
 
 const capture = Effect.fn('build.captureStartup')(function*(args: readonly string[]) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve(dist('entry/cli/entry-full.js')), ...args], { env: environment }));
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve(dist('entry/cli/entry.js')), ...args], { env: environment }));
   const collect = (stream: typeof child.stdout) => Effect.suspend(() => {
     let bytes = 0;
     return stream.pipe(Stream.mapEffect(chunk => {
