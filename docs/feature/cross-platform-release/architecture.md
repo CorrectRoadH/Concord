@@ -34,7 +34,7 @@ tap 定期或经通知发现更新的公开发布，核验标签、归档与资�
 | 部分 | 来源 |
 | --- | --- |
 | `runtime/node` | 仓库[运行时版本](../../engineering/build/README.md#运行时版本)指定的该目标官方 Node.js 发行包，先按 nodejs.org 的 `SHASUMS256.txt` 校验整个发行包，再取出 `node` 与其 `LICENSE`；Node.js 的摘要不另存，不从构建机 `PATH` 中的 `node` 推定版本 |
-| `runtime/rg` | 仓库根目录的 `runtime-deps.json` 唯一记录 ripgrep 版本与每个目标的官方发行资产（文件名与 SHA-256），按它校验后取出 `rg` 与许可证；macOS 的 `rg` 由 macOS 原生任务校验、ad-hoc 签名后随原生产物交给组装，签名后的摘要记在该任务的产物清单 |
+| `runtime/rg` | 仓库根目录的 `runtime-deps.json` 唯一记录 ripgrep 版本与每个目标的官方发行资产（文件名与 SHA-256），按它校验后取出 `rg` 与许可证；Linux 使用官方静态链接的 musl 版本，不设 RPATH；macOS 的 `rg` 由 macOS 原生任务校验、ad-hoc 签名后随原生产物交给组装，签名后的摘要记在该任务的产物清单 |
 | `runtime/lib/` | 仅 Linux：Ubuntu 24.04 构建环境中的 `libatomic.so.1` 与 `libstdc++.so.6`，以及检查发现的其它 glibc 之外的 `DT_NEEDED` 库 |
 | `app/` 中的应用 | 一次构建得到的 JavaScript，与包根布局相同 |
 | `app/` 中的依赖 | 按 `pnpm-lock.yaml` 冻结、`--ignore-scripts` 安装的运行依赖；平台相关的可选依赖按目标平台选择 |
