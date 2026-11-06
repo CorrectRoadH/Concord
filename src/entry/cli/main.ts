@@ -88,10 +88,7 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
 const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceRecord')(function*(privateDir: string, installation?: string) {
   const runtime = yield* ServerRuntime, client = yield* loadClient();
   const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
-  if (!record) {
-    yield* Effect.try({ try: runtime.sourceDigest, catch: failure });
-    return false;
-  }
+  if (!record) return false;
   if (record.installation === (installation ?? (yield* installationIdentity(runtime))) && record.protocol === client.PROTOCOL) {
     const sourceDigest = yield* Effect.try({ try: runtime.sourceDigest, catch: failure });
     if (sourceDigest !== undefined && record.sourceDigest !== sourceDigest && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) {
@@ -178,6 +175,9 @@ const existingCompatibleWorkspace = Effect.fn('existingCompatibleWorkspace')(fun
 
 function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: ServerRuntime['Service'], local: PersistentCache['Service'], root: string | undefined, operation: Effect.Effect<A, E, R>, required: boolean): Effect.Effect<A, E | ConcordError, R> {
   return Effect.scoped(Effect.gen(function*() {
+    // A damaged source installation cannot authenticate a remote owner. The
+    // repository cache reports the same unavailable diagnostic on the local path.
+    if ((yield* Effect.result(local.verifyArtifact))._tag === 'Failure') return yield* operation;
     const identified = yield* workspace.locate(root);
     const connection = yield* existingCompatibleWorkspace(identified.root, identified.privateDir).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime));
     if (!connection) return yield* operation;
@@ -305,6 +305,7 @@ const launchers = Layer.mergeAll(
       projection: root => readExistingWorkspaceProjection(root).pipe(Effect.provideContext(context)),
       clear: root => clearExistingWorkspaceCache(root).pipe(Effect.provideContext(context)),
       cache: (root, action) => Effect.scoped(Effect.gen(function*() {
+        if ((yield* Effect.result(persistent.verifyArtifact))._tag === 'Failure') return undefined;
         const identified = yield* workspace.locate(root);
         const connection = yield* existingCompatibleWorkspace(identified.root, identified.privateDir).pipe(Effect.provideContext(context));
         return connection ? yield* requestWorkspace(connection, action, {}).pipe(Effect.mapError(workspaceServerFailure)) : undefined;
