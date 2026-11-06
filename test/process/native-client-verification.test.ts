@@ -1,3 +1,4 @@
+// 跨进程保证：运行环境——真实--no-addons客户端只验证artifact而不加载引擎，hook工件需显式身份并保持摘要校验。
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';

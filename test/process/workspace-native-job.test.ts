@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实Web任务进程运行adapter后把派生observation交回持久服务，后续CLI能读取收集结果。
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';

@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实owned子进程完整接收Unicode stdin，默认忽略stdin时得到EOF并确认进程组已退出。
 import { sourceCli, sourceRoot, prepareSourceConsumer, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, statSync, tmpdir, join, resolve, test, Effect, Schema, makeOwnedProcessService, LocalRepository, initialize, setConfig, showConfig, type Call, type Receipt, connection, issue, scratch, bin, scenarioFile, callsFile, packedCli, consumer, mode, calls, writes, cli, plan, execute, error, alterReceipt } from '../support/issue-remote-fixture.ts';
 
 

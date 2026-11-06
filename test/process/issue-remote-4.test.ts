@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——两个真实apply进程竞争同一receipt时仅一个消费并向gh写入一次。
 import { sourceCli, sourceRoot, prepareSourceConsumer, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, statSync, tmpdir, join, resolve, test, Effect, Schema, makeOwnedProcessService, LocalRepository, initialize, setConfig, showConfig, type Call, type Receipt, connection, issue, scratch, bin, scenarioFile, callsFile, packedCli, consumer, mode, calls, writes, cli, plan, execute, error, alterReceipt } from '../support/issue-remote-fixture.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 test('packed execute aborts on read budgets and preserves rejection when outcome publication fails', () => Effect.runPromise(Effect.sync(() => {

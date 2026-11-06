@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——不同安装通过真实RPC停止指定工作区服务，拒绝错误身份且不影响另一工作区。
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——客户端断连只释放HTTP租约，服务被杀可恢复，私有目录删除后清理记录及精确socket。
 import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';

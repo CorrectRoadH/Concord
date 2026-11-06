@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——真实编译任务取消后被回收且不留僵尸，清理失败时shutdown或EOF不能成功退出。
 import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md

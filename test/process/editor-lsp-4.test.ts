@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——真实编辑器stdio EOF收拢在途导航任务并释放publication租约且不执行仓库配置命令。
 import { pollUntil } from '../support/support.ts';
 import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.ts';
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md

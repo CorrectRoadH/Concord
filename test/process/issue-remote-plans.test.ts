@@ -1,4 +1,4 @@
-// 跨进程保证：外部程序——真实 gh 协议读取、输出与分页预算拒绝，以及真实 CLI 的错误映射。
+// 跨进程保证：外部程序——真实gh读取输出超限或分页耗尽时拒绝计划且不签发receipt。
 import { assert, existsSync, writeFileSync, join, test, Effect, connection, issue, consumer, mode, writes, cli, error } from '../support/issue-remote-fixture.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 test('remote previews retain gh reads, output/page budgets and CLI InvalidInput mapping', () => Effect.runPromise(Effect.sync(() => {

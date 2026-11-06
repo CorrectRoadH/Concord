@@ -1,3 +1,4 @@
+// 跨进程保证：运行环境——真实gate子进程在独立cgroup受内存限制，OOM不杀调用者且资源报告保留，systemd缺失保留工作负载退出码。
 import type * as EffectTypes from 'effect';
 import assert from 'node:assert/strict';
 import test from 'node:test';

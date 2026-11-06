@@ -1,3 +1,4 @@
+// 跨进程保证：原生模块与句柄——真实native引擎与clear guard双向跨进程互斥，SIGKILL事务无半批提交且加载失败可修复重试。
 import { nativeArtifactRoot } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

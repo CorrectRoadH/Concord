@@ -1,4 +1,4 @@
-// 跨进程保证：运行环境——真实刷新 worker 接受请求与缺省配置；并发写进程触发 C2 漂移。
+// 跨进程保证：服务与 IPC——独立持续写进程使后续刷新漂移时，后台保留已接受的一致generation并发布失败尝试。
 import { runApplication } from '../support/repository.ts';
 import { assert, candidate, consumer, createConsumer, editing, Effect, existsSync, gaps, genericPrivateDirectorySync, installedCall, join, packedConsumer, packedEnvelope, queryContext, readQuery, refreshInstalled, refreshQuery, rmSync, spawnSync, storeQuery, test, waitForRefreshExit, workerEntryArgv } from '../support/asynchronous-projections-fixture.ts';
 

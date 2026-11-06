@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——命令scope父CLI死亡或IPC断开时服务退出并移除socket，长期计算按每位调用者环境判定observation身份。
 import { assert, spawn, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, join, fileURLToPath, test, Effect, acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync, installedConcordCli, pollUntil, command, fixture, record, recordPath, rpcModule, stop, launch, cli, gone, terminate, type ChildProcess } from './workspace-query-cli-fixture.ts';
 
 

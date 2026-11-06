@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——真实编辑器stdio服务传递overlay导航结果，shutdown取消在途请求并在清诊断后退出。
 import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md

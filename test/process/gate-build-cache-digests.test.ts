@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——旧构建被真实gate进程持有时prune保留，最后持有者退出后只留最新四份。
 import { assert, createHash, NodeServices, Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream, ChildProcess, ChildProcessSpawner, join, resolve, pathToFileURL, test, gateBuildDigest, nativeSourceFiles, HAWDB_ABI, HAWDB_REVISION, hawdbTarget, tmpdir, cacheTest, hash, Reply, fixture, waitFile, start, build, published, type Scope, type Requirements } from './gate-build-cache-fixture.ts';
 
 

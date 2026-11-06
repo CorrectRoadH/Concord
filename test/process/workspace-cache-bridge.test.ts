@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——真实RPC分帧提交完整派生缓存，断连未完成会话被丢弃且不能写历史结果命名空间。
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import test from 'node:test';

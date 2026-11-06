@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——不同子目录的真实CLI复用同一服务，命令作用域在成功和配置失败后回收且不接管已有实例。
 import { assert, spawn, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, join, fileURLToPath, test, Effect, acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync, installedConcordCli, pollUntil, command, fixture, record, recordPath, rpcModule, stop, launch, cli, gone, terminate, type ChildProcess } from './workspace-query-cli-fixture.ts';
 
 

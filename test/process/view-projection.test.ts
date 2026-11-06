@@ -1,3 +1,4 @@
+// 跨进程保证：网络——真实HTTP投影路由返回异步刷新202、无store与ETag缓存响应，历史generation可立即读取。
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { Workspace } from '../../src/base/workspace/index.ts';

@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——构建入口在命中时不启动compiler/network，未命中或损坏时真实触达Cargo边界并保留失败。
 import { nativeArtifactRoot } from "../../src/base/installation/index.ts";
 import { hawdbTarget, decodeNativeArtifact, HAWDB_MACOS_DEPLOYMENT_TARGET } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';

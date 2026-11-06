@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——性能场景等待后台投影并启动真实scan worker，严格解码worker协议与退出结果。
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';

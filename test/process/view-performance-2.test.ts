@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——独立读进程持有shared lease时服务可读取而写入被拒绝，reader被SIGKILL后可恢复写入。
 import { createDocument, initialize } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';
 import { installationResources } from "../../src/base/installation/index.ts";

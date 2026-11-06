@@ -1,3 +1,4 @@
+// 跨进程保证：网络——真实HTTP下载校验失败不发布，完整字节按摘要复用且不重复请求。
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';

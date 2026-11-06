@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实language server的畸形协议、超时、越界请求和残留子进程被拒绝并完成回收。
 import { analyzeCode, executeQuery } from '../../src/app/index.ts';
 import { failure as applicationFailure } from '../../src/model/index.ts';
 import { runApplication } from '../support/repository.ts';

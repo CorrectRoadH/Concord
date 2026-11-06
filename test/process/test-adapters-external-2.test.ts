@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实adapter分拆调用生成两个报告时保留请求选择并记录两次执行。
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 // 跨进程保证：外部程序——adapter exchanges and split invocations produce a native CLI receipt.
 import { assert, test, Effect, Schema, OwnedProcessLive, text, Receipt, call } from '../support/test-adapters-consumer-fixture.ts';

@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——两个真实进程争用服务native锁，owner被SIGKILL后OS释放锁且新owner可验证并关闭。
 import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';

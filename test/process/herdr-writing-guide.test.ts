@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实mod经宿主exec调用CLI初始化和读取指南，并在会话重开时连接工作区。
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import { registerHooks } from 'node:module';

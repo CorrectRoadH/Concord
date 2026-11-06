@@ -1,3 +1,4 @@
+// 跨进程保证：原生模块与句柄——真实native handle与服务owner双向互斥，释放后服务恢复，server stop确认释放后可独立重开写入。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';

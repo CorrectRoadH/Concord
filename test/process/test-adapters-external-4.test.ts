@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实adapter超时、报告路径逃逸或执行期间输入漂移时拒绝执行结果。
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 // 跨进程保证：外部程序——adapter timeout, report path escape and source drift fail the CLI run.
 import { assert, test, Effect, OwnedProcessLive, text, call } from '../support/test-adapters-consumer-fixture.ts';

@@ -1,3 +1,4 @@
+// 跨进程保证：运行环境——隔离源码快照无需dist即可运行CLI及刷新worker，缺native时启动前给出构建指引。
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { nativeArtifactRoot, nativeSourceFiles } from "../../src/base/installation/index.ts";
 import { basename, dirname } from "node:path";

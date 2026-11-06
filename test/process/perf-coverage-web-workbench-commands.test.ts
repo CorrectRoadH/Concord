@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——性能烟雾场景启动真实view服务并经CLI读取已发布工作区投影。
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';

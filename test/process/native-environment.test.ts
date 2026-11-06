@@ -1,4 +1,4 @@
-// Cross-process guarantee: runtime environment — native bindings selected by caller cwd/env remain independent after failures and installed-file replacement.
+// 跨进程保证：原生模块与句柄——真实native映射在A、损坏B、修复B间按caller cwd和完整env隔离，关闭后句柄不可再用。
 import assert from 'node:assert/strict';
 import { cpSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——并发真实启动者共享单服务token，初始计算可经CLI读取且停止后socket移除。
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

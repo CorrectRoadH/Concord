@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实gh子进程以stdin接收一次写入且隔离GH_REPO和GH_DEBUG环境。
 import { sourceCli, sourceRoot, prepareSourceConsumer, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, statSync, tmpdir, join, resolve, test, Effect, Schema, makeOwnedProcessService, LocalRepository, initialize, setConfig, showConfig, type Call, type Receipt, connection, issue, scratch, bin, scenarioFile, callsFile, packedCli, consumer, mode, calls, writes, cli, plan, execute, error, alterReceipt } from '../support/issue-remote-fixture.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 test('packed preview/apply binds authorization, consumes once, uses stdin and emits private outcome', () => Effect.runPromise(Effect.sync(() => {

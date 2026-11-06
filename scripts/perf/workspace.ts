@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
 import { fixtureConsumer } from '../../bench/fixtures/index.ts';
 import { defaultScale, pathConsumer, scaleConsumer, selfConsumer, type Consumer, type ScaleSpec } from './consumer.ts';
-import { mustRun, PerfError, refreshPids, settleRefreshes } from './process.ts';
+import { mustRun, mustRunCli, PerfError, refreshPids, settleRefreshes, type CliExecutor } from './process.ts';
 
 /** Temporary directories are canonical before any CLI observes them. */
 export const workDirectory = Effect.fn('perf.workDirectory')(function*(prefix: string, keep: boolean) {
@@ -26,6 +26,7 @@ export const settleConsumerRefreshes = (consumer: Consumer) => settleRefreshes(c
 
 export const prepareConsumer = Effect.fn('perf.prepareConsumer')(function*(kind: string, options: {
   readonly smoke?: boolean; readonly repository: string; readonly commit: string; readonly entry: string; readonly scale: ScaleSpec; readonly workDir: string;
+  readonly executeCli?: CliExecutor;
 }) {
   const fs = yield* FileSystem.FileSystem;
   // Register cleanup before initialization, including failed initialization.
@@ -35,7 +36,9 @@ export const prepareConsumer = Effect.fn('perf.prepareConsumer')(function*(kind:
   const hadServer = yield* fs.exists(serverRecord);
   yield* Effect.addFinalizer(() => Effect.gen(function*() {
     if (!hadServer && (yield* fs.exists(serverRecord))) {
-      yield* mustRun([...packageCommand(options.entry), '--root', root, '--json', 'server', 'stop'], { cwd: root, outputDir: options.workDir });
+      yield* (options.executeCli
+        ? mustRunCli(['--root', root, '--json', 'server', 'stop'], { cwd: root }, options.executeCli)
+        : mustRun([...packageCommand(options.entry), '--root', root, '--json', 'server', 'stop'], { cwd: root, outputDir: options.workDir }));
       // Historical baselines can acknowledge stop before their cleanup finishes.
       yield* Effect.gen(function*() {
         while (yield* fs.exists(serverRecord)) yield* Effect.sleep('10 millis');
@@ -43,8 +46,8 @@ export const prepareConsumer = Effect.fn('perf.prepareConsumer')(function*(kind:
     }
     yield* settleRefreshes(root, preexisting);
   }).pipe(Effect.orDie));
-  const consumer = yield* (kind.startsWith('fixture:') ? fixtureConsumer(kind.slice(8), options.entry, options.workDir, options.smoke, { repository: options.repository, commit: options.commit }) : kind === 'self' ? selfConsumer(options.repository, options.commit, options.workDir, options.entry, options.smoke)
-    : kind === 'scale' ? scaleConsumer(options.entry, options.scale, options.workDir)
+  const consumer = yield* (kind.startsWith('fixture:') ? fixtureConsumer(kind.slice(8), options.entry, options.workDir, options.smoke, { repository: options.repository, commit: options.commit }, options.executeCli) : kind === 'self' ? selfConsumer(options.repository, options.commit, options.workDir, options.entry, options.smoke, options.executeCli)
+    : kind === 'scale' ? scaleConsumer(options.entry, options.scale, options.workDir, options.executeCli)
       : pathConsumer(kind, options.workDir));
   existingRefreshes.set(consumer, preexisting);
   return consumer;

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { benchmarkSmoke } from '../support/benchmark-smoke.ts';
+import { benchmarkCliSmoke } from '../support/benchmark-cli-smoke.ts';
 
 // @feature docs/feature/local-sdlc/README.md
 test('local-sdlc-tools ordinary benchmark scenarios execute on minimal frozen consumers without timing verdicts', { timeout: 180_000 }, t =>
-  Effect.runPromise(benchmarkSmoke(false, 'local-sdlc', [4]).pipe(Effect.scoped, Effect.provide(NodeServices.layer)), { signal: t.signal }));
+  Effect.runPromise(benchmarkCliSmoke('local-sdlc', [4]).pipe(Effect.scoped, Effect.provide(NodeServices.layer)), { signal: t.signal }));

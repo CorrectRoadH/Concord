@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——rename-step进程被SIGKILL后后续CLI恢复prepared或committed journal，未知编辑保持冲突。
 import { createDocument, initialize } from '../support/operations.ts';
 import { sourceCli } from '../support/source-consumer.ts';
 import assert from 'node:assert/strict';

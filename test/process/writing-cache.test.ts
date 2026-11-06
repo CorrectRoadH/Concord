@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——独立CLI重复读取复用服务拥有的写作缓存，真实解析计数降为零且输出字节一致。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { initialize } from '../support/operations.ts';

@@ -1,3 +1,4 @@
+// 跨进程保证：运行环境——真实安装脚本切换链接失败时保留原安装字节、入口及可运行版本并清理候选。
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, readdirSync, readlinkSync } from 'node:fs';
 import { join } from 'node:path';

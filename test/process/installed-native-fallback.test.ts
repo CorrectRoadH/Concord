@@ -1,3 +1,4 @@
+// 跨进程保证：原生模块与句柄——私有安装真实native工件损坏或丢失时降级读取，写入与服务启动拒绝且不残留运行记录。
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';

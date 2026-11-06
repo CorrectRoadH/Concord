@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实安装脚本下载或校验失败时保持既有可运行安装，拒绝不确定checksum且不发布候选。
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, readlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

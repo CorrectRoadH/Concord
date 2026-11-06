@@ -1,3 +1,4 @@
+// 跨进程保证：网络——真实HTTP拒绝重复Host或Origin与非origin-form请求目标，后台大扫描时仍服务静态资源和定向读取。
 import { Publication } from '../../src/base/publication/index.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';

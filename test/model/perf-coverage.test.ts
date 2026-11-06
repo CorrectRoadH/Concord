@@ -37,21 +37,24 @@ test('CLI top-level command definitions have scenarios or documented exemptions'
 test('benchmark smoke files partition every scenario exactly once', () => Effect.runPromise(Effect.gen(function*() {
   const scenarios = yield* loadScenarios(root);
   const selected: string[] = [];
-  const directory = join(root, 'test/process');
+  const files = ['test/cli', 'test/process'].flatMap(directory => readdirSync(join(root, directory))
+    .filter(name => /^perf-(?:service-)?coverage(?:-[a-z0-9-]+)?\.test\.ts$/u.test(name))
+    .map(name => join(root, directory, name)));
   const api = yield* Effect.acquireRelease(Effect.sync(() => new API({ runExternalCode: false })), api => Effect.sync(() => api.close()));
-  for (const file of readdirSync(directory).filter(name => /^perf-(?:service-)?coverage(?:-[a-z0-9-]+)?\.test\.ts$/u.test(name))) {
-    const source = api.createSourceFile(join(directory, file), readFileSync(join(directory, file), 'utf8'), { scriptKind: ts.ScriptKind.TS });
+  for (const file of files) {
+    const source = api.createSourceFile(file, readFileSync(file, 'utf8'), { scriptKind: ts.ScriptKind.TS });
     const visit = (node: ts.Node): void => {
-      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'benchmarkSmoke') {
-        const [service, feature, indices] = node.arguments;
-        assert.ok(service && (service.kind === ts.SyntaxKind.TrueKeyword || service.kind === ts.SyntaxKind.FalseKeyword), `${file}: literal service selector required`);
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ['benchmarkSmoke', 'benchmarkCliSmoke'].includes(node.expression.text)) {
+        const cli = node.expression.text === 'benchmarkCliSmoke';
+        const [service, feature, indices] = cli ? [undefined, ...node.arguments] : node.arguments;
+        assert.ok(cli || service && (service.kind === ts.SyntaxKind.TrueKeyword || service.kind === ts.SyntaxKind.FalseKeyword), `${file}: literal service selector required`);
         assert.ok(feature && ts.isStringLiteral(feature), `${file}: literal feature selector required`);
         let groups: number[] | undefined;
         if (indices !== undefined) {
           assert.ok(ts.isArrayLiteralExpression(indices), `${file}: literal group selectors required`);
           groups = indices.elements.map(index => { assert.ok(ts.isNumericLiteral(index), `${file}: numeric group selector required`); return Number(index.text); });
         }
-        selected.push(...benchmarkSmokeGroups(scenarios, service.kind === ts.SyntaxKind.TrueKeyword, feature.text, groups).flatMap(group => group.scenarios.map(scenario => scenario.id)));
+        selected.push(...benchmarkSmokeGroups(scenarios, service?.kind === ts.SyntaxKind.TrueKeyword, feature.text, groups).flatMap(group => group.scenarios.map(scenario => scenario.id)));
       }
       node.forEachChild(visit);
     };

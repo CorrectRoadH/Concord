@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——独立gate进程拒绝损坏命中及compiler产生的缺失或越界产物，不发布候选。
 import { assert, createHash, NodeServices, Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream, ChildProcess, ChildProcessSpawner, join, resolve, pathToFileURL, test, gateBuildDigest, nativeSourceFiles, HAWDB_ABI, HAWDB_REVISION, hawdbTarget, tmpdir, cacheTest, hash, Reply, fixture, waitFile, start, build, published, type Scope, type Requirements } from './gate-build-cache-fixture.ts';
 
 

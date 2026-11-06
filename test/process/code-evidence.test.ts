@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实Node runner在代码标记错误时仍执行测试并保留红绿退出结果。
 import { existsSync } from 'node:fs';
 import { createDocument } from '../support/operations.ts';
 import { createConsumer } from '../support/consumer.ts';

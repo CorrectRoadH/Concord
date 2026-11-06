@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实TypeScript编译器默认排除发布mod子树且不生成输出，显式emit只写指定目录。
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';

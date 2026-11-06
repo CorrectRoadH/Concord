@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——真实检查进程组超时或CLI取消后子孙退出并释放run锁，失败finalizer不被重跑。
 import { installedConcordCli } from '../support/support.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 import assert from 'node:assert/strict';

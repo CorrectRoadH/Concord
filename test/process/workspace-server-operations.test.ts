@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——真实缓存维护关闭再打开服务持久owner并发布新generation，同token同时支持读写和HTTP重建。
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

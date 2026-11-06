@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——运行中的服务锁inode被替换后HTTP写入拒绝授权且原源文件字节保持。
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

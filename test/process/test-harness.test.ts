@@ -1,3 +1,4 @@
+// 跨进程保证：网络——真实HTTP超时取消令连接关闭，fixture停止时回收未发请求的TCP连接及服务进程。
 import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';

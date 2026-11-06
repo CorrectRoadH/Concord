@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { runCli } from '../support/cli.ts';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -7,33 +7,32 @@ import { Effect, Schema } from 'effect';
 import { beginRun, finalizeRun } from '../../src/base/publication/index.ts';
 import { digest } from '../../src/model/index.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
-import { installedConcordCli } from '../support/support.ts';
+import '../support/support.ts';
 import { fixture } from '../support/publication-ownership-fixture.ts';
-const entry=installedConcordCli();
 
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name recovery-reports-runner-blocker
-test('CLI recovery reports quarantined runner instead of claiming clean readiness', t => runApplication(Effect.sync(() => {
+test('CLI recovery reports quarantined runner instead of claiming clean readiness', t => runApplication(Effect.promise(async () => {
   const root = fixture(t);
   const repo = new LocalRepository(root);
   try {
     const run = repo.snapshot(() => beginRun(root));
     repo.snapshot(() => finalizeRun(root, run, false));
-    const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'recover'], { encoding: 'utf8', timeout: 15000 });
-    assert.equal(result.status, 1, result.stdout + result.stderr);
+    const result = await runCli({ argv: ['--root', root, '--json', 'recover'], cwd: process.cwd(), env: process.env, stdin: '', signal: AbortSignal.timeout(15000) });
+    assert.equal(result.exitCode, 1, result.stdout + result.stderr);
     const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.String })))(result.stdout);
     assert.equal(report.status, 'blocked');
     assert.ok(existsSync(join(run.lease.path, `${run.lease.owner.token}.json`)));
-    const observed = spawnSync(process.execPath, [entry, '--root', root, '--json', 'list', 'memory'], { encoding: 'utf8', timeout: 15000 });
-    assert.equal(observed.status, 0, observed.stderr);
+    const observed = await runCli({ argv: ['--root', root, '--json', 'list', 'memory'], cwd: process.cwd(), env: process.env, stdin: '', signal: AbortSignal.timeout(15000) });
+    assert.equal(observed.exitCode, 0, observed.stderr);
     assert.throws(() => repo.publish('still-blocked', [{ path: 'memory/blocked.md', before: null, after: 'no' }]), { code: 'CleanupFailed' });
   } finally { repo.close(); }
 })));
 
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('recovery preserves prepared and committed journals when runner cleanup is unknown', t => runApplication(Effect.sync(() => {
+test('recovery preserves prepared and committed journals when runner cleanup is unknown', t => runApplication(Effect.promise(async () => {
   for (const phase of ['prepared', 'committed']) {
     const root = fixture(t);
     const repo = new LocalRepository(root);
@@ -49,8 +48,8 @@ test('recovery preserves prepared and committed journals when runner cleanup is 
       writeFileSync(join(root, 'memory/interrupted.md'), 'pending\n');
       writeFileSync(path, journal);
       for (const args of [['recover'], ['action', '--input', '-']]) {
-        const result = spawnSync(process.execPath, [entry, '--root', root, '--json', ...args], { input: JSON.stringify({ action: 'recover' }), encoding: 'utf8', timeout: 15000 });
-        assert.equal(result.status, 1, result.stdout + result.stderr);
+        const result = await runCli({ argv: ['--root', root, '--json', ...args], cwd: process.cwd(), env: process.env, stdin: JSON.stringify({ action: 'recover' }), signal: AbortSignal.timeout(15000) });
+        assert.equal(result.exitCode, 1, result.stdout + result.stderr);
         const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.Literal('blocked'), journalStatus: Schema.Literal('pending') })))(result.stdout);
         assert.equal(report.status, 'blocked');
         assert.equal(readFileSync(path, 'utf8'), journal);

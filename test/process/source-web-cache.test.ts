@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——两个真实工作区服务共享唯一Web builder，死租约可恢复且断连等待者退出时不回收活owner。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import type * as NodeHttpTypes from 'node:http';
 import assert from 'node:assert/strict';

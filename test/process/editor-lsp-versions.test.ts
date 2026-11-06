@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——真实编辑器stdio交互中取消或版本变更使在途导航返回取消及过期错误。
 import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md

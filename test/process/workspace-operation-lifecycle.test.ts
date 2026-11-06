@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——每次Web写入消费独立operation子进程，空闲worker被杀后补位，服务停止回收替补。
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

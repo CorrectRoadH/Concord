@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——cache status报告真实CLI或工作区服务PID与安装身份，不混淆两个owner。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import assert from 'node:assert/strict';
 import { rmSync, existsSync } from 'node:fs';

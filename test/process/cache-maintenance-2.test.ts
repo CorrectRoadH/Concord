@@ -1,3 +1,4 @@
+// 跨进程保证：原生模块与句柄——独立native写入者与维护worker争用不删除活跃缓存，长期服务维护后保留owner并继续受理。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { runApplication } from '../support/repository.ts';
 import { PersistentCache } from '../../src/base/cache/index.ts';

@@ -1,3 +1,4 @@
+// 跨进程保证：网络——真实HTTP投影刷新后ETag失效且后续304复用已发布generation。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';

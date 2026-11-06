@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——关闭真实View后刷新资源释放，工作区立即可由新repository handle打开。
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { Workspace } from '../../src/base/workspace/index.ts';

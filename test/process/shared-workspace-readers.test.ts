@@ -1,4 +1,4 @@
-// 跨进程保证：服务与 IPC——真实 HTTP 缓存与压缩、定向文件响应、Git 状态及跨帧 RPC 读取共用服务，逐用例恢复来源。
+// 跨进程保证：服务与 IPC——共享服务真实HTTP支持压缩和缓存头，RPC跨帧读取完整原文并拒绝错误instance token。
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实mod宿主经CLI协议读取工作区并复用共享服务，退出时恢复安装源文件。
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';

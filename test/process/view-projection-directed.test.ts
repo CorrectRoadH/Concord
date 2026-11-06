@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——真实View退出后CLI读取已发布投影且refreshOwner为none，当前源入口不冒充历史投影。
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import { Workspace } from '../../src/base/workspace/index.ts';

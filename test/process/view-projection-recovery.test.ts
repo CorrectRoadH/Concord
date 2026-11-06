@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——真实publication owner持有时首代投影保持pending，释放后服务发布；中断后保留历史generation。
 import { privateSourceInstallation } from '../support/private-source.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';

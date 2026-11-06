@@ -1,3 +1,4 @@
+// 跨进程保证：文件监听——真实watcher发布缓存后不形成连续刷新环，关闭View后资源释放且外部编辑不再发布。
 import { readWorkspaceProjection, createDocument, initialize, Workspace, NodeServices, installedConcordCli, parseWorkspaceProjectionOutput, genericPrivateDirectorySync, spawnSync, assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, tmpdir, dirname, join, test, Effect, Schema, ConcordError, digest, failure, LocalRepository, startViewServer, identifyProjection, readProjectConfig, writeProjectConfig, ownerPath, mainSource, busyDetails, write, fixture, closeServer, startServer, readPublished, waitForPublished, sourceDigest, waitForSource, workspaceProjectionContext, type WorkspaceProjection, type ViewServerHandle } from './view-watch-fixture.ts';
 
 

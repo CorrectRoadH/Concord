@@ -1,3 +1,4 @@
+// 跨进程保证：原生模块与句柄——运行服务重验真实native工件后降级，修复后同token重新打开持久owner。
 import { privateSourceInstallation } from '../support/private-source.ts';
 import { installationResources } from '../support/source-resources.ts';
 import assert from 'node:assert/strict';

@@ -1,3 +1,4 @@
+// 跨进程保证：运行环境——真实发布归档在无系统runtime路径下用捆绑runtime安装运行，升级保留活服务并隔离native损坏。
 import { verifyInstalledBundles } from '../support/installed-bundles.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';

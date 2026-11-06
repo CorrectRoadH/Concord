@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——共享浏览器fixture各种scope结局都等待真实服务退出并清理socket，stop不得在服务仍退出时成功。
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

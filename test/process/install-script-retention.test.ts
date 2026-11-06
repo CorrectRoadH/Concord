@@ -1,3 +1,4 @@
+// 跨进程保证：运行环境——真实安装脚本依据存活PID保留在用版本，升级回滚保留inode并清除死亡标记。
 import assert from 'node:assert/strict';
 import { lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——真实generic或Trace写进程持有publication所有权时独立来源读仍可完成。
 import { withPublication } from '../support/repository.ts';
 import { installedConcordCli } from '../support/support.ts';
 import { execFileSync, spawn } from "node:child_process";

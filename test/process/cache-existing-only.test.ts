@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——真实dry-run冷show在输出后退出且不创建持久缓存或锁文件。
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';

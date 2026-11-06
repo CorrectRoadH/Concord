@@ -1,3 +1,4 @@
+// 跨进程保证：OS 锁与互斥——真实reader在link后被杀时恢复不侵占活writer，跨阶段新owner死亡仍需显式再恢复。
 import { initialize, createDocument } from '../support/operations.ts';
 import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.ts';
 import { runApplication } from '../support/repository.ts';

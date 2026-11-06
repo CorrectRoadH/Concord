@@ -1,3 +1,4 @@
+// 跨进程保证：原生模块与句柄——真实native query命名空间预算压力不驱逐workspace行，后续CLI读取保留同代投影。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
 import { createDocument, initialize } from '../support/operations.ts';

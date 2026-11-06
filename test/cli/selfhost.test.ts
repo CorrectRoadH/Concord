@@ -1,6 +1,6 @@
-import { installedConcordCli } from '../support/support.ts';
+import { runCli } from '../support/cli.ts';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { dirname, join, resolve } from 'node:path';
@@ -13,12 +13,12 @@ const PackageVersion = Schema.Struct({ version: Schema.String });
 const CheckOutput = Schema.Struct({ ok: Schema.Boolean });
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
-test('installed self-host commands accept the checkout and reject a broken implementation reference', () => Effect.runPromise(Effect.sync(() => {
+test('installed self-host commands accept the checkout and reject a broken implementation reference', () => Effect.runPromise(Effect.promise(async () => {
   const root = resolve(".");
   const project = readProjectConfig(root);
   const packageVersion = Schema.decodeUnknownSync(Schema.fromJsonString(PackageVersion))(readFileSync(join(root, 'package.json'), 'utf8')).version;
-  const version = spawnSync(process.execPath, [installedConcordCli(), '--version'], { cwd: root, encoding: 'utf8' });
-  assert.equal(version.status, 0, version.stderr);
+  const version = await runCli({ argv: ['--version'], cwd: root, env: process.env, stdin: '' });
+  assert.equal(version.exitCode, 0, version.stderr);
   assert.equal(version.stdout.trim(), `concord v${packageVersion}`);
 
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), 'concord-selfhost-smoke-')));
@@ -37,19 +37,19 @@ test('installed self-host commands accept the checkout and reject a broken imple
       mkdirSync(dirname(join(consumer, source)), { recursive: true });
       cpSync(join(root, source), join(consumer, source), { recursive: true });
     }
-    const checked = spawnSync(process.execPath, [installedConcordCli(), '--root', consumer, '--json', 'check'], { cwd: consumer, encoding: 'utf8' });
-    assert.equal(checked.status, 0, checked.stderr);
+    const checked = await runCli({ argv: ['--root', consumer, '--json', 'check'], cwd: consumer, env: process.env, stdin: '' });
+    assert.equal(checked.exitCode, 0, checked.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(checked.stdout).ok, true);
-    const traced = spawnSync(process.execPath, [installedConcordCli(), '--root', consumer, '--json', 'trace', 'check'], { cwd: consumer, encoding: 'utf8' });
-    assert.equal(traced.status, 0, traced.stderr);
+    const traced = await runCli({ argv: ['--root', consumer, '--json', 'trace', 'check'], cwd: consumer, env: process.env, stdin: '' });
+    assert.equal(traced.exitCode, 0, traced.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(traced.stdout).ok, true);
     const engine = join(consumer, 'src/base/workspace/storage.ts');
     const source = readFileSync(engine, 'utf8');
     const invalid = source.replace('docs/feature/portable-coordination/architecture.md#invariants', 'docs/feature/missing-selfhost/README.md');
     assert.notEqual(invalid, source);
     writeFileSync(engine, invalid);
-    const rejected = spawnSync(process.execPath, [installedConcordCli(), '--root', consumer, '--json', 'check'], { cwd: consumer, encoding: 'utf8' });
-    assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+    const rejected = await runCli({ argv: ['--root', consumer, '--json', 'check'], cwd: consumer, env: process.env, stdin: '' });
+    assert.equal(rejected.exitCode, 1, rejected.stdout + rejected.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(rejected.stdout).ok, false);
     assert.match(rejected.stdout, /src\/base\/workspace\/storage\.ts/u);
   } finally {

@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实mod宿主调用CLI完成初始化与新建并保留草稿冲突。
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';

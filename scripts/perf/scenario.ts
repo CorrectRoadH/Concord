@@ -4,15 +4,16 @@ import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, FileSystem, Schema } from 'effect';
 import type { Scope } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
 import type { Artifact } from './artifact.ts';
 import type { Consumer } from './consumer.ts';
-import { io, mustRun, PerfError, timedRun, type TimedRun } from './process.ts';
+import { io, mustRun, PerfError, timedRun, type CliExecutor, type TimedRun } from './process.ts';
 
 export interface BenchContext {
   readonly artifact: Artifact; readonly consumer: Consumer; readonly outputDir: string;
   readonly smoke: boolean; readonly refreshLimitMs: number; readonly env?: NodeJS.ProcessEnv;
   readonly services: Map<string, string>;
-  readonly cli: (argv: readonly string[], timeoutMs?: number) => Effect.Effect<TimedRun, PerfError, FileSystem.FileSystem>;
+  readonly cli: (argv: readonly string[], timeoutMs?: number, env?: NodeJS.ProcessEnv) => Effect.Effect<TimedRun, PerfError, FileSystem.FileSystem>;
 }
 export type BenchStep = (context: BenchContext) => Effect.Effect<unknown, PerfError, Scope.Scope | FileSystem.FileSystem>;
 export interface HttpRequest {
@@ -65,9 +66,11 @@ export function runArguments(run: BenchRun): readonly string[] {
 const nodeEntry = packageCommand;
 export const cliCommand = (artifact: Artifact, root: string, argv: readonly string[]) => (argv[0] === 'repo' || argv.includes('--skill') || argv.includes('--help') || argv.includes('--version'))
   ? [...nodeEntry(artifact.entry), ...argv] : [...nodeEntry(artifact.entry), '--root', root, ...argv];
-export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: NodeJS.ProcessEnv, refreshLimitMs = 0): BenchContext => ({
+export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: NodeJS.ProcessEnv, refreshLimitMs = 0, executeCli?: CliExecutor): BenchContext => ({
   artifact, consumer, outputDir, smoke, refreshLimitMs, services: new Map(), ...(env ? { env } : {}),
-  cli: (argv, timeoutMs) => timedRun(cliCommand(artifact, consumer.root, argv), { cwd: consumer.root, outputDir, ...(env ? { env } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }) }),
+  cli: (argv, timeoutMs, invocationEnv = env) => executeCli
+    ? executeCli(cliCommand(artifact, consumer.root, argv).slice(nodeEntry(artifact.entry).length), { cwd: consumer.root, ...(invocationEnv ? { env: invocationEnv } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }) })
+    : timedRun(cliCommand(artifact, consumer.root, argv), { cwd: consumer.root, outputDir, ...(invocationEnv ? { env: invocationEnv } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }) }),
 });
 export const prepareServer = Effect.fn('perf.prepareServer')(function*(context: BenchContext) {
   if (context.services.has('workspace-server')) return;
@@ -98,9 +101,19 @@ const ScanMessage = Schema.Union([
     drift: Schema.Struct({ files: Schema.Array(Schema.String), directories: Schema.Array(Schema.String), publicationChanged: Schema.Boolean }) }),
   Schema.Struct({ format: Schema.Literal('concord.query-scan/v1'), ok: Schema.Literal(false), scannedAt: Schema.Number, code: Schema.String, message: Schema.String, details: Schema.optionalKey(Schema.Json) }),
 ]);
-export const executeScenario = Effect.fn('perf.executeScenario')(function*(scenario: BenchScenario, context: BenchContext, timeoutMs?: number) {
-  const fs = yield* FileSystem.FileSystem;
+const executeCliRun = Effect.fn('perf.executeCliRun')(function*(scenario: BenchScenario, context: BenchContext, execute: BenchContext['cli'], timeoutMs?: number) {
   const run = scenario.run;
+  if ('mod' in run || 'request' in run || 'scan' in run) return yield* new PerfError({ message: `Scenario ${scenario.id} requires a non-CLI execution driver` });
+  const argv = runArguments(run);
+  const count = 'argv' in run ? run.concurrency : 1;
+  const results = yield* Effect.all(Array.from({ length: count }, () => execute(argv, timeoutMs, { ...context.env, ...scenario.env })), { concurrency: 'unbounded' });
+  for (const item of results) yield* checkExpectation(scenario, item);
+  return count === 1 ? results[0]! : { ...results[0]!, ms: Math.max(...results.map(item => item.endedAtMs)) - Math.min(...results.map(item => item.startedAtMs)) };
+});
+
+type ScenarioDriver = (scenario: BenchScenario, context: BenchContext, timeoutMs?: number) => Effect.Effect<TimedRun, PerfError | PlatformError, FileSystem.FileSystem>;
+const executePreparedScenario = Effect.fn('perf.executePreparedScenario')(function*(scenario: BenchScenario, context: BenchContext, execute: ScenarioDriver, timeoutMs?: number) {
+  const fs = yield* FileSystem.FileSystem;
   if (scenario.state === 'cold') {
     const clear = yield* context.cli(['cache', 'clear']);
     if (clear.exitCode !== 0) return yield* new PerfError({ message: `Cache clear failed: ${clear.stderr || clear.stdout}` });
@@ -136,6 +149,13 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
       yield* scenario.beforeEach(context);
     }
   }
+  const result = yield* execute(scenario, context, timeoutMs);
+  yield* checkExpectation(scenario, result);
+  return result;
+}, Effect.scoped);
+
+const executeFullRun = Effect.fn('perf.executeFullRun')(function*(scenario: BenchScenario, context: BenchContext, timeoutMs?: number) {
+  const run = scenario.run;
   let result: TimedRun;
   if ('mod' in run) {
     const captured = yield* timedRun([process.execPath, 'scripts/herdr-mod-host.ts', context.artifact.entry, context.consumer.root, run.mod], { cwd: process.cwd(), outputDir: context.outputDir, ...(timeoutMs ? { timeoutMs } : {}) });
@@ -164,26 +184,30 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
       yield* io('Decode competing request', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json })), { onExcessProperty: 'error' })(companion.stdout));
     }
     result = target!;
-  } else {
-    let argv: readonly string[];
-    if ('scan' in run) {
-      const application = installationRootForBin(context.artifact.entry);
-      const bundled = packagedRuntimeForApplication(application);
-      const scanWorker = installationResources(application).worker('query-scan-worker');
-      argv = [...(bundled === undefined ? nodeEntry((yield* fs.exists(scanWorker)) ? scanWorker : join(dirname(context.artifact.entry), 'query-scan-worker.js')) : [bundled.node, scanWorker]), context.consumer.root, JSON.stringify(run.scan)];
-    } else argv = cliCommand(context.artifact, context.consumer.root, runArguments(run));
-    const count = 'argv' in run ? run.concurrency : 1;
-    const results = yield* Effect.all(Array.from({ length: count }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,
+  } else if ('scan' in run) {
+    const fs = yield* FileSystem.FileSystem;
+    const application = installationRootForBin(context.artifact.entry);
+    const bundled = packagedRuntimeForApplication(application);
+    const scanWorker = installationResources(application).worker('query-scan-worker');
+    const argv = [...(bundled === undefined ? nodeEntry((yield* fs.exists(scanWorker)) ? scanWorker : join(dirname(context.artifact.entry), 'query-scan-worker.js')) : [bundled.node, scanWorker]), context.consumer.root, JSON.stringify(run.scan)];
+    const results = yield* Effect.all(Array.from({ length: 1 }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,
       ...(timeoutMs === undefined ? {} : { timeoutMs }), env: { ...context.env, ...scenario.env } })), { concurrency: 'unbounded' });
     for (const item of results) {
       yield* checkExpectation(scenario, item);
-      if ('scan' in run) {
-        const decoded = yield* io('Decode scan result', () => Schema.decodeUnknownSync(Schema.fromJsonString(ScanMessage), { onExcessProperty: 'error' })(item.stdout));
-        if (!decoded.ok) return yield* new PerfError({ message: `Scan failed: ${item.stdout}` });
-      }
+      const decoded = yield* io('Decode scan result', () => Schema.decodeUnknownSync(Schema.fromJsonString(ScanMessage), { onExcessProperty: 'error' })(item.stdout));
+      if (!decoded.ok) return yield* new PerfError({ message: `Scan failed: ${item.stdout}` });
     }
-    result = count === 1 ? results[0]! : { ...results[0]!, ms: Math.max(...results.map(item => item.endedAtMs)) - Math.min(...results.map(item => item.startedAtMs)) };
-  }
-  yield* checkExpectation(scenario, result);
+    result = results[0]!;
+  } else result = yield* executeCliRun(scenario, context, (argv, timeoutMs, env) => timedRun(cliCommand(context.artifact, context.consumer.root, argv), {
+    cwd: context.consumer.root, outputDir: context.outputDir, ...(timeoutMs === undefined ? {} : { timeoutMs }), env,
+  }), timeoutMs);
   return result;
-}, Effect.scoped);
+});
+
+export const executeScenario = Effect.fn('perf.executeScenario')(function*(scenario: BenchScenario, context: BenchContext, timeoutMs?: number) {
+  return yield* executePreparedScenario(scenario, context, executeFullRun, timeoutMs);
+});
+
+export const executeCliScenario = Effect.fn('perf.executeCliScenario')(function*(scenario: BenchScenario, context: BenchContext, timeoutMs?: number) {
+  return yield* executePreparedScenario(scenario, context, (scenario, context, timeoutMs) => executeCliRun(scenario, context, context.cli, timeoutMs), timeoutMs);
+});

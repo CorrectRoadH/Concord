@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实patchelf重定位物理ELF owner，保留硬链接包存储inode与原字节。
 import assert from 'node:assert/strict';
 import { chmod, copyFile, link, mkdtemp, readFile, realpath, rm, stat, mkdir, symlink } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';

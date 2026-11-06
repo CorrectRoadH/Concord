@@ -1,3 +1,4 @@
+// 跨进程保证：原生模块与句柄——维护worker在publication争用时释放native锁并延后删除，后续回收保留持久owner inode。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { runApplication } from '../support/repository.ts';
 import { PersistentCache } from '../../src/base/cache/index.ts';

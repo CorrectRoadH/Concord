@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——真实编辑器收到SIGINT时结束任务，stdio超预算帧令新进程以错误退出。
 import { pollUntil } from '../support/support.ts';
 import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.ts';
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md

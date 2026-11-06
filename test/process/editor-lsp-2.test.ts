@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——真实editor worker被OS暂停后来源变化使在途结果失效，恢复后继续提供当前导航。
 import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
 import { pollUntil } from '../support/support.ts';
 import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.ts';

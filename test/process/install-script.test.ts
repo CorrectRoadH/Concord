@@ -1,3 +1,4 @@
+// 跨进程保证：运行环境——真实POSIX安装脚本在最小PATH和平台工具边界下校验归档并激活可运行入口。
 import assert from 'node:assert/strict';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

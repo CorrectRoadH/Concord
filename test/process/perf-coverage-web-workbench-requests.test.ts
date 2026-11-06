@@ -1,3 +1,4 @@
+// 跨进程保证：网络——性能烟雾场景在真实HTTP连接并发请求工作台，所有伴随请求与目标响应均通过严格解码。
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';

@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实安装脚本解析发布tag并请求对应checksum及归档，安装后的CLI报告匹配版本。
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

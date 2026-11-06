@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——真实计算进程被暂停后取消队列不杀活任务，取消owner确认子进程退出且后续generation可继续。
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';

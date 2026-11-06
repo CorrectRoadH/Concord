@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——真实gh子进程使用隔离cwd与env，取消或HTTP断连后回收，清理未确认时拒绝再启动。
 import { installedConcordCli } from '../support/support.ts';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md

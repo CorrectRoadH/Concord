@@ -2,7 +2,7 @@ import { packageCommand } from '../package-command.ts';
 import { join, resolve } from 'node:path';
 import { packageBin } from '../package-location.ts';
 import { Effect, FileSystem, Schema } from 'effect';
-import { io, mustRun, PerfError } from './process.ts';
+import { io, mustRun, mustRunCli, PerfError, type CliExecutor } from './process.ts';
 
 export interface ScaleSpec { readonly sources: number; readonly tests: number; readonly pages: number }
 /** The default synthetic scale mirrors a large adopted game repository: thousands of sources and a thousand supporting pages. */
@@ -20,8 +20,10 @@ export interface Consumer {
 }
 
 const CacheStatus = Schema.Struct({ status: Schema.Literal('ready') });
-const prepareCache = Effect.fn('perf.prepareCache')(function*(entry: string, root: string, outputDir: string, smoke = false) {
-  const concord = (...args: string[]) => mustRun([...packageCommand(entry), '--root', root, '--json', 'cache', ...args], { cwd: root, outputDir });
+const prepareCache = Effect.fn('perf.prepareCache')(function*(entry: string, root: string, outputDir: string, smoke = false, executeCli?: CliExecutor) {
+  const concord = (...args: string[]) => executeCli
+    ? mustRunCli(['--root', root, '--json', 'cache', ...args], { cwd: root }, executeCli)
+    : mustRun([...packageCommand(entry), '--root', root, '--json', 'cache', ...args], { cwd: root, outputDir });
   const rebuilt = yield* concord('rebuild');
   if (smoke) {
     yield* io('Verify rebuilt smoke cache', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ cacheStatus: CacheStatus })), { onExcessProperty: 'ignore' })(rebuilt.stdout));
@@ -42,22 +44,24 @@ const headOf = Effect.fn('perf.headOf')(function*(root: string, outputDir: strin
 });
 
 /** Self-hosting consumer: an independent clone of this repository frozen at one commit; uncommitted edits are excluded by design. */
-export const selfConsumer = Effect.fn('perf.selfConsumer')(function*(repository: string, commit: string, workDir: string, entry?: string, smoke = false) {
+export const selfConsumer = Effect.fn('perf.selfConsumer')(function*(repository: string, commit: string, workDir: string, entry?: string, smoke = false, executeCli?: CliExecutor) {
   entry ??= yield* packageBin(repository);
   const root = join(workDir, 'self');
   yield* mustRun(['git', 'clone', '-q', '--no-hardlinks', '--no-checkout', repository, root], { cwd: workDir, outputDir: workDir });
   yield* git(root, workDir, 'checkout', '-q', '--detach', commit);
-  const cache = yield* prepareCache(entry, root, workDir, smoke);
+  const cache = yield* prepareCache(entry, root, workDir, smoke, executeCli);
   return { kind: 'self', root, commit: yield* headOf(root, workDir), cache } satisfies Consumer;
 });
 
 /** Synthetic consumer created through the candidate's public CLI, then frozen in Git. */
-export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: string, spec: ScaleSpec, workDir: string) {
+export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: string, spec: ScaleSpec, workDir: string, executeCli?: CliExecutor) {
   const root = join(workDir, 'scale');
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(root);
   yield* git(root, workDir, 'init', '-q');
-  const concord = (...args: string[]) => mustRun([...packageCommand(entry), '--root', root, '--json', ...args], { cwd: root, outputDir: workDir });
+  const concord = (...args: string[]) => executeCli
+    ? mustRunCli(['--root', root, '--json', ...args], { cwd: root }, executeCli)
+    : mustRun([...packageCommand(entry), '--root', root, '--json', ...args], { cwd: root, outputDir: workDir });
   yield* concord('init', '--test-root', 'test', '--source-root', 'src', '--yes');
   yield* concord('new', 'feature', 'scale', '--title', 'Scale');
   yield* concord('new', 'feature', 'local-sdlc', '--title', 'Local SDLC query target');
@@ -74,7 +78,7 @@ export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: st
     yield* fs.writeFileString(join(root, 'docs/feature/scale/format', `page-${index}.md`), `# Page ${index}\n\nSupporting page for [Scale](../README.md).\n`);
   }
   yield* commitAll(root, workDir, 'Frozen scale consumer');
-  const cache = yield* prepareCache(entry, root, workDir);
+  const cache = yield* prepareCache(entry, root, workDir, false, executeCli);
   return { kind: 'scale', root, commit: yield* headOf(root, workDir), scale: spec, cache } satisfies Consumer;
 });
 

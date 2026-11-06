@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——前台服务将真实HTTP失败代码写入stderr且只一条，日志不泄露请求目标或诊断。
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';

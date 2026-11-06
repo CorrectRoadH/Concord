@@ -1,3 +1,4 @@
+// 跨进程保证：网络——客户端事件循环阻塞超过服务keep-alive后新HTTP请求仍独立完成。
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import test from 'node:test';

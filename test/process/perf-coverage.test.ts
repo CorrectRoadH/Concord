@@ -1,4 +1,4 @@
-// 跨进程保证：运行环境——真实 CLI 帮助与命令定义一致，场景子进程失败后恢复消费者。
+// 跨进程保证：外部程序——性能场景驱动真实并发CLI结果并在失败后恢复冻结消费者。
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';

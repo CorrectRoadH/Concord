@@ -1,3 +1,4 @@
+// 跨进程保证：运行环境——新进程重建自己的有界文档内存缓存，重复批次共享解析且不留下持久文档库。
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';

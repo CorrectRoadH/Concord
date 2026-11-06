@@ -13,6 +13,18 @@ export interface TimedRun {
   readonly ms: number; readonly startedAtMs: number; readonly endedAtMs: number; readonly exitCode: number | null; readonly signal: string | null;
   readonly stdout: string; readonly stderr: string;
 }
+export interface CliExecutionOptions {
+  readonly cwd: string; readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number;
+}
+/** A caller may supply CLI execution without changing the default process measurements. */
+export type CliExecutor = (argv: readonly string[], options: CliExecutionOptions) => Effect.Effect<TimedRun, PerfError, FileSystem.FileSystem>;
+
+/** Setup and cleanup retain mustRun's success requirement when execution is injected. */
+export const mustRunCli = Effect.fn('perf.mustRunCli')(function*(argv: readonly string[], options: CliExecutionOptions, execute: CliExecutor) {
+  const run = yield* execute(argv, options);
+  if (run.exitCode !== 0) return yield* new PerfError({ message: `${argv.join(' ')} exited ${run.exitCode}: ${(run.stderr || run.stdout).slice(0, 2000)}` });
+  return run;
+});
 let sequence = 0;
 
 /**

@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——刷新worker退出后发布无正文投影，后续CLI仍可读取历史正文。
 import { assert, test, rmSync, refreshInstalled, packedEnvelope, installedCall, waitForRefreshExit } from '../support/asynchronous-projections-fixture.ts';
 import { queryFactsConsumer, ownerPath } from '../support/query-facts-fixture.ts';
 

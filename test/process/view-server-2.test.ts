@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——真实Web任务通过HTTP或manager取消runner后可再次执行，关闭manager释放仓库所有权。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { Publication } from '../../src/base/publication/index.ts';
 import { createDocument, initialize } from '../support/operations.ts';

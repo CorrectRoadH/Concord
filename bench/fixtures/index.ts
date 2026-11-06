@@ -3,15 +3,17 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
 import type { Consumer } from '../../scripts/perf/consumer.ts';
-import { io, mustRun, PerfError } from '../../scripts/perf/process.ts';
+import { io, mustRun, mustRunCli, PerfError, type CliExecutor } from '../../scripts/perf/process.ts';
 
-export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name: string, entry: string, workDir: string, smoke = false, source?: { readonly repository: string; readonly commit: string }) {
+export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name: string, entry: string, workDir: string, smoke = false, source?: { readonly repository: string; readonly commit: string }, executeCli?: CliExecutor) {
   if (!['minimal', 'smoke', 'web', 'writing', 'writing-scale', 'mod'].includes(name)) return yield* new PerfError({ message: `Unknown fixture: ${name}` });
-  if (name === 'writing' && !smoke && source) return yield* writingSelfConsumer(entry, workDir, source);
+  if (name === 'writing' && !smoke && source) return yield* writingSelfConsumer(entry, workDir, source, executeCli);
   const root = join(workDir, name);
   yield* io('Create fixture', () => mkdirSync(root));
   const git = (...argv: string[]) => mustRun(['git', '-C', root, ...argv], { cwd: root, outputDir: workDir });
-  const cli = (...argv: string[]) => mustRun([...packageCommand(entry), '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
+  const cli = (...argv: string[]) => executeCli
+    ? mustRunCli(['--root', root, '--json', ...argv], { cwd: root }, executeCli)
+    : mustRun([...packageCommand(entry), '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
   yield* git('init', '-q');
   yield* cli('init', '--test-root', 'test', '--source-root', 'src', '--yes');
   for (const feature of ['local-sdlc', 'measured']) yield* cli('new', 'feature', feature, '--title', feature);
@@ -50,13 +52,15 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
 });
 
 /** A frozen self clone using its declared Markdown terminology and writing rules. */
-const writingSelfConsumer = Effect.fn('bench.writingSelfConsumer')(function*(entry: string, workDir: string, source: { readonly repository: string; readonly commit: string }) {
+const writingSelfConsumer = Effect.fn('bench.writingSelfConsumer')(function*(entry: string, workDir: string, source: { readonly repository: string; readonly commit: string }, executeCli?: CliExecutor) {
   const root = join(workDir, 'writing');
   const git = (...argv: string[]) => mustRun(['git', '-C', root, ...argv], { cwd: workDir, outputDir: workDir });
   yield* mustRun(['git', 'clone', '-q', '--no-hardlinks', '--no-checkout', source.repository, root], { cwd: workDir, outputDir: workDir });
   yield* git('checkout', '-q', '--detach', source.commit);
   const sourceCommit = (yield* git('rev-parse', 'HEAD')).stdout.trim();
-  const cli = (...argv: string[]) => mustRun([...packageCommand(entry), '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
+  const cli = (...argv: string[]) => executeCli
+    ? mustRunCli(['--root', root, '--json', ...argv], { cwd: root }, executeCli)
+    : mustRun([...packageCommand(entry), '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
   const commit = (yield* git('rev-parse', 'HEAD')).stdout.trim();
   const files = (yield* git('ls-files', '-z')).stdout.split('\0').filter(Boolean);
   yield* cli('cache', 'rebuild');

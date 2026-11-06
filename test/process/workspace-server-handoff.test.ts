@@ -1,3 +1,4 @@
+// 跨进程保证：服务与 IPC——不同安装冲突保留旧服务直到显式停止，同源码安装变更后才退出旧owner并交接新实例。
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

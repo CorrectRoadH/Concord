@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——测量子进程继承普通输出文件，超时保留SIGKILL诊断，中断后真实PID已退出。
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import test from 'node:test';
