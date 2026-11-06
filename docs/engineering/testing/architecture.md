@@ -24,13 +24,17 @@
 
 每次 CLI 调用取得一份不可变的输入：argv（不含 Node 可执行文件与入口文件）、绝对路径的 cwd 与完整的环境变量快照。快照中没有的变量视为不存在，不与宿主进程的环境合并。相对路径、项目发现、Git、runner、LSP、安装资源、发给工作区服务的请求环境，以及子进程的 cwd 与环境，都从这份输入派生；调用不修改 `process.chdir`、`process.env` 或宿主的标准流。
 
-基础适配需要的只读环境端口定义在 base，由每个入口的组合根提供：CLI、工作区服务、计算与操作进程、LSP 与库入口各自提供自己的值，base 不导入 CLI（[代码结构](../../architecture.md#代码结构)）。argv、标准流与退出结果由 CLI 适配拥有；标准流使用 Effect 的 Stdio，Console 与 Terminal 绑定到同一次调用的输出与 TTY 能力。
+基础适配需要的只读环境端口是 `base/environment` 的 [RuntimeEnvironment](../../architecture.md#基础服务)，由每个入口的组合根提供：CLI、工作区服务、计算与操作进程、LSP 与库入口各自提供自己的值，base 不导入 CLI（[代码结构](../../architecture.md#代码结构)）。argv、标准流与退出结果由 CLI 适配拥有；标准流使用 Effect 的 Stdio，Console 与 Terminal 绑定到同一次调用的输出与 TTY 能力。
 
 生产入口与进程内入口运行同一个可等待的命令程序：同一命令定义、初始化守卫、错误呈现与退出码映射。只有真实的启动适配执行 `runMain`、安装信号处理与写入启动缓存。命令树与不带调用状态的 Layer 定义可以复用；每次调用拥有自己的 Scope、构建出的上下文、输出与退出结果，退出结果初值为 0，不写测试进程的 `process.exitCode`。原生模块、编译器等进程级加载缓存不得携带调用者的环境或消费者状态。
 
-`test/support/cli.ts` 的 `runCli({ argv, cwd, env, stdin })` 是异步入口，返回 `{ stdout, stderr, exitCode }`。stdin 与输出按 UTF-8 字节处理，stdin 给定内容后结束；TTY 默认为否。命令与 Scope 的 finalizer 都完成后才返回，清理失败时返回失败而不是成功结果；领域错误转换为退出结果，取消与宿主异常向调用者传播。命令自身需要的工作区服务、runner 等子进程保持生产行为，与真实 CLI 相同，计入门禁报告。
+CLI 适配内部的 `CliInvocation` 服务拥有本次调用不可变的 argv 与退出码，设置退出码是 Effect 操作；输出、`--json` 判断、`--body` 与 stdin 读取都经本次的 argv、Stdio 与 RuntimeEnvironment。组合根不提供会覆盖这些的宿主 Stdio 与 Terminal，平台只组合文件系统、路径与子进程。`src/entry/cli/main.ts` 导出 `runCommand(command, argv)`，返回 `Effect<number>`；分组加载与完整命令都运行它，`entry.ts` 独占 `NodeRuntime.runMain`、宿主的 `process.exitCode`、信号与启动缓存，`entry-full.ts`、`cli-fallback.ts` 与 `cli.ts` 不在顶层执行、不读宿主 argv。
 
-进程内入口须通过这些验收：连续调用 A、失败的 B、再 A，结果互不影响；不同 cwd、环境与 stdin 的调用并发运行；非零退出之后的下一次调用退出码为 0；帮助与参数错误的人读和 JSON 两种格式；取消后资源与信号监听全部释放。
+工作区服务的长期计算进程对每个查询，按请求携带的环境重建与环境有关的服务（Workspace、Git、OwnedProcess、Installation、ConfigProvider），消费者 root 仍取请求的 root。由调用者发起的操作进程携带调用者的环境，不复用服务启动时的环境。原生绑定按经过验证的二进制身份（路径、摘要、测试钩子模式）缓存，加载失败按同一身份分别记录，不保存调用者的环境；artifact 路径每次从快照求得。编译缓存只由真实启动适配初始化。缓存维护的排队决策在触发它的命令结束前完成，不留给下一次调用。
+
+`test/support/cli.ts` 的 `runCli({ argv, cwd, env, stdin, signal })` 是异步入口，返回 `{ stdout, stderr, exitCode }`。stdin 接受 UTF-8 字符串或字节，给定内容后结束；输出按字节捕获、以 UTF-8 解码；TTY 默认为否。命令与 Scope 的 finalizer 都完成后才返回，清理失败时返回失败而不是成功结果；领域错误转换为退出结果，取消与宿主异常向调用者传播。命令自身需要的工作区服务、runner 等子进程保持生产行为，与真实 CLI 相同，计入门禁报告。
+
+进程内入口须通过两组验收。环境隔离：快照里缺少的变量不回落到宿主，Git、runner、LSP 与服务请求的后代实际使用给定的环境，不同原生 artifact 的选择互不污染。调用隔离：连续调用 A、失败的 B、再 A，结果互不影响；不同 cwd、环境与 stdin 的调用并发运行；非零退出之后的下一次调用退出码为 0；帮助与参数错误的人读和 JSON 两种格式；取消后资源与信号监听全部释放。
 
 只有真实进程才能观察的部分由进程层“运行环境”类别保留代表测试：按命令分组加载模块、按 argv 回放预先记录的输出、未捕获失败的退出码、信号处理，以及原生模块的首次加载、损坏与安装替换。代表测试与进程内命令程序对同一 argv 的输出逐字比较。
 

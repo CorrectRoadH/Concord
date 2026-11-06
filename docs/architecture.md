@@ -99,7 +99,7 @@ CI 可以使用 `concord --server=command check`：服务属于本次命令，�
 ```text
 src/
   model/        纯模型：Schema、Markdown 与 frontmatter 解析、文档身份推导、关系推导、写作规则、作用域与路径算法、步骤、代码引用
-  base/         基础服务：installation、workspace、sources、publication、cache、git、process
+  base/         基础服务：environment、installation、workspace、sources、publication、cache、git、process
   domain/       领域服务：documents、designs、trace、tests、code、issues、memory、taste、writing、concepts、feedback、onboarding、docs-work
   app/          应用操作、Queries 端口与 ViewAction
   entry/        入口：cli、http（Web 工作台的服务端）、server（工作区服务的主进程、计算进程与操作进程）、lsp、herdr-mod
@@ -168,13 +168,14 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 | 服务 | 职责 |
 | --- | --- |
+| RuntimeEnvironment | `base/environment` 的只读端口：一次调用或一个进程的绝对 cwd 与完整环境变量快照，不含 argv、标准流与退出码。`makeRuntimeEnvironment(cwd, env)` 要求绝对 cwd 并冻结副本，`RuntimeEnvironment.layer(snapshot)` 只提供值、不读取宿主。每个入口的组合根提供它：CLI 的 `entry.ts`、工作区服务、计算、操作、刷新与读写进程、LSP、库与测试；相对路径、Git、临时目录、runner、LSP、OwnedProcess、安装资源与缓存路径都从它派生，缺少的变量不回落到宿主进程。`ConfigProvider` 绑定同一快照。模块只依赖 Effect 与平台的纯路径查询，不依赖其它 base 模块 |
 | Installation | 安装目录根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自安装目录）、模板与 skill 资源、工作进程入口，以及安装身份。安装身份是安装目录全部 JS 与原生产物的内容摘要，按各文件的 device、inode、大小、mtime、ctime 与目录成员组成的元数据指纹缓存在用户缓存目录；指纹任一变化时重新计算内容摘要，因此产物被替换时仍能发现 |
 | Workspace | 项目目录、对应的 Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
 | Sources | 路径安全的读取、乐观快照与返回前核验 |
 | Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作规则、概念目录、步骤重命名与 Issue 关闭的规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
 | Cache | 解析缓存（内存或持久）、只读快照（`CacheSnapshot`，进程内不可写的行，不经内存 HawDB）、持久命名空间的独占写入，三种能力分开提供；计算进程另有 `CacheDerivations`，只在请求内收集新产生的派生行，随结果交回主进程写入，不持有句柄或写入能力 |
 | Git | 状态、diff、提交与 worktree 操作 |
-| OwnedProcess | 用 `unstable/process` 的 ChildProcess 启动与发送信号；Concord 负责后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出也核对后代 |
+| OwnedProcess | 子进程默认使用当前 RuntimeEnvironment 的环境，显式给出的受限环境按完整环境使用；用 `unstable/process` 的 ChildProcess 启动与发送信号；Concord 负责后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出也核对后代 |
 
 ### 应用端口 Queries
 
@@ -365,7 +366,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 绑定与孤立标记诊断消费真实 TS comment ranges，不从纯文本行认领字符串、模板、正则或 JSX 中的伪标记。含真实代码标记且有语法错误的文件不产生有效声明。起始块内 implements 必须连续相邻，语法与位置规则见[使用指引](../skills/concord/references/code.md)。
 
-目标支持 Feature、Use Case 与 Engineering，沿用 owner、supporting page 与 anchor 解析，只拒绝重复 exactRef。Feature 反查汇总自身与 Use Case；Engineering 汇总自身与支持页面。反查按自动引用去重，保留匹配的 exactRefs。
+目标支持 Feature、Use Case 与 Engineering，沿用 owner、supporting page 与 anchor 解析，只拒绝重复 exactRef。Feature 反查汇总自身与 Use Case；Engineering 汇总自身与附页。反查按自动引用去重，保留匹配的 exactRefs。
 
 引用由 canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用。文件移动、改名、作用域和顺序变化可能使引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list 或 locate。派生算法见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)。
 
@@ -385,7 +386,7 @@ Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文�
 
 ## 文档写作检查
 
-写作规则、术语表作用域与合并检查由[文档写作 Spec](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/format.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
+写作规则、术语表的生效范围与合并检查由[文档写作 Spec](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/format.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
 
 ## 工程知识与本地观察
 
