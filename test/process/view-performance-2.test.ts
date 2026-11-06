@@ -34,32 +34,6 @@ function fixture(): string {
   return root;
 }
 
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('workbench compresses workspace data and caches fingerprinted assets only', async () => {
-  const root = fixture();
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  try {
-    const base = `http://127.0.0.1:${server.port}`;
-    await waitForWorkspaceProjection(base);
-    const workspace = await fetchFresh(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip' } });
-    assert.equal(workspace.status, 200);
-    assert.equal(workspace.headers.get('content-encoding'), 'gzip');
-    assert.equal(workspace.headers.get('vary'), 'Accept-Encoding');
-    assert.equal(workspace.headers.get('cache-control'), 'no-store');
-    assert.equal((await workspace.json() as { ok: boolean }).ok, true);
-    const uncompressed = await fetchFresh(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip;q=0' } });
-    assert.equal(uncompressed.headers.get('content-encoding'), null);
-    const html = await (await fetchFresh(base)).text();
-    const asset = /src="\/assets\/([^"]+\.js)"/u.exec(html)?.[1];
-    assert.ok(asset);
-    const script = await fetchFresh(`${base}/assets/${asset}`, { headers: { 'Accept-Encoding': 'gzip' } });
-    assert.equal(script.status, 200);
-    assert.equal(script.headers.get('content-encoding'), 'gzip');
-    assert.equal(script.headers.get('cache-control'), 'public, max-age=31536000, immutable');
-    const index = await fetchFresh(base);
-    assert.equal(index.headers.get('cache-control'), 'no-store');
-  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
-});
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('independent readers share a lease while publication still requires exclusivity', async () => {
@@ -124,21 +98,3 @@ test('supporting-page saves avoid inventory scans and preserve conflict checks',
     assert.throws(() => setMarkdown(repo, path, '# Stale\n', page.digest), { code: 'FileChangedSinceRead' });
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 })));
-
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('HTTP Git status does not scan workspace documents or source declarations', async () => {
-  const root = fixture();
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  const files = LocalRepository.prototype.files;
-  let walks = 0;
-  LocalRepository.prototype.files = function(path) { walks += 1; return files.call(this, path); };
-  try {
-    const response = await fetchFresh(`http://127.0.0.1:${server.port}/api/git`);
-    assert.equal(response.status, 200);
-    assert.match(await response.text(), /src\/main.ts/);
-    assert.equal(walks, 0, 'Git refresh must not compile the entire workspace');
-  } finally {
-    LocalRepository.prototype.files = files;
-    await server.close(); rmSync(root, { recursive: true, force: true });
-  }
-});

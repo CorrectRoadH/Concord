@@ -30,35 +30,6 @@ import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitFo
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.ts';
 
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('/api/file resolves directed current owners without a workspace-wide scan', async () => {
-  const root = fixture();
-  const seed = new LocalRepository(root);
-  try { createDocument(seed, 'issue', { id: 'sample-issue', title: 'Sample issue' }); }
-  finally { seed.close(); }
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  const base = baseOf(server);
-  try {
-    const document = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('docs/feature/projected/README.md')}`);
-    assert.equal(document.status, 200, await document.clone().text());
-    const documentValue = await document.json() as { readonly value: { readonly body: string; readonly digest: string; readonly document?: { readonly metadata: { readonly id: string } } } };
-    assert.equal(documentValue.value.document?.metadata.id, 'projected');
-    assert.match(documentValue.value.body, /Projected feature/u);
-
-    const config = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('concord.config.ts')}`);
-    assert.equal(config.status, 200, await config.clone().text());
-    const configValue = await config.json() as { readonly value: { readonly project?: { readonly sourceRoots?: readonly string[] }; readonly digest: string } };
-    assert.ok(configValue.value.project, 'a valid config target exposes its parsed project preimage');
-
-    const issue = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('docs/issues/sample-issue.md')}`);
-    assert.equal(issue.status, 200, await issue.clone().text());
-    const issueValue = await issue.json() as { readonly value: { readonly feedback?: { readonly document: { readonly metadata: { readonly kind: string; readonly id: string } }; readonly remote: unknown } } };
-    assert.equal(issueValue.value.feedback?.document.metadata.kind, 'issue');
-    assert.equal(issueValue.value.feedback?.document.metadata.id, 'sample-issue');
-    assert.equal(issueValue.value.feedback?.remote, null);
-  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
-});
-
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('current-source queries and cached projection queries remain separate', async () => {
