@@ -62,7 +62,11 @@ function prose(file: string, source: string): { blocks: Prose[]; tree: ReturnTyp
   const result: Prose[] = [];
   const visit = (node: Nodes): void => {
     if (node.type === 'paragraph' || node.type === 'heading') {
-      const text = textOf(node);
+      const last = node.children.at(-1);
+      const rawEnd = last?.type === 'text' && last.position
+        ? authored.slice(last.position.start.offset, last.position.end.offset) : '';
+      const text = node.type === 'heading' && /\s+\{#[^{}\s]+\}\s*$/u.test(rawEnd)
+        ? textOf(node).replace(/\s+\{#[^{}\s]+\}\s*$/u, '') : textOf(node);
       result.push({ line: node.position?.start.line ?? 1, text, readable: text, sentences: text.split(SENTENCE_BREAK), paragraph: node.type === 'paragraph' && !text.split('\n').some(line => /^\s*\|/u.test(line) || /^\s*\|?\s*:?-{3,}:?\s*\|/u.test(line)) });
     } else if ('children' in node) node.children.forEach(visit);
   };
