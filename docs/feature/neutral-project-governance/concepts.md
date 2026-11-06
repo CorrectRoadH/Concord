@@ -18,6 +18,8 @@ Docs Work 中交给一个 Agent 的一份工作，声明目标、write 与 read 
 
 `issue remote preview` 签发的一次性远端写入计划，记录连接、动作、目标、payload 与远端前像的摘要，由 `issue remote apply` 消费。
 
+旧写法：`receipt`
+
 ## 授权串 {#authorization-string}
 
 preview 输出的 `authorize` 值，绑定动作、目标与 payload，作为当次授权传给 `--authorize`。它不是凭据。
