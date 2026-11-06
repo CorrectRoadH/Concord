@@ -4,7 +4,7 @@ import { Cause, Effect, Exit, Option } from "effect";
 import { runCase } from "../domain/tests/index.ts";
 import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService, OwnedProcess, type OwnedProcessService } from "../base/process/index.ts";
 import { ConcordError, failure } from "../model/index.ts";
-import { LocalRepository } from "../base/workspace/index.ts";
+import type { LocalRepository } from "../base/workspace/index.ts";
 import { Sources } from '../base/sources/index.ts';
 import { buildTrace, requireValidTrace, selectCase } from "../domain/trace/index.ts";
 import type { ViewJob, ViewJobState } from "../model/index.ts";

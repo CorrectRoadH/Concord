@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { X } from 'lucide-react';
-import { useWorkspace } from '../workspace';
-import { Button } from './ui/button';
+import { useWorkspace } from '../workspace.tsx';
+import { Button } from './ui/button.tsx';
 
 /** Stable-source diagnostics and refresh failures need attention on ordinary pages. */
 export function WorkspaceHealthNotice() {

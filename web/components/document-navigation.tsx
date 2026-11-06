@@ -1,14 +1,14 @@
 import { FileText, Folder } from 'lucide-react';
 import { Suspense, lazy } from 'react';
-import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs';
-import { documentHref } from '../lib/document-routing';
+import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs.ts';
+import { documentHref } from '../lib/document-routing.ts';
 import { Link, useLocation } from 'react-router-dom';
-import { projectionIsConclusive, useWorkspace } from '../workspace';
-import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar';
-import { useSidebar } from './ui/sidebar';
-const CreateDocument = lazy(() => import('../pages/documents').then(module => ({ default: module.CreateDocument })));
+import { projectionIsConclusive, useWorkspace } from '../workspace.tsx';
+import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar.tsx';
+import { useSidebar } from './ui/sidebar.tsx';
+const CreateDocument = lazy(() => import('../pages/documents.tsx').then(module => ({ default: module.CreateDocument })));
 
-import { documentCategories as sections, documentsInCategory } from '../lib/workspace-display';
+import { documentCategories as sections, documentsInCategory } from '../lib/workspace-display.ts';
 
 export function CloseMobileOnNavigate({ children, href, onClick, ...props }: Omit<React.ComponentProps<typeof Link>, 'to'> & { href: string }) {
   const { setOpenMobile } = useSidebar();

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import type { Effect } from "effect";
 
 
 /** A complete terminal decision made by one repository-tools domain. */

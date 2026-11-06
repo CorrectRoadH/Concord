@@ -1,5 +1,6 @@
+import type * as WorkspaceTypes from '../base/workspace/index.ts';
 import { Effect } from "effect";
-import { Publication } from "../base/publication/index.ts";
+import type { Publication } from "../base/publication/index.ts";
 import { clearCache } from "../domain/tests/index.ts";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cachePhysicalBytes, cacheRootOwnerOnly } from "../base/cache/index.ts";
 import { genericPrivateDirectorySync } from "../base/publication/index.ts";
@@ -14,7 +15,7 @@ export const cacheMaintenanceNeeded = (privateDir: string) => Effect.try({
 });
 
 /** Best effort: reclaim first, then release every native lock before publication. */
-export const maintainCache = Effect.fn('maintainCache')(function*(root: string): Effect.fn.Return<'below-threshold' | 'reclaimed' | 'cleared' | 'deferred', never, import('../base/workspace/index.ts').Workspace | Publication | PersistentCache> {
+export const maintainCache = Effect.fn('maintainCache')(function*(root: string): Effect.fn.Return<'below-threshold' | 'reclaimed' | 'cleared' | 'deferred', never, WorkspaceTypes.Workspace | Publication | PersistentCache> {
   try {
     const privateDir = genericPrivateDirectorySync(root), path = cacheDatabasePath(privateDir);
     if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) || cachePhysicalBytes(privateDir) <= CACHE_MAINTENANCE_THRESHOLD_BYTES) return 'below-threshold';

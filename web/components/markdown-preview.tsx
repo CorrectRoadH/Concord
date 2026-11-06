@@ -6,10 +6,10 @@ import remarkFrontmatter from 'remark-frontmatter';
 import remarkMath from 'remark-math';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import type { Root, RootContent } from 'mdast';
-import { P5Sketch } from './p5-sketch';
-import { MermaidDiagram } from './mermaid-diagram';
-import { RecordDetails } from './content-layout';
-import { rehypeSafeMath, remarkMathNodes } from './markdown-math';
+import { P5Sketch } from './p5-sketch.tsx';
+import { MermaidDiagram } from './mermaid-diagram.tsx';
+import { RecordDetails } from './content-layout.tsx';
+import { rehypeSafeMath, remarkMathNodes } from './markdown-math.ts';
 
 /** Read-only rendering never round-trips source bytes through an editor. */
 function diagramBlocks(markdown: string): ReadonlyMap<number, { language: string; code: string; meta: string }> {

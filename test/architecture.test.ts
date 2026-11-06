@@ -6,6 +6,17 @@ import { dependencyViolations, inspectArchitecture } from './support/architectur
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
+// @feature docs/engineering/code/README.md#模块与文件
+test('source index files only export their module interfaces', () => Effect.runSync(Effect.sync(() => {
+  const audit = inspectArchitecture(root, new Map([
+    ['src/model/index.ts', 'export { ready } from "./ready.ts"; export type { Ready } from "./ready.ts";'],
+    ['src/model/ready.ts', 'export const ready = true; export type Ready = boolean;'],
+    ['src/app/index.ts', 'import { ready } from "../model/index.ts"; export const active = ready;'],
+  ]));
+  assert.deepEqual(audit.invalid.filter(item => item.code === 'IndexImplementation').map(item => item.file), ['src/app/index.ts', 'src/app/index.ts']);
+  assert.deepEqual(inspectArchitecture(root).invalid.filter(item => item.code === 'IndexImplementation'), []);
+})));
+
 // @feature docs/engineering/testing/architecture.md#架构守护
 test('source import and export graphs obey module exits, layers, domain order and composition roots', () => Effect.runSync(Effect.sync(() => {
   const audit = inspectArchitecture(root);
@@ -40,6 +51,6 @@ test('architecture audit sees type exports, finite dynamic imports and aliased p
   assert.deepEqual(new Set(audit.platform.map(item => item.code)), new Set(['ProcessDestructure', 'ProcessCapability']));
   assert.ok(dependencyViolations(audit).some(item => item.code === 'LayerDirection'));
   assert.ok(dependencyViolations(audit).some(item => item.code === 'DomainOrder' && item.file === 'src/domain/documents/index.ts' && item.text.startsWith('import type:')));
-  const opaque = inspectArchitecture(root, new Map([['src/app/index.ts', 'export const load = (path: string) => import(path);']]));
+  const opaque = inspectArchitecture(root, new Map([['src/app/load.ts', 'export const load = (path: string) => import(path);']]));
   assert.deepEqual(opaque.invalid.map(item => item.code), ['UnenumerableDynamicImport']);
 })));

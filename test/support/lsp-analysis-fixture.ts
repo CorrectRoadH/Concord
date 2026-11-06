@@ -1,3 +1,4 @@
+import type * as ModelTypes from '../../src/model/index.ts';
 import { createDocument } from './operations.ts';
 import { sourceCli } from './source-consumer.ts';
 
@@ -80,7 +81,7 @@ export type { AnnotatedCase };
 export type { DocumentRecord };
 export { observation };
 export { LocalRepository };
-export const withPersistentCache = <A>(repo: import('../../src/model/index.ts').Repository, _writable: boolean, use: (cache: RepositoryCache) => A): A => use(PersistentCache.repository(repo));
+export const withPersistentCache = <A>(repo: ModelTypes.Repository, _writable: boolean, use: (cache: RepositoryCache) => A): A => use(PersistentCache.repository(repo));
 export { observeOwnedProcessGroup };
 export { hydrateQueryValue };
 export { TraceShowValue };

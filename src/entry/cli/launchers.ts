@@ -1,4 +1,6 @@
-import { Context, Effect } from "effect";
+import type * as ModelTypes from '../../model/index.ts';
+import type { Effect } from "effect";
+import { Context } from "effect";
 import type { ConcordError } from "../../model/index.ts";
 
 export const QueryServerMode = Context.Reference<'shared' | 'command'>('concord/cli/QueryServerMode', { defaultValue: () => 'shared' });
@@ -19,7 +21,7 @@ export class ServerLauncher extends Context.Service<ServerLauncher, {
   readonly start: (root: string) => Effect.Effect<unknown, unknown>;
   readonly stop: (root: string) => Effect.Effect<unknown, unknown>;
   readonly status: (root: string) => Effect.Effect<unknown, unknown>;
-  readonly projection: (root: string) => Effect.Effect<import('../../model/index.ts').WorkspaceProjection | undefined, unknown>;
+  readonly projection: (root: string) => Effect.Effect<ModelTypes.WorkspaceProjection | undefined, unknown>;
   readonly clear: (root: string) => Effect.Effect<unknown, unknown>;
   readonly cache: (root: string, action: 'cache-status' | 'cache-rebuild') => Effect.Effect<unknown, ConcordError>;
   readonly withCache: <A, E, R>(root: string | undefined, operation: Effect.Effect<A, E, R>, required?: boolean) => Effect.Effect<A, E | ConcordError, R>;

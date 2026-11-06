@@ -1,5 +1,5 @@
 import { projectConceptCatalogs } from '../model/index.ts';
-import { WorkspaceProjectionEnvelope as Envelope } from "../model/index.ts";
+import type { WorkspaceProjectionEnvelope as Envelope } from "../model/index.ts";
 import { join } from "node:path";
 
 import { Workspace } from "../base/workspace/index.ts";

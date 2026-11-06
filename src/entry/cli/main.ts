@@ -1,6 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 // @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
+import type * as ServerTypes from '../server/index.ts';
+import type * as AppTypes from '../../app/index.ts';
+import type * as ProcessTypes from '../../base/process/index.ts';
 import { Installation } from '../../base/installation/index.ts';
 import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./launchers.ts";
 import { Publication } from "../../base/publication/index.ts";
@@ -17,7 +20,7 @@ import { Sources } from '../../base/sources/index.ts';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 const loadClient = () => Effect.tryPromise(() => import('../server/index.ts')).pipe(Effect.mapError(failure));
-const requestWorkspace: typeof import('../server/index.ts').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
+const requestWorkspace: typeof ServerTypes.requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
 const ServerFailure = Schema.Struct({ _tag: Schema.Literal('WorkspaceServerError'), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) });
 const remoteFailure = (cause: unknown): ConcordError | undefined => {
   const decoded = Schema.decodeUnknownExit(ServerFailure, { onExcessProperty: 'ignore' })(cause);
@@ -32,8 +35,8 @@ const nativeAvailable = Effect.flatMap(PersistentCache, cache => cache.verifyArt
 
 const loadServerMain = () => Effect.tryPromise(() => import('../server/main.ts'));
 const loadApp = () => Effect.tryPromise(() => import('../../app/index.ts'));
-const executeQuery: typeof import('../../app/index.ts').executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
-const mergeLocalFeedbackObservation: typeof import('../../app/index.ts').mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
+const executeQuery: typeof AppTypes.executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
+const mergeLocalFeedbackObservation: typeof AppTypes.mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
 const builtAssetRoot = (name: 'web') => loadApp().pipe(Effect.flatMap(app => Effect.try({ try: () => app.builtAssetRoot(name), catch: failure })), Effect.mapError(failure));
 const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string, scope?: string) {
   const platform = yield* ServerRuntime;
@@ -146,7 +149,7 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
   return connection;
 });
 
-const awaitQueryReady = Effect.fn('awaitQueryReady')(function*(connection: import('../server/index.ts').WorkspaceConnection) {
+const awaitQueryReady = Effect.fn('awaitQueryReady')(function*(connection: ServerTypes.WorkspaceConnection) {
   let hello = connection.hello;
   while (hello.state === 'opening') {
     yield* Effect.sleep('10 millis');
@@ -362,6 +365,6 @@ const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effec
   // @concord-end
   return yield* guarded.pipe(Command.run({ version, renderErrors: !process.argv.includes('--json') }));
 }).pipe(Effect.catch(cliFailure));
-export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.ts").OwnedProcess>): void {
+export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | ProcessTypes.OwnedProcess>): void {
   runCommand(command).pipe(Effect.provide(cliLayer), NodeRuntime.runMain);
 }

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from './ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from './ui/sheet.tsx';
 
 export interface DetailDrawerModel {
   readonly title: string;

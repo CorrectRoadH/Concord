@@ -3,7 +3,7 @@
 import { Schema } from 'effect';
 import { useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import type { SourceLocation } from '../components/source-drawer';
+import type { SourceLocation } from '../components/source-drawer.tsx';
 
 // Only history provenance lives here. Visible navigation is always read from URL.
 const session = Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');

@@ -4,8 +4,8 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import '@mdxeditor/editor/style.css';
 import 'react-diff-view/style/index.css';
 import './styles.css';
-import { App } from './app';
-import { initializeTheme } from './theme';
+import { App } from './app.tsx';
+import { initializeTheme } from './theme.tsx';
 
 if (import.meta.env.DEV) void import('react-grab');
 

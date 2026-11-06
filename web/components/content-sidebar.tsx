@@ -1,11 +1,11 @@
 import { ArrowLeft, ChevronRight, Folder, List } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { useIsMobile } from '../hooks/use-mobile';
-import { Input } from './ui/input';
-import { Button } from './ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
-import { PathContextMenu } from './path-context-menu';
+import { useIsMobile } from '../hooks/use-mobile.ts';
+import { Input } from './ui/input.tsx';
+import { Button } from './ui/button.tsx';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet.tsx';
+import { PathContextMenu } from './path-context-menu.tsx';
 
 interface SidebarItemContent {
   readonly id: string;

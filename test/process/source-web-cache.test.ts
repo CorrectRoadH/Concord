@@ -1,3 +1,4 @@
+import type * as NodeHttpTypes from 'node:http';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -18,7 +19,7 @@ const installation = pathToFileURL(join(checkout, 'src/base/installation/index.t
 const Ready = Schema.Struct({ address: Schema.String });
 const Receipt = Schema.Struct({ digest: Schema.String, builderPid: Schema.Int, files: Schema.Array(Schema.Struct({ path: Schema.String })) });
 const receipt = (path: string) => Schema.decodeUnknownSync(Schema.fromJsonString(Receipt), { onExcessProperty: 'ignore' })(readFileSync(join(path, 'receipt.json'), 'utf8'));
-const http = (address: string) => new Promise<{ status: number; body: string; headers: import('node:http').IncomingHttpHeaders }>((accept, reject) => {
+const http = (address: string) => new Promise<{ status: number; body: string; headers: NodeHttpTypes.IncomingHttpHeaders }>((accept, reject) => {
   // A request owns a fresh connection, including after rebuilding cached files.
   const request = get(address, { agent: false }, response => {
     let body = ''; response.setEncoding('utf8'); response.on('data', data => { body += String(data); });

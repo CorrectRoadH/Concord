@@ -1,4 +1,4 @@
-import type { GitEntry } from '../../../src/model/index';
+import type { GitEntry } from '../../../src/model/index.ts';
 
 export type Area = 'staged' | 'unstaged' | 'untracked';
 export type Category = 'all' | 'docs' | 'tests';

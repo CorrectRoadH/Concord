@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import { TraceRecoveryConflict, TraceRecoveryRequired } from "./repo-docs-trace-errors.ts";
+import type { TraceRecoveryConflict, TraceRecoveryRequired } from "./repo-docs-trace-errors.ts";
 
 export class TraceMutationError extends Data.TaggedError("TraceMutationError")<{
   readonly operation: string;

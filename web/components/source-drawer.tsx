@@ -1,11 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
 import { useEffect, useState } from 'react';
-import type { ViewFile } from '../../src/model/index';
-import { useWorkspace } from '../workspace';
-import { DetailDrawer } from './detail-drawer';
-import { MarkdownEditor, codeMirrorExtensions } from './markdown-editor';
-import { SourceEditor } from './source-editor';
+import type { ViewFile } from '../../src/model/index.ts';
+import { useWorkspace } from '../workspace.tsx';
+import { DetailDrawer } from './detail-drawer.tsx';
+import { MarkdownEditor, codeMirrorExtensions } from './markdown-editor.tsx';
+import { SourceEditor } from './source-editor.tsx';
 
 export interface SourceLocation {
   readonly path: string;

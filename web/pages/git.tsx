@@ -3,16 +3,16 @@
 // @concord-implements docs/feature/web-workbench/use-case/review-local-changes.md
 import * as stylex from '@stylexjs/stylex';
 import { AlertTriangle, FileDiff, RefreshCw } from 'lucide-react';
-import { Empty } from '../components/page';
-import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
+import { Empty } from '../components/page.tsx';
+import { Badge } from '../components/ui/badge.tsx';
+import { Button } from '../components/ui/button.tsx';
 import { createPortal } from 'react-dom';
-import { ContentSidebar } from '../components/content-sidebar';
-import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { DiffReading } from './git/diff-reading';
-import { FileTree } from './git/file-tree';
-import { AREAS, AREA_LABELS, entriesFor, firstArea, validArea } from './git/model';
-import { useGitReview } from './git/use-git-review';
+import { ContentSidebar } from '../components/content-sidebar.tsx';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs.tsx';
+import { DiffReading } from './git/diff-reading.tsx';
+import { FileTree } from './git/file-tree.tsx';
+import { AREAS, AREA_LABELS, entriesFor, firstArea, validArea } from './git/model.ts';
+import { useGitReview } from './git/use-git-review.ts';
 
 const styles = stylex.create({
   review: {

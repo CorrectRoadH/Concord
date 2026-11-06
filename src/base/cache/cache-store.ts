@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
+import type * as HawdbNativeTypes from './hawdb-native.ts';
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly, inspectCacheClear, deleteInspectedCache } from "./cache-file.ts";
 import { HawdbFailure, openHawdb, acquireHawdbClearGuard, type HawdbDatabase } from "./hawdb-native.ts";
 import type { Repository } from "../../model/index.ts";
@@ -50,10 +51,10 @@ function withPersistentCache<A>(repo: Repository, writable: boolean, use: (datab
 export interface RepositoryCache {
   readonly diagnostic?: () => string | undefined;
   readonly prepareWrite: (options?: { readonly create: boolean }) => void;
-  readonly get: (namespace: import('./hawdb-native.ts').HawdbNamespace, keys: readonly string[]) => readonly import('./hawdb-native.ts').HawdbEntry[];
-  readonly scan: (namespace: import('./hawdb-native.ts').HawdbNamespace) => readonly import('./hawdb-native.ts').HawdbEntry[];
-  readonly put: (namespace: import('./hawdb-native.ts').HawdbNamespace, rows: readonly import('./hawdb-native.ts').HawdbEntry[]) => void;
-  readonly namespaces: () => readonly import('./hawdb-native.ts').HawdbNamespace[];
+  readonly get: (namespace: HawdbNativeTypes.HawdbNamespace, keys: readonly string[]) => readonly HawdbNativeTypes.HawdbEntry[];
+  readonly scan: (namespace: HawdbNativeTypes.HawdbNamespace) => readonly HawdbNativeTypes.HawdbEntry[];
+  readonly put: (namespace: HawdbNativeTypes.HawdbNamespace, rows: readonly HawdbNativeTypes.HawdbEntry[]) => void;
+  readonly namespaces: () => readonly HawdbNativeTypes.HawdbNamespace[];
 }
 const owners = new WeakMap<Repository, RepositoryCache>();
 const disabled = () => { throw new HawdbFailure('HawdbUnavailable', 'Persistent cache access is disabled'); };
@@ -67,9 +68,9 @@ export function bindRepositoryCache(repo: Repository, access: RepositoryCache): 
 export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase): RepositoryCache {
   let diagnostic: string | undefined;
   const missing = () => new HawdbFailure('HawdbUnavailable', 'Persistent cache is absent; start the workspace service or run cache rebuild');
-  const parseNamespace = (namespace: import('./hawdb-native.ts').HawdbNamespace) => ['document_parse', 'code_parse', 'git_baseline'].includes(namespace);
-  const rebuildable = (namespace: import('./hawdb-native.ts').HawdbNamespace, keys?: readonly string[]) => !['feedback_cache', 'query_cache', 'workspace_projection'].includes(namespace) || namespace === 'query_cache' && keys !== undefined && keys.every(key => key.startsWith('writing:'));
-  const use = <A>(namespace: import('./hawdb-native.ts').HawdbNamespace, keys: readonly string[] | undefined, writable: boolean, operation: (database: HawdbDatabase | undefined) => A): A => {
+  const parseNamespace = (namespace: HawdbNativeTypes.HawdbNamespace) => ['document_parse', 'code_parse', 'git_baseline'].includes(namespace);
+  const rebuildable = (namespace: HawdbNativeTypes.HawdbNamespace, keys?: readonly string[]) => !['feedback_cache', 'query_cache', 'workspace_projection'].includes(namespace) || namespace === 'query_cache' && keys !== undefined && keys.every(key => key.startsWith('writing:'));
+  const use = <A>(namespace: HawdbNativeTypes.HawdbNamespace, keys: readonly string[] | undefined, writable: boolean, operation: (database: HawdbDatabase | undefined) => A): A => {
     try { return withPersistentCache(repo, writable, database => operation(database ?? (parseNamespace(namespace) ? memory : undefined))); }
     catch (cause) {
       if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || !rebuildable(namespace, keys)) throw cause;

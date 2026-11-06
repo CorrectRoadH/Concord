@@ -1,3 +1,4 @@
+import type * as SharedTypes from '../../src/model/shared.ts';
 import { createDocument, initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -95,7 +96,7 @@ test('project documents under docs are readable without becoming category owners
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('config editing rejects retired fields and validates source roots', () => Effect.runPromise(Effect.sync(() => withRepository((_root, repo) => {
   const source = repo.configSnapshot.source;
-  throwsCode('InvalidData', () => setConfig(repo, { ...repo.config, projectId: 'other-project' } as unknown as import("../../src/model/shared.ts").ProjectConfig, digest(source)));
+  throwsCode('InvalidData', () => setConfig(repo, { ...repo.config, projectId: 'other-project' } as unknown as SharedTypes.ProjectConfig, digest(source)));
   throwsCode('InvalidSourcePath', () => setConfig(repo, { ...repo.config, sourceRoots: ['node_modules'] }, digest(source)));
   throwsCode('InvalidSourcePath', () => setConfig(repo, { ...repo.config, testRoots: ['node_modules'] }, digest(source)));
   const receipt = setConfig(repo, { ...repo.config, sourceRoots: ['src', 'test'] }, digest(source));

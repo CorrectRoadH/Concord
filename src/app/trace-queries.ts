@@ -6,9 +6,9 @@ import { ConcordError, documentTitle, type DocumentRecord, type Repository } fro
 import { packagePageKind } from '../model/index.ts';
 import { packagePagePaths } from '../domain/documents/index.ts';
 import { TASTE_PATH, showTaste } from "../domain/taste/index.ts";
-import { referenceResolver } from "../domain/documents/index.ts";
+import type { referenceResolver } from "../domain/documents/index.ts";
 import { extractSteps } from "../domain/documents/index.ts";
-import { buildTrace } from "../domain/trace/index.ts";
+import type { buildTrace } from "../domain/trace/index.ts";
 import { buildUnderSnapshot } from "../domain/trace/index.ts";
 import { requireValidTrace } from "../domain/trace/index.ts";
 import type { RelationshipKind } from "../domain/trace/index.ts";

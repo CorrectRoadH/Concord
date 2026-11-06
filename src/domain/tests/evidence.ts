@@ -7,7 +7,8 @@ import { ConcordError, failure, objectDigest, type AnnotatedCase, type DocumentR
 import { hasConfirmedOwnedGroupCleanup, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
 import type { Sources } from '../../base/sources/index.ts';
 import type { LocalRepository } from "../../base/workspace/index.ts";
-import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
+import type { Publication} from "../../base/publication/index.ts";
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
 import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.ts";
 import { adapterFor, executeNativeCase } from "./test-adapters.ts";
 import { nativeVerdict } from "../../model/index.ts";

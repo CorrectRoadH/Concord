@@ -38,6 +38,13 @@ export function inspectArchitecture(root: string, sources?: ReadonlyMap<string, 
       const retained = api.createSourceFile(resolve(root, file), sources?.get(file) ?? readFileSync(join(root, file), 'utf8'), { scriptKind: ts.ScriptKind.TS });
       try {
         const source = retained.sourceFile;
+        if (file.endsWith('/index.ts')) {
+          for (const statement of source.statements) {
+            if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier === undefined) {
+              invalid.push(plain(file, source.getLineAndCharacterOfPosition(statement.getStart(source)).line + 1, 'IndexImplementation', statement.getText(source)));
+            }
+          }
+        }
         const variables = new Map<string, ts.Expression>(), processAliases = new Set(['process']);
         const processModules = new Set<string>();
         const declarations = (node: ts.Node): void => {
@@ -102,7 +109,7 @@ export function inspectArchitecture(root: string, sources?: ReadonlyMap<string, 
             add(node, node.argument.literal.text, true, 'import-type');
           } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
             const argument = node.arguments[0], paths = argument && values(argument);
-            if (file === 'src/base/installation/startup/index.ts' && paths?.length === 1 && paths[0] === 'dist/startup-data.js') {
+            if (file === 'src/base/installation/startup/startup-data.ts' && paths?.length === 1 && paths[0] === 'dist/startup-data.js') {
               edges.push({ from: file, specifier: paths[0], typeOnly: false, kind: 'generated-installation-resource', line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, bindings: [] });
             } else if (paths) for (const path of paths) add(node, path, false, 'dynamic');
             else if (file !== 'src/entry/server/test-adapter-vitest.ts') invalid.push(location(node, 'UnenumerableDynamicImport'));

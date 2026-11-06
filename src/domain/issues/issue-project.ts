@@ -1,7 +1,8 @@
-import { Context, Effect } from "effect";
-import { IssuePlanStore, IssueRemote } from "./repo-issue-domain.ts";
-import { ConcordError, type IssueError } from "../../model/index.ts";
-import type { IssueBinding } from "../../model/index.ts";
+import type { Effect } from "effect";
+import { Context } from "effect";
+import type { IssuePlanStore, IssueRemote } from "./repo-issue-domain.ts";
+import { type IssueError } from "../../model/index.ts";
+import type { IssueBinding , ConcordError} from "../../model/index.ts";
 export class IssueProject extends Context.Service<IssueProject, {
   readonly connection: (id: string) => Effect.Effect<IssueBinding, IssueError>;
   readonly readBody: (path: string) => Effect.Effect<string, IssueError>;

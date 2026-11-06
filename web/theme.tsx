@@ -1,6 +1,6 @@
 import { Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Button } from './components/ui/button';
+import { Button } from './components/ui/button.tsx';
 
 type Theme = 'light' | 'dark';
 const storageKey = 'concord-theme';

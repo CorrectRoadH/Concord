@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { WorkspaceProjectionSnapshot } from '../../src/model/index';
+import type { WorkspaceProjectionSnapshot } from '../../src/model/index.ts';
 
 export function scanFindings(snapshot: WorkspaceProjectionSnapshot, kind: 'tests' | 'sources') {
   const roots = (kind === 'tests' ? snapshot.project?.testRoots : snapshot.project?.sourceRoots) ?? [];

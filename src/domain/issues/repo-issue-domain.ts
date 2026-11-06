@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Context, Effect, Schema } from "effect";
-import { IssueAuthorizationMismatch, IssueCreateConflict, IssueInputError, IssueNoChange, IssuePlanConsumed, IssuePlanCorrupt, IssuePlanDrifted, IssuePlanExpired, IssuePlanIoError, IssuePlanNotPlanned, IssueTargetIsPullRequest, type IssueError } from "../../model/index.ts";
+import type { IssuePlanConsumed, IssuePlanExpired, IssuePlanIoError, IssuePlanNotPlanned} from "../../model/index.ts";
+import { IssueAuthorizationMismatch, IssueCreateConflict, IssueInputError, IssueNoChange, IssuePlanCorrupt, IssuePlanDrifted, IssueTargetIsPullRequest, type IssueError } from "../../model/index.ts";
 import { IssuePlanReceiptSchema, type CreateIdentity, type IssueBinding, type IssueIdentity, type IssueMutationResult, type IssueOperation, type IssueOutcome, type IssuePayload, type IssuePlanReceipt, type IssueRepository, type RemoteIssue } from "../../model/index.ts";
 const digest = (value: unknown) => `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 const sameRepository = (left: IssueRepository, right: IssueRepository) => left.host === right.host && left.repository === right.repository;

@@ -1,3 +1,9 @@
+import type * as CacheTypes from '../../base/cache/index.ts';
+import type * as ProcessTypes from '../../base/process/index.ts';
+import type * as RpcGroupTypes from 'effect/unstable/rpc/RpcGroup';
+import type * as RpcClientErrorTypes from 'effect/unstable/rpc/RpcClientError';
+import type * as ModelTypes from '../../model/index.ts';
+import type * as AppTypes from '../../app/index.ts';
 import { Installation } from '../../base/installation/index.ts';
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Context, Effect, Layer } from "effect";
@@ -7,7 +13,7 @@ import { Workspace } from '../../base/workspace/index.ts';
 import { Sources, type SourceWatch } from '../../base/sources/index.ts';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../base/cache/index.ts';
 import type { ReadonlyCacheSnapshot } from '../../base/cache/index.ts';
-import { CacheDerivationBatch } from '../../model/index.ts';
+import type { CacheDerivationBatch } from '../../model/index.ts';
 import type { ChildProcessSpawner } from 'effect/unstable/process';
 import { NodeSocketServer } from '@effect/platform-node';
 import { Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Semaphore, Stream, SubscriptionRef } from 'effect';
@@ -44,7 +50,7 @@ import { assertWorkspacePublicationReady } from '../../app/index.ts';
 import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.ts';
 
 import { OperationReply, OperationReady } from './operation-protocol.ts';
-const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: string, snapshot: Effect.Effect<import('../../base/cache/index.ts').ReadonlyCacheSnapshot, unknown>, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown>) {
+const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: string, snapshot: Effect.Effect<CacheTypes.ReadonlyCacheSnapshot, unknown>, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown>) {
   const installation = yield* Installation;
   const scope = yield* Effect.scope;
   const selection = yield* Semaphore.make(1);
@@ -52,7 +58,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     readonly owner: ReturnType<typeof makeOwnedProcessService>;
     readonly ready: Deferred.Deferred<void, ConcordError>;
     readonly input: Deferred.Deferred<{ write: (bytes: string | Uint8Array) => void; end: () => void }>;
-    readonly result: Deferred.Deferred<import('../../base/process/index.ts').OwnedProcessResult, ConcordError>;
+    readonly result: Deferred.Deferred<ProcessTypes.OwnedProcessResult, ConcordError>;
     header: string;
     used: boolean;
   };
@@ -66,7 +72,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
   const stopWorker = (worker: Worker) => worker.owner.requestStop('SIGTERM').pipe(Effect.andThen(Deferred.await(worker.result).pipe(Effect.ignore)), Effect.andThen(inspect(worker)));
   const start: Effect.Effect<Worker, ConcordError> = Effect.gen(function*() {
     yield* ensureClean;
-    const worker: Worker = { owner: makeOwnedProcessService(), ready: yield* Deferred.make<void, ConcordError>(), input: yield* Deferred.make<{ write: (bytes: string | Uint8Array) => void; end: () => void }>(), result: yield* Deferred.make<import('../../base/process/index.ts').OwnedProcessResult, ConcordError>(), header: '', used: false };
+    const worker: Worker = { owner: makeOwnedProcessService(), ready: yield* Deferred.make<void, ConcordError>(), input: yield* Deferred.make<{ write: (bytes: string | Uint8Array) => void; end: () => void }>(), result: yield* Deferred.make<ProcessTypes.OwnedProcessResult, ConcordError>(), header: '', used: false };
     workers.add(worker);
     let buffered = '', received = false;
     const exited = new ConcordError('OperationResultUnknown', 'Operation process ended before accepting a request');
@@ -208,7 +214,7 @@ export const runComputeMain = (root: string | undefined): void => {
 export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown> = () => Effect.void) {
   const installation = yield* Installation;
   const mutex = yield* Semaphore.make(1);
-  let active: { scope: Scope.Closeable; client: RpcClient.RpcClient<import('effect/unstable/rpc/RpcGroup').Rpcs<typeof ComputeRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>; owner: ReturnType<typeof makeOwnedProcessService>; snapshot?: { readonly text: string; readonly id: string } } | undefined;
+  let active: { scope: Scope.Closeable; client: RpcClient.RpcClient<RpcGroupTypes.Rpcs<typeof ComputeRpcs>, RpcClientErrorTypes.RpcClientError>; owner: ReturnType<typeof makeOwnedProcessService>; snapshot?: { readonly text: string; readonly id: string } } | undefined;
   let starting: { scope: Scope.Closeable; owner: ReturnType<typeof makeOwnedProcessService> } | undefined;
   const close = Effect.gen(function*() {
     const worker = active ?? starting; active = undefined; starting = undefined;
@@ -356,7 +362,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         verify: () => run(runtime.verify.pipe(Effect.mapError(workspaceServerFailure), Effect.andThen(service.state.touch))),
         workspace: () => runAdmitted(readProjection),
         refresh: () => { Effect.runFork(service.request); },
-        read: path => runAdmitted(service.execute({ kind: 'read', path })) as Promise<import('../../model/index.ts').ViewFile>,
+        read: path => runAdmitted(service.execute({ kind: 'read', path })) as Promise<ModelTypes.ViewFile>,
         git: () => runAdmitted(service.execute({ kind: 'git-status' })),
         diff: (path, area) => runAdmitted(service.execute({ kind: 'git-diff', path, area })),
         compile: input => runAdmitted(service.execute({ kind: 'p5-compile', input: Schema.decodeUnknownSync(Schema.Json)(input) })),
@@ -397,7 +403,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const feedback = new FeedbackSessions();
     const derivations = new DerivationSessions();
     const refreshing = new Set<string>();
-    const refreshQuery = (query: import('../../app/index.ts').Query) => Effect.gen(function*() {
+    const refreshQuery = (query: AppTypes.Query) => Effect.gen(function*() {
       const key = JSON.stringify(query);
       if (refreshing.has(key)) return;
       refreshing.add(key);

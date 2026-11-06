@@ -1,10 +1,10 @@
-import { PathContextMenu } from '../../components/path-context-menu';
+import { PathContextMenu } from '../../components/path-context-menu.tsx';
 import * as stylex from '@stylexjs/stylex';
 import { ChevronRight, FileDiff, Folder } from 'lucide-react';
 import { useState } from 'react';
-import { SidebarItem } from '../../components/content-sidebar';
-import type { GitEntry } from '../../../src/model/index';
-import type { CaseLink, TreeNode } from './model';
+import { SidebarItem } from '../../components/content-sidebar.tsx';
+import type { GitEntry } from '../../../src/model/index.ts';
+import type { CaseLink, TreeNode } from './model.ts';
 
 const styles = stylex.create({
   list: { margin: 0, padding: 0, listStyleType: 'none' },

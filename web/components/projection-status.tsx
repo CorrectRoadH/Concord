@@ -2,9 +2,9 @@
 // @concord-implements docs/feature/web-workbench/architecture.md
 import { RefreshCw, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import { useWorkspace } from '../workspace';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
+import { useWorkspace } from '../workspace.tsx';
+import { Badge } from './ui/badge.tsx';
+import { Button } from './ui/button.tsx';
 
 function time(value: string | undefined): string {
   if (!value) return '';

@@ -2,11 +2,11 @@
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { showConcepts } from '../../src/domain/concepts/index';
-import type { WorkspaceDocument } from '../../src/model/index';
-import { useWorkspace } from '../workspace';
-import { Button } from './ui/button';
-import { PanelEmpty, PanelHeader, RecordList, RecordItem } from './content-layout';
+import type { showConcepts } from '../../src/domain/concepts/index.ts';
+import type { WorkspaceDocument } from '../../src/model/index.ts';
+import { useWorkspace } from '../workspace.tsx';
+import { Button } from './ui/button.tsx';
+import { PanelEmpty, PanelHeader, RecordList, RecordItem } from './content-layout.tsx';
 
 type ConceptShow = ReturnType<typeof showConcepts>;
 

@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
+import type * as WorkspaceTypes from '../base/workspace/index.ts';
 import { Effect, Schedule, Schema } from 'effect';
 import type { QueryReply } from './query-port.ts';
 export { Queries, QueryReply } from './query-port.ts';
@@ -47,7 +48,7 @@ export const QueryRequest = Schema.Union([
 ]);
 export type QueryRequest = typeof QueryRequest.Type;
 
-const queryValue = (repo: import('../base/workspace/index.ts').LocalRepository, request: QueryRequest, cache: 'use' | 'off'): unknown => {
+const queryValue = (repo: WorkspaceTypes.LocalRepository, request: QueryRequest, cache: 'use' | 'off'): unknown => {
   switch (request.name) {
     case 'trace.check': { const t = buildTrace(repo, cache); return { operation: 'trace-check', ok: t.complete, complete: t.complete, findings: t.findings, edges: t.edges }; }
     case 'trace.show': return traceShow(repo, request.input.reference, cache);

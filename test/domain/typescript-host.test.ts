@@ -1,3 +1,4 @@
+import type * as ProcessTypes from '../../src/base/process/index.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -79,7 +80,7 @@ test('editor verifies cleanup records only after Scope release and rejects every
   const computed = { session: 'fixture', config: 'fixture', complete: true, gaps: [], value: null, diagnostics: [], reads: [], listings: [] };
   const job = { root: process.cwd(), session: 'fixture', config: 'fixture', overlays: [], method: 'diagnostics' };
   const { makeOwnedProcessService } = await import("../../src/base/process/owned-process.ts");
-  type Result = import("../../src/base/process/index.ts").OwnedProcessResult;
+  type Result = ProcessTypes.OwnedProcessResult;
   const confirmed: Result = { command: ['fixture'], exitCode: 0, signal: null, timedOut: false, cancelled: false, outputLimitExceeded: false, stdout: JSON.stringify({ ok: true, result: computed }), stderr: '', outputBytes: 0, processGroupOwned: true, groupCleanup: { owned: true, checked: true, gone: true, aliveAfterLeaderClose: false, signalsSent: [], detail: 'fixture' } };
   const variants: readonly (Result | undefined)[] = [confirmed, { ...confirmed, processGroupOwned: false }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, owned: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, checked: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, gone: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, gone: null } }, undefined];
   for (const record of variants) {

@@ -4,7 +4,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { Cause, Context, Deferred, Effect, Fiber, Layer, Option, Queue, Result, Scope, Stream } from "effect";
+import type { Cause, Scope} from "effect";
+import { Context, Deferred, Effect, Fiber, Layer, Option, Queue, Result, Stream } from "effect";
 import { NodeServices } from '@effect/platform-node';
 import { launchDetachedWorker } from './worker.ts';
 import { ChildProcess as ProcessCommand, ChildProcessSpawner } from 'effect/unstable/process';

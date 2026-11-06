@@ -1,3 +1,4 @@
+import type * as ModelTypes from '../../src/model/index.ts';
 import { sourceCli } from './source-consumer.ts';
 import assert from 'node:assert/strict';
 import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -89,6 +90,6 @@ export { parseTypeScriptConfig };
 export type { TestAdapter };
 export { LocalRepository };
 export { closeRepositoryCache };
-export const withPersistentCache = <A>(repo: import('../../src/model/index.ts').Repository, _writable: boolean, use: (cache: RepositoryCache) => A): A => use(PersistentCache.repository(repo));
+export const withPersistentCache = <A>(repo: ModelTypes.Repository, _writable: boolean, use: (cache: RepositoryCache) => A): A => use(PersistentCache.repository(repo));
 export { prepareSourceConsumer };
 export { sourceRoot };

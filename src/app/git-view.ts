@@ -1,3 +1,4 @@
+import type * as SourcesTypes from '../base/sources/index.ts';
 import type { GitEntry, GitStatus, GitArea, GitDiff } from "../model/index.ts";
 import { Effect, Schema } from "effect";
 import { parseTestDeclarations } from "../domain/tests/index.ts";
@@ -74,7 +75,7 @@ export const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(roo
 });
 
 
-export function untrackedDiff(path: string, inspected: import('../base/sources/index.ts').UntrackedFile): GitDiff {
+export function untrackedDiff(path: string, inspected: SourcesTypes.UntrackedFile): GitDiff {
   const empty = { path, area: 'untracked' as const, patch: '', binary: false, truncated: false };
   if (inspected.kind === 'symlink') return { ...empty, message: 'Symbolic link: its target is not read.' };
   if (inspected.kind === 'other') return { ...empty, message: 'This entry is not a regular file.' };

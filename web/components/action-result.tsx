@@ -2,11 +2,11 @@
 // @concord-implements docs/feature/web-workbench/architecture.md#web-组件组合
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { urlChoice, useUrlNavigation } from '../hooks/use-url-navigation';
-import { json } from '../lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card.tsx';
+import { Badge } from './ui/badge.tsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs.tsx';
+import { urlChoice, useUrlNavigation } from '../hooks/use-url-navigation.ts';
+import { json } from '../lib/utils.ts';
 
 const labels: Readonly<Record<string, string>> = {
   id: '标识', caseId: '测试', operation: '操作', name: '名称', kind: '类型', status: '状态',

@@ -1,3 +1,4 @@
+import type * as EffectTypes from 'effect';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
@@ -15,7 +16,7 @@ const Report = Schema.Struct({
   cgroup: Schema.NullOr(Schema.String), unit: Schema.NullOr(Schema.String), exitCode: Schema.NullOr(Schema.Number),
 });
 
-const resourceTest = (name: string, body: (root: string) => Effect.Effect<void, unknown, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | import('effect').Scope.Scope>) =>
+const resourceTest = (name: string, body: (root: string) => Effect.Effect<void, unknown, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | EffectTypes.Scope.Scope>) =>
   test(name, { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-gate-resources-' });

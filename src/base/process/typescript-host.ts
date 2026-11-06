@@ -1,6 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 // @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
+import type * as SyncTypes from 'typescript/sync';
+import type * as FsTypes from 'typescript/fs';
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -15,8 +17,8 @@ let activeAPI: API | undefined;
 let trustedLibraries: ReadonlyMap<string, string> | undefined;
 
 /** Load the native client namespace only when a compiler operation needs it. */
-export function nativeTypeScript(): typeof import('typescript/sync') {
-  return require('typescript/sync') as typeof import('typescript/sync');
+export function nativeTypeScript(): typeof SyncTypes {
+  return require('typescript/sync') as typeof SyncTypes;
 }
 
 /** Capture only library declarations from the matching installed platform package. */
@@ -45,7 +47,7 @@ function rooted(path: string, cwd: string): string { return resolve(cwd, path).r
 
 /** Total, captured filesystem. There is no operating-system fallback. */
 function capturedFileSystem(input: ReadonlyMap<string, string>, cwd: string): FileSystemCallbacks {
-  const { serverFS } = require('typescript/fs') as typeof import('typescript/fs');
+  const { serverFS } = require('typescript/fs') as typeof FsTypes;
   const files = new Map([...input].map(([path, source]) => [rooted(path, cwd), source]));
   const directories = new Map<string, { files: Set<string>; directories: Set<string> }>();
   const entry = (path: string) => {
@@ -136,7 +138,7 @@ export function withTypeScript<T>(run: (api: API) => T): T {
 /** Obtain real syntax diagnostics and an AST from a closed one-file input set. */
 export function withTypeScriptSource<T>(path: string, text: string, run: (source: SourceFile, diagnostics: readonly Diagnostic[]) => T): T {
   return withTypeScript(api => {
-    const { createFileSystem } = require('typescript/fs') as typeof import('typescript/fs');
+    const { createFileSystem } = require('typescript/fs') as typeof FsTypes;
     const file = rooted(path, '/');
     const snapshot = typescriptRequest(() => api.createSnapshot({
       fileSystem: createFileSystem([[file, text]]),

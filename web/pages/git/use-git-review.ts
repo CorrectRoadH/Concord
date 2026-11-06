@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { GitDiff, GitEntry } from '../../../src/model/index';
-import { urlChoice } from '../../hooks/use-url-navigation';
-import { useWorkspace } from '../../workspace';
-import { entriesFor, fileTree, firstArea, sortedFiles, validArea, type Category } from './model';
+import type { GitDiff, GitEntry } from '../../../src/model/index.ts';
+import { urlChoice } from '../../hooks/use-url-navigation.ts';
+import { useWorkspace } from '../../workspace.tsx';
+import { entriesFor, fileTree, firstArea, sortedFiles, validArea, type Category } from './model.ts';
 
 export function useGitReview() {
   const { api, git, gitIssue, snapshot, refresh, notify } = useWorkspace();

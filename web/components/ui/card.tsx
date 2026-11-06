@@ -1,6 +1,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { Surface } from '../content-layout'
+import { Surface } from '../content-layout.tsx'
 
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (

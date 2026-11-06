@@ -1,5 +1,5 @@
 import { workspaceSourceDigest } from './workspace-source.ts';
-import { Installation } from '../base/installation/index.ts';
+import type { Installation } from '../base/installation/index.ts';
 import type { Publication } from "../base/publication/index.ts";
 import { openReadRepository, openWriteRepository, Workspace } from "../base/workspace/index.ts";
 import { Sources } from '../base/sources/index.ts';
@@ -26,7 +26,8 @@ import { annotationSnippet } from "../domain/onboarding/index.ts";
 import { doctor } from "./onboarding.ts";
 import { projectInitializationRequired, uninitializedDoctor } from './project-onboarding.ts';
 import { ConcordError, decode, digest, failure } from "../model/index.ts";
-import { discoverRoot, git, LocalRepository } from "../base/workspace/index.ts";
+import type { LocalRepository } from "../base/workspace/index.ts";
+import { discoverRoot, git } from "../base/workspace/index.ts";
 import { initialize } from "./initialize.ts";
 import { listTemplates, templateBody } from "../domain/documents/index.ts";
 import { buildTrace } from "../domain/trace/index.ts";

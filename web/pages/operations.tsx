@@ -1,26 +1,26 @@
-import { PathContextMenu } from '../components/path-context-menu';
-import { copyText } from '../lib/clipboard';
+import { PathContextMenu } from '../components/path-context-menu.tsx';
+import { copyText } from '../lib/clipboard.ts';
 import { Activity, AlertTriangle, Braces, CheckCircle2, Clipboard, Code2, Database, Play, RefreshCw, Square, Stethoscope, Wrench } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
-import { documentHref } from '../lib/document-routing';
+import { documentHref } from '../lib/document-routing.ts';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import type { ViewAction } from '../../src/model/index';
-import type { WorkspaceDocument, WorkspaceProjectionSnapshot } from '../../src/model/index';
-import { ActionResult as ResultCard } from '../components/action-result';
-export { ImplementationPanel } from '../components/implementation-panel';
-import { Definition, Empty, Field, PageHeader } from '../components/page';
-import { PanelEmpty, PanelHeader, RecordList, RecordItem, RecordLink, RecordDetails } from '../components/content-layout';
-import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Input } from '../components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Textarea } from '../components/ui/textarea';
-const SourceDrawer = lazy(() => import('../components/source-drawer').then(module => ({ default: module.SourceDrawer })));
-import { dateTime, humanKind } from '../lib/utils';
-import { projectionIsConclusive, useWorkspace } from '../workspace';
-import { ScanNotice, scanFindings } from '../components/scan-notice';
+import type { ViewAction } from '../../src/model/index.ts';
+import type { WorkspaceDocument, WorkspaceProjectionSnapshot } from '../../src/model/index.ts';
+import { ActionResult as ResultCard } from '../components/action-result.tsx';
+export { ImplementationPanel } from '../components/implementation-panel.tsx';
+import { Definition, Empty, Field, PageHeader } from '../components/page.tsx';
+import { PanelEmpty, PanelHeader, RecordList, RecordItem, RecordLink, RecordDetails } from '../components/content-layout.tsx';
+import { Badge } from '../components/ui/badge.tsx';
+import { Button } from '../components/ui/button.tsx';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.tsx';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog.tsx';
+import { Input } from '../components/ui/input.tsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select.tsx';
+import { Textarea } from '../components/ui/textarea.tsx';
+const SourceDrawer = lazy(() => import('../components/source-drawer.tsx').then(module => ({ default: module.SourceDrawer })));
+import { dateTime, humanKind } from '../lib/utils.ts';
+import { projectionIsConclusive, useWorkspace } from '../workspace.tsx';
+import { ScanNotice, scanFindings } from '../components/scan-notice.tsx';
 
 function settle(task: Promise<unknown>): void { void task.catch(() => undefined); }
 
@@ -65,10 +65,10 @@ export function OverviewPage() {
 
 function Metric({ label, value, icon, href }: { label: string; value: number; icon: React.ReactNode; href: string }) { return <Link to={href} className="metric"><div>{icon}</div><strong>{value}</strong><span>{label}</span></Link>; }
 
-import { contractIdentities, relatedTests, testDeclarationSummary } from '../lib/workspace-display';
-export { contractIdentities } from '../lib/workspace-display';
+import { contractIdentities, relatedTests, testDeclarationSummary } from '../lib/workspace-display.ts';
+export { contractIdentities } from '../lib/workspace-display.ts';
 
-import { useSourceNavigation } from '../hooks/use-url-navigation';
+import { useSourceNavigation } from '../hooks/use-url-navigation.ts';
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程

@@ -2,10 +2,11 @@
 // @concord-implements docs/feature/web-workbench/architecture.md
 import '@fontsource-variable/noto-sans-sc/wght.css';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { GitStatus, ViewAction, ViewJob, WorkspaceProjection, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../src/model/index';
-import { ApiError, ConcordApi } from './lib/api';
+import type { GitStatus, ViewAction, ViewJob, WorkspaceProjection, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../src/model/index.ts';
+import type { ConcordApi } from './lib/api.ts';
+import { ApiError } from './lib/api.ts';
 import { Schema } from 'effect';
-import { WorkspaceServerEvent } from '../src/model/index';
+import { WorkspaceServerEvent } from '../src/model/index.ts';
 
 interface Notice { readonly id: number; readonly tone: 'success' | 'error' | 'info'; readonly text: string }
 export interface WorkspaceIssue { readonly code: string; readonly message: string; readonly hint?: string; readonly reason?: string }
@@ -266,4 +267,4 @@ export function useWorkspace(): WorkspaceValue {
   return value;
 }
 
-export { projectionIsConclusive } from './lib/workspace-display';
+export { projectionIsConclusive } from './lib/workspace-display.ts';

@@ -3,14 +3,14 @@
 import { GitBranch } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { MarkdownEditor } from '../components/markdown-editor';
-import { Button } from '../components/ui/button';
-import { useUrlNavigation } from '../hooks/use-url-navigation';
-import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs';
-import { documentHref, relativeMarkdownTarget } from './documents';
-import { Empty, PageHeader } from '../components/page';
-import { projectionIsConclusive, useWorkspace } from '../workspace';
-import type { ViewFile } from '../../src/model/index';
+import { MarkdownEditor } from '../components/markdown-editor.tsx';
+import { Button } from '../components/ui/button.tsx';
+import { useUrlNavigation } from '../hooks/use-url-navigation.ts';
+import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs.ts';
+import { documentHref, relativeMarkdownTarget } from './documents.tsx';
+import { Empty, PageHeader } from '../components/page.tsx';
+import { projectionIsConclusive, useWorkspace } from '../workspace.tsx';
+import type { ViewFile } from '../../src/model/index.ts';
 
 export function ProjectDocsPage() {
   const { snapshot, api, projection } = useWorkspace();

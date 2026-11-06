@@ -11,7 +11,7 @@ import { renderDocument } from "../../model/index.ts";
 import { fetchFeedback, type FeedbackTransport } from "./feedback-providers.ts";
 import { checkGhConnection, fetchGhFeedback } from "./feedback-gh.ts";
 import { ConcordError, ProjectSchema, canonical, decode, digest, failure, type DocumentMeta, type DocumentRecord, type MutationReceipt } from "../../model/index.ts";
-import { LocalRepository } from "../../base/workspace/index.ts";
+import type { LocalRepository } from "../../base/workspace/index.ts";
 import { renderTypeScriptConfig } from "../../base/workspace/index.ts";
 import { FeedbackFilterSchema, matchesFeedback, type FeedbackFilter } from "../../model/index.ts";
 

@@ -1,3 +1,4 @@
+import type * as EffectTypes from 'effect';
 import { createDocument, addPage, templateBody } from '../support/operations.ts';
 import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
@@ -28,7 +29,7 @@ function fixture(): string {
   write(root, 'docs/design/storage.md', '# Storage\n\nCompare files and sqlite.\n');
   return root;
 }
-const run = <A, E>(effect: Effect.Effect<A, E, import('effect').FileSystem.FileSystem>): Promise<A> => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+const run = <A, E>(effect: Effect.Effect<A, E, EffectTypes.FileSystem.FileSystem>): Promise<A> => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
 test('advanced writing emits plain Spec pages and reads a single Design page', async () => {

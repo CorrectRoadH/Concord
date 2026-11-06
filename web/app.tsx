@@ -3,43 +3,43 @@ import {
   GitBranch, Home, Layers3, Map, Menu, MessageSquareText, PanelTop, Search, Settings, Shapes, SpellCheck, X,
 } from 'lucide-react';
 import * as stylex from '@stylexjs/stylex';
-import { documentHref } from './lib/document-routing';
-import { WorkspaceHealthNotice } from './components/workspace-health-notice';
-import { ProjectionStatus } from './components/projection-status';
+import { documentHref } from './lib/document-routing.ts';
+import { WorkspaceHealthNotice } from './components/workspace-health-notice.tsx';
+import { ProjectionStatus } from './components/projection-status.tsx';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useNavigationScroll } from './hooks/use-navigation-scroll';
+import { useNavigationScroll } from './hooks/use-navigation-scroll.ts';
 import { Link, Navigate, Route, Routes, useBlocker, useLocation, useNavigate } from 'react-router-dom';
-import { CloseMobileOnNavigate, DocumentNavigation } from './components/document-navigation';
-import type { WorkspaceProjection } from '../src/model/index';
-import { WritingGuideSchema, type WritingGuide } from '../src/model/index';
+import { CloseMobileOnNavigate, DocumentNavigation } from './components/document-navigation.tsx';
+import type { WorkspaceProjection } from '../src/model/index.ts';
+import { WritingGuideSchema, type WritingGuide } from '../src/model/index.ts';
 import { Schema } from 'effect';
-const DocumentsListPage = lazy(() => import('./pages/documents').then(module => ({ default: module.DocumentsListPage })));
-const FeatureDetailPage = lazy(() => import('./pages/documents').then(module => ({ default: module.FeatureDetailPage })));
-const DocumentDetailPage = lazy(() => import('./pages/documents').then(module => ({ default: module.DocumentDetailPage })));
-const UseCaseDrawer = lazy(() => import('./pages/documents').then(module => ({ default: module.UseCaseDrawer })));
-const ProjectDocsPage = lazy(() => import('./pages/project-docs').then(module => ({ default: module.ProjectDocsPage })));
-const OverviewPage = lazy(() => import('./pages/operations').then(module => ({ default: module.OverviewPage })));
-const ToolsPage = lazy(() => import('./pages/operations').then(module => ({ default: module.ToolsPage })));
-const SettingsPage = lazy(() => import('./pages/settings').then(module => ({ default: module.SettingsPage })));
-const GitPage = lazy(() => import('./pages/git').then(module => ({ default: module.GitPage })));
-const FeedbackDetailPage = lazy(() => import('./pages/feedback').then(module => ({ default: module.FeedbackDetailPage })));
-const FeedbackNavigation = lazy(() => import('./pages/feedback').then(module => ({ default: module.FeedbackNavigation })));
-const FeedbackPage = lazy(() => import('./pages/feedback').then(module => ({ default: module.FeedbackPage })));
-const WritingPage = lazy(() => import('./pages/writing').then(module => ({ default: module.WritingPage })));
-import { ApiError, ConcordApi } from './lib/api';
-import { projectDocHref, projectDocPages, projectDocTitle } from './lib/project-docs';
-import { humanKind } from './lib/utils';
-import { projectionIsConclusive, WorkspaceProvider, useWorkspace } from './workspace';
-import { ThemeToggle } from './theme';
-import { Badge } from './components/ui/badge';
-import { Button } from './components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog';
-import { Input } from './components/ui/input';
+const DocumentsListPage = lazy(() => import('./pages/documents.tsx').then(module => ({ default: module.DocumentsListPage })));
+const FeatureDetailPage = lazy(() => import('./pages/documents.tsx').then(module => ({ default: module.FeatureDetailPage })));
+const DocumentDetailPage = lazy(() => import('./pages/documents.tsx').then(module => ({ default: module.DocumentDetailPage })));
+const UseCaseDrawer = lazy(() => import('./pages/documents.tsx').then(module => ({ default: module.UseCaseDrawer })));
+const ProjectDocsPage = lazy(() => import('./pages/project-docs.tsx').then(module => ({ default: module.ProjectDocsPage })));
+const OverviewPage = lazy(() => import('./pages/operations.tsx').then(module => ({ default: module.OverviewPage })));
+const ToolsPage = lazy(() => import('./pages/operations.tsx').then(module => ({ default: module.ToolsPage })));
+const SettingsPage = lazy(() => import('./pages/settings.tsx').then(module => ({ default: module.SettingsPage })));
+const GitPage = lazy(() => import('./pages/git.tsx').then(module => ({ default: module.GitPage })));
+const FeedbackDetailPage = lazy(() => import('./pages/feedback.tsx').then(module => ({ default: module.FeedbackDetailPage })));
+const FeedbackNavigation = lazy(() => import('./pages/feedback.tsx').then(module => ({ default: module.FeedbackNavigation })));
+const FeedbackPage = lazy(() => import('./pages/feedback.tsx').then(module => ({ default: module.FeedbackPage })));
+const WritingPage = lazy(() => import('./pages/writing.tsx').then(module => ({ default: module.WritingPage })));
+import { ApiError, ConcordApi } from './lib/api.ts';
+import { projectDocHref, projectDocPages, projectDocTitle } from './lib/project-docs.ts';
+import { humanKind } from './lib/utils.ts';
+import { projectionIsConclusive, WorkspaceProvider, useWorkspace } from './workspace.tsx';
+import { ThemeToggle } from './theme.tsx';
+import { Badge } from './components/ui/badge.tsx';
+import { Button } from './components/ui/button.tsx';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog.tsx';
+import { Input } from './components/ui/input.tsx';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader,
   SidebarInset, SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem,
   SidebarProvider, SidebarRail, SidebarTrigger,
-} from './components/ui/sidebar';
+} from './components/ui/sidebar.tsx';
 
 const nav = [
   { href: '/git', label: 'Git 变更', icon: GitBranch },

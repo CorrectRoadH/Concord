@@ -1,3 +1,5 @@
+import type * as WorkspaceTypes from '../../src/base/workspace/index.ts';
+import type * as CacheTypes from '../../src/base/cache/index.ts';
 import assert from 'node:assert/strict';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -116,7 +118,7 @@ test('entry layers build the declared reader and operation capabilities', async 
 test('PersistentCache reuses nested source ownership and releases the native handle at the outer boundary', async () => {
   const root = createConsumer();
   const live = Layer.mergeAll(Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provide(NodeServices.layer));
-  let captured: import('../../src/base/workspace/index.ts').LocalRepository | undefined;
+  let captured: WorkspaceTypes.LocalRepository | undefined;
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const workspace = yield* Workspace, sources = yield* Sources;
@@ -161,7 +163,7 @@ test('memory Cache owns its handle and read-only snapshots retain detached immut
   const rows = [{ key: 'a', payload: 'before' }];
   const live = Layer.merge(Cache.layer, CacheSnapshot.layer({ document_parse: rows }));
   rows[0]!.payload = 'after';
-  let closed: import('../../src/base/cache/index.ts').HawdbDatabase | undefined;
+  let closed: CacheTypes.HawdbDatabase | undefined;
   await Effect.runPromise(Effect.gen(function*() {
     const cache = yield* Cache;
     const snapshot = yield* CacheSnapshot;

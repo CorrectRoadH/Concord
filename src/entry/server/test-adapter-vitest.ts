@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 // Runs only as an owned child process. Project modules never enter Concord's process.
+import type * as NodeTypes from 'vitest/node';
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -11,7 +12,7 @@ const Arguments = Schema.Tuple([Schema.String, Schema.String, Schema.String]);
 const program = Effect.gen(function* () {
   const [root, file, report] = yield* Effect.try(() => Schema.decodeUnknownSync(Arguments)(process.argv.slice(2)));
   const modulePath = yield* Effect.try(() => createRequire(join(root, 'package.json')).resolve('vitest/node'));
-  const api = yield* Effect.tryPromise(() => import(pathToFileURL(modulePath).href) as Promise<typeof import('vitest/node')>);
+  const api = yield* Effect.tryPromise(() => import(pathToFileURL(modulePath).href) as Promise<typeof NodeTypes>);
   const ctx = yield* Effect.acquireRelease(
     Effect.tryPromise(() => api.createVitest('test', { root, watch: false, cache: false, reporters: [], includeTaskLocation: true })),
     ctx => Effect.promise(() => ctx.close()),

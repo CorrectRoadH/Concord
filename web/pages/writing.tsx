@@ -1,24 +1,25 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/manage-writing.md
+import type * as StateTypes from '@codemirror/state';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Folder, Trash2 } from 'lucide-react';
 import { createPortal, flushSync } from 'react-dom';
 import { useLocation } from 'react-router-dom';
-import { defaultWritingPolicy } from '../../src/model/index';
-import type { ViewAction } from '../../src/model/index';
+import { defaultWritingPolicy } from '../../src/model/index.ts';
+import type { ViewAction } from '../../src/model/index.ts';
 import { Schema } from 'effect';
-import { renderWritingPolicy, parseWritingPolicy } from '../../src/model/index';
-import type { BannedTerm, WritingPolicy } from '../../src/model/index';
-import { EMPTY_CONCEPT_CATALOG, parseConceptCatalog, type ConceptCatalog, type ConceptDefinition } from '../../src/model/index';
+import { renderWritingPolicy, parseWritingPolicy } from '../../src/model/index.ts';
+import type { BannedTerm, WritingPolicy } from '../../src/model/index.ts';
+import { EMPTY_CONCEPT_CATALOG, parseConceptCatalog, type ConceptCatalog, type ConceptDefinition } from '../../src/model/index.ts';
 import { fromMarkdown } from 'mdast-util-from-markdown';
-import { SourceEditor } from '../components/source-editor';
-import type { WritingReport } from '../../src/model/index';
-import { useWorkspace } from '../workspace';
-import { ContentSidebar } from '../components/content-sidebar';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Textarea } from '../components/ui/textarea';
-import { ContentSection, PanelHeader, PanelEmpty, RecordList, RecordItem, RecordDetails, Surface } from '../components/content-layout';
+import { SourceEditor } from '../components/source-editor.tsx';
+import type { WritingReport } from '../../src/model/index.ts';
+import { useWorkspace } from '../workspace.tsx';
+import { ContentSidebar } from '../components/content-sidebar.tsx';
+import { Button } from '../components/ui/button.tsx';
+import { Input } from '../components/ui/input.tsx';
+import { Textarea } from '../components/ui/textarea.tsx';
+import { ContentSection, PanelHeader, PanelEmpty, RecordList, RecordItem, RecordDetails, Surface } from '../components/content-layout.tsx';
 
 type Concept = ConceptDefinition;
 type Catalog = ConceptCatalog;
@@ -31,7 +32,7 @@ const policyPath = (scope: string) => `${scope}/writing.md`;
 const catalogPath = (scope: string) => `${scope}/concepts.md`;
 const emptyPolicy = (): WritingPolicy => ({ bannedTerms: [] });
 const emptyCatalog = () => EMPTY_CONCEPT_CATALOG;
-const sourceExtensions: readonly import('@codemirror/state').Extension[] = [];
+const sourceExtensions: readonly StateTypes.Extension[] = [];
 const lines = (text: string) => text.split(/\r?\n/u).map(value => value.trim()).filter(Boolean);
 const listed = (values?: readonly string[]) => (values ?? []).join('\n');
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);

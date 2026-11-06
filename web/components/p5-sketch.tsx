@@ -5,10 +5,10 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Effect, Schema } from 'effect';
 import { CodeMirrorEditor, useCodeBlockEditorContext, type CodeBlockEditorProps } from '@mdxeditor/editor';
 import { P5BundleSchema, P5EventSchema, parseP5Options, type P5Bundle } from "../../src/model/p5/index.ts";
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { useTheme } from '../theme';
-import { WorkbenchThemeSchema, themeVariables } from '../p5/theme';
+import { Button } from './ui/button.tsx';
+import { Input } from './ui/input.tsx';
+import { useTheme } from '../theme.tsx';
+import { WorkbenchThemeSchema, themeVariables } from '../p5/theme.ts';
 
 export const P5DocumentContext = createContext<string | undefined>(undefined);
 const ResponseSchema = Schema.Union([

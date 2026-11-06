@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#状态
+import type * as EffectTypes from 'effect';
 import { Clock, Context, Effect, Layer, Schedule, Stream, SubscriptionRef } from 'effect';
 import { ConcordError } from '../../model/index.ts';
 import type { WorkspaceProjection } from '../../model/index.ts';
@@ -54,7 +55,7 @@ export const compensationRefresh = Schedule.spaced('30 seconds');
 export { waitForServerHandshake } from './client.ts';
 
 /** State changes always flow; each subscription retains its own last result identity. */
-export function workspaceEvents(events: import('effect').Stream.Stream<WorkspaceEvent>): Stream.Stream<WorkspaceEvent> {
+export function workspaceEvents(events: EffectTypes.Stream.Stream<WorkspaceEvent>): Stream.Stream<WorkspaceEvent> {
   return Stream.suspend(() => {
     let previous: string | undefined;
     return events.pipe(Stream.map(event => {

@@ -1,3 +1,4 @@
+import type * as CacheTypes from '../../src/base/cache/index.ts';
 import { PersistentCache } from '../../src/base/cache/index.ts';
 import { Effect } from 'effect';
 import { Installation } from '../../src/base/installation/index.ts';
@@ -12,7 +13,7 @@ export const addPage = (...args: Parameters<typeof documents.addPage>) => run(do
 export const templateBody = (...args: Parameters<typeof documents.templateBody>) => run(documents.templateBody(...args));
 export const listTemplates = () => run(documents.listTemplates());
 
-const runCache = <A, E>(operation: Effect.Effect<A, E, import('../../src/base/cache/index.ts').PersistentCache>): A => Effect.runSync(operation.pipe(Effect.provide(PersistentCache.layer)));
+const runCache = <A, E>(operation: Effect.Effect<A, E, CacheTypes.PersistentCache>): A => Effect.runSync(operation.pipe(Effect.provide(PersistentCache.layer)));
 export const readQuery = (...args: Parameters<typeof application.readQuery>) => runCache(application.readQuery(...args));
 export const storeQuery = (...args: Parameters<typeof application.storeQuery>) => runCache(application.storeQuery(...args));
 export const readWorkspaceProjection = (...args: Parameters<typeof application.readWorkspaceProjection>) => runCache(application.readWorkspaceProjection(...args));

@@ -1,5 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
+import type * as RpcClientTypes from 'effect/unstable/rpc/RpcClient';
+import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
 import { Effect, Schema, Stream } from 'effect';
 import * as Rpc from 'effect/unstable/rpc/Rpc';
 import * as RpcGroup from 'effect/unstable/rpc/RpcGroup';
@@ -43,7 +45,7 @@ export const WorkspaceRpcs = RpcGroup.make(
   rpc('cache-derived', strict(Schema.Struct({ ...Identity, action: Schema.Literals(['begin', 'append', 'commit']), session: Schema.String, data: Schema.optional(Schema.Uint8Array) }))),
   rpc('feedback-merge', strict(Schema.Struct({ ...Identity, action: Schema.Literals(['begin', 'append', 'commit']), session: Schema.String, connectionId: Schema.optional(Schema.String), items: Schema.optional(Schema.Json) }))),
 );
-export type WorkspaceClient = import('effect/unstable/rpc/RpcClient').RpcClient<RpcGroup.Rpcs<typeof WorkspaceRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>;
+export type WorkspaceClient = RpcClientTypes.RpcClient<RpcGroup.Rpcs<typeof WorkspaceRpcs>, RpcClientError>;
 
 export const collectBytes = <E, R>(stream: Stream.Stream<typeof Packet.Type, E, R>, limit = RESULT_LIMIT) => Effect.gen(function*() {
   const chunks: Uint8Array[] = [];

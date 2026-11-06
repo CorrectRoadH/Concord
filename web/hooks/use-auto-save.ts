@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { useWorkspace } from '../workspace';
+import { useWorkspace } from '../workspace.tsx';
 
 /** Serializes saves and flushes the latest revision before navigation. */
 export function useAutoSave({ dirty, revision, save, discard, enabled = true }: {

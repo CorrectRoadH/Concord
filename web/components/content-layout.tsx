@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { cn } from '../lib/utils';
+import { cn } from '../lib/utils.ts';
 
 export function PanelHeader({ title, actions }: { title: string; actions?: ReactNode }) {
   return <header className="panel-header"><h2>{title}</h2>{actions && <div className="button-row">{actions}</div>}</header>;

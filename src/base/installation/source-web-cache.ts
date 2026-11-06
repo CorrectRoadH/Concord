@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/engineering/build/architecture.md#从源码运行
+import type * as EffectTypes from 'effect';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { Clock, Effect, FileSystem, Schema } from 'effect';
@@ -128,5 +129,5 @@ export const sourceWebArtifact = Effect.fn('sourceWebArtifact')(function*() {
 }, Effect.mapError(webFailure('build')));
 
 /** Promise adapters retain the existing consumer API while all resources remain scoped. */
-export const runSourceWeb = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | import('effect').Scope.Scope>): Promise<A> =>
+export const runSourceWeb = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | EffectTypes.Scope.Scope>): Promise<A> =>
   Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));

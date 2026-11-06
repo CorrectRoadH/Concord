@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
-import { Effect, Scope } from 'effect';
+import type { Scope } from 'effect';
+import { Effect } from 'effect';
 import { RpcServer } from 'effect/unstable/rpc';
 import { Socket, SocketServer } from 'effect/unstable/socket';
 import { makeRequestAdmission, type RequestAdmission } from './request-admission.ts';

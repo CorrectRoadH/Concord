@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
+import type * as ClientTypes from './client.ts';
 import { NodeSocket } from '@effect/platform-node';
 import { Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
 import * as RpcClient from 'effect/unstable/rpc/RpcClient';
@@ -44,7 +45,7 @@ export const subscribeWorkspace = (connection: WorkspaceConnection) => Stream.ca
   })).pipe(Effect.catch(cause => Queue.fail(queue, cause)), Effect.andThen(Queue.end(queue))));
 }));
 
-export const submitFeedback = Effect.fn('submitFeedback')(function*(connection: import('./client.ts').WorkspaceConnection, connectionId: string, items: readonly RemoteFeedback[]) {
+export const submitFeedback = Effect.fn('submitFeedback')(function*(connection: ClientTypes.WorkspaceConnection, connectionId: string, items: readonly RemoteFeedback[]) {
   const session = crypto.randomUUID();
   yield* requestWorkspace(connection, 'feedback-merge', { action: 'begin', session, connectionId });
   let batch: RemoteFeedback[] = [], bytes = 2;

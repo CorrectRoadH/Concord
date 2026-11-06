@@ -5,7 +5,8 @@ import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import type { TerminalDeliverySink } from "./delivery.ts";
 
-import { ConcordError, type IssueError } from "../../model/index.ts";
+import type { ConcordError} from "../../model/index.ts";
+import { type IssueError } from "../../model/index.ts";
 
 export function makeIssueRemoteSubcommands<R>(deliver: TerminalDeliverySink, run: IssueCommandRunner<R>, sharedJson?: boolean): readonly Command.Command<any, never, unknown, never, R>[];
 export function makeIssueRemoteSubcommands<R = never>(deliver: TerminalDeliverySink, run?: IssueCommandRunner<R>, sharedJson?: boolean): readonly Command.Command<any, never, unknown, never, IssueCommandRequirements | R>[];

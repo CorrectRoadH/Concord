@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { NodeServices } from '@effect/platform-node';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { Effect, FileSystem, Schema, Scope, Stream } from 'effect';
+import type { Scope} from 'effect';
+import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';

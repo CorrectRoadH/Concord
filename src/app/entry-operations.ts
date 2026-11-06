@@ -1,4 +1,6 @@
 // Application operations used by transport adapters. Domain policy remains in its owner.
+import type * as ModelTypes from '../model/index.ts';
+import type * as WorkspaceTypes from '../base/workspace/index.ts';
 import * as Module0 from "../base/workspace/index.ts";
 import * as Module1 from "../domain/tests/index.ts";
 import * as Module2 from "../domain/code/index.ts";
@@ -59,13 +61,13 @@ export const sourceInstallation = Module14.sourceInstallation;
 export const sourceWebServer: typeof Module14.sourceWebServer = (...args) => Module14.sourceWebServer(...args);
 export const sourceP5Runtime: typeof Module14.sourceP5Runtime = (...args) => Module14.sourceP5Runtime(...args);
 export const readRepositoryFileSync: typeof Module0.readRepositoryFileSync = (...args) => Module0.readRepositoryFileSync(...args);
-export function uriPath(repo: import('../model/index.ts').Repository, uri: string): string;
-export function uriPath(repo: import('../model/index.ts').Repository, uri: string, allowExternal: true): string | undefined;
-export function uriPath(repo: import('../model/index.ts').Repository, uri: string, allowExternal = false): string | undefined {
+export function uriPath(repo: ModelTypes.Repository, uri: string): string;
+export function uriPath(repo: ModelTypes.Repository, uri: string, allowExternal: true): string | undefined;
+export function uriPath(repo: ModelTypes.Repository, uri: string, allowExternal = false): string | undefined {
   return allowExternal ? Module15.uriPath(repo, uri, true) : Module15.uriPath(repo, uri);
 }
 export const makeOwnedProcessService: typeof Module15.makeOwnedProcessService = (...args) => Module15.makeOwnedProcessService(...args);
 
-export function createReadRepository(root: string | undefined, options: import('../base/workspace/index.ts').ReadRepositoryOptions) {
+export function createReadRepository(root: string | undefined, options: WorkspaceTypes.ReadRepositoryOptions) {
   return new Module0.LocalRepository(root, options);
 }

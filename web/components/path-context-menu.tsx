@@ -1,7 +1,7 @@
 import { ContextMenu } from 'radix-ui';
 import type { ReactElement } from 'react';
-import { useWorkspace } from '../workspace';
-import { copyText } from '../lib/clipboard';
+import { useWorkspace } from '../workspace.tsx';
+import { copyText } from '../lib/clipboard.ts';
 
 /** Paths come from the server inventory, never from the browser's current URL. */
 export function PathContextMenu({ path, children }: { path: string; children: ReactElement }) {

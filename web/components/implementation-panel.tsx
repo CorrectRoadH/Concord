@@ -1,21 +1,21 @@
-import { implementationGroups } from '../lib/workspace-display';
-import { PathContextMenu } from './path-context-menu';
+import { implementationGroups } from '../lib/workspace-display.ts';
+import { PathContextMenu } from './path-context-menu.tsx';
 import { Clipboard, FileCode2 } from 'lucide-react';
 import { Suspense, lazy, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { WorkspaceDocument } from '../../src/model/index';
-import { projectionIsConclusive, useWorkspace } from '../workspace';
-import { useSourceNavigation } from '../hooks/use-url-navigation';
-import { ActionResult as ResultCard } from './action-result';
-import { Field } from './page';
-import { ContentSection, PanelEmpty, PanelHeader, RecordItem, RecordList } from './content-layout';
-import { ScanNotice } from './scan-notice';
-const SourceDrawer = lazy(() => import('./source-drawer').then(module => ({ default: module.SourceDrawer })));
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Textarea } from './ui/textarea';
+import type { WorkspaceDocument } from '../../src/model/index.ts';
+import { projectionIsConclusive, useWorkspace } from '../workspace.tsx';
+import { useSourceNavigation } from '../hooks/use-url-navigation.ts';
+import { ActionResult as ResultCard } from './action-result.tsx';
+import { Field } from './page.tsx';
+import { ContentSection, PanelEmpty, PanelHeader, RecordItem, RecordList } from './content-layout.tsx';
+import { ScanNotice } from './scan-notice.tsx';
+const SourceDrawer = lazy(() => import('./source-drawer.tsx').then(module => ({ default: module.SourceDrawer })));
+import { Badge } from './ui/badge.tsx';
+import { Button } from './ui/button.tsx';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog.tsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select.tsx';
+import { Textarea } from './ui/textarea.tsx';
 
 function settle(task: Promise<unknown>): void { void task.catch(() => undefined); }
 

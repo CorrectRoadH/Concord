@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
+import type * as HawdbNativeTypes from './hawdb-native.ts';
 import { Schema } from "effect";
 import { repositoryCache } from "./cache-store.ts";
 import { RemoteFeedbackSchema, feedbackIdentity, type RemoteFeedback } from "../../model/index.ts";
@@ -41,7 +42,7 @@ export function mergeFeedbackCache(repo: Repository, connectionId: string, remot
   });
 }
 /** The handle owner validates and writes the entire accepted batch atomically. */
-export function mergeFeedbackRows(database: Pick<import('./hawdb-native.ts').HawdbDatabase, 'get' | 'put'>, connectionId: string, remoteItems: readonly RemoteFeedback[]): readonly string[] {
+export function mergeFeedbackRows(database: Pick<HawdbNativeTypes.HawdbDatabase, 'get' | 'put'>, connectionId: string, remoteItems: readonly RemoteFeedback[]): readonly string[] {
     const incoming = remoteItems.map(remote => decode(RemoteFeedbackSchema, remote, 'feedback fetch'));
     const keys = [...new Set(incoming.map(feedbackIdentity))];
     if (keys.length > 1000) throw new ConcordError('HawdbLimit', 'A feedback fetch exceeds the atomic 1000-identity cache batch limit');

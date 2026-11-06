@@ -1,9 +1,9 @@
 import { fromMarkdown } from 'mdast-util-from-markdown'
-import { PathContextMenu } from '../components/path-context-menu'
-import { DOCUMENT_NAME_PATTERN } from '../../src/model/index'
-import { matchingOwners } from '../../src/model/index'
-import { documentHref } from '../lib/document-routing'
-export { documentHref } from '../lib/document-routing'
+import { PathContextMenu } from '../components/path-context-menu.tsx'
+import { DOCUMENT_NAME_PATTERN } from '../../src/model/index.ts'
+import { matchingOwners } from '../../src/model/index.ts'
+import { documentHref } from '../lib/document-routing.ts'
+export { documentHref } from '../lib/document-routing.ts'
 import {
   ArrowLeft,
   ChevronRight,
@@ -22,10 +22,10 @@ import * as React from "react"
 import { createPortal } from "react-dom"
 import { Link, Navigate, Outlet, useNavigate, useParams } from "react-router-dom"
 
-import type { DocumentKind, DocumentRecord } from '../../src/model/index'
-import type { ViewAction, ViewFile } from '../../src/model/index'
-import type { WorkspaceDocument, WorkspacePage } from '../../src/model/index'
-import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from '../../src/model/index'
+import type { DocumentKind, DocumentRecord } from '../../src/model/index.ts'
+import type { ViewAction, ViewFile } from '../../src/model/index.ts'
+import type { WorkspaceDocument, WorkspacePage } from '../../src/model/index.ts'
+import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from '../../src/model/index.ts'
 import { MarkdownEditor } from "@/components/markdown-editor"
 import { Definition, Empty, Field, PageHeader } from "@/components/page"
 import { Badge } from "@/components/ui/badge"
@@ -65,7 +65,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { humanKind } from "@/lib/utils"
 import { projectionIsConclusive, useWorkspace } from "@/workspace"
 
-import { contractIdentities, ImplementationPanel, TestingPanel } from './operations'
+import { contractIdentities, ImplementationPanel, TestingPanel } from './operations.tsx'
 
 const descriptions: Record<string, string> = {
   feature: "当前交付目标；Use Case 只在所属 Feature 内维护。",
@@ -207,7 +207,7 @@ export function relativeMarkdownTarget(currentPath: string, href: string): { pat
   }
 }
 
-import { featureMatches, featureUseCases } from '../lib/workspace-display'
+import { featureMatches, featureUseCases } from '../lib/workspace-display.ts'
 
 function fire(task: Promise<unknown>): void {
   void task.catch(() => undefined)

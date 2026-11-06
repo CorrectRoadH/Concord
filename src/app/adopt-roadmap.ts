@@ -1,3 +1,5 @@
+import type * as ModelTypes from '../model/index.ts';
+import type * as MdastTypes from 'mdast';
 import { posix } from "node:path";
 import { fromMarkdown } from "../model/index.ts";
 import { renderDocument } from "../model/index.ts";
@@ -23,7 +25,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId?: str
   if (repo.files(featureDirectory).length > 0 || (repo.exists?.(featureDirectory) ?? false)) throw new ConcordError('DocumentExists', `${featureDirectory} already exists`);
   const sourcePaths = repo.files(roadmapDirectory).sort();
   const observed = new Map<string, string>();
-  const changes: import("../model/index.ts").Change[] = [];
+  const changes: ModelTypes.Change[] = [];
   for (const sourcePath of sourcePaths) {
     if (!sourcePath.endsWith('.md')) throw new ConcordError('UnsupportedAttachment', `Roadmap adoption only moves Markdown pages: ${sourcePath}`);
     const source = repo.read(sourcePath);
@@ -50,7 +52,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId?: str
     }
     // Only documents with an inbound Markdown link need the bounded link transform.
     const links: { url: string }[] = [];
-    const visit = (node: import('mdast').Nodes): void => {
+    const visit = (node: MdastTypes.Nodes): void => {
       if (node.type === 'link' || node.type === 'image' || node.type === 'definition') links.push({ url: node.url });
       if ('children' in node) node.children.forEach(visit);
     };

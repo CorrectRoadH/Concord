@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { Effect, Result } from "effect";
 import { acquireFileLease, CoordinationError, recoverFileLease, releaseFileLease } from "../base/publication/index.ts";
-import { Query, queryContext, queryRequestSatisfied, readQuery, type QueryUpdate } from "./query-cache.ts";
+import type { Query} from "./query-cache.ts";
+import { queryContext, queryRequestSatisfied, readQuery, type QueryUpdate } from "./query-cache.ts";
 import { makeOwnedProcessService, hasConfirmedOwnedGroupCleanup, type OwnedProcessResult } from "../base/process/index.ts";
 import { decodeQueryScanMessage, type QueryScanMessage } from "../model/index.ts";
 import { failure } from "../model/index.ts";
