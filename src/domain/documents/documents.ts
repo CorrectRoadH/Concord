@@ -82,7 +82,7 @@ export function memory(record: DocumentRecord): MemoryMeta {
 export function loadDocuments(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
   return inRepositorySnapshot(repo, () => loadDocumentsUnderSnapshot(repo, kinds));
 }
-function documentInputs(repo: Repository, kinds?: readonly DocumentKind[], findings?: Finding[]): { path: string; source: string }[] {
+function documentInputs(repo: Repository, kinds?: readonly DocumentKind[]): { path: string; source: string }[] {
   const paths = new Set<string>();
   const roots = kinds === undefined ? documentRoots(repo) : [...new Set(kinds.flatMap(kind => kind === 'memory'
     ? ['memory']
@@ -120,17 +120,17 @@ export interface DocumentInventory {
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
 // @concord-implements docs/feature/document-packages/use-case/discover-managed-documents.md
-export function diagnoseDocuments(repo: Repository): DocumentInventory {
+export function diagnoseDocuments(repo: Repository, kinds?: readonly DocumentKind[]): DocumentInventory {
   return inRepositorySnapshot(repo, () => {
     const documents: DocumentRecord[] = [], findings: Finding[] = [];
-    const inputs = documentInputs(repo, undefined, findings);
+    const inputs = documentInputs(repo, kinds);
     const results = inspectDocumentRecords(inputs, true);
     for (const [index, input] of inputs.entries()) {
       try {
         const result = results[index]!;
         if (!result.ok) throw result.cause;
         const record = result.value;
-        if (currentDocument(repo, record)) documents.push(record);
+        if (currentDocument(repo, record) && (kinds === undefined || kinds.includes(record.metadata.kind))) documents.push(record);
       } catch (cause) {
         if (!(cause instanceof ConcordError) || !['InvalidData', 'InvalidPlacement'].includes(cause.code)) throw cause;
         findings.push({ code: cause.code, path: input.path, message: cause.message });

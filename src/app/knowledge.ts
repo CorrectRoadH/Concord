@@ -1,6 +1,6 @@
 import type * as WorkspaceTypes from '../base/workspace/index.ts';
 import { closeIssue } from '../domain/issues/index.ts';
-import { findDocument, loadDocuments, readDocumentSelector, setAuthor } from "../domain/documents/index.ts";
+import { diagnoseDocuments, findDocument, loadDocuments, readDocumentSelector, setAuthor } from "../domain/documents/index.ts";
 import { buildTrace, requireValidTrace } from "../domain/trace/index.ts";
 import { ConcordError, digest, inRepositorySnapshot, type DocumentKind, type DocumentRecord, type MutationReceipt, type Repository } from "../model/index.ts";
 
@@ -27,7 +27,10 @@ function summary(record: DocumentRecord) {
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 // @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
 export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
-  return inRepositorySnapshot(repo, () => ({ operation: `${kind}-index`, documents: ownerRecords(repo, kind).map(summary) }));
+  return inRepositorySnapshot(repo, () => {
+    const inventory = diagnoseDocuments(repo, [kind]);
+    return { operation: `${kind}-index`, documents: [...inventory.documents].sort((left, right) => left.path.localeCompare(right.path)).map(summary), complete: inventory.complete, findings: inventory.findings };
+  });
 }
 
 

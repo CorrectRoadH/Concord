@@ -9,7 +9,7 @@ import { Workspace } from '../base/workspace/index.ts';
 import { Sources } from '../base/sources/index.ts';
 import { waitForPublication } from '../base/publication/index.ts';
 import { buildTrace, requireValidTrace, selectCase } from '../domain/trace/index.ts';
-import { loadDocuments, readDocumentReference, findDocument } from '../domain/documents/index.ts';
+import { diagnoseDocuments, loadDocuments, readDocumentReference, findDocument } from '../domain/documents/index.ts';
 import { tasteShow } from '../domain/taste/index.ts';
 import { showWriting, checkWriting, writingIndex } from '../domain/writing/index.ts';
 import { showConcepts, indexConcepts } from '../domain/concepts/index.ts';
@@ -59,8 +59,9 @@ const queryValue = (repo: WorkspaceTypes.LocalRepository, request: QueryRequest,
     case 'docs.check': return checkWriting(repo, undefined, cache !== 'off');
     case 'documents.list': {
       const { kind } = request.input;
-      if (kind === 'memory' || kind === 'issue') return { operation: 'list', documents: knowledgeIndex(repo, kind).documents };
-      return { operation: 'list', documents: loadDocuments(repo, kind === undefined ? undefined : [kind]).map(doc => ({ path: doc.path, ...doc.metadata })) };
+      if (kind === 'memory' || kind === 'issue') return { ...knowledgeIndex(repo, kind), operation: 'list' };
+      const inventory = diagnoseDocuments(repo, kind === undefined ? undefined : [kind]);
+      return { operation: 'list', documents: inventory.documents.map(doc => ({ path: doc.path, ...doc.metadata })), complete: inventory.complete, findings: inventory.findings };
     }
     case 'documents.show': {
       const { id, kind } = request.input;
