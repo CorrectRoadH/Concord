@@ -165,7 +165,7 @@ test("private coordination paths reject symlinked Trace and generic directories"
   const journalRoot = isolatedRepository(t);
   mkdirSync(join(journalRoot, ".git", "concord"), { recursive: true });
   symlinkSync(journalRoot, join(journalRoot, ".git", "concord", "journal.json"));
-  assert.throws(() => new LocalRepository(journalRoot, { dryRun: true }), { code: 'RecoveryRequired' });
+  assert.throws(() => new LocalRepository(journalRoot, { dryRun: true }), { code: 'UnsafePath' });
 });
 
 test("fresh repositories create only Concord private coordination state", (t) => {

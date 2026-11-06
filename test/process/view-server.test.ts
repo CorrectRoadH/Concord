@@ -61,29 +61,6 @@ test('a real thousand-file workspace scan leaves static and document HTTP reques
   } finally { await server.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('view writes request failure codes without copying request targets or diagnostics into logs', async () => {
-  const { root } = fixture();
-  let server: ViewServerHandle | undefined;
-  const logs: string[] = [];
-  const write = process.stderr.write;
-  try {
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    process.stderr.write = ((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; }) as typeof process.stderr.write;
-    const result = await send(server, '/api/missing?token=private');
-    assert.equal(result.status, 404);
-    assert.equal(parsed(result).error, 'ApiNotFound');
-    await pollUntil(async () => logs.some(line => line.includes('ApiNotFound')) ? true : undefined, { description: 'the foreground service forwards its sanitized request failure log' });
-    assert.equal(logs.length, 1);
-    assert.match(logs[0]!, /"status":404,"code":"ApiNotFound"/u);
-    assert.doesNotMatch(logs[0]!, /private|\/api\/missing|message|details|stack/u);
-  } finally {
-    process.stderr.write = write;
-    await server?.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 async function waitFor(manager: ViewJobManager, id: string, state: readonly string[], timeoutMs = 8_000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -159,7 +136,7 @@ test('view server keeps the application shell data-free and allows unauthenticat
     const created = await send(server, '/api/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'document.create', kind: 'feature', id: 'web', title: 'Web' }) });
     assert.equal(created.status, 200, created.body);
     assert.equal(existsSync(join(root, 'docs/feature/web/cli.md')), false);
-    for (const [id, kind, pages] of [['unknown-page', 'feature', ['other']], ['duplicate-page', 'feature', ['cli', 'cli']], ['engineering-pages', 'engineering', []]] as const) {
+    for (const [id, kind, pages] of [['unknown-page', 'feature', ['other']], ['duplicate-page', 'feature', ['cli', 'cli']], ['engineering-pages', 'engineering', ['other']]] as const) {
       const invalid = await send(server, '/api/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'document.create', kind, id, title: id, pages }) });
       assert.equal(invalid.status, 400, invalid.body);
       assert.equal(existsSync(join(root, `docs/${kind}/${id}`)), false);

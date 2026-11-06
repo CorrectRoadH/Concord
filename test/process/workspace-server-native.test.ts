@@ -29,7 +29,7 @@ test('runtime native validation degrades the locked service and a repaired artif
       yield* Effect.forkScoped(Stream.runForEach(rpc.subscribeWorkspace(connection), value => Effect.sync(() => {
         last = Schema.decodeUnknownSync(Schema.Struct({ state: Schema.String, error: Schema.optional(Schema.Struct({ code: Schema.String, message: Schema.String })) }))(value);
       })));
-      const hello = () => Effect.runPromise(connection.client.hello({ protocol: 'concord.workspace/v1', installation: running.installation }));
+      const hello = () => Effect.runPromise(connection.client.hello({ protocol: rpc.PROTOCOL, installation: running.installation }));
       yield* Effect.promise(() => pollUntil(async () => (await hello()).state === 'running' ? true : undefined, { description: 'initial native owner opens', timeoutMs: 5000 }));
       renameSync(metadata, hidden);
       try {

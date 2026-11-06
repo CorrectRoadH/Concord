@@ -152,9 +152,11 @@ test('current-source queries and cached projection queries remain separate', asy
 test('workspace projection survives query-cache eviction pressure in its own namespace', async () => {
   const root = fixture();
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  let built: WorkspaceProjection;
-  try { built = await waitForWorkspaceProjection(baseOf(server)); }
+  try { await waitForWorkspaceProjection(baseOf(server)); }
   finally { await server.close(); }
+  // Shutdown can finish an already queued refresh; freeze the durable generation
+  // before applying query-cache pressure.
+  const built = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));
   const path = cacheDatabasePath(genericPrivateDirectorySync(root));
   const database = openHawdb(path, { readOnly: false, create: false });
   try {

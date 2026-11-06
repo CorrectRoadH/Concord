@@ -27,6 +27,8 @@ import { startViewServer } from '../e2e/server.js';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.js';
+import { hawdbTarget, installationResources } from '../../src/base/installation/index.js';
+import { packageBin, prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('a live publication keeps the first workspace generation pending and refreshes after completion', async () => {
@@ -153,7 +155,11 @@ test('an installation missing native artifacts reports unavailable instead of pe
   const root = fixture();
   const installation = mkdtempSync(join(tmpdir(), 'concord-projection-install-'));
   try {
-    const result = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { env: { ...process.env, XDG_CACHE_HOME: installation }, encoding: 'utf8', timeout: 20_000 });
+    writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
+    prepareSourceConsumer(installation, sourceConcord(), [], { private: true });
+    const installed = join(installation, 'node_modules/concord-sdlc');
+    rmSync(join(installationResources(installed).native, hawdbTarget(), 'hawdb.node'));
+    const result = spawnSync(process.execPath, [packageBin(installed), '--root', root, '--json', 'workspace', 'projection'], { env: { ...process.env, XDG_CACHE_HOME: installation }, encoding: 'utf8', timeout: 20_000 });
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stderr, /^\{/u, result.stdout + result.stderr);
     const failure = JSON.parse(result.stderr) as { error: string; details: { reason: string } };

@@ -1,5 +1,5 @@
 import { createRequire, packageBin, createConsumer, sourceConcord, prepareSourceConsumer, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, TemplatesOutput, scratch, cli, call, callString, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
-
+import { decodeChangePreview } from '../../src/model/change-preview.js';
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name packed-operation-boundaries
@@ -51,7 +51,6 @@ test('packed PR export compares the actual target and serves a safe static revie
  const out = join(scratch,'exported-pr');
  const result = spawnSync(process.execPath,['--no-addons',cli,'--root',join(root,'docs'),'--json','view','export','--base',base,'--head',head,'--base-label','release','--out',out],{encoding:'utf8',timeout:120000});
  assert.equal(result.status,0,result.stderr + result.stdout);
- const { decodeChangePreview } = await import(pathToFileURL(createRequire(cli).resolve('concord-sdlc/change-preview')).href) as typeof import("../../src/model/change-preview.js");
  const data = decodeChangePreview(JSON.parse(readFileSync(join(out,'changes.json'),'utf8')));
  assert.deepEqual(data.comparison,{base,head,mergeBase:ancestor,baseLabel:'release'});
  assert.deepEqual(data.entries.map(entry=>entry.path).sort(),['binary.dat','docs/new.md','docs/renamed.md','source.ts']);

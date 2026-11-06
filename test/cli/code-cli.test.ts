@@ -57,7 +57,7 @@ test('packed CLI traces code scopes and keeps command execution independent of c
     owner('feature', { id: 'orders', title: 'Orders' });
     owner('use-case', { id: 'create-order', feature, title: 'Create order' });
     owner('engineering', { id: 'tooling', title: 'Tooling' });
-    writeFileSync(join(root, 'docs/feature/orders/behavior.md'), '# Behavior\n\n## Normalize\n\n## Validate\n');
+    writeFileSync(join(root, 'docs/feature/orders/architecture.md'), '# Architecture\n\n## Normalize\n\n## Validate\n');
     const engineering = 'docs/engineering/tooling/README.md';
     const engineeringPage = 'docs/engineering/tooling/architecture.md';
     writeFileSync(join(root, engineeringPage), '# Architecture\n\n## Overview\n');
@@ -84,8 +84,8 @@ test('packed CLI traces code scopes and keeps command execution independent of c
       '  const trimmed = input.trim();', '  const result = trimmed.toLowerCase();',
       '  // @concord-end', '  return result;', '}', '',
       '// @concord-code',
-      '// @concord-implements docs/feature/orders/behavior.md#normalize',
-      '// @concord-implements docs/feature/orders/behavior.md#validate',
+      '// @concord-implements docs/feature/orders/architecture.md#normalize',
+      '// @concord-implements docs/feature/orders/architecture.md#validate',
       `// @concord-implements ${engineeringPage}#overview`,
       'export const validate = (input: string) => input.length > 0;', '',
     ].join('\n');
@@ -111,8 +111,8 @@ test('packed CLI traces code scopes and keeps command execution independent of c
     assert.deepEqual(engineeringTrace.codeDeclarations.map(item => item.id), [anchor.id]);
     assert.deepEqual(engineeringTrace.codeDeclarations[0]?.matchedContracts, [`${engineeringPage}#overview`]);
     assert.deepEqual(engineeringTrace.codeDeclarations[0]?.contracts, [
-      'docs/feature/orders/behavior.md#normalize',
-      'docs/feature/orders/behavior.md#validate',
+      'docs/feature/orders/architecture.md#normalize',
+      'docs/feature/orders/architecture.md#validate',
       `${engineeringPage}#overview`,
     ]);
     const engineeringShow = call(['show', engineering], Schema.Struct({ codeDeclarations: Schema.Array(Schema.Struct({ id: Schema.String })) }));

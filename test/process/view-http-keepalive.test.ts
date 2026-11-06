@@ -11,9 +11,9 @@ test('test HTTP requests remain independent after an event-loop stall exceeds se
   const f = fixture();
   const server = await startViewServer({ ...f, host: '127.0.0.1', port: 0 });
   try {
-    assert.equal((await send(server, '/assets/app.js')).status, 200);
+    assert.equal((await send(server, '/')).status, 200);
     // Reproduce a busy shared loop while an idle socket reaches its deadline.
     Effect.runSync(Effect.sync(() => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 6_500)));
-    assert.equal((await send(server, '/assets/app.js')).status, 200);
+    assert.equal((await send(server, '/')).status, 200);
   } finally { await server.close(); rmSync(f.root, { recursive: true, force: true }); }
 })));
