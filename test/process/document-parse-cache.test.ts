@@ -1,12 +1,16 @@
 // 跨进程保证：运行环境——新进程重建自己的有界文档内存缓存，重复批次共享解析且不留下持久文档库。
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { fixture } from '../support/document-cache-fixture.ts';
+import { NodeServices } from '@effect/platform-node';
+import { Installation } from '../../src/base/installation/index.ts';
+import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
+import { makeComputationOwner } from '../../src/entry/server/main.ts';
+import { fixture, useCasePath } from '../support/document-cache-fixture.ts';
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('metadata stays lazy and one tree serves repeated and duplicate requests without persistent document state', () => Effect.runPromise(Effect.sync(() => {
@@ -36,3 +40,31 @@ test('metadata stays lazy and one tree serves repeated and duplicate requests wi
     assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false, 'document parsing never creates a persistent database');
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
+
+// @feature docs/engineering/code/architecture.md#基础服务
+// @issue docs/issues/test-architecture-gaps.md
+test('one real compute retains parsed source between requests and rebuilds after source changes', async () => {
+  const root = fixture(), counts = join(root, 'parse-counts.jsonl');
+  const preload = fileURLToPath(new URL('../support/parse-count-probe.ts', import.meta.url));
+  const environment = Object.fromEntries(Object.entries({ ...process.env,
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${preload}`.trim(), CONCORD_TEST_PARSE_COUNTS: counts,
+  }).filter((entry): entry is [string, string] => entry[1] !== undefined));
+  const runtime = makeRuntimeEnvironment(root, environment);
+  const calls = () => readFileSync(counts, 'utf8').trim().split('\n')
+    .map(line => Schema.decodeUnknownSync(Schema.String)(JSON.parse(line)))
+    .filter(source => source.includes('parser-sentinel')).length;
+  try {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const owner = yield* makeComputationOwner(root);
+      const read = () => owner.run({ kind: 'query', request: { name: 'documents.list', input: {} }, cwd: root, environment });
+      const first = yield* read();
+      assert.equal(calls(), 1, 'the real parser observes the original source once');
+      assert.deepEqual(yield* read(), first);
+      assert.equal(calls(), 1, 'an unchanged request reuses the compute-owned parse cache');
+      const path = join(root, useCasePath);
+      writeFileSync(path, readFileSync(path, 'utf8').replace('parser-sentinel source', 'parser-sentinel changed source'));
+      assert.deepEqual(yield* read(), first, 'body changes keep the listed metadata');
+      assert.equal(calls(), 2, 'changed source is parsed before accepting its current metadata');
+    })).pipe(Effect.provide(Installation.layer), Effect.provide(NodeServices.layer), Effect.provide(RuntimeEnvironment.layer(runtime))));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
