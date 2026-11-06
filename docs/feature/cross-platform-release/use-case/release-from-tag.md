@@ -6,7 +6,7 @@
 
 ## 起始状态
 
-- 本地 master 是 Concord 仓库的主检出，要发版的 commit 已推送到 `origin/master`。
+- 本地 master 是 Concord 仓库的主 worktree，要发版的 commit 已推送到 `origin/master`。
 - 维护者有推送标签的权限，本机已完成 `gh auth login`。
 - 还没有 `v0.9.0` 标签，也没有同名 Release。
 - 本页的输出都是预期输出：发版是外部操作，示例不作为运行证据。

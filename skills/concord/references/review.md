@@ -2,7 +2,7 @@
 
 对照 Spec 检查一组改动。只读，不修改文件。
 
-1. 确定范围：要验收的 diff（提交区间或工作区改动）与它声称满足的 Feature、Use Case 或步骤。
+1. 确定范围：要验收的 diff（提交区间或未提交的改动）与它声称满足的 Feature、Use Case 或步骤。
 2. 运行 `concord check` 与 `concord trace gaps`；用 `concord review` 生成改动涉及的 Spec、代码与测试材料。
 3. 逐条对照：每个步骤的行为、输出字段、错误码与退出码是否和 Spec 一致；在临时目录实际运行关键命令，不依据实现者的自述或测试名称判断。
 4. 检查代码是否符合项目的代码规范（本仓库见 `docs/engineering/code/README.md`）与架构文档的分层和依赖规则。

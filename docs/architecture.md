@@ -12,7 +12,7 @@ Concord 由 CLI、按需启动的工作区服务和浏览器工作台组成。�
 
 每个项目目录最多一个工作区服务。同一项目下的不同子目录复用同一服务，不按命令启动位置重复创建。服务不按分支分配；在同一目录切换分支时，来源变化触发重新核验与刷新。
 
-Concord 不规定分支或检出方式：直接在 main 开发、在同一目录切分支、使用多个 worktree 或独立 clone，都从选定的项目目录开始。不同项目目录的服务、缓存与发布协调状态彼此隔离（[适配项目的开发方式](taste.md#t-9)）。
+Concord 不规定分支或 worktree 的用法：直接在 main 开发、在同一目录切分支、使用多个 worktree 或独立 clone，都从选定的项目目录开始。不同项目目录的服务、缓存与发布协调状态彼此隔离（[适配项目的开发方式](taste.md#t-9)）。
 
 安装身份用于核对客户端和服务端是否属于同一份程序。项目定位、Git-private 目录、服务锁与握手是底层机制，完整规则由[工作区服务](feature/local-data-engine/architecture.md#工作区服务)拥有。
 
@@ -27,7 +27,7 @@ flowchart LR
   Server -->|调度只读计算| Compute[长期计算进程]
   Server -->|派发写入与恢复| Operation[单次操作进程]
   Server --> Cache[(该项目目录的持久 HawDB)]
-  Local --> Sources[工作树文件与 Git]
+  Local --> Sources[worktree 文件与 Git]
   Compute -->|读取当前来源| Sources
   Operation -->|校验后发布| Sources
 ```
@@ -61,7 +61,7 @@ CI 可以使用 `concord --server=command check`：服务属于本次命令，�
 
 | 数据 | 所有者与用途 |
 | --- | --- |
-| Spec、代码、测试、配置与 Memory | 工作树中的文件是事实来源，由人、agent 与受校验的操作修改；Git 保存历史 |
+| Spec、代码、测试、配置与 Memory | worktree 中的文件是事实来源，由人、agent 与受校验的操作修改；Git 保存历史 |
 | 发布租约、journal 与 runner 状态 | 项目目录对应的 Git-private 目录保存协调与恢复材料，不能作为缓存删除 |
 | 持久解析缓存、远端观察与诊断投影 | 主进程持有 HawDB；无服务时由当前命令按[打开模式](feature/local-data-engine/architecture.md#句柄与打开模式)使用。计算进程只接收快照并交回派生行 |
 | 当前查询与历史投影 | 当前查询读取并复核来源；导航与诊断可以读取明确标注的历史投影，历史结果不授权写入或修复核验 |
@@ -298,7 +298,7 @@ Trace 与定向 Review 按 owner 汇总 Feature supporting page 与 Use Case 的
 
 Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个项目目录独立；journal 绑定 root 与 privateDir。基础适配提供文件租约、身份复核与原子替换，见[可移植协调架构](feature/portable-coordination/architecture.md)。
 
-支持同主机、同 PID 命名空间内的 Linux 与 macOS 本地工作树，不保证网络多机协调与 Windows 执行。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
+支持同主机、同 PID 命名空间内的 Linux 与 macOS 本地 worktree，不保证网络多机协调与 Windows 执行。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
 
 普通来源查询不取得发布租约。读取记录文件前像、缺失路径和目录集合，返回前重新核对读过的每个文件摘要与目录集合，并确认没有未完成的 journal，变化返回 SourceChanged。未完成 journal 仍阻断当前事实结果。缓存快照查询不加载来源 Repository。
 
@@ -382,7 +382,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 `concord view` 提供随包分发的 React 工作台，是工作区服务的客户端。[Concord mod](feature/herdr-mod/README.md) 在 Herdr 中提供完整的阅读、初始化与编辑，通过公开 CLI 查询结构化数据，正文读写与文件监听由 mod 负责。
 
-Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见[工作台视觉规范](feature/web-workbench/ui.md)。
+Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见[工作台视觉规范](feature/web-workbench/ui.md)。
 
 ## 文档写作检查
 

@@ -2,7 +2,7 @@
 
 Agent 在 CLI 中检查和修改项目，人在 Herdr 面板或 Web 中审阅，两者连接同一个项目后台。检查、文件变化和测试任务在各界面共享，切换界面不需要再启动一份测试。
 
-后台跟随选定的[项目目录](../../concepts.md#project-directory)。在 main 上开发、原地切分支或使用多个检出目录，都使用同一套命令；不同目录彼此隔离（[适配项目的开发方式](../../taste.md#t-9)）。
+后台跟随选定的[项目目录](../../concepts.md#project-directory)。在 main 上开发、原地切分支或使用多个 worktree，都使用同一套命令；不同目录彼此隔离（[适配项目的开发方式](../../taste.md#t-9)）。
 
 ```mermaid
 flowchart LR

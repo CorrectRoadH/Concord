@@ -28,7 +28,7 @@
 | `server` | `start`、`run`、`status`、`stop`：管理项目目录的[工作区服务](../../concepts.md#workspace-server)，查询命令也会自动启动它；`server stop` 等目标实例回收子进程、关闭持久缓存、删除实例记录、释放服务锁并且服务进程本身已经退出后才返回 0，返回后其它命令可以立即打开持久缓存；它也能停止另一版本或另一渠道安装的 Concord 启动的实例 |
 | `skills` | `install`：在项目中创建或更新 Concord 工作流 skill，见[用工作流 skill 走开发流程](../project-onboarding/use-case/run-workflow-from-agent.md) |
 | `herdr` | `install`、`uninstall`：安装 [Concord mod](../herdr-mod/README.md) |
-| `workspace`、`git` | 工作区的当前扫描与历史投影、只读 Git 状态与差异，见 [Web 工作台 CLI](../web-workbench/cli.md) |
+| `workspace`、`git` | 项目目录的当前扫描与历史投影、只读 Git 状态与差异，见 [Web 工作台 CLI](../web-workbench/cli.md) |
 | `config`、`template` | 查看与替换配置；查看随包模板 |
 | `cache`、`recover`、`doctor`、`lsp`、`review`、`action` | 维护与集成 |
 

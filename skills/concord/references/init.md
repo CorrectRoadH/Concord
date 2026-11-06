@@ -1,6 +1,6 @@
 # 初始化与模板
 
-在目标 Git worktree 顶层执行；`init` 不把 Concord 的安装目录当接入项目，也不导入外部 checkout。
+在目标 Git worktree 顶层执行；`init` 不把 Concord 的安装目录当接入项目，也不导入其它仓库的 worktree。
 
 ```sh
 concord init

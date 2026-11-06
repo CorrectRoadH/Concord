@@ -17,7 +17,7 @@
 
    消费者拥有 PR 身份、Git 历史与托管，须满足：
 
-   - PR head 等于构建提交与 checkout 的 HEAD，拒绝 merge checkout。构建前与部署前各查询一次 PR，base ref、base SHA 或 head SHA 变化即失败。
+   - PR head 等于构建提交与检出的 HEAD，拒绝检出 merge 提交。构建前与部署前各查询一次 PR，base ref、base SHA 或 head SHA 变化即失败。
    - 补全 shallow 历史与缺失的对象后再导出，历史中要包含 base 与 head 的共同祖先。
    - 用[安装脚本](../../cross-platform-release/use-case/install-with-script.md)加 `CONCORD_VERSION` 安装固定版本的 Concord 发版归档，按 Release 的 `SHA256SUMS` 校验。解码器取自同一版本的[库包](../../local-sdlc/library.md#安装)。不依赖相邻源码或未发版的版本，不手改归档。
 
@@ -80,14 +80,14 @@
 
 ## 结果
 
-预览只有静态阅读能力：没有编辑、测试执行、工作区 API 或凭据。页面不把 diff 或测试声明当作执行证据。Concord 不获取远端凭据、不 fetch、不部署，也不写 PR 评论。
+预览只有静态阅读能力：没有编辑、测试执行、工作区服务 API 或凭据。页面不把 diff 或测试声明当作执行证据。Concord 不获取远端凭据、不 fetch、不部署，也不写 PR 评论。
 
 | 情形 | 看到什么 |
 | --- | --- |
 | 目标分支在 PR 创建后又有新提交 | 这些提交不出现在 PR 差异中 |
 | 目标分支不是 main、detached HEAD、fork 的已取得 head | 照常导出 |
 | 删除、重命名、没有变化 | 照常导出 |
-| 工作树有未提交内容 | 不进入输出 |
+| worktree 中有未提交的改动 | 不进入输出 |
 | 缺失 revision、浅历史、多个最佳共同祖先、超出导出上限、输出路径不安全 | 按 [CLI 错误](../cli.md#错误)具名失败，不回退到 main 或本地 HEAD |
 | 输出目录已经存在 | 返回 `PreviewOutputExists`，退出 1 |
 | 同一目标并发导出 | 只有一份成功 |

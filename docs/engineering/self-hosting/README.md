@@ -1,6 +1,6 @@
 # Concord 自举维护
 
-本文档包规定 Concord 怎样用当前检出的源码 CLI（`pnpm concord`）维护本仓库的 Spec。仓库中的 Markdown 与真实测试标记共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是 [`pnpm gate`](../testing/README.md#检查入口)。
+本文档包规定 Concord 怎样用当前 worktree 的源码 CLI（`pnpm concord`）维护本仓库的 Spec。仓库中的 Markdown 与真实测试标记共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是 [`pnpm gate`](../testing/README.md#检查入口)。
 
 构建与源码运行见[构建与开发环境](../build/README.md)，测试规则见[测试](../testing/README.md)，性能测量见[性能测量](../performance/README.md)。
 
@@ -49,4 +49,4 @@ Concord 用自己的流程开发和验收自己。
 
 ## 完成条件
 
-当前检出可由源码 CLI 完成 `doctor`、`check`、`test list`、`trace show/check` 与 `review`；类型检查和相关测试通过。
+当前 worktree 可由源码 CLI 完成 `doctor`、`check`、`test list`、`trace show/check` 与 `review`；类型检查和相关测试通过。

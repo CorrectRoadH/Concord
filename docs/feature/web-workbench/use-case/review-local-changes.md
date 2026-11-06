@@ -2,12 +2,12 @@
 
 ## 用户目标
 
-开发者在提交前想看清工作区里改了什么：哪些文件变了、改动在暂存区还是工作树、新加了哪些测试声明，不用在终端里来回切换 `git status` 与 `git diff`。
+开发者在提交前想看清有哪些未提交的改动：哪些文件变了、改动是否已暂存、新加了哪些测试声明，不用在终端里来回切换 `git status` 与 `git diff`。
 
 ## 起始状态
 
-- 项目是一个 Git 工作区，已用 `concord init` 初始化。
-- 工作区里有未提交的改动，例如修改了 `docs/feature/cart/README.md`，新增了带 `@feature docs/feature/cart/README.md` 标记的 `test/cart.test.ts`。
+- 项目目录是一个 Git worktree，已用 `concord init` 初始化。
+- 项目目录中有未提交的改动，例如修改了 `docs/feature/cart/README.md`，新增了带 `@feature docs/feature/cart/README.md` 标记的 `test/cart.test.ts`。
 
 ## 完整路径
 
@@ -56,7 +56,7 @@
    	33	购物车可以一次结算全部商品。
    ```
 
-   已暂存的差异比较 HEAD 与 index，未暂存的差异比较 index 与工作树，未跟踪的文件显示新文件内容。同一个文件暂存后又被编辑时，标题下同时出现「已暂存」与「未暂存」，点击切换。
+   已暂存的差异比较 HEAD 与 index，未暂存的差异比较 index 与 worktree 中的文件，未跟踪的文件显示新文件内容。同一个文件暂存后又被编辑时，标题下同时出现「已暂存」与「未暂存」，点击切换。
 
 3. 只看文档或测试。 {#filter}
 

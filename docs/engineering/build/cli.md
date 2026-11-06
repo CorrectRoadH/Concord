@@ -6,8 +6,8 @@
 | --- | --- |
 | `pnpm install --frozen-lockfile` | 首次安装依赖与项目固定版本的 `vp` |
 | `vp install` | 之后的依赖安装 |
-| `pnpm concord <参数>` | 运行当前检出的源码 CLI，等价于 `node src/entry/cli/entry.ts`，由 Node 自带的类型擦除直接运行，V8 编译缓存见[从源码运行](architecture.md#从源码运行) |
-| `vp build --outDir <目录>` | 把一个目标的完整归档（启动脚本、Node.js 运行时、ripgrep、CLI、原生绑定、Web、PR 预览与随包资源）构建到检出之外的目录；目标由 `CONCORD_TARGET` 选择，省略时为本机目标 |
+| `pnpm concord <参数>` | 运行当前 worktree 的源码 CLI，等价于 `node src/entry/cli/entry.ts`，由 Node 自带的类型擦除直接运行，V8 编译缓存见[从源码运行](architecture.md#从源码运行) |
+| `vp build --outDir <目录>` | 把一个目标的完整归档（启动脚本、Node.js 运行时、ripgrep、CLI、原生绑定、Web、PR 预览与随包资源）构建到 worktree 之外的目录；目标由 `CONCORD_TARGET` 选择，省略时为本机目标 |
 | `vp run build:native` | 准备原生绑定，按[原生绑定复用](architecture.md#原生绑定复用)的顺序取得 |
 | `vp dev` | 只启动 Web 开发服务器，不运行发行准备 |
 
@@ -26,8 +26,8 @@
 
 | 错误 | 条件 |
 | --- | --- |
-| `BuildOutputInCheckout` | `vp build --outDir` 的目录位于检出内 |
-| `DistInCheckout` | 门禁开始时检出中存在 `dist/`；删除它后重试 |
+| `BuildOutputInCheckout` | `vp build --outDir` 的目录位于 worktree 内 |
+| `DistInCheckout` | 门禁开始时 worktree 中存在 `dist/`；删除它后重试 |
 | `UnsupportedTarget` | `CONCORD_TARGET` 不是 `linux-x64` 或 `darwin-arm64`，或省略时本机不是支持的目标；不写输出目录，以非零退出，消息列出支持的目标 |
 | `HawdbUnavailable` | 源码运行找不到经身份校验的原生绑定；提示运行 `pnpm exec vp run build:native` |
 

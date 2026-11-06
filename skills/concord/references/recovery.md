@@ -1,6 +1,6 @@
 # 缓存与中断恢复
 
-HawDB 只拥有可重建投影与可丢弃缓存。它位于 `git rev-parse --git-path concord` 返回目录下的 `cache.hawdb`，普通 checkout 通常是 `.git/concord/cache.hawdb`，linked worktree 则位于对应 Git-private 目录，不是项目根的 `.concord`。状态与维护命令：
+HawDB 只拥有可重建投影与可丢弃缓存。它位于 `git rev-parse --git-path concord` 返回目录下的 `cache.hawdb`，主 worktree 通常是 `.git/concord/cache.hawdb`，linked worktree 则位于对应 Git-private 目录，不是项目根的 `.concord`。状态与维护命令：
 
 ```sh
 concord cache status --json

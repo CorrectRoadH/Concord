@@ -6,7 +6,7 @@
 
 `ConfigSnapshot` 为 `{path: "concord.config.ts", source, digest, config}`：`source` 是实际原文，`digest` 绑定其完整字节。`config` 由 TypeScript 语法树静态求值后按 `ProjectSchema` 严格解码，不加载模块，不解析类型依赖。
 
-配置文件不存在时快照记为 absent，`config` 取[默认值](use-case/maintain-project-config.md#配置项)。工作区身份取 worktree 根与 Git-private 目录，配置快照只绑定原文摘要。同一次读取的 `source` 直接作为发布前像。新事务冻结该快照；普通文档与源码写入要求当前配置仍等于冻结 `source`。`config.set` action 单独发布并重写规范化 TS 全文，不与 Memory 修改同批；普通发布不得删除或改名唯一配置。
+配置文件不存在时快照记为 absent，`config` 取[默认值](use-case/maintain-project-config.md#配置项)。项目目录的身份取 worktree 根与 Git-private 目录，配置快照只绑定原文摘要。同一次读取的 `source` 直接作为发布前像。新事务冻结该快照；普通文档与源码写入要求当前配置仍等于冻结 `source`。`config.set` action 单独发布并重写规范化 TS 全文，不与 Memory 修改同批；普通发布不得删除或改名唯一配置。
 
 ## 运行时格式识别
 

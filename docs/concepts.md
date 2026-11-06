@@ -84,7 +84,13 @@ Feature、Engineering 或 Roadmap 的一个目录，以 `README.md` 为入口，
 
 一次 Concord 操作所针对的项目根目录。从命令所在的当前目录定位，也可以通过 `--root` 显式选择；同一项目的子目录指向同一个项目目录。
 
-项目目录与分支策略无关。在原目录切换分支仍是同一个项目目录，另一个检出目录是独立的项目目录。
+项目目录是使用者看到的目录，通常就是某个 [worktree](#worktree) 的根。它与分支策略无关：在原目录切换分支仍是同一个项目目录，另一个 worktree 是独立的项目目录。
+
+## worktree {#worktree}
+
+Git 的一个工作目录，包括其中的文件与 index：主 worktree，或 `git worktree add` 创建的 worktree。一个 worktree 的根就是一个[项目目录](#project-directory)；讲 Git 机制时写 worktree，讲在哪个目录运行、管理哪个仓库时写项目目录。
+
+旧写法：`工作树`
 
 ## 工作区服务 {#workspace-server}
 

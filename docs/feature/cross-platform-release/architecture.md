@@ -60,7 +60,7 @@ Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`li
 
 ### 库包
 
-库包 `concord-sdlc-<version>.tgz` 的 `package.json` 只声明 `name`、`version`、`gitHead`、`type`、`license`、`exports` 与 `dependencies`。`exports` 恰好是[库接口](../local-sdlc/library.md)列出的四个子路径，每项只有 `types` 与 `import` 两个条件，不含 `concord-source` 等源码条件，也没有 `bin`。包内只有这四个入口可达的编译 JavaScript 与声明，`dependencies` 只列这些文件实际导入的第三方包，版本取 `pnpm-lock.yaml` 中的精确版本。打包时在仓库之外的临时目录安装该 tgz，类型检查一个导入 `concord-sdlc/config` 的配置文件，并实际导入、调用其余三个入口，不借助检出的 `node_modules`。
+库包 `concord-sdlc-<version>.tgz` 的 `package.json` 只声明 `name`、`version`、`gitHead`、`type`、`license`、`exports` 与 `dependencies`。`exports` 恰好是[库接口](../local-sdlc/library.md)列出的四个子路径，每项只有 `types` 与 `import` 两个条件，不含 `concord-source` 等源码条件，也没有 `bin`。包内只有这四个入口可达的编译 JavaScript 与声明，`dependencies` 只列这些文件实际导入的第三方包，版本取 `pnpm-lock.yaml` 中的精确版本。打包时在仓库之外的临时目录安装该 tgz，类型检查一个导入 `concord-sdlc/config` 的配置文件，并实际导入、调用其余三个入口，不借助 worktree 的 `node_modules`。
 
 ### Homebrew
 
@@ -103,7 +103,7 @@ Concord 拥有源码校验、归档字节与源码 Release，tap 拥有包管理
 
 ### 创建
 
-标签事件校验版本并调度默认分支的 Release 工作流，构建 checkout 始终使用显式标签。默认分支拥有跨版本可复用的缓存作用域，源码身份仍由标签拥有。tap 只接受固定的公开仓库、规范标签与唯一匹配的资产。
+标签事件校验版本并调度默认分支的 Release 工作流，构建时始终检出显式标签。默认分支拥有跨版本可复用的缓存作用域，源码身份仍由标签拥有。tap 只接受固定的公开仓库、规范标签与唯一匹配的资产。
 
 ### 运行
 

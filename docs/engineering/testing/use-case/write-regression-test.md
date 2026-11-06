@@ -69,7 +69,7 @@
    git commit -m "test: issue close must refuse linked Issues" -- test/domain/issue-close-links.test.ts docs/issues/close-ignores-links.md
    ```
 
-   共享 checkout 中只提交自己的文件，用 `git commit -- <路径>`，不提交他人尚未提交的改动。
+   共享 worktree 中只提交自己的文件，用 `git commit -- <路径>`，不提交他人尚未提交的改动。
 
 5. 修复并单独提交。 {#commit-fix}
 
@@ -81,7 +81,7 @@
    pnpm concord issue close close-ignores-links --fixed --reason "close 检查入链"
    ```
 
-   命令在临时 worktree 中对缺陷提交执行 `runner.prepare` 与 runner，在当前工作树对 HEAD 执行 runner；前者失败、后者通过才删除 Issue。输出与拒绝条件见[核验修复并关闭缺陷](../../../feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed)，把输出的结论写进提交说明并提交 Issue 的删除。
+   命令在临时 worktree 中对缺陷提交执行 `runner.prepare` 与 runner，在当前 worktree 对 HEAD 执行 runner；前者失败、后者通过才删除 Issue。输出与拒绝条件见[核验修复并关闭缺陷](../../../feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed)，把输出的结论写进提交说明并提交 Issue 的删除。
 
 ## 结果
 

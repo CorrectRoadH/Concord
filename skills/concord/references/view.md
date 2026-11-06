@@ -1,6 +1,6 @@
 # Web 工作台与 AI CLI
 
-在目标 Git 工作区运行 `concord view`，或显式使用 `concord --root <worktree> view`。默认只监听本机 `127.0.0.1:4317`；`--host 0.0.0.0` 在可信网络开放访问，`--port` 调整端口。浏览器打开终端显示的地址即可进入工作台，无需登录或访问密钥。
+在目标项目目录运行 `concord view`，或显式使用 `concord --root <worktree> view`。默认只监听本机 `127.0.0.1:4317`；`--host 0.0.0.0` 在可信网络开放访问，`--port` 调整端口。浏览器打开终端显示的地址即可进入工作台，无需登录或访问密钥。
 
 启动输出分别列出实际 Host / Port、Local 与各网卡 Network URL。域名和 NAT 入口也可用；反向代理必须保留浏览器使用的外部 Host（含非默认端口），不依赖 forwarded headers 绕过检查。修改安装代码后需重启已有 view 进程才能生效。
 
@@ -72,11 +72,11 @@ export default function (p: P5) {
 
 AI 继续优先使用已有 CLI 命令与 `--json`。新增结构化操作可由 `concord action --input <file|->` 调用，与 Web 共用校验。先读取当前摘要，再提交正文、源码或配置更新；`FileChangedSinceRead` 表示文件被外部修改，重新读取、合并意图后重试，不能强行覆盖。
 
-Git 面板显示已暂存（HEAD 对 index）、未暂存（index 对工作区）与未跟踪文件。它与编辑器内未保存的差异不是同一比较。查看 Git 不隐含暂存、提交、回滚或 push 授权。
+Git 面板显示已暂存（HEAD 对 index）、未暂存（index 对 worktree 中的文件）与未跟踪文件。它与编辑器内未保存的差异不是同一比较。查看 Git 不隐含暂存、提交、回滚或 push 授权。
 
 打开工作台默认进入 Git 变更页，先列出全部变更；可筛选文档或测试，选择文件后切换暂存区域与差异布局。总览仍从侧栏进入。读取失败会显示错误，可点击刷新重试。
 
-PR 只读预览使用 `concord view export --base <actual-base-commit> --head <head-commit> --base-label <target-branch> --out <new-directory>`。比较唯一最佳 merge-base 到 head，不假定 main，不包含工作树脏内容，不加载消费者配置或文档代码。消费者先准备完整 Git 历史，并核对真实 PR 身份；Concord 不联网、不部署。输出目录可放到静态站点子路径；文件选择与阅读模式存入 hash。静态 Markdown 不运行 p5、不接受原始 HTML、不加载图片。Schema 由 `concord-sdlc/change-preview` 拥有。
+PR 只读预览使用 `concord view export --base <actual-base-commit> --head <head-commit> --base-label <target-branch> --out <new-directory>`。比较唯一最佳 merge-base 到 head，不假定 main，不包含未提交的改动，不加载消费者配置或文档代码。消费者先准备完整 Git 历史，并核对真实 PR 身份；Concord 不联网、不部署。输出目录可放到静态站点子路径；文件选择与阅读模式存入 hash。静态 Markdown 不运行 p5、不接受原始 HTML、不加载图片。Schema 由 `concord-sdlc/change-preview` 拥有。
 
 导出只接受受信父目录下不存在的目标，拒绝 symlink 祖先和 Git-private 路径。失败保留不完整输出，检查现场后选择新路径；不要自动覆盖或清理未知文件。超出 2000 文件、单 blob 4 MiB、单 Markdown 正文 1 MiB 或 JSON 8 MiB 时明确失败。
 

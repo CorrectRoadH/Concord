@@ -32,7 +32,7 @@ source: {...}                    # 导入时写入的远端来源
 1. 在 Issue 中写观察、期望行为与复现；调查与根因写进 Memory，用 `relations` 关联。
 2. 写一个在当前代码上失败的回归测试，标记 `@issue docs/issues/<id>.md` 与它验证的 Spec，单独提交。
 3. 只修改产品文件，提交修复。测试文件、runner 配置、`runner.sourceFiles` 与测试指向的 Spec 在两次提交之间保持不变。
-4. 工作树干净时运行 `concord issue close <id> --fixed`。
+4. worktree 没有未提交的改动时运行 `concord issue close <id> --fixed`。
 
 ```sh
 concord issue close expired-token-accepted --fixed --json
@@ -40,7 +40,7 @@ concord issue close expired-token-accepted --fixed --defect <commit> --json
 concord test verify expired-token-accepted --json
 ```
 
-缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交，所有回归测试必须在同一提交中首次出现，否则用 `--defect` 指定 HEAD 的 first-parent 祖先。命令在临时 worktree 中运行缺陷提交、在当前工作树运行 HEAD：前者以非零码结束、后者以零结束才写入 `verification`，内容是两个提交、回归测试、runner 配置摘要与 Concord 版本。
+缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交，所有回归测试必须在同一提交中首次出现，否则用 `--defect` 指定 HEAD 的 first-parent 祖先。命令在临时 worktree 中运行缺陷提交、在当前 worktree 运行 HEAD：前者以非零码结束、后者以零结束才写入 `verification`，内容是两个提交、回归测试、runner 配置摘要与 Concord 版本。
 
 同一提交同时加入测试与修复、缺少测试或提交（包括 shallow clone）、区间含 merge 提交、超时，都返回 `FixUnverifiable`；command runner 不区分断言失败与构建失败。`test verify` 在两个提交上重放已记录的结论，提交、依赖或运行环境不可获得时报告无法重放，不改变结论。
 

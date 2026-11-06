@@ -14,7 +14,7 @@
 
 原生产物按以下顺序取得，第一项命中即停止。每一项都经 `--prebuilt` 的身份校验：target、ABI、HawDB revision、源码摘要、锁文件摘要、二进制与许可证摘要全部一致才使用。
 
-1. 本机共享缓存 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<源码摘要>-<锁文件摘要>/<target>/`，同一台机器的所有 checkout 与 worktree 共用。
+1. 本机共享缓存 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<源码摘要>-<锁文件摘要>/<target>/`，同一台机器的所有 worktree 共用。
 2. 本仓库 GitHub Release `native-<源码摘要前 16 位>` 中的 `concord-native-<target>.tar.gz`。下载后校验，写入共享缓存。
 3. 用固定 Rust 工具链编译，结果写入共享缓存。
 
@@ -40,12 +40,12 @@
 
 ## 共享构建缓存
 
-打包测试与性能对照使用的本机目标归档按构建输入的摘要保存在 `${XDG_CACHE_HOME:-~/.cache}/concord/build/<摘要>/`。构建输入是工作区中参与 `vp build` 的源码、依赖锁、构建配置、`.node-version`、`runtime-deps.json` 的内容与原生产物身份，包括未提交的改动。
+打包测试与性能对照使用的本机目标归档按构建输入的摘要保存在 `${XDG_CACHE_HOME:-~/.cache}/concord/build/<摘要>/`。构建输入是 worktree 中参与 `vp build` 的源码、依赖锁、构建配置、`.node-version`、`runtime-deps.json` 的内容与原生产物身份，包括未提交的改动。
 
 1. 使用者先计算摘要。同摘要的目录已发布时直接只读使用，不再构建。
 2. 不存在时构建到同一缓存下的临时目录，校验后以原子 rename 发布；同一摘要同时只有一个构建者，其余使用者等待它的结果。构建失败不发布任何目录。
 3. 使用中的归档目录不被替换或删除：源码变化得到新摘要和新目录。缓存只保留最近 4 个摘要，删除时跳过仍在使用的目录。
-4. 缓存可以随时整体删除，下次使用时重新构建。检出中从不出现构建产物。
+4. 缓存可以随时整体删除，下次使用时重新构建。worktree 中从不出现构建产物。
 
 ## 从源码运行
 
@@ -54,8 +54,8 @@
 | 原生绑定 | 源码运行取自经身份校验的本机共享缓存，构建产物取自安装目录根，校验规则相同 |
 | 源码约束 | 相对导入写 `.ts` 扩展名；只使用可擦除的 TypeScript 语法，类型检查开启 `erasableSyntaxOnly`；构建归档时由 TypeScript 的 `rewriteRelativeImportExtensions` 改写为 `.js` |
 | 子进程 | 运行模式由一个模块统一判断。源码模式用 Node 自带的类型擦除直接运行 `.ts` 入口，不经转译工具；V8 编译缓存放在 `${XDG_CACHE_HOME:-~/.cache}/concord/node-compile/`，按文件复用，改一个文件只重新编译这个文件。安装模式用安装目录内的 `runtime/node` 启动其中的 JavaScript 入口 |
-| 安装身份 | 源码模式的安装身份是检出位置，安装模式使用产物摘要。源码模式的服务记录启动时的源码摘要 |
-| 服务替换 | 同一检出的调用发现运行中服务的源码摘要与当前不同时，先停止它并等待完全退出，再启动新服务，不报 `WorkspaceServerVersionConflict` |
+| 安装身份 | 源码模式的安装身份是 worktree 位置，安装模式使用产物摘要。源码模式的服务记录启动时的源码摘要 |
+| 服务替换 | 同一 worktree 的调用发现运行中服务的源码摘要与当前不同时，先停止它并等待完全退出，再启动新服务，不报 `WorkspaceServerVersionConflict` |
 | 缓存身份 | 缓存身份包含源码摘要，源码变化后不复用旧缓存 |
 | Web 资源 | 源码模式读取按 `web/` 的构建输入摘要共享的 Web 产物 `${XDG_CACHE_HOME:-~/.cache}/concord/web/<摘要>/`；缺失时由一个进程构建并原子发布，其余等待，服务本身不编译 Web。只改 CLI 或服务代码时不重新构建 Web。日常改前端用 `vp dev`。安装模式读取安装目录内的编译结果 |
 

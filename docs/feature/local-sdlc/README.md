@@ -193,7 +193,7 @@ export default function (p: P5) {
 - [核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)
 - [检索与维护工程知识](use-case/recall-and-maintain-memory.md)
 
-保护工作区：
+保护项目目录：
 
 - [保护并恢复本地状态](use-case/recover-local-state.md)
 

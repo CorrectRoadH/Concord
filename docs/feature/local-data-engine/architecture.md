@@ -46,7 +46,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 ## 工作区服务
 
-每个[项目目录](../../concepts.md#project-directory)最多一个工作区服务，与分支名或检出方式无关。它长期持有该目录的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。
+每个[项目目录](../../concepts.md#project-directory)最多一个工作区服务，与分支名或 worktree 的用法无关。它长期持有该目录的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。
 
 Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git-path concord` 取得该目录独立的 Git-private 状态位置。普通 clone 的工作目录与 linked worktree 使用同一协议；同一目录切换分支不改变服务归属。以下以 worktree 表述这项底层隔离边界。
 
@@ -210,7 +210,7 @@ CLI 默认自动启动或复用同安装身份、同协议的服务，再发送 
 
 工作区服务运行时，由服务在空闲时执行同样的回收与丢弃，不另启维护进程。回收与丢弃都不改变任何命令结果，丢弃之后的命令冷启动重建。
 
-启用缓存的工作区扫描可以恢复固定引擎版本明确报告的只读行增量恢复失败：以 existing-only 可写句柄恢复日志并 checkpoint，再重新只读打开。恢复不删除目录、不覆盖文档、不创建缺失的数据库；关闭缓存的模式和普通只读调用不启用该恢复，恢复失败仍报告不可用。
+启用缓存的项目目录扫描可以恢复固定引擎版本明确报告的只读行增量恢复失败：以 existing-only 可写句柄恢复日志并 checkpoint，再重新只读打开。恢复不删除目录、不覆盖文档、不创建缺失的数据库；关闭缓存的模式和普通只读调用不启用该恢复，恢复失败仍报告不可用。
 
 进程对原生产物的加载失败保留一个有界失败记录，一秒内复用该失败，随后重新验证安装产物。期间缓存调用按不可用回源。该退避只限制重复的安装检查，不跳过来源摘要、Schema 或扫描一致性验证。
 
@@ -281,7 +281,7 @@ type QueryCacheEnvelope = {
 6. 只有失败保留 record 与 lastAttempt 并写入 error。
 7. 漂移不在同一刷新内重扫。
 
-以上规则只适用于诊断投影：它是带漂移标注的历史结果，服务 trace gaps、trace show 与 review 的历史查询，没有一致结果时也发布，并用 `consistent`、`unknownRelations` 与 `changedPaths` 如实标注，避免 agent 持续写入时查询一直拿不到结果。工作区导航不同：它是给人看的当前工作区，只发布一致的结果，漂移的候选丢弃，见 [Web 工作台的读取与发布](../web-workbench/architecture.md#读取与发布)。诊断投影的 `builtAt` 是发布时间，不等于 `builtUntil`。
+以上规则只适用于诊断投影：它是带漂移标注的历史结果，服务 trace gaps、trace show 与 review 的历史查询，没有一致结果时也发布，并用 `consistent`、`unknownRelations` 与 `changedPaths` 如实标注，避免 agent 持续写入时查询一直拿不到结果。工作区导航不同：它是给人看的当前项目目录，只发布一致的结果，漂移的候选丢弃，见 [Web 工作台的读取与发布](../web-workbench/architecture.md#读取与发布)。诊断投影的 `builtAt` 是发布时间，不等于 `builtUntil`。
 
 ### 失败分类
 

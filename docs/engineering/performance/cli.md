@@ -1,6 +1,6 @@
 # 测量命令
 
-测量与 profile 都在本仓库自举：被测产物是当前 checkout 的构建，默认消费者是当前仓库某个 commit 的独立 clone。入口先构建被测归档，结果以 JSON 输出到 stdout，可用 `--out` 另存。测量方法见[性能测量](README.md#测量方法)。
+测量与 profile 都在本仓库自举：被测产物是当前 worktree 的构建，默认消费者是当前仓库某个 commit 的独立 clone。入口先构建被测归档，结果以 JSON 输出到 stdout，可用 `--out` 另存。测量方法见[性能测量](README.md#测量方法)。
 
 ```text
 vp run bench [<场景 ID | feature-id> ...] [--changed [<base>]] [--compare [<rev>]] [--quick] [--reference]
@@ -20,7 +20,7 @@ vp run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <co
 | `--samples <n>` | 每组样本数，默认 7；低于 7 的记录只用于定位，不作为预算验收证据 |
 | `--keep` | 保留临时消费者与进程输出 |
 
-`--changed` 的改动文件为 `<base>`（默认 `origin/master` 与 HEAD 的 merge-base）到工作区的全部差异，包括未提交改动。改动文件通过代码归属声明（`@concord-implements`）映射到 Feature，选中这些 Feature 的场景。改动了 `bench/<feature-id>.bench.ts` 的选中该文件的场景；改动了 `scripts/perf/` 或 `bench/fixtures/` 的选中全部场景。
+`--changed` 的改动文件为 `<base>`（默认 `origin/master` 与 HEAD 的 merge-base）到 worktree 当前文件的全部差异，包括未提交改动。改动文件通过代码归属声明（`@concord-implements`）映射到 Feature，选中这些 Feature 的场景。改动了 `bench/<feature-id>.bench.ts` 的选中该文件的场景；改动了 `scripts/perf/` 或 `bench/fixtures/` 的选中全部场景。
 
 省略 `--compare` 时只测候选产物，判定只包含样本有效性、刷新上限，以及声明 `--reference` 时的绝对预算。
 

@@ -2,7 +2,7 @@
 
 ## 现象
 
-2026-10-06 在已接入的 rpg-game 仓库（Git 跟踪 4727 个文件，其中 docs 1096 个；工作区有 84 处未提交改动）执行 `concord trace gaps --json`（Homebrew 安装的 0.11.4），每次都立即返回：
+2026-10-06 在已接入的 rpg-game 仓库（Git 跟踪 4727 个文件，其中 docs 1096 个；有 84 处未提交的改动）执行 `concord trace gaps --json`（Homebrew 安装的 0.11.4），每次都立即返回：
 
 ```json
 {"ok":false,"error":"QueryPending","details":{"refresh":{"code":"QueryRefreshFailed","message":"Diagnostic scan failed or timed out"}}}
@@ -17,7 +17,7 @@
 ## 原因
 
 1. `src/query-refresh-worker.ts` 的刷新上限为 120s，扫描超过该时间后子进程被终止。stdout 与 stderr 为空，只记录泛化的 `Diagnostic scan failed or timed out`，没有超时或耗时信息。
-2. 即使不受上限限制，扫描窗口长达约 3 分钟，持续编辑的工作区几乎必然触发来源变化（`PreimageChanged` / `SourceChanged`），结果被拒绝发布。
+2. 即使不受上限限制，扫描窗口长达约 3 分钟，持续编辑的 worktree 几乎必然触发来源变化（`PreimageChanged` / `SourceChanged`），结果被拒绝发布。
 3. 刷新失败只写 `error`，不写 `record`；没有上一代投影的仓库因此一直返回 QueryPending，后续每次调用又会排一次注定失败的扫描。
 
 system 时间占比约 55%，推测文件系统调用次数是主要成本，尚未做 profile 确认。

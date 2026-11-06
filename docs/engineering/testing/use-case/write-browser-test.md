@@ -6,7 +6,7 @@
 
 ## 起始状态
 
-- 要验证的路径已写在 Web 工作台的 Use Case 中，例如[使用 Web 工作台](../../../feature/web-workbench/use-case/use-web-workbench.md)：工作区不完整时，提示条把用户带到健康诊断。
+- 要验证的路径已写在 Web 工作台的 Use Case 中，例如[使用 Web 工作台](../../../feature/web-workbench/use-case/use-web-workbench.md)：扫描不完整时，工作区健康提示条把用户带到健康诊断。
 - 开发环境装有 Chromium，方式见[浏览器环境](../cli.md#浏览器环境)。
 
 ## 完整路径
