@@ -97,6 +97,21 @@ test('installed ordinary commands load only their selected command group', () =>
 });
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @issue docs/issues/test-architecture-gaps.md
+test('installed skill startup loads its packaged guide without repository command services', () => {
+  const path = join(scratch, 'skill-loaded.json');
+  const result = spawnSync(runtime, ['--import', resolve('test/support/cli-load-probe.ts'), applicationEntry, '--skill'], { cwd: scratch, env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trimEnd(), readFileSync(join(applicationRoot(packageRoot), 'skills/concord/SKILL.md'), 'utf8').trimEnd());
+  assert.equal(result.stderr, '');
+  const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(readFileSync(path, 'utf8'));
+  for (const url of loaded) {
+    assert.doesNotMatch(url, /\/entry\/cli\/(?:main|cli-command-[^/]+)\.js$/u);
+    assert.doesNotMatch(url, /\/dist\/(?:domain|base\/(?:workspace|publication|cache|server-lock))\//u);
+  }
+});
+
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('installed routing preserves flags, unknown inputs, delimiters, completion and skills', () => Effect.runPromise(Effect.gen(function* () {
   const calls = [
     ['--json', 'unknown'], ['memory', 'unknown', '--json'], ['template', 'list', '--unknown', '--json'],

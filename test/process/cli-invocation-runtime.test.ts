@@ -19,6 +19,33 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 const entry = fileURLToPath(new URL('../../src/entry/cli/entry.ts', import.meta.url));
 const plainEnvironment = (): NodeJS.ProcessEnv => ({ ...process.env, NO_COLOR: '1', TERM: 'dumb', FORCE_COLOR: undefined, COLUMNS: '80', LINES: '24' });
 
+// @feature docs/feature/local-sdlc/architecture.md#入口与命令加载
+// @issue docs/issues/test-architecture-gaps.md
+test('real skill startup reads its guide without loading repository command services', async t => {
+  const root = createConsumer();
+  const modules = join(root, 'loaded.json');
+  try {
+    const child = spawn(process.execPath, ['--conditions=concord-source', '--import', fileURLToPath(new URL('../support/cli-load-probe.ts', import.meta.url)), entry, '--skill'], {
+      cwd: root, env: { ...plainEnvironment(), CONCORD_TEST_LOADED_MODULES: modules }, signal: t.signal, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const stdout: Buffer[] = [], stderr: Buffer[] = [];
+    child.stdout.on('data', (chunk: Buffer) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(Buffer.from(chunk)));
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', code => code === 0 ? resolve() : reject(new Error(`Skill exited ${code}: ${Buffer.concat(stderr)}`)));
+    });
+    assert.equal(Buffer.concat(stdout).toString('utf8').trimEnd(), readFileSync(new URL('../../skills/concord/SKILL.md', import.meta.url), 'utf8').trimEnd());
+    assert.equal(Buffer.concat(stderr).toString('utf8'), '');
+    const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(readFileSync(modules, 'utf8'));
+    assert.ok(loaded.some(url => url.endsWith('/entry/cli/skill.ts')));
+    for (const url of loaded) {
+      assert.doesNotMatch(url, /\/entry\/cli\/(?:main|cli-command-[^/]+)\.ts$/u, 'guides need no ordinary command composition root');
+      assert.doesNotMatch(url, /\/src\/(?:domain|base\/(?:workspace|publication|cache|server-lock))\//u, 'guides need no repository services');
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 async function runEntry(argv: readonly string[], cwd: string, env: NodeJS.ProcessEnv, signal: AbortSignal): Promise<CliResult> {
   const child = spawn(process.execPath, ['--conditions=concord-source', entry, ...argv], { cwd, env, signal, stdio: ['pipe', 'pipe', 'pipe'] });
   const stdout: Buffer[] = [], stderr: Buffer[] = [];
