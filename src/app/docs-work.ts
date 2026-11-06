@@ -24,9 +24,11 @@ const context = Effect.fn('DocsWork.context')(function*(input?: string, existing
   const main = yield* host();
   const root = yield* Effect.try({ try: () => main.storage.discoverRoot(input), catch: cause => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', String(cause)) });
   const fs = yield* FileSystem.FileSystem;
-  const source = yield* fs.readFileString(join(root, 'concord.config.ts')).pipe(Effect.mapError(() => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', 'Cannot read project configuration')));
-  const config = yield* Effect.try({ try: () => main.config.parseTypeScriptConfig(source), catch: cause => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', String(cause)) });
-  return { root, config, configDigest: objectHash({ source, docsWork: config.docsWork ?? {} }), main };
+  const source = yield* fs.readFileString(join(root, 'concord.config.ts')).pipe(Effect.catch(error => error.reason._tag === 'NotFound'
+    ? Effect.succeed(undefined)
+    : Effect.fail(fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', 'Cannot read project configuration'))));
+  const config: ProjectConfig = yield* Effect.try({ try: () => source === undefined ? {} : main.config.parseTypeScriptConfig(source), catch: cause => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', String(cause)) });
+  return { root, config, configDigest: objectHash({ source: source ?? null, docsWork: config.docsWork ?? {} }), main };
 });
 
 type Context = Effect.Success<ReturnType<typeof context>>;
