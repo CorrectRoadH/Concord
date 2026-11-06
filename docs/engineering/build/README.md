@@ -4,7 +4,7 @@
 
 ## 开始开发
 
-源码构建需要 Node.js 24.15+、pnpm 11.18.0、Git、Rust 1.97.1 和本机 C 链接工具链。
+开发与 CI 使用 Node.js 26 LTS，另需 pnpm 11.18.0、Git、Rust 1.97.1 和本机 C 链接工具链。产品的运行要求仍是 Node.js 24.15+：CI 在 Node.js 26 上跑完整门禁，并在 Node.js 24.15 上再跑一遍，产品代码不使用 24.15 没有的 API，例如 `Temporal`。
 
 ```sh
 git clone https://github.com/CorrectRoadH/Concord.git
