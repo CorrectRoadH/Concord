@@ -43,20 +43,13 @@
 
    `writeProjectConfig` 先按 `ProjectSchema` 严格解码再渲染；写作政策用 `src/model/index.ts` 的 `parseWritingPolicy` 与 `renderWritingPolicy`。格式改变时只改格式 owner，Fixture 与测试不随之修改。
 
-3. 新建 Fixture 文件并写清资源回收。 {#create}
+3. 写出 Fixture 并写清资源回收。 {#create}
 
-   文件放在 `test/support/<主题>-fixture.ts`，命名与导出遵守 [TypeScript 代码规范](../../code/README.md)。持有临时目录、进程或服务的 Fixture 用 `Effect.acquireRelease` 声明释放，测试用 `Effect.scoped` 限定范围，成功、失败与超时都会释放：
+   只有一个测试文件使用的 Fixture 写在该测试文件中；多个测试文件共用时放到 `test/support/<主题>-fixture.ts` 并导出。命名与导出遵守 [TypeScript 代码规范](../../code/README.md)。持有临时目录、进程或服务的 Fixture 用 `Effect.acquireRelease` 声明释放，测试用 `Effect.scoped` 限定范围，成功、失败与超时都会释放：
 
    ```ts
-   import { rmSync } from 'node:fs';
-   import { Effect } from 'effect';
-   import { withRepository } from './application-fixture.ts';
-   import { createConsumer } from './consumer.ts';
-   import { createDocument } from './operations.ts';
-   import { linkIssue } from '../../src/domain/issues/index.ts';
-
    /** A consumer where Issue `two` links `one`; closing the scope deletes it. */
-   export const linkedIssues = Effect.acquireRelease(
+   const linkedIssues = Effect.acquireRelease(
      Effect.sync(() => {
        const root = createConsumer();
        withRepository(root, repo => {
@@ -69,16 +62,22 @@
    );
    ```
 
-   测试这样使用：
+   测试这样使用。Scope 结束后断言临时仓库已删除，观察到资源确实释放：
 
    ```ts
-   // @use-case docs/feature/feedback/use-case/manage-local-observations.md#结果
-   test('close refuses while another Issue links the target', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-     const root = yield* linkedIssues;
-     withRepository(root, repo => assert.throws(() => closeIssue(repo, 'one', 'Done'), (cause: unknown) => cause instanceof ConcordError && cause.code === 'IssueReferenced'));
-     assert.equal(existsSync(join(root, 'docs/issues/one.md')), true);
-   }))));
+   // @use-case docs/engineering/testing/use-case/extend-fixtures.md#create
+   test('linked Issue fixture closes repositories and removes its scoped consumer', () => Effect.runPromise(Effect.gen(function*() {
+     const root = yield* Effect.scoped(Effect.gen(function*() {
+       const root = yield* linkedIssues;
+       withRepository(root, repo => assert.throws(() => closeIssue(repo, 'one', 'Done'), (cause: unknown) => cause instanceof ConcordError && cause.code === 'IssueReferenced'));
+       assert.equal(existsSync(join(root, 'docs/issues/one.md')), true);
+       return root;
+     }));
+     assert.equal(existsSync(root), false);
+   })));
    ```
+
+   这两段来自 `test/domain/issue-close-links.test.ts`。
 
    `test/support/external-adapter-fixture.ts` 的 `externalCase` 是同样写法的真实例子。标记写在测试文件中，不写在 Fixture 里。
 

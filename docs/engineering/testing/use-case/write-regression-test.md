@@ -39,14 +39,15 @@
    本例的判断在领域操作 `closeIssue` 中，写在 `test/domain/`。写法与[上手示例](../README.md#上手示例)相同，只是标记块多一行 `@issue`：
 
    ```ts
-   // @use-case docs/feature/feedback/use-case/manage-local-observations.md#结果
-   // @issue docs/issues/close-ignores-links.md
-   test('close refuses while another Issue links the target', () => withConsumer(repo => {
+   // @use-case docs/engineering/testing/use-case/write-regression-test.md#write
+   test('close refuses while another Issue links the target', () => Effect.runPromise(Effect.sync(() => withConsumer(repo => {
      for (const id of ['one', 'two']) createDocument(repo, 'issue', { id, title: id });
      linkIssue(repo, 'two', 'docs/issues/one.md', false, 'related');
      assert.throws(() => closeIssue(repo, 'one', 'Done'), (cause: unknown) => cause instanceof ConcordError && cause.code === 'IssueReferenced');
-   }));
+   }))));
    ```
+
+   这段代码是仓库中 `test/domain/issue-close-links.test.ts` 的第一条测试。它在当前代码上通过，只演示写法，所以标记指向本教程且没有 `@issue`。真实的回归测试在标记块加上第 2 步的 `@issue` 一行，指向真实存在的 Issue；本页的 `close-ignores-links` 只是示意。
 
    `withConsumer` 来自 `test/support/consumer.ts`，`createDocument` 来自 `test/support/operations.ts`，`closeIssue` 与 `linkIssue` 来自 `src/domain/issues/index.ts`，`ConcordError` 来自 `src/model/index.ts`。
 

@@ -18,28 +18,29 @@
 2. 在共用仓库上准备状态，然后等服务刷新。 {#setup}
 
    ```ts
+   import { createDocument } from '../support/operations.ts';
    import { mkdirSync, writeFileSync } from 'node:fs';
    import { join } from 'node:path';
-   import { expect } from '@playwright/test';
    import { test } from './fixtures.ts';
    import { act } from './journey.ts';
-   import { createDocument } from '../support/operations.ts';
+   import { expect } from '@playwright/test';
    import { LocalRepository } from '../support/repository.ts';
 
-   // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+   // @use-case docs/engineering/testing/use-case/write-browser-test.md
    // @name dismissible-workspace-health-navigation
-   test('incomplete workspace notice opens health diagnostics', { tags: ['journey'] }, async fixtures => {
+   test('incomplete workspace notice opens health diagnostics and dismisses without hiding findings', { tags: ['journey'] }, async fixtures => {
      const { page, workspace } = fixtures;
-     const repo = new LocalRepository(workspace.root);
+     const root = workspace.root;
+     const repo = new LocalRepository(root);
      try {
        createDocument(repo, 'engineering', { id: 'health', title: 'Health example' });
      } finally { repo.close(); }
-     mkdirSync(join(workspace.root, 'docs/feature/broken'));
-     writeFileSync(join(workspace.root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\nid: broken\n---\n');
+     mkdirSync(join(root, 'docs/feature/broken'));
+     writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\nid: broken\n---\n');
      const server = await workspace.ready();
    ```
 
-   受管文件由 `createDocument` 生成；故意损坏的 `README.md` 是这条路径要求的无效输入。`workspace.ready()` 请求刷新，并等到投影包含这次改动后才返回，不按时间等待。
+   这两段合起来就是 `test/e2e/view-performance-browser.e2e.ts` 中的同名测试，只省略了同文件其它测试用到的导入。受管文件由 `createDocument` 生成；故意损坏的 `README.md` 是这条路径要求的无效输入。`workspace.ready()` 请求刷新，并等到投影包含这次改动后才返回，不按时间等待。
 
 3. 像用户一样操作，断言可观察结果。 {#act}
 
@@ -49,6 +50,9 @@
      await expect(notice).toBeVisible({ timeout: 15000 });
      await act(fixtures, '通过当前页面的工作区健康提示，打开健康诊断。', () => notice.click());
      await expect(page).toHaveURL(/\/overview#workspace-health$/);
+     await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
+     await act(fixtures, '关闭工作区健康提示条，保留当前健康诊断页面。', () => page.getByRole('button', { name: '关闭工作区健康提示' }).click());
+     await expect(notice).toHaveCount(0);
      await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
    });
    ```

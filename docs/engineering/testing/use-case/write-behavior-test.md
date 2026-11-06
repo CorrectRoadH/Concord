@@ -56,7 +56,7 @@
      return JSON.parse(result.stdout.trim() || result.stderr) as Record<string, unknown>;
    }
 
-   // @use-case docs/feature/feedback/use-case/manage-local-observations.md#结果
+   // @use-case docs/engineering/testing/use-case/write-behavior-test.md#write
    test('issue close refuses with a named error and exit 1', async t => {
      for (const [row, linked, expected] of [
        ['another Issue links it', true, 'IssueReferenced'],
@@ -73,6 +73,8 @@
      });
    });
    ```
+
+   这段代码就是仓库中的 `test/cli/issue-close-links.test.ts`。它的标记指向本教程；`issue close` 的业务行为由 Feedback 已有的测试关联。自己写测试时，标记指向要验证的 Use Case 步骤。
 
    `call` 在退出码不符时把 args、status、signal、stdout 与 stderr 一起写进失败消息，满足[断言](../README.md#断言)对子进程诊断的要求。
 
