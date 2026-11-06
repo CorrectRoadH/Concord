@@ -317,6 +317,7 @@ const launchers = Layer.mergeAll(
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
     const workspace = yield* Workspace, runtime = yield* ServerRuntime, persistent = yield* PersistentCache;
     return ServerLauncher.of({
+      processIdentity: installationIdentity(runtime).pipe(Effect.map(installation => ({ pid: process.pid, installation }))),
       run: root => nativeAvailable.pipe(Effect.andThen(loadServerMain()), Effect.flatMap(server => server.serveWorkspaceFromEnvironment(root)), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause)), Effect.provideContext(context)),
       start: root => startWorkspaceServer(root).pipe(Effect.provideContext(context)),
       stop: root => stopWorkspaceServer(root).pipe(Effect.provideContext(context)),

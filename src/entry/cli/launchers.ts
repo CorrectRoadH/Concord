@@ -17,6 +17,7 @@ export class LspLauncher extends Context.Service<LspLauncher, {
   readonly serve: (root: string | undefined) => Effect.Effect<void, ConcordError>;
 }>()('concord/cli/LspLauncher') {}
 export class ServerLauncher extends Context.Service<ServerLauncher, {
+  readonly processIdentity: Effect.Effect<{ readonly pid: number; readonly installation: string }, ConcordError>;
   readonly run: (root: string) => Effect.Effect<void, unknown>;
   readonly start: (root: string) => Effect.Effect<unknown, unknown>;
   readonly stop: (root: string) => Effect.Effect<unknown, unknown>;
