@@ -155,7 +155,7 @@ nix profile install 'git+https://github.com/CorrectRoadH/homebrew-tap?ref=main#c
 concord --help
 ```
 
-Concord 自带 Node.js 运行时与 ripgrep，运行只需要 Git，支持 Linux x64 与 Apple Silicon macOS；不支持 Windows。
+Concord 自带 Node.js 运行时与 ripgrep，运行只需要 Git，支持 glibc 2.39 及以上的 Linux x64（Ubuntu 24.04 及更新）与 macOS 15 及以上的 Apple Silicon macOS；不支持 Windows。
 
 ## 快速上手
 

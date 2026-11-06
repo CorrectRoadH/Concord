@@ -2,13 +2,13 @@
 
 ## 实体所有权
 
-源码标签、应用的包元数据与 GitHub Release 中的归档由 CorrectRoadH/Concord 拥有。CorrectRoadH/homebrew-tap 拥有 Formula、Nix 表达式与 recipe 标签。
+源码标签、应用与库包的包元数据、GitHub Release 中的归档与库包由 CorrectRoadH/Concord 拥有。CorrectRoadH/homebrew-tap 拥有 Formula、Nix 表达式、recipe 标签，以及 Nix 渠道修补后的安装身份。
 
 运行时协调遵循[可移植协调架构](../portable-coordination/architecture.md)：来源读取不取得租约，提交与恢复使用同一 Node 文件租约。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时协调。
 
 ## 数据流
 
-标签工作流从校验后的标签派生版本。原生任务在各自目标系统上构建 HawDB 引擎；一个打包任务只构建一次应用，再为每个目标组装归档，核验版本、原生产物身份与摘要，然后发布源码 Release。
+标签工作流从校验后的标签派生版本。原生任务在各自目标系统上构建 HawDB 引擎；一个打包任务只构建一次应用，再为每个目标组装候选归档并打出库包，核验版本、原生产物身份与摘要。验证任务在目标系统上运行同一份候选，全部通过后发布源码 Release。
 
 tap 定期或经通知发现更新的公开发布，核验标签、归档与资产身份，生成 Formula 与 Nix 候选。候选分别完成安装和运行检查后才提交并打 recipe 标签，创建同版本渠道完成记录。日常发现、验证与更新不依赖 LLM。
 
@@ -17,9 +17,9 @@ tap 定期或经通知发现更新的公开发布，核验标签、归档与资�
 - 普通运行时不探测文件系统名称，不调用外部锁或磁盘工具；支持的协调限于同一主机与 PID 命名空间。
 - Darwin 保留路径段的精确拼写，别名不能产生第二个 owner 身份。
 - 只有 ESRCH 证明所拥有的 POSIX 进程组已结束。清理不确定时不能产生 green 证据。
-- 发布与渠道同步共享精确的候选归档和 SHA-256；自动化成功不表示已完成安装或运行时验收。
+- 发布与渠道同步共享精确的候选归档和 SHA-256；发布的字节就是验证过的候选。自动化成功不表示已完成渠道安装后的验收。
 - 版本不回退，已有身份不能被不同字节覆盖。
-- 应用只使用包内的 Node.js 运行时与 ripgrep，不读取 `PATH` 中的 `node` 或 `rg`。
+- 应用只使用包内的 Node.js 运行时与 ripgrep，不读取 `PATH` 中的 `node` 或 `rg`；Linux 上的动态库解析不依赖 `LD_LIBRARY_PATH`。
 
 ## 错误
 
@@ -29,32 +29,65 @@ tap 定期或经通知发现更新的公开发布，核验标签、归档与资�
 
 ### 归档构成
 
-每个目标一个 `concord-<version>-<target>.tar.gz`，目录结构见 [CLI](cli.md#发布资产)。归档由同一个 TypeScript 打包入口组装，打包测试与发布调用同一入口，摘要只针对最终归档。
+每个目标一个 `concord-<version>-<target>.tar.gz`，目录结构见 [CLI](cli.md#发布资产)。归档由同一个 TypeScript 打包入口组装，步骤见[归档组装](../../engineering/build/architecture.md#归档组装)；打包测试与发布调用同一入口，摘要只针对最终归档。本表是各部分来源与校验的唯一定义。
 
 | 部分 | 来源 |
 | --- | --- |
-| `runtime/node` | 仓库[运行时版本](../../engineering/build/README.md#运行时版本)指定的官方 Node.js 二进制，按 nodejs.org 的 `SHASUMS256.txt` 校验后取出 |
-| `runtime/rg` | 固定版本的官方 ripgrep 二进制，按 `runtime-deps.json` 记录的 SHA-256 校验 |
+| `runtime/node` | 仓库[运行时版本](../../engineering/build/README.md#运行时版本)指定的该目标官方 Node.js 发行包，先按 nodejs.org 的 `SHASUMS256.txt` 校验整个发行包，再取出 `node` 与其 `LICENSE`；Node.js 的摘要不另存，不从构建机 `PATH` 中的 `node` 推定版本 |
+| `runtime/rg` | 仓库根目录的 `runtime-deps.json` 唯一记录 ripgrep 版本与每个目标的官方发行资产（文件名与 SHA-256），按它校验后取出 `rg` 与许可证；macOS 的 `rg` 由 macOS 原生任务校验、ad-hoc 签名后随原生产物交给组装，签名后的摘要记在该任务的产物清单 |
+| `runtime/lib/` | 仅 Linux：Ubuntu 24.04 构建环境中的 `libatomic.so.1` 与 `libstdc++.so.6`，以及检查发现的其它 glibc 之外的 `DT_NEEDED` 库 |
 | `app/` 中的应用 | 一次构建得到的 JavaScript，与包根布局相同 |
 | `app/` 中的依赖 | 按 `pnpm-lock.yaml` 冻结、`--ignore-scripts` 安装的运行依赖；平台相关的可选依赖按目标平台选择 |
 | `app/` 中的原生绑定 | 该目标经身份校验的 HawDB N-API 引擎 |
+| `licenses/` | Node.js、ripgrep、`runtime/lib/` 中的运行库与运行依赖的许可证文本 |
 | `bin/concord` | 打包入口生成的 POSIX 启动脚本 |
 
 `bin/concord` 只做定位与转交：解析自身的符号链接，找到归档根，以 `runtime/node` 执行 `app/` 中的应用入口并原样传递参数、标准流与退出码。应用从包根读取版本、资源与原生绑定，并通过包内路径调用 `runtime/rg`。
 
+### Linux 运行库
+
+Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`libc`、`libm`、`libdl`、`libpthread`、`librt` 与解释器 `/lib64/ld-linux-x86-64.so.2`）和 `runtime/lib/` 中的库。组装时为每个动态链接的 ELF（`runtime/node`、HawDB `.node`、`runtime/rg`）把 RPATH 设为指向 `runtime/lib/` 的 `$ORIGIN` 相对路径，`runtime/lib/` 中的库之间同样如此；静态链接的 ELF 没有动态段，不设置。启动脚本不设置 `LD_LIBRARY_PATH`。
+
+组装后检查归档内全部 ELF：解释器、`DT_NEEDED` 全部可在 glibc 或 `runtime/lib/` 中解析、引用的 GLIBC 符号版本不高于 2.39、RPATH 不指向归档之外。任一不满足即组装失败。候选验证在 Ubuntu 24.04 上实际运行，见[从标签发布](use-case/release-from-tag.md#verify)。
+
+### macOS 签名
+
+`runtime/node` 保留 Node.js 官方签名与 entitlements，任何阶段都不改写。HawDB `.node` 与 `runtime/rg` 在 macOS 原生任务中 ad-hoc 签名，之后组装、验证与安装都不改写它们的字节。验证阶段对全部 Mach-O 运行 `codesign --verify`。安装脚本用 `curl` 下载，不产生 `com.apple.quarantine`；Concord 不做公证，不支持浏览器下载的安装。
+
 ### 版本与身份
 
-发布版本只从规范标签写入 `app/package.json` 的 `version`。版本、源码标签 commit、各归档的 SHA-256 与 recipe commit 构成发布映射，只有这些身份完全一致时，重跑才能继续中断的阶段。Repository 实现身份包含包内 JavaScript、包元数据、依赖锁与运行时版本。
+发布版本只从规范标签写入。应用的 `app/package.json` 与库包的 `package.json` 写入相同的 `version`，并以 `gitHead` 记录标签 commit；两者都在同一个打包任务中从该 commit 构建。版本、源码标签 commit、各归档与库包的 SHA-256 和 recipe commit 构成发布映射，只有这些身份完全一致时，重跑才能继续中断的阶段。Repository 实现身份包含包内 JavaScript、包元数据、依赖锁与运行时版本。
+
+### 库包
+
+库包 `concord-sdlc-<version>.tgz` 的 `package.json` 只声明 `name`、`version`、`gitHead`、`type`、`license`、`exports` 与 `dependencies`。`exports` 恰好是[库接口](../local-sdlc/library.md)列出的四个子路径，每项只有 `types` 与 `import` 两个条件，不含 `concord-source` 等源码条件，也没有 `bin`。包内只有这四个入口可达的编译 JavaScript 与声明，`dependencies` 只列这些文件实际导入的第三方包，版本取 `pnpm-lock.yaml` 中的精确版本。打包时在仓库之外的临时目录安装该 tgz，类型检查一个导入 `concord-sdlc/config` 的配置文件，并实际导入、调用其余三个入口，不借助检出的 `node_modules`。
 
 ### Homebrew
 
 Formula 按平台引用对应归档与 SHA-256，没有 `depends_on` 的 node、pnpm 或 ripgrep，也不编译原生引擎。安装把归档内容放入 `libexec`，在 `bin` 链接 `libexec/bin/concord`。
 
-macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`。安装时压缩包内全部 Mach-O 文件（原生 addon、`runtime/node` 与 `runtime/rg`），待 Homebrew 链接处理结束后在 post-install 解压还原原始字节，不重签、不改写。
+macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`。安装时压缩包内全部 Mach-O 文件（原生 addon、`runtime/node` 与 `runtime/rg`），待 Homebrew 链接处理结束后在 post-install 解压还原原始字节，不重签、不改写。tap 的 Homebrew 检查逐文件比对还原后的摘要与归档相同，对全部 Mach-O 运行 `codesign --verify`，并确认没有 `com.apple.quarantine`。
 
 ### Nix
 
-Nix 只支持 `x86_64-linux`。表达式用 `fetchurl` 按 Release 中的 SHA-256 取 `linux-x64` 归档，用 `autoPatchelfHook` 修补归档中的 ELF 文件，运行库取自 flake.lock 固定的 nixpkgs。修补只改 ELF 的解释器与运行库路径，不改应用 JavaScript、依赖与启动脚本的逻辑。
+Nix 只支持 `x86_64-linux`。原始发布身份与渠道安装身份分开：
+
+1. 表达式用 `fetchurl` 按 Release 中的 SHA-256 取 `linux-x64` 归档，recipe 构建先核对原始 native manifest 与绑定字节一致。
+2. recipe 构建阶段用 `autoPatchelfHook` 修补归档内全部 ELF（`runtime/node`、HawDB `.node`、`runtime/rg` 与 `runtime/lib/` 中的库），运行库取自 flake.lock 固定的 nixpkgs，至少包含 glibc、GCC 运行库与 libatomic。有库无法解析时构建失败。修补只改 ELF 的解释器与运行库路径，不改应用 JavaScript、依赖与启动脚本。
+3. 修补后为 HawDB 绑定重写 native manifest `artifact.json`：`revision`、ABI、`target`、源码摘要 `sourceDigest`、锁文件摘要 `cargoLockDigest` 与 `noticesSha256` 保持原值，`binarySha256` 换成修补后字节的 SHA-256。修补后的安装目录与这个 manifest 构成 Nix 渠道的安装身份。
+
+运行时的摘要检查不放宽：Nix 安装的绑定与其它渠道一样，必须与所在安装的 manifest 一致。tap 的 Nix 检查经过 HawDB 身份校验与一次缓存写入后读取，不只运行 `--help`。
+
+### 安装脚本
+
+安装脚本把每个版本解压到 `~/.local/share/concord/<version>/`，链接 `concord` 指向当前版本的 `bin/concord`：
+
+1. 先在同一父目录的临时目录中下载、校验与解压，成功后 rename 为版本目录，并在其中写入 `.archive-sha256`。下载或校验失败只删除自己的临时目录。
+2. 版本目录已存在时比对 `.archive-sha256`：相同则复用；不同或缺失则以非零退出，提示删除该目录后重试，不覆盖已有目录。
+3. 新链接先写到临时名，再 rename 到目标位置。每次链接指向某个版本，都更新该版本的 `.activated` 时间。旧版本目录不被改写。
+4. 清理只考虑同一父目录下的版本目录：跳过当前版本与使用中的版本，其余按 `.activated` 时间保留最近两个，删除更早的。
+
+安装包模式的工作区服务启动时在其安装根下创建 `.in-use/<pid>`，正常退出时删除；安装根不可写（例如 Nix store）时不写标记，这些目录也不归安装脚本清理。安装脚本用 `kill -0` 判断标记中的进程是否存活：存活即视为使用中，进程已不存在时删除该标记。PID 被复用时只会多保留一个版本。`.archive-sha256`、`.activated` 与 `.in-use/` 不属于[安装身份](../../architecture.md#基础服务)摘要的内容。安装脚本不向任何服务发信号。
 
 ### tap 同步
 
@@ -76,7 +109,9 @@ Concord 拥有源码校验、归档字节与源码 Release，tap 拥有包管理
 
 Linux 与 macOS 原生任务分别在 Ubuntu 24.04 与 Apple Silicon macOS 15 上从源码构建 `linux-x64` 与 `darwin-arm64` HawDB 引擎，后者 deployment target 为 macOS 15.0。native manifest 绑定桥接源码、Cargo lock、ABI、HawDB revision 与二进制摘要；本机 Nix 构建的原生产物不进入归档。
 
-一个 Ubuntu 24.04 任务在原生任务之后运行：清理输出目录，构建并类型检查应用一次，收集完整且经核验的原生产物集合，为每个目标组装归档并核验版本与摘要。后续验证解压该归档，不重新构建。同一标签 commit 的完整检查也是源码发布的前置条件。
+一个 Ubuntu 24.04 任务在原生任务之后运行：清理输出目录，构建并类型检查应用一次，收集完整且经核验的原生产物集合，为每个目标组装候选归档、打出库包并核验版本与摘要，把候选与摘要作为不可变产物上传。
+
+验证任务依赖打包任务，分别在 `ubuntu-24.04` 与 `macos-15` arm64 runner 上下载本目标的候选与摘要，校验后解压运行，不重新构建，核对项见[从标签发布](use-case/release-from-tag.md#verify)。验证的 `PATH` 只含系统基础命令与 Git，没有真实的 `node`、`pnpm` 与 `rg`；另放以非零退出的 `node` 与 `rg` 探针，确认应用不回退到 `PATH`。发布任务同时依赖两个验证任务与同一标签 commit 的完整检查。
 
 CI 在四个独立 runner 上分片运行同一完整套件，每个分片串行执行，避免其它测试进程干扰性能计时。手动可移植检查必须断言真实的 HawDB 缓存未命中后命中，只回源不算通过。
 

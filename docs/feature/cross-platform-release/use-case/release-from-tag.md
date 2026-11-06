@@ -2,26 +2,37 @@
 
 ## 用户目标
 
-维护者推送一个版本标签，得到每个目标平台一个自带运行时的 Concord 归档，以及自动同步的 Homebrew 与 Linux Nix recipe，各渠道使用同一份字节。
+维护者推送一个版本标签，得到每个目标平台一个自带运行时的 Concord 归档、同版本的库包，以及自动同步的 Homebrew 与 Linux Nix recipe，各渠道从同一份归档安装。
 
 ## 完整路径
 
 1. 在已推送的 commit 上完成 Concord 驱动的 Spec、实现与测试工作。 {#prepare}
 2. 创建并推送 `v<version>`，命令见 [CLI](../cli.md#命令)。 {#tag}
-3. 原生任务分别构建固定版本的 `linux-x64` 与 `darwin-arm64` HawDB 引擎。 {#native}
-4. 一台 Ubuntu 24.04 runner 从标签派生版本，构建并类型检查应用一次，为两个目标各组装一个归档并核验摘要；同一标签 commit 执行完整检查。 {#package}
-5. 构建、身份核验与完整检查通过后发布源码 GitHub Release，附带两个归档、`SHA256SUMS` 与[安装脚本](install-with-script.md) `install.sh`。 {#publish}
-6. 公开 tap 自动发现发布，核验版本、标签、资产与哈希，用同一归档生成 Formula 与 Linux Nix 候选。候选通过 Homebrew 与 Nix 安装运行检查后，tap 提交、打 recipe 标签并创建渠道完成记录。 {#channels}
-7. 用户通过安装脚本、`brew install CorrectRoadH/tap/concord` 或文档中的 Nix flake 安装，看到对应标签的版本。 {#install}
-8. 源码 Release 成功后发布同版本的 Herdr mod：发布 workflow 把归档中构建好的 mod、`RECIPE.md` 与截图 `preview.png` 写到本仓库顶层的 `concord/` 目录，以一个提交推到 master。 {#herdr-mod}
+3. 原生任务分别构建固定版本的 `linux-x64` 与 `darwin-arm64` HawDB 引擎；macOS 任务给 HawDB 绑定与 `runtime/rg` 做 ad-hoc 签名。 {#native}
+4. 一台 Ubuntu 24.04 runner 从标签派生版本，构建并类型检查应用一次，为两个目标各组装一个候选归档，打出库包 `concord-sdlc-<version>.tgz`，计算全部资产的 SHA-256；同一标签 commit 执行完整检查。 {#package}
+5. 在 `ubuntu-24.04` 与 `macos-15` arm64 runner 上各验证本目标的候选归档。验证任务下载第 4 步产出的同一份候选与摘要，不重新构建，校验摘要后解压，在只含系统基础命令与 Git 的 `PATH`（没有 `node`、`pnpm`、`rg`）中运行： {#verify}
 
-第 8 步的目录结构为 `concord/RECIPE.md`、`concord/preview.png` 与 `concord/mods/concord/`（`main.js`、`mod.json`），截图来自真实 Herdr 主机。本仓库带 GitHub topic `herdr-mod`，herdr.dev 按账号与目录名把它列为 `herdr.dev/mods/CorrectRoadH/concord`；`mod.json` 写明要求的最低 Concord 版本，即本次发布的版本。
+   | 核对 | 通过条件 |
+   | --- | --- |
+   | 启动 | `bin/concord --version` 输出标签版本，`bin/concord --help` 以零退出 |
+   | 原生绑定 | 包内 HawDB 绑定通过身份校验并被实际加载 |
+   | 项目闭环 | 在临时 Git 仓库中 `concord init` 与 `concord check` 成功，退出后没有残留的服务进程 |
+   | Web 资源 | 包内 Web 资源存在 |
+   | Linux 依赖 | 所有 ELF 只依赖 glibc 与 `runtime/lib/` 中的库，RPATH 指向包内，GLIBC 符号版本不高于 2.39 |
+   | macOS 签名 | 全部 Mach-O 通过 `codesign --verify`；`runtime/node` 保留 Node.js 官方签名；用 `curl` 下载并解压的文件没有 `com.apple.quarantine` |
 
-`concord/` 是唯一提交到仓库的构建产物，只由发布 workflow 写入，人与 agent 不手改；它不属于源码、测试或 Spec，不参与类型检查、`concord check` 与测试选择。workflow 使用自带的 `GITHUB_TOKEN` 写入，第 8 步失败时报告，不影响源码 Release 与 Homebrew、Nix 渠道。
+6. 第 4 步的完整检查和两个目标的验证全部通过后，发布源码 GitHub Release，附带两个归档、库包、`SHA256SUMS` 与[安装脚本](install-with-script.md) `install.sh`，字节与验证过的候选相同。任何一项失败都不发布。 {#publish}
+7. 公开 tap 自动发现发布，核验版本、标签、资产与哈希，用同一归档生成 Formula 与 Linux Nix 候选。候选通过 Homebrew 与 Nix 安装运行检查后，tap 提交、打 recipe 标签并创建渠道完成记录。macOS 的 Homebrew 检查同样核对全部 Mach-O 的 `codesign --verify`、与归档相同的原始摘要和没有 `com.apple.quarantine`。 {#channels}
+8. 用户通过安装脚本、`brew install CorrectRoadH/tap/concord` 或文档中的 Nix flake 安装，看到对应标签的版本。需要配置类型或解码器的项目按[库接口](../../local-sdlc/library.md)安装同版本库包。 {#install}
+9. 源码 Release 成功后发布同版本的 Herdr mod：发布 workflow 把归档中构建好的 mod、`RECIPE.md` 与截图 `preview.png` 写到本仓库顶层的 `concord/` 目录，以一个提交推到 master。 {#herdr-mod}
+
+第 9 步的目录结构为 `concord/RECIPE.md`、`concord/preview.png` 与 `concord/mods/concord/`（`main.js`、`mod.json`），截图来自真实 Herdr 主机。本仓库带 GitHub topic `herdr-mod`，herdr.dev 按账号与目录名把它列为 `herdr.dev/mods/CorrectRoadH/concord`；`mod.json` 写明要求的最低 Concord 版本，即本次发布的版本。
+
+`concord/` 是唯一提交到仓库的构建产物，只由发布 workflow 写入，人与 agent 不手改；它不属于源码、测试或 Spec，不参与类型检查、`concord check` 与测试选择。workflow 使用自带的 `GITHUB_TOKEN` 写入，第 9 步失败时报告，不影响源码 Release 与 Homebrew、Nix 渠道。
 
 ## 结果
 
-各渠道得到相同的归档字节与 `concord --version`。矩阵、身份、摘要、运行时清理、Formula 或 Nix 失败都可见，并停止所在的发布阶段。该工作流不声称支持网络多机协调或 Windows 执行。
+各渠道从相同的归档字节安装，得到相同的 `concord --version`。矩阵、身份、摘要、候选验证、运行时清理、Formula 或 Nix 失败都可见，并停止所在的发布阶段。该工作流不声称支持网络多机协调或 Windows 执行。
 
 ## Spec 来源
 

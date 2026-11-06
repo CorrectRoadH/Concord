@@ -151,14 +151,14 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 ### 公开接口
 
-安装包只导出四个子路径：
+库包 `concord-sdlc` 只导出四个子路径，行为见[库接口](feature/local-sdlc/library.md)：
 
 - `concord-sdlc/config`：`concord.config.ts` 的类型；
 - `concord-sdlc/model`：文档 Schema 与模型类型；
 - `concord-sdlc/test-adapter-protocol`：原生测试 adapter 的协议；
 - `concord-sdlc/change-preview`：PR 静态预览产物的 Schema。
 
-其余模块是内部实现，不导出。CLI 入口是 `concord` bin。
+其余模块是内部实现，不导出。CLI 入口是发布归档中的 `bin/concord`，库包没有 `bin`。
 
 ### 测试布局
 
@@ -397,7 +397,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 真实闭环：init → 写 Feature 与 Use Case → 写 Issue → 提交带 `@issue` 的失败回归测试并配置 runner → 提交修复 → `issue close --fixed` → trace 与 review。另覆盖错误引用、未核验的 fixed、伪造的 verification、测试源码变化、重开、退役、缓存删除与损坏、注释变化后的缓存失效、悬空与重复标注、跨 cwd 与 root、路径穿越、写冲突、并发写、journal 恢复、超时清理和独立安装。
 
-构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。每个目标的发布归档携带该目标的原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一组装归档，在目标平台安装同一份归档验收，见[跨平台标签发布](feature/cross-platform-release/README.md)。
+构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，由 Node 自带的类型擦除直接运行 TS，并纳入 typecheck。每个目标的发布归档携带该目标的原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一组装候选归档，在每个目标的真实系统上运行同一份候选，通过后才发布，见[跨平台标签发布](feature/cross-platform-release/README.md)。
 
 交付通过 `pnpm gate`，检查流程由[构建与检查入口](engineering/testing/README.md#检查入口)定义。性能预算由 `pnpm bench` 按[性能验收](engineering/performance/README.md)的测量路径单独判定，不进入 `pnpm gate`。
 

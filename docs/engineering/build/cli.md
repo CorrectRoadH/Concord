@@ -7,7 +7,7 @@
 | `pnpm install --frozen-lockfile` | 首次安装依赖与项目固定版本的 `vp` |
 | `vp install` | 之后的依赖安装 |
 | `pnpm concord <参数>` | 运行当前检出的源码 CLI，等价于 `node src/entry/cli/entry.ts`，由 Node 自带的类型擦除直接运行，V8 编译缓存见[从源码运行](architecture.md#从源码运行) |
-| `vp build --outDir <目录>` | 把本机目标的完整归档（启动脚本、Node.js 运行时、ripgrep、CLI、原生绑定、Web、PR 预览与随包资源）构建到检出之外的目录 |
+| `vp build --outDir <目录>` | 把一个目标的完整归档（启动脚本、Node.js 运行时、ripgrep、CLI、原生绑定、Web、PR 预览与随包资源）构建到检出之外的目录；目标由 `CONCORD_TARGET` 选择，省略时为本机目标 |
 | `vp run build:native` | 准备原生绑定，按[原生绑定复用](architecture.md#原生绑定复用)的顺序取得 |
 | `vp dev` | 只启动 Web 开发服务器，不运行发行准备 |
 
@@ -19,6 +19,7 @@
 | --- | --- |
 | `CONCORD_NATIVE_OFFLINE=1` | `build:native` 跳过下载，只用共享缓存或从源码编译 |
 | `XDG_CACHE_HOME` | 原生产物共享缓存的根目录，省略时为 `~/.cache` |
+| `CONCORD_TARGET` | `vp build` 组装的目标：`linux-x64` 或 `darwin-arm64`。省略时取本机目标；本机不是这两者之一时，省略也返回 `UnsupportedTarget` |
 
 ## 错误
 
@@ -26,8 +27,17 @@
 | --- | --- |
 | `BuildOutputInCheckout` | `vp build --outDir` 的目录位于检出内 |
 | `DistInCheckout` | 门禁开始时检出中存在 `dist/`；删除它后重试 |
+| `UnsupportedTarget` | `CONCORD_TARGET` 不是 `linux-x64` 或 `darwin-arm64`，或省略时本机不是支持的目标；不写输出目录，以非零退出，消息列出支持的目标 |
 | `HawdbUnavailable` | 源码运行找不到经身份校验的原生绑定；提示运行 `pnpm exec vp run build:native` |
 
 定义了自己错误码的命令按那些错误码包装原生绑定缺失，以 `HawdbUnavailable` 为原因码。例如工作区投影返回 `WorkspaceProjectionUnavailable`，`details.reason` 为 `HawdbUnavailable`。
 
 原生绑定只有在 `native/hawdb` 或其锁文件变化时才需要重建。下载失败、产物缺失或校验不一致时进入下一项来源并输出原因，不中断构建。
+
+在 Ubuntu 上为 Apple Silicon macOS 组装归档：
+
+```sh
+CONCORD_TARGET=darwin-arm64 vp build --outDir /tmp/concord-darwin-arm64
+```
+
+该目标的原生产物取自共享缓存或按摘要的 Release，发布流程传入原生任务的产物；Ubuntu 上不编译 macOS 原生绑定。

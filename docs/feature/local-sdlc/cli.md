@@ -25,7 +25,7 @@
 | `docs` | `docs check` 与 `docs work` |
 | `feedback` | 外部来源的同步与导入 |
 | `view` | Web 工作台 |
-| `server` | `start`、`run`、`status`、`stop`：管理项目目录的[工作区服务](../../concepts.md#workspace-server)，查询命令也会自动启动它；`server stop` 等目标实例回收子进程、关闭持久缓存、删除实例记录并释放服务锁后才返回 0，返回后其它命令可以立即打开持久缓存 |
+| `server` | `start`、`run`、`status`、`stop`：管理项目目录的[工作区服务](../../concepts.md#workspace-server)，查询命令也会自动启动它；`server stop` 等目标实例回收子进程、关闭持久缓存、删除实例记录并释放服务锁后才返回 0，返回后其它命令可以立即打开持久缓存；它也能停止另一版本或另一渠道安装的 Concord 启动的实例 |
 | `skills` | `install`：在项目中创建或更新 Concord 工作流 skill，见[用斜杠命令走开发流程](../project-onboarding/use-case/run-workflow-from-agent.md) |
 | `herdr` | `install`、`uninstall`：安装 [Herdr mod](../herdr-mod/README.md) |
 | `workspace`、`git` | 工作区的当前扫描与历史投影、只读 Git 状态与差异，见 [Web 工作台 CLI](../web-workbench/cli.md) |
@@ -83,7 +83,7 @@ Inspect configuration: concord doctor
 
 在还没有初始化的仓库里，需要项目的命令返回 `ProjectNotInitialized`（退出 1），`details.guide` 给出初始化后推荐的写作指南；哪些命令照常执行见[在还没初始化的仓库里打开 Concord](../project-onboarding/use-case/open-uninitialized-repo.md)。
 
-`concord doctor --json` 报告配置与接入缺口，不运行测试：
+`concord doctor --json` 报告配置与接入缺口，不运行测试；项目安装的库包 `concord-sdlc` 与 CLI 版本不一致时给出 `LibraryVersionMismatch`，见[库接口](library.md#版本)：
 
 ```json
 {

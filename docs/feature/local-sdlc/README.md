@@ -261,7 +261,7 @@ Concord 用源码标记把测试关联到 Spec，通过配置的 `runner` 运行
 
 - [命令体验](cli.md)：每个命令的调用、JSON 输出、退出码与错误。
 - [文档与标记格式](format.md)：文档路径、Issue 与 Memory 的 frontmatter、测试与代码标记。
-- [库接口](library.md)：安装包导出的子路径。
+- [库接口](library.md)：库包 `concord-sdlc` 导出的子路径与安装方式。
 - [性能预算](performance.md)：高频命令的 p50 预算。
 - [实现](architecture.md)
 

@@ -82,7 +82,7 @@ CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选�
 4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`，然后打开持久库、读取最近一份已接受的结果并启动计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务并在状态中报告原因。
 5. 启动者等待自己拉起或竞争中胜出的服务完成握手，最多 10 秒；`opening` 已可握手，项目查询等待服务就绪。连接已在运行的服务时握手最多 1 秒。配置无效不阻止控制接口与查询入口启动，查询返回原有配置诊断。
 
-`hello {protocol, installation, scope?}` 返回 `{protocol, installation, token, state, sourceDigest}`；`shutdown {token, scope?}` 显式停止实例。安装身份或协议不同时只回应控制帧。普通启动与查询返回 `WorkspaceServerVersionConflict`，不能自动停止已有实例；用户可以显式执行 `server stop`。
+`hello {protocol, installation, scope?}` 返回 `{protocol, installation, token, state, sourceDigest}`；`shutdown {token, scope?}` 显式停止实例。安装身份或协议不同时只回应控制帧。普通启动与查询返回 `WorkspaceServerVersionConflict`，不能自动停止已有实例，错误消息给出 `concord server stop`；`server stop` 用 `shutdown` 控制帧停止其它安装身份的实例。安装、升级与回退时的表现见[用一行命令安装](../cross-platform-release/use-case/install-with-script.md#upgrade-running-service)。
 
 ### 状态
 

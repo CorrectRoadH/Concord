@@ -22,20 +22,19 @@
 
 ## 归档组装
 
-发布归档由一个 TypeScript 打包入口组装，`vp build`、打包测试与发布工作流都调用它。入口的输入是目标、应用构建输出与经身份校验的原生产物，输出为[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)所列的目录与 `concord-<version>-<target>.tar.gz`。
+发布归档由一个 TypeScript 打包入口组装，`vp build`、打包测试与发布工作流都调用它。入口的输入是目标、应用构建输出与经身份校验的原生产物，输出为[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)所列的目录与 `concord-<version>-<target>.tar.gz`。各部分的来源与校验只由归档构成定义，本节只写组装顺序。目标由 [`CONCORD_TARGET`](cli.md#环境变量) 选择。
 
-1. 应用 JavaScript 只构建一次，各目标共用。
-2. 运行依赖按 `pnpm-lock.yaml` 冻结、`--ignore-scripts` 安装到 `app/`，平台相关的可选依赖按目标选择。
-3. `runtime/node` 按[运行时版本](README.md#运行时版本)从 nodejs.org 下载该目标的官方发行包，核对 `SHASUMS256.txt` 后只取出 `node` 可执行文件。
-4. `runtime/rg` 取自固定版本的官方 ripgrep 发行包，版本与每个目标的 SHA-256 唯一记录在仓库根目录的 `runtime-deps.json`。`runtime/node` 的 SHA-256 取自 Node.js 官方的 `SHASUMS256.txt`，不另存。
-5. 发布时每个目标单独组装：`CONCORD_TARGET=<target> vp build --outDir <目录>`，运行依赖按目标平台选择可选依赖（pnpm 的 `--os` 与 `--cpu`）。本机打包与打包测试省略 `CONCORD_TARGET`，取本机目标。
-6. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。
+1. 应用 JavaScript、声明与 Web 产物只依赖与目标无关的输入，按这些输入构建一次，各目标共用；切换 `CONCORD_TARGET` 不重新构建应用。
+2. 每个目标用独立、干净的安装树装运行依赖：按 `pnpm-lock.yaml` 冻结、`--ignore-scripts`，保留可选依赖，用 pnpm 的 `--os`、`--cpu` 与 `--libc` 选择目标平台的包（`linux-x64` 为 glibc）。安装树中的符号链接不得指向归档之外。依赖必须在目标平台执行安装脚本或编译时组装失败，不静默漏包。
+3. 按归档构成取得并校验 `runtime/node`、`runtime/rg`、Linux 的 `runtime/lib/` 与许可证文本。
+4. Linux 目标按 [Linux 运行库](../../feature/cross-platform-release/architecture.md#linux-运行库)设置 RPATH 并检查全部 ELF，不满足即失败。macOS 目标的 HawDB 绑定与 `rg` 使用原生任务签名后的字节，不改写。
+5. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。发布时打包任务另打出[库包](../../feature/cross-platform-release/architecture.md#库包)。
 
-下载的发行包按摘要缓存在 `${XDG_CACHE_HOME:-~/.cache}/concord/runtime/`，校验失败不进入归档。入口不读取 `PATH` 中的 `node` 或 `rg`。
+下载的上游发行包按文件内容的 SHA-256 缓存在 `${XDG_CACHE_HOME:-~/.cache}/concord/runtime/`，先校验再使用，校验失败不进入缓存或归档。入口不读取 `PATH` 中的 `node` 或 `rg`。
 
 ## 共享构建缓存
 
-打包测试与性能对照使用的本机目标归档按构建输入的摘要保存在 `${XDG_CACHE_HOME:-~/.cache}/concord/build/<摘要>/`。构建输入是工作区中参与 `vp build` 的源码、依赖锁、构建配置、`.node-version`、ripgrep 版本与原生产物身份，包括未提交的改动。
+打包测试与性能对照使用的本机目标归档按构建输入的摘要保存在 `${XDG_CACHE_HOME:-~/.cache}/concord/build/<摘要>/`。构建输入是工作区中参与 `vp build` 的源码、依赖锁、构建配置、`.node-version`、`runtime-deps.json` 的内容与原生产物身份，包括未提交的改动。
 
 1. 使用者先计算摘要。同摘要的目录已发布时直接只读使用，不再构建。
 2. 不存在时构建到同一缓存下的临时目录，校验后以原子 rename 发布；同一摘要同时只有一个构建者，其余使用者等待它的结果。构建失败不发布任何目录。

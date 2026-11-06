@@ -18,15 +18,18 @@
 
 ### 打包测试
 
-打包测试从[共享构建缓存](../build/architecture.md#共享构建缓存)取得本机目标的[发布归档](../../feature/cross-platform-release/cli.md#发布资产)，解压到临时目录。它在不含系统 `node` 的 `PATH` 中运行 `bin/concord`，核对以下结果：
+打包测试从[共享构建缓存](../build/architecture.md#共享构建缓存)取得本机目标的[发布归档](../../feature/cross-platform-release/cli.md#发布资产)，解压到临时目录。它在只含系统基础命令与 Git 的 `PATH` 中运行 `bin/concord`：没有真实的 `node`、`pnpm` 与 `rg`，另放以非零退出的 `node` 与 `rg` 探针，确认应用不回退到 `PATH`。核对以下结果：
 
 | 核对 | 通过条件 |
 | --- | --- |
-| 文件清单 | 归档只含[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)列出的部分，不含源码、测试或检出路径 |
+| 文件清单 | 归档只含[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)列出的部分，包括许可证文本，不含源码、测试或检出路径 |
 | 版本 | `concord --version` 输出包元数据中的版本 |
 | 原生绑定 | 包内 HawDB 原生绑定通过身份校验并被实际加载 |
 | Web 资源 | 包内 Web 资源存在，工作区服务能提供页面 |
 | 帮助 | `concord --help` 以零退出 |
+| 项目闭环 | 在临时 Git 仓库中 `concord init` 与 `concord check` 成功，退出后没有残留的服务进程 |
+
+发布前另在每个目标的真实系统上验证候选归档，见[从标签发布](../../feature/cross-platform-release/use-case/release-from-tag.md#verify)。
 
 ## 质量标准
 
