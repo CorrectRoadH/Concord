@@ -17,13 +17,13 @@ const runnerTest = (name: string, body: (root: string) => Effect.Effect<void, un
     yield* body(root);
   })).pipe(Effect.provide(NodeServices.layer))));
 
-const run = Effect.fn('test.runner.integration')(function*(args: string[], env: Record<string, string | undefined> = {}, cwd?: string) {
+const run = Effect.fn('test.runner.integration')(function*(args: string[], env: Record<string, string | undefined> = {}, cwd?: string, onOutput?: (chunk: string) => void) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/test-built.ts'), ...args], {
     env: { ...process.env, CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_COMPILE_CACHE: undefined, ...env },
     cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
   }));
-  const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.all)), child.exitCode], { concurrency: 'unbounded' });
+  const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.all).pipe(Stream.tap(chunk => Effect.sync(() => onOutput?.(chunk))))), child.exitCode], { concurrency: 'unbounded' });
   const output = /# Test diagnostics: ([^\n]+)/u.exec(text)?.[1];
   assert.ok(output, text);
   return { text, code: Number(code), output };
@@ -76,26 +76,46 @@ runnerTest('archive preparation gates only packaging and preserves official shar
   const fs = yield* FileSystem.FileSystem;
   const source = join(root, 'test/model/source.test.ts'), packaging = join(root, 'test/process/release-package.test.ts');
   const receipt = join(root, 'preparation.json'), sourceDone = join(root, 'source-done'), packageDone = join(root, 'package-done');
+  const sourceStarted = join(root, 'source-started'), sourceRelease = join(root, 'source-release');
+  const packagingWaiting = yield* Deferred.make<void>();
   yield* fs.makeDirectory(join(root, 'test/model'), { recursive: true });
   yield* fs.makeDirectory(join(root, 'test/process'), { recursive: true });
   yield* fs.writeFileString(receipt, JSON.stringify({ state: 'pending' }));
-  yield* fs.writeFileString(source, `import test from 'node:test'; import assert from 'node:assert/strict'; import {writeFileSync} from 'node:fs';
-test('ordinary source starts before archive readiness', () => { assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, undefined); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined); writeFileSync(${JSON.stringify(sourceDone)}, 'done'); });\n`);
+  yield* fs.writeFileString(source, `import test from 'node:test'; import assert from 'node:assert/strict'; import {existsSync,writeFileSync,watchFile,unwatchFile} from 'node:fs';
+test('ordinary source starts before archive readiness', async () => {
+  assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, undefined); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined);
+  writeFileSync(${JSON.stringify(sourceStarted)}, 'started');
+  await new Promise(resolve => {
+    const release = () => { if (existsSync(${JSON.stringify(sourceRelease)})) { unwatchFile(${JSON.stringify(sourceRelease)}, release); resolve(); } };
+    watchFile(${JSON.stringify(sourceRelease)}, {interval: 10}, release); release();
+  });
+  writeFileSync(${JSON.stringify(sourceDone)}, 'done');
+});\n`);
   yield* fs.writeFileString(packaging, `import test from 'node:test'; import assert from 'node:assert/strict'; import {existsSync,writeFileSync} from 'node:fs';
 test('packaging receives ready archive only', () => { assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, ${JSON.stringify(join(root, 'archive'))}); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined); assert.ok(existsSync(${JSON.stringify(sourceDone)})); writeFileSync(${JSON.stringify(packageDone)}, 'done'); });\n`);
   assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=1/2'], root), false);
   assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=2/2'], root), true);
   assert.equal(selectsPackagingTest([source, packaging], ['--suite=e2e'], root), false);
+  let observed = '';
   const running = yield* run(['--suite=node', source, packaging], {
     CONCORD_GATE_PACKAGE_PREPARATION: receipt, CONCORD_TEST_PACKAGE_ROOT: undefined, CONCORD_TEST_CONCURRENCY: '2',
-  }, root).pipe(Effect.forkScoped);
+  }, root, chunk => {
+    observed += chunk;
+    if (observed.includes('# Packaging waits for Source Node completion')) Deferred.doneUnsafe(packagingWaiting, Effect.void);
+  }).pipe(Effect.forkScoped);
   yield* Effect.gen(function*() {
-    while (!(yield* fs.exists(sourceDone))) yield* Effect.sleep('10 millis');
+    while (!(yield* fs.exists(sourceStarted))) yield* Effect.sleep('10 millis');
   }).pipe(Effect.timeout('20 seconds'));
   assert.equal(yield* fs.exists(packageDone), false, 'pending archive must not start the packaging test process');
   const temporary = `${receipt}.ready`;
   yield* fs.writeFileString(temporary, JSON.stringify({ state: 'ready', code: 0, packageRoot: join(root, 'archive'), duration_ms: 12_345, digest: 'fixture', cache: 'hit' }));
   yield* fs.rename(temporary, receipt);
+  yield* Deferred.await(packagingWaiting).pipe(Effect.timeoutOrElse({
+    duration: '15 seconds', orElse: () => Effect.sync(() => assert.fail(`Packaging did not wait for active source work:\n${observed}`)),
+  }));
+  assert.equal(yield* fs.exists(sourceDone), false, 'source work remains active when the archive becomes ready');
+  assert.equal(yield* fs.exists(packageDone), false, 'ready archive must wait for the source group to release its memory');
+  yield* fs.writeFileString(sourceRelease, 'release');
   const result = yield* Fiber.join(running);
   assert.equal(result.code, 0, result.text);
   assert.match(result.text, /# Packaging Node tests:/u);
