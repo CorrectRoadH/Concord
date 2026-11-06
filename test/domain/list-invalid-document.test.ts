@@ -29,7 +29,6 @@ async function consumer(run: (root: string) => Promise<void>): Promise<void> {
 }
 
 // @use-case docs/feature/document-packages/use-case/discover-managed-documents.md#partial-list
-// @issue docs/issues/list-invalid-document-fails.md
 test('list preserves healthy rows and reports malformed documents without rewriting them', () => consumer(async root => {
   for (const kind of ['issue', 'memory', undefined] as const) {
     const request = { name: 'documents.list' as const, input: { kind } };
@@ -52,7 +51,6 @@ test('list preserves healthy rows and reports malformed documents without rewrit
 }));
 
 // @use-case docs/feature/document-packages/use-case/discover-managed-documents.md#partial-list
-// @issue docs/issues/list-invalid-document-fails.md
 test('list and knowledge indexes return explicit completeness and isolate their scan kinds', () => consumer(async root => {
   for (const kind of ['issue', 'memory'] as const) {
     const request = { name: 'documents.list' as const, input: { kind } };

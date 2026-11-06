@@ -20,7 +20,6 @@ test('client artifact verification does not load a native engine owned by the se
 });
 
 // @feature docs/engineering/build/architecture.md#故障注入产物
-// @issue docs/issues/source-native-test-hooks.md
 test('source native hooks require explicit matching identity and preserve digest verification', () => Effect.runPromise(Effect.sync(() => {
   const root = mkdtempSync(join(tmpdir(), 'concord-native-hooks-'));
   const cache = join(root, 'cache');

@@ -3,7 +3,6 @@ import test from 'node:test';
 import { humanOutput } from '../../src/entry/cli/index.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
-// @issue docs/issues/native-observation-human-output.md
 test('human observations retain native case and dependency facts without case-marker placeholders', () => {
   const native = { nativeId: 'node:case-1', project: 'main', file: 'test/example.test.ts', kind: 'leaf', group: 'group-1', range: { startLine: 4, endLine: 9, sourceDigest: 'sha256:source' }, selection: { opaqueId: 'case-1', capabilityVersion: 'v1' }, tags: { owner: 'docs' }, provenance: 'node' };
   const dependency = { testId: 'case-1', scope: 'file', file: 'test/example.test.ts', declarations: ['code-1'], edges: [{ from: 'test/example.test.ts', to: 'src/example.ts' }], gaps: ['FileScope'] };

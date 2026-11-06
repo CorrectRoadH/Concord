@@ -10,7 +10,6 @@ const Status = Schema.Struct({ owner: Schema.Literals(['service', 'process']), p
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Status));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#status
-// @issue docs/issues/cache-status-server-identity.md
 test('cache status identifies the actual CLI or workspace service owner', async () => {
   const root = fixture();
   try {

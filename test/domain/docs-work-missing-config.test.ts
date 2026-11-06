@@ -7,7 +7,6 @@ import { fixture } from '../support/docs-work-fixture.ts';
 import { prepare, show } from '../support/docs-work-domain-fixture.ts';
 
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
-// @issue docs/issues/docs-work-missing-config.md
 test('docs work plans with default settings without creating a project configuration', () => Effect.runPromise(Effect.tryPromise(async () => {
   // The absent project configuration is the initial state under test.
   const root = fixture(undefined, false);

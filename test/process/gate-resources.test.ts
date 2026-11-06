@@ -57,7 +57,6 @@ withGateResources(${body}, { memoryMaxBytes: ${memoryMaxBytes}, reportRoot: ${JS
 });
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
-// @issue docs/issues/gate-scope-oom-peak-lost.md
 resourceTest('a real gate scope is separate from its caller and records cgroup peaks before exit', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const expectedScope = yield* hasSystemdScope;
@@ -84,7 +83,6 @@ resourceTest('a real gate scope is separate from its caller and records cgroup p
 }));
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
-// @issue docs/issues/gate-scope-oom-peak-lost.md
 resourceTest('scope OOM kills only the gate and leaves its peak report readable to the surviving caller', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const expectedScope = yield* hasSystemdScope;
