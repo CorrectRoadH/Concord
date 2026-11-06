@@ -47,7 +47,9 @@
    }))));
    ```
 
-   这段代码是仓库中 `test/domain/issue-close-links.test.ts` 的第一条测试。它在当前代码上通过，只演示写法，所以标记指向本教程且没有 `@issue`。真实的回归测试在标记块加上第 2 步的 `@issue` 一行，指向真实存在的 Issue；本页的 `close-ignores-links` 只是示意。
+   这段代码是仓库中 `test/domain/issue-close-links.test.ts` 的第一条测试。它在当前代码上通过，只演示写法，所以标记指向本教程且没有 `@issue`。
+
+   真实的回归测试在标记块加上第 2 步的 `@issue` 一行，指向真实存在的 Issue；本页的 `close-ignores-links` 只是示意。
 
    `withConsumer` 来自 `test/support/consumer.ts`，`createDocument` 来自 `test/support/operations.ts`，`closeIssue` 与 `linkIssue` 来自 `src/domain/issues/index.ts`，`ConcordError` 来自 `src/model/index.ts`。
 
@@ -81,7 +83,9 @@
    pnpm concord issue close close-ignores-links --fixed --reason "close 检查入链"
    ```
 
-   命令在临时 worktree 中对缺陷提交执行 `runner.prepare` 与 runner，在当前 worktree 对 HEAD 执行 runner；前者失败、后者通过才删除 Issue。输出与拒绝条件见[核验修复并关闭缺陷](../../../feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed)，把输出的结论写进提交说明并提交 Issue 的删除。
+   命令在临时 worktree 中对缺陷提交执行 `runner.prepare` 与 runner，在当前 worktree 对 HEAD 执行 runner；前者失败、后者通过才删除 Issue。输出与拒绝条件见[核验修复并关闭缺陷](../../../feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed)。
+
+   把输出的结论写进提交说明，并提交 Issue 的删除。
 
 ## 结果
 

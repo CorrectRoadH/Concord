@@ -40,7 +40,9 @@
      const server = await workspace.ready();
    ```
 
-   这两段合起来就是 `test/e2e/view-performance-browser.e2e.ts` 中的同名测试，只省略了同文件其它测试用到的导入。受管文件由 `createDocument` 生成；故意损坏的 `README.md` 是这条路径要求的无效输入。`workspace.ready()` 请求刷新，并等到投影包含这次改动后才返回，不按时间等待。
+   受管文件由 `createDocument` 生成；故意损坏的 `README.md` 是这条路径要求的无效输入。`workspace.ready()` 请求刷新，并等到投影包含这次改动后才返回，不按时间等待。
+
+   这一段与下一步的代码合起来，就是 `test/e2e/view-performance-browser.e2e.ts` 中的同名测试，只省略了同文件其它测试用到的导入。
 
 3. 像用户一样操作，断言可观察结果。 {#act}
 
@@ -57,7 +59,9 @@
    });
    ```
 
-   定位用角色与可访问名称。`act` 来自 `test/e2e/journey.ts`：普通门禁执行第三个参数中的确定性操作，[自然语言运行](../cli.md#自然语言运行)交给模型执行第二个参数的指令，两种模式共用后面的精确断言。只有[自然语言用例](../README.md#自然语言用例)列出的那类操作才加 `{ tags: ['journey'] }` 与 `act`。
+   定位用角色与可访问名称。
+
+   `act` 来自 `test/e2e/journey.ts`。普通门禁执行第三个参数中的确定性操作，[自然语言运行](../cli.md#自然语言运行)交给模型执行第二个参数的指令，两种模式共用后面的精确断言。只有[自然语言用例](../README.md#自然语言用例)列出的那类操作才加 `{ tags: ['journey'] }` 与 `act`。
 
 4. 需要独占服务状态时另起仓库与服务。 {#private}
 

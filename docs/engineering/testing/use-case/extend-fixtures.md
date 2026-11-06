@@ -45,7 +45,9 @@
 
 3. 写出 Fixture 并写清资源回收。 {#create}
 
-   只有一个测试文件使用的 Fixture 写在该测试文件中；多个测试文件共用时放到 `test/support/<主题>-fixture.ts` 并导出。命名与导出遵守 [TypeScript 代码规范](../../code/README.md)。持有临时目录、进程或服务的 Fixture 用 `Effect.acquireRelease` 声明释放，测试用 `Effect.scoped` 限定范围，成功、失败与超时都会释放：
+   只有一个测试文件使用的 Fixture 写在该测试文件中；多个测试文件共用时，放到 `test/support/<主题>-fixture.ts` 并导出。命名与导出遵守 [TypeScript 代码规范](../../code/README.md)。
+
+   持有临时目录、进程或服务的 Fixture 用 `Effect.acquireRelease` 声明释放，测试用 `Effect.scoped` 限定范围。这样成功、失败与超时都会释放：
 
    ```ts
    /** A consumer where Issue `two` links `one`; closing the scope deletes it. */
@@ -95,7 +97,9 @@
    pnpm gate --changed
    ```
 
-   改动了 `test/support/` 时 `--changed` 选中全部测试（[完整门禁](../cli.md#完整门禁)），这是一次完整门禁：同一台机器同时只运行一次。被修复核验冻结的支持文件列在 `concord.config.ts` 的 `runner.sourceFiles`，见 [Runner 适配](../architecture.md#runner-适配)。
+   改动了 `test/support/` 时，`--changed` 选中全部测试（[完整门禁](../cli.md#完整门禁)）。这是一次完整门禁，同一台机器同时只运行一次。
+
+   被修复核验冻结的支持文件列在 `concord.config.ts` 的 `runner.sourceFiles`，见 [Runner 适配](../architecture.md#runner-适配)。
 
 ## 结果
 
