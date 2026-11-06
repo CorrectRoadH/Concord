@@ -36,7 +36,9 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 | `CONCORD_TEST_CONCURRENCY` | `min(8, floor(可用 CPU / 2), floor(可用内存 / 1 GiB))`，至少 1 | Node 测试的文件进程并发，必须为正整数；可用内存取门禁 scope 的 `MemoryMax` 减去浏览器 worker 的预算 |
 | `CONCORD_E2E_WORKERS` | `min(4, Node 并发, floor(MemoryMax / 4 / 2.5 GiB))`，至少 1 | 浏览器测试的 worker 数；每个 worker 的预算 2.5 GiB 含它的浏览器与工作区服务 |
 
-本地与 CI 使用相同的默认值。默认值改变时，用同一冻结快照按[性能测量](../performance/README.md#测量方法)测量前后两种设置。
+本地与 CI 使用相同的默认值。默认值按完整进程树的内存计算：门禁、静态检查与构建的固定开销，加上 Node 并发乘以一个 Node 测试文件及其全部后代进程的实测峰值，再加上浏览器并发乘以一个浏览器 worker 及其后代（浏览器、View 服务、计算与操作进程、私有服务）的实测峰值，合计不超过 `MemoryMax` 并留出余量。整个门禁的峰值除以 worker 数不是单个 worker 的峰值。
+
+默认值改变时，用同一冻结快照按[性能测量](../performance/README.md#测量方法)测量前后两种设置，在参照机器与 CI 的实际 `MemoryMax` 上分别比较墙钟时间与内存峰值；失败或触及上限的运行不作为基线。`MemoryMax` 容纳不下一个 worker 时，门禁报告资源不足，不以“至少 1”的下限当作安全。
 
 ## 浏览器环境
 
