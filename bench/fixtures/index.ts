@@ -1,3 +1,4 @@
+import { packageCommand } from '../../scripts/package-command.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
@@ -10,7 +11,7 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
   const root = join(workDir, name);
   yield* io('Create fixture', () => mkdirSync(root));
   const git = (...argv: string[]) => mustRun(['git', '-C', root, ...argv], { cwd: root, outputDir: workDir });
-  const cli = (...argv: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
+  const cli = (...argv: string[]) => mustRun([...packageCommand(entry), '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
   yield* git('init', '-q');
   yield* cli('init', '--test-root', 'test', '--source-root', 'src', '--yes');
   for (const feature of ['local-sdlc', 'measured']) yield* cli('new', 'feature', feature, '--title', feature);
@@ -55,7 +56,7 @@ const writingSelfConsumer = Effect.fn('bench.writingSelfConsumer')(function*(ent
   yield* mustRun(['git', 'clone', '-q', '--no-hardlinks', '--no-checkout', source.repository, root], { cwd: workDir, outputDir: workDir });
   yield* git('checkout', '-q', '--detach', source.commit);
   const sourceCommit = (yield* git('rev-parse', 'HEAD')).stdout.trim();
-  const cli = (...argv: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
+  const cli = (...argv: string[]) => mustRun([...packageCommand(entry), '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
   const commit = (yield* git('rev-parse', 'HEAD')).stdout.trim();
   const files = (yield* git('ls-files', '-z')).stdout.split('\0').filter(Boolean);
   yield* cli('cache', 'rebuild');

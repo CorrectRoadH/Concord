@@ -1,3 +1,4 @@
+import { packageCommand } from '../package-command.ts';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
@@ -34,7 +35,7 @@ export const prepareConsumer = Effect.fn('perf.prepareConsumer')(function*(kind:
   const hadServer = yield* fs.exists(serverRecord);
   yield* Effect.addFinalizer(() => Effect.gen(function*() {
     if (!hadServer && (yield* fs.exists(serverRecord))) {
-      yield* mustRun([process.execPath, options.entry, '--root', root, '--json', 'server', 'stop'], { cwd: root, outputDir: options.workDir });
+      yield* mustRun([...packageCommand(options.entry), '--root', root, '--json', 'server', 'stop'], { cwd: root, outputDir: options.workDir });
       // Historical baselines can acknowledge stop before their cleanup finishes.
       yield* Effect.gen(function*() {
         while (yield* fs.exists(serverRecord)) yield* Effect.sleep('10 millis');

@@ -6,6 +6,8 @@ const Manifest = Schema.fromJsonString(Schema.Struct({ bin: Schema.Struct({ conc
 /** Packaging and acceptance resolve the bin from the artifact's own manifest. */
 export const packageBin = Effect.fn('packageBin')(function*(root: string) {
   const fs = yield* FileSystem.FileSystem;
+  const launcher = join(root, 'bin/concord');
+  if ((yield* fs.exists(launcher)) && (yield* fs.exists(join(root, 'app/package.json')))) return launcher;
   const source = join(root, 'src/entry/cli/entry.ts');
   if (yield* fs.exists(source)) return source;
   const manifest = yield* Schema.decodeUnknownEffect(Manifest, { onExcessProperty: 'ignore' })(yield* fs.readFileString(join(root, 'package.json')));

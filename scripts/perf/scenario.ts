@@ -1,4 +1,5 @@
-import { installationResources, installationRootForBin } from '../../src/base/installation/index.ts';
+import { packageCommand } from '../package-command.ts';
+import { installationResources, installationRootForBin, packagedRuntimeForApplication } from '../../src/base/installation/index.ts';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, FileSystem, Schema } from 'effect';
@@ -61,8 +62,7 @@ export function runArguments(run: BenchRun): readonly string[] {
   if ('mod' in run) return ['herdr'];
   return run;
 }
-// Source smoke tests still need a loader when a measured scenario clears NODE_OPTIONS.
-const nodeEntry = (entry: string) => [process.execPath, entry];
+const nodeEntry = packageCommand;
 export const cliCommand = (artifact: Artifact, root: string, argv: readonly string[]) => (argv[0] === 'repo' || argv.includes('--skill') || argv.includes('--help') || argv.includes('--version'))
   ? [...nodeEntry(artifact.entry), ...argv] : [...nodeEntry(artifact.entry), '--root', root, ...argv];
 export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: NodeJS.ProcessEnv, refreshLimitMs = 0): BenchContext => ({
@@ -165,8 +165,13 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
     }
     result = target!;
   } else {
-    const argv = 'scan' in run ? [...nodeEntry(((yield* fs.exists(installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker'))) ? installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker') : join(dirname(context.artifact.entry), 'query-scan-worker.js'))), context.consumer.root, JSON.stringify(run.scan)]
-      : cliCommand(context.artifact, context.consumer.root, runArguments(run));
+    let argv: readonly string[];
+    if ('scan' in run) {
+      const application = installationRootForBin(context.artifact.entry);
+      const bundled = packagedRuntimeForApplication(application);
+      const scanWorker = installationResources(application).worker('query-scan-worker');
+      argv = [...(bundled === undefined ? nodeEntry((yield* fs.exists(scanWorker)) ? scanWorker : join(dirname(context.artifact.entry), 'query-scan-worker.js')) : [bundled.node, scanWorker]), context.consumer.root, JSON.stringify(run.scan)];
+    } else argv = cliCommand(context.artifact, context.consumer.root, runArguments(run));
     const count = 'argv' in run ? run.concurrency : 1;
     const results = yield* Effect.all(Array.from({ length: count }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,
       ...(timeoutMs === undefined ? {} : { timeoutMs }), env: { ...context.env, ...scenario.env } })), { concurrency: 'unbounded' });

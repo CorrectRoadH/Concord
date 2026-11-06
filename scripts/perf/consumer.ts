@@ -1,3 +1,4 @@
+import { packageCommand } from '../package-command.ts';
 import { join, resolve } from 'node:path';
 import { packageBin } from '../package-location.ts';
 import { Effect, FileSystem, Schema } from 'effect';
@@ -20,7 +21,7 @@ export interface Consumer {
 
 const CacheStatus = Schema.Struct({ status: Schema.Literal('ready') });
 const prepareCache = Effect.fn('perf.prepareCache')(function*(entry: string, root: string, outputDir: string, smoke = false) {
-  const concord = (...args: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', 'cache', ...args], { cwd: root, outputDir });
+  const concord = (...args: string[]) => mustRun([...packageCommand(entry), '--root', root, '--json', 'cache', ...args], { cwd: root, outputDir });
   const rebuilt = yield* concord('rebuild');
   if (smoke) {
     yield* io('Verify rebuilt smoke cache', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ cacheStatus: CacheStatus })), { onExcessProperty: 'ignore' })(rebuilt.stdout));
@@ -56,7 +57,7 @@ export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: st
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(root);
   yield* git(root, workDir, 'init', '-q');
-  const concord = (...args: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', ...args], { cwd: root, outputDir: workDir });
+  const concord = (...args: string[]) => mustRun([...packageCommand(entry), '--root', root, '--json', ...args], { cwd: root, outputDir: workDir });
   yield* concord('init', '--test-root', 'test', '--source-root', 'src', '--yes');
   yield* concord('new', 'feature', 'scale', '--title', 'Scale');
   yield* concord('new', 'feature', 'local-sdlc', '--title', 'Local SDLC query target');

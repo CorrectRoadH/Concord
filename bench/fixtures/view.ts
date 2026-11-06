@@ -1,3 +1,4 @@
+import { packageCommand } from '../../scripts/package-command.ts';
 import { spawn } from 'node:child_process';
 import { Effect, Schema } from 'effect';
 import { io, PerfError } from '../../scripts/perf/process.ts';
@@ -19,7 +20,7 @@ export const prepareView = Effect.fn('bench.prepareView')(function*(context: Ben
   const started = performance.now();
   if (!context.services.has('view')) {
   const handle = yield* Effect.acquireRelease(io('Start view', () => {
-    const server = spawn(process.execPath, [context.artifact.entry, '--root', context.consumer.root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...context.env } });
+    const server = spawn(packageCommand(context.artifact.entry)[0], [...packageCommand(context.artifact.entry).slice(1), '--root', context.consumer.root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...context.env } });
     let stdout = '', stderr = '', closed = false; let failure: Error | undefined;
     const exited = new Promise<void>(resolve => server.once('close', () => { closed = true; resolve(); }));
     server.once('error', error => { failure = error; });

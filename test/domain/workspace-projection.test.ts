@@ -5,7 +5,6 @@ import { NodeServices } from '@effect/platform-node';
 import { runApplication } from '../support/repository.ts';
 import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.ts';
 import { installationResources } from "../../src/base/installation/index.ts";
-import { packageBin } from '../support/installed-package.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -25,7 +24,6 @@ import { type WorkspaceProjection } from "../../src/model/index.ts";
 import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.ts";
 import { type ViewServerHandle } from '../e2e/server.ts';
 import { startViewServer } from '../e2e/server.ts';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.ts';

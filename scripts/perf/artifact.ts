@@ -1,5 +1,5 @@
 import { packConcord } from '../release-package.ts';
-import { workspaceInstallationIdentity, installationRootForBin } from '../../src/base/installation/index.ts';
+import { workspaceInstallationIdentity, installationRootForBin, archiveRootForApplication } from '../../src/base/installation/index.ts';
 import { createHash } from 'node:crypto';
 import { cpus, totalmem, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -11,7 +11,7 @@ import { io, mustRun, PerfError } from './process.ts';
 
 export interface Artifact { readonly label: 'candidate' | 'baseline'; readonly dir: string; readonly entry: string; readonly commit: string; readonly dirty: boolean; readonly digest: string }
 
-const digestDist = Effect.fn('perf.digestDist')(function*(directory: string) {
+const digestDist = Effect.fn('perf.digestDist')(function*(directory: string, all = false) {
   const fs = yield* FileSystem.FileSystem;
   const hash = createHash('sha256');
   const visit = Effect.fn('perf.digestDist.visit')(function*(folder: string, prefix: string): Effect.fn.Return<void, PlatformError> {
@@ -20,12 +20,24 @@ const digestDist = Effect.fn('perf.digestDist')(function*(directory: string) {
       if ((yield* Effect.result(fs.readLink(path)))._tag === 'Success') continue;
       const info = yield* fs.stat(path);
       if (info.type === 'Directory') yield* visit(path, name);
-      else if (info.type === 'File' && /(?:\.js|\.node|(?:artifact|build-identity)\.json)$/u.test(entry)) {
+      else if (info.type === 'File' && (all || /(?:\.js|\.node|(?:artifact|build-identity)\.json)$/u.test(entry))) {
         hash.update(name); hash.update('\0'); hash.update(yield* fs.readFile(path)); hash.update('\0');
       }
     }
   });
   yield* visit(directory, 'dist');
+  return `sha256:${hash.digest('hex')}`;
+});
+
+const digestInstallation = Effect.fn('perf.digestInstallation')(function*(entry: string) {
+  const app = installationRootForBin(entry);
+  const archive = archiveRootForApplication(app);
+  if (archive === undefined) return yield* digestDist(join(app, 'dist'));
+  const hash = createHash('sha256');
+  // Exclude mutable service usage markers and the redundant compressed archive.
+  for (const directory of ['app', 'bin', 'runtime', 'licenses']) {
+    hash.update(directory); hash.update(yield* digestDist(join(archive, directory), true));
+  }
   return `sha256:${hash.digest('hex')}`;
 });
 
@@ -54,14 +66,13 @@ export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Arti
   const identity = yield* io('Read build identity', () => identityBytes === undefined ? undefined : Schema.decodeUnknownSync(Schema.fromJsonString(BuildIdentity), { onExcessProperty: 'error' })(identityBytes));
   const commit = identity?.commit ?? (yield* git('rev-parse', 'HEAD'));
   const dirty = identity?.dirty ?? ((yield* git('status', '--porcelain')) !== '');
-  const digest = source ? yield* io('Identify source installation', () => workspaceInstallationIdentity()) : yield* digestDist(distribution);
+  const digest = source ? yield* io('Identify source installation', () => workspaceInstallationIdentity()) : yield* digestInstallation(entry);
   return { label, dir, entry, commit, dirty, digest } satisfies Artifact;
 });
 
 /** Concurrent source commits do not change an already built installation. */
 export const verifyArtifact = Effect.fn('perf.verifyArtifact')(function*(artifact: Artifact) {
-  const distribution = join(installationRootForBin(artifact.entry), 'dist');
-  const digest = artifact.entry.endsWith('.ts') ? yield* io('Identify source installation', () => workspaceInstallationIdentity()) : yield* digestDist(distribution);
+  const digest = artifact.entry.endsWith('.ts') ? yield* io('Identify source installation', () => workspaceInstallationIdentity()) : yield* digestInstallation(artifact.entry);
   if (digest !== artifact.digest) {
     return yield* new PerfError({ message: `${artifact.label} artifact changed during measurement` });
   }

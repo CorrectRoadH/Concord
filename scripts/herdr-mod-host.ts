@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/architecture.md
 // @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
+import { packageCommand } from './package-command.ts';
 // Only the external Herdr/GPUI boundary is replaced; this loads the source mod
 // and executes the public CLI. It does not measure native drawing.
 import { registerHooks } from 'node:module';
@@ -86,7 +87,7 @@ const main = Effect.scoped(Effect.gen(function*() {
       calls.push(operation);
       const started = performance.now();
       const execution = Effect.scoped(Effect.gen(function*() {
-        const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [entry, ...args], {
+        const child = yield* spawner.spawn(ChildProcess.make(packageCommand(entry)[0], [...packageCommand(entry).slice(1), ...args], {
           cwd: options.cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
         }));
         const result = yield* Effect.all({ code: child.exitCode, stdout: Stream.mkString(Stream.decodeText(child.stdout)), stderr: Stream.mkString(Stream.decodeText(child.stderr)) }, { concurrency: 'unbounded' });
