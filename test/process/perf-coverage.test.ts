@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
+import { API } from 'typescript/sync';
+import * as ts from 'typescript/ast';
 import { loadArtifact } from '../../scripts/perf/artifact.ts';
 import { loadBudgets } from '../../scripts/perf/budgets.ts';
 import { commandGroups, selectScenarios } from '../../scripts/perf/selection.ts';
-import { executeScenario, loadScenarios, makeContext, prepareServer, runArguments, type BenchScenario } from '../../scripts/perf/scenario.ts';
+import { executeScenario, loadScenarios, makeContext, runArguments, type BenchScenario } from '../../scripts/perf/scenario.ts';
 import { io, mustRun } from '../../scripts/perf/process.ts';
 import { installedConcordCli } from '../support/support.ts';
 import { prepareConsumer, workDirectory } from '../../scripts/perf/workspace.ts';
-import { benchmarkSmoke } from '../support/benchmark-smoke.ts';
+import { benchmarkSmokeGroups } from '../support/benchmark-smoke.ts';
 const root = resolve(".");
 // @feature docs/feature/local-sdlc/README.md
 test('performance budgets and executable scenarios have exactly one consistent owner', () => Effect.runPromise(Effect.gen(function*() {
@@ -36,10 +38,32 @@ test('CLI top-level command definitions have scenarios or documented exemptions'
   const covered = scenarios.map(s => runArguments(s.run).find(arg => !arg.startsWith('--')));
   for (const group of groups) assert.ok(covered.includes(group) || exemptions.includes(group), `Uncovered CLI command group: ${group}`);
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));
-// @feature docs/feature/local-sdlc/README.md
-test('all ordinary benchmark scenarios execute on minimal frozen consumers without timing verdicts', { timeout: 180_000 }, t =>
-  Effect.runPromise(benchmarkSmoke(false).pipe(Effect.scoped, Effect.provide(NodeServices.layer)), { signal: t.signal }));
-
+// @feature docs/engineering/testing/README.md#成本与稳定
+test('benchmark smoke files partition every scenario exactly once', () => Effect.runPromise(Effect.gen(function*() {
+  const scenarios = yield* loadScenarios(root);
+  const selected: string[] = [];
+  const directory = join(root, 'test/process');
+  const api = yield* Effect.acquireRelease(Effect.sync(() => new API({ runExternalCode: false })), api => Effect.sync(() => api.close()));
+  for (const file of readdirSync(directory).filter(name => /^perf-(?:service-)?coverage(?:-[a-z0-9-]+)?\.test\.ts$/u.test(name))) {
+    const source = api.createSourceFile(join(directory, file), readFileSync(join(directory, file), 'utf8'), { scriptKind: ts.ScriptKind.TS });
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'benchmarkSmoke') {
+        const [service, feature, indices] = node.arguments;
+        assert.ok(service && (service.kind === ts.SyntaxKind.TrueKeyword || service.kind === ts.SyntaxKind.FalseKeyword), `${file}: literal service selector required`);
+        assert.ok(feature && ts.isStringLiteral(feature), `${file}: literal feature selector required`);
+        let groups: number[] | undefined;
+        if (indices !== undefined) {
+          assert.ok(ts.isArrayLiteralExpression(indices), `${file}: literal group selectors required`);
+          groups = indices.elements.map(index => { assert.ok(ts.isNumericLiteral(index), `${file}: numeric group selector required`); return Number(index.text); });
+        }
+        selected.push(...benchmarkSmokeGroups(scenarios, service.kind === ts.SyntaxKind.TrueKeyword, feature.text, groups).flatMap(group => group.scenarios.map(scenario => scenario.id)));
+      }
+      node.forEachChild(visit);
+    };
+    try { visit(source.sourceFile); } finally { source.dispose(); }
+  }
+  assert.deepEqual(selected.sort(), scenarios.map(scenario => scenario.id).sort(), 'Smoke files must execute the complete scenario set exactly once');
+}).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));
 
 // @feature docs/feature/local-sdlc/README.md
 test('scenario execution checks every concurrent result and restores beforeEach edits on failure', () => Effect.runPromise(Effect.gen(function*() {
