@@ -36,7 +36,7 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 
 只有当前格式（[当前格式](architecture.md#当前格式)）。frontmatter 严格解码，未知字段与可推导字段都是无效输入。
 
-发布与恢复使用 Git-private 的短发布租约与 journal 协议。读取使用乐观快照，提交短期独占；dry-run 不发布文件。无法解码的 journal 保留现场并阻断写入。
+发布与恢复使用 Git-private 的短发布租约与 journal 协议。读取使用[来源快照](feature/portable-coordination/concepts.md#source-snapshot)，提交短期独占；dry-run 不发布文件。无法解码的 journal 保留现场并阻断写入。
 
 配置 `concord.config.ts` 可以不存在；存在时只声明 runner、测试与源码目录的覆盖、排除项与可选集成，见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md)。
 

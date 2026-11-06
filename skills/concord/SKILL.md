@@ -5,7 +5,7 @@ description: 在本地 Git 仓库中使用 Concord 维护产品 Spec、代码与
 
 # Concord
 
-Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与测试中的 Concord 标记、Issue 与 Memory 各自保存在自己的文件里，关系从中推导。先遵守消费仓库的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
+Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与测试中的 Concord 标记、Issue 与 Memory 各自保存在自己的文件里，关系从中推导。先遵守接入项目的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
 
 `docs/` 与 `memory/` 下的全部文件都可以直接编辑，包括 Issue 与 Memory 的状态和关系。具名命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用，它们把结果写进同一份文件；`concord check` 检查结果是否一致。
 

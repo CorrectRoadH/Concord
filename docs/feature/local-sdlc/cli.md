@@ -1,8 +1,8 @@
 # 命令体验
 
-本页按日常顺序列出命令、实际输出、退出码与错误。示例来自一个只有 `src/cart.js` 与 `test/cart.test.js` 的消费仓库。摘要和时间戳因运行而异，其余字段与真实输出一致；标为预期输出的示例尚待实现核对。实现方式见[架构](architecture.md)。
+本页按日常顺序列出命令、实际输出、退出码与错误。示例来自一个只有 `src/cart.js` 与 `test/cart.test.js` 的接入项目。摘要和时间戳因运行而异，其余字段与真实输出一致；标为预期输出的示例尚待实现核对。实现方式见[架构](architecture.md)。
 
-全部文件都可以直接编辑。命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用，并把结果写进文件；`check` 检查结果是否一致。
+全部文件都可以直接编辑。命令只做必须由程序完成的操作，例如修复核验与 Roadmap 采用，并把结果写进文件；`check` 检查结果是否一致。
 
 ## 命令面
 
@@ -26,7 +26,7 @@
 | `feedback` | 外部来源的同步与导入 |
 | `view` | Web 工作台 |
 | `server` | `start`、`run`、`status`、`stop`：管理项目目录的[工作区服务](../../concepts.md#workspace-server)，查询命令也会自动启动它；`server stop` 等目标实例回收子进程、关闭持久缓存、删除实例记录、释放服务锁并且服务进程本身已经退出后才返回 0，返回后其它命令可以立即打开持久缓存；它也能停止另一版本或另一渠道安装的 Concord 启动的实例 |
-| `skills` | `install`：在项目中创建或更新 Concord 工作流 skill，见[用斜杠命令走开发流程](../project-onboarding/use-case/run-workflow-from-agent.md) |
+| `skills` | `install`：在项目中创建或更新 Concord 工作流 skill，见[用工作流 skill 走开发流程](../project-onboarding/use-case/run-workflow-from-agent.md) |
 | `herdr` | `install`、`uninstall`：安装 [Concord mod](../herdr-mod/README.md) |
 | `workspace`、`git` | 工作区的当前扫描与历史投影、只读 Git 状态与差异，见 [Web 工作台 CLI](../web-workbench/cli.md) |
 | `config`、`template` | 查看与替换配置；查看随包模板 |
@@ -41,7 +41,7 @@
 - 每个命令都接受 `--json`。Agent 与脚本读取 JSON，不解析人读输出。JSON 字段是公开 Spec。
 - 退出码 0 表示成功。退出码 1 表示命令拒绝执行、检查发现问题或测试失败。
 - 命令拒绝执行时，错误对象写到 stderr，形如 `{"ok":false,"error":"<错误码>","message":"...","details":{...}}`。`details` 可省略。人读输出以 `ok: false`、`error:`、`message:` 三行开头。`check` 这类检查命令发现问题时，结果仍写到 stdout，`ok` 为 false。
-- `--root <worktree>` 指定消费仓库。省略时取 cwd 所在 Git worktree 的顶层；`concord.config.ts` 可以不存在。
+- `--root <worktree>` 指定接入项目。省略时取 cwd 所在 Git worktree 的顶层；`concord.config.ts` 可以不存在。
 - CLI 查询默认使用 `--server=shared`，自动启动或复用项目后台；`--server=command` 使用随查询回收的后台。作用域、环境隔离与失败语义见[CLI 查询](../local-data-engine/architecture.md#cli-查询)。
 - `--dry-run` 放在子命令之前，校验并预览写入，不改文件。人读输出以 `Would apply` 开头。
 - 诊断类读取默认返回后台刷新的快照。尚无快照时返回 `QueryPending`，`details.refresh` 为 `requested`。加 `--fresh` 等待当前来源。
@@ -71,7 +71,7 @@ Inspect configuration: concord doctor
 {"operation":"init","dryRun":false,"changedPaths":["docs/taste.md","..."],"config":{},"createdPaths":["docs/taste.md","..."],"preservedPaths":[],"guide":"docs-from-code"}
 ```
 
-`concord skills install` 创建或更新 `.agents/skills/concord-{spec,implement,review,fix}/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，全部是普通文件，在一次写入中提交；`init` 安装同一组文件。当前版本不再提供、但带 `concord-managed` 标记的 `concord-*` skill 被删除。人读输出按 `Created`、`Updated`、`Removed`、`Unchanged` 分组列出路径。`--json` 返回：
+`concord skills install` 创建或更新 `.agents/skills/concord-{spec,implement,review,fix}/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，全部是普通文件，在一次写入中提交；`init` 安装同一组文件。当前版本不再提供、但带 `concord-managed` 托管标记的 `concord-*` skill 被删除。人读输出按 `Created`、`Updated`、`Removed`、`Unchanged` 分组列出路径。`--json` 返回：
 
 ```json
 {"operation":"skills-install","dryRun":false,"createdPaths":[".agents/skills/concord-spec/SKILL.md","..."],"updatedPaths":[],"removedPaths":[],"unchangedPaths":[]}
@@ -81,7 +81,7 @@ Inspect configuration: concord doctor
 
 | 错误 | 触发条件 |
 | --- | --- |
-| `SkillPathOccupied` | 目标路径已有不带 `concord-managed` 标记的文件，或是目录、符号链接；`details.path` 给出路径，不写任何文件 |
+| `SkillPathOccupied` | 目标路径已有不带 `concord-managed` 托管标记的文件，或是目录、符号链接；`details.path` 给出路径，不写任何文件 |
 
 在还没有初始化的仓库里，需要项目的命令返回 `ProjectNotInitialized`（退出 1），`details.guide` 给出初始化后推荐的写作指南；哪些命令照常执行见[在还没初始化的仓库里打开 Concord](../project-onboarding/use-case/open-uninitialized-repo.md)。
 

@@ -38,7 +38,7 @@
    诊断与工具  项目设置
    ```
 
-   点「Feature」，第二侧栏列出全部 Feature 与筛选框，右侧预览第一项；点「cart」只切换右侧预览。Feature 的页签是「正文、Use Cases、术语、实现、测试、元数据」。在「Use Cases」页签点一个 Use Case，它从右侧的详情抽屉打开，Feature 留在背景里。
+   点「Feature」，内容导航列出全部 Feature 与筛选框，右侧预览第一项；点「cart」只切换右侧预览。Feature 的页签是「正文、Use Cases、术语、实现、测试、元数据」。在「Use Cases」页签点一个 Use Case，它从右侧的详情抽屉打开，Feature 留在背景里。
 
    架构、品味、概念、指南与参考模板这类不属于任何分类的 Markdown，在「文档」里打开：
 

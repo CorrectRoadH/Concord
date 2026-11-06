@@ -23,7 +23,7 @@
      memory/lease-notes.md — lease-notes
    ```
 
-   读取不取得发布所有权，另一个写入持有租约时照常返回。读取记下前像、缺失路径、目录成员与发布 revision，返回当前结果前再核对。历史诊断查询遵守[异步投影](../../local-data-engine/use-case/query-asynchronous-projections.md)。
+   读取不持有发布租约，另一个写入持有它时照常返回。读取记下前像、缺失路径、目录成员与发布修订号，返回当前结果前再核对。历史诊断查询遵守[异步投影](../../local-data-engine/use-case/query-asynchronous-projections.md)。
 
 2. 提交写入时遇到另一个写入。 {#contention}
 
@@ -37,7 +37,7 @@
    message: exclusive publication lease is busy (pid=4182 host=my-host mode=exclusive); retry after the operation finishes. For an interrupted operation run concord recover; do not delete the lease directory.
    ```
 
-   普通写入先在没有独占租约的情况下准备计划，只在提交时取得独占所有权，核对全部依赖与前像后才写 journal。同步提交遇到占用立即报告；显式快照与恢复最多异步等待三秒。超时报告 PID、主机与模式，不撤销对方的所有权，也不重放修改。等对方完成后重试。
+   普通写入先在没有独占租约的情况下准备计划，只在提交时取得发布租约，核对全部依赖与前像后才写 journal。同步提交遇到占用立即报告；显式快照与恢复最多异步等待三秒。超时报告 PID、主机与模式，不撤销对方的所有权，也不重放修改。等对方完成后重试。
 
 3. 另一个写入的进程异常退出后继续写。 {#dead-owner}
 
@@ -80,7 +80,7 @@
 | 情形 | 结果 |
 | --- | --- |
 | 打包后的 CLI，`PATH` 中没有 flock、diskutil、plutil 或 stat | 正常工作 |
-| 打开两个仓库 | 都不取得贯穿命令的写锁 |
+| 打开两个仓库 | 都不在整个命令期间持有发布租约 |
 | 两个提交竞争 | 互斥，后到者报告占用 |
 | 读取与写入并发 | 读者不阻塞写者；读到一半有发布时拒绝当前结果 |
 | 两次读取观察之间有完整发布，包括 A→B→A 的编辑 | revision 变化，当前结果被拒绝 |

@@ -51,7 +51,7 @@
    - 术语与写作规则：随包空 catalog `docs/concepts.md`、预设的 `docs/writing.md`。
    - 模板与目录：`docs/_template/`、各分类目录的 README。
    - `AGENTS.md` 中的 Concord 区块。
-   - 工作流 skill：`.agents/skills/concord-*/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，见[用斜杠命令走开发流程](../../project-onboarding/use-case/run-workflow-from-agent.md)。
+   - 工作流 skill：`.agents/skills/concord-*/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，见[用工作流 skill 走开发流程](../../project-onboarding/use-case/run-workflow-from-agent.md)。
 
 3. 查看接入缺口。 {#doctor}
 
@@ -111,7 +111,7 @@ Feature、Engineering 与 Roadmap 只要求 README。`concord new` 的 `--pages`
 
 ## Agent 指引的边界
 
-`concord --skill` 来自安装目录，不读取消费仓库的配置。未知的 skill 主题返回 `SkillTopicUnknown`，与其它参数混用返回 `SkillArgumentsInvalid`，两者都不写文件。
+`concord --skill` 来自安装目录，不读取接入项目的配置。未知的 skill 主题返回 `SkillTopicUnknown`，与其它参数混用返回 `SkillArgumentsInvalid`，两者都不写文件。
 
 ## 可执行 quick start
 

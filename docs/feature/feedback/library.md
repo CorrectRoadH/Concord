@@ -2,7 +2,7 @@
 
 `feedback-schema.ts` 拥有浏览器与服务端共享的连接、来源与远端观察 Schema。`feedback-providers.ts` 负责 GitHub / Linear 协议、身份解析、范围校验和有界分页。`feedback.ts` 负责本地观察与幂等导入，`feedback-cache.ts` 负责可重建远端投影。
 
-适配器的 `fetchFeedback(connection, options)` 返回 Effect，结果包含绑定后的连接、规范化条目及读取时间。可注入 transport 以模拟 HTTP 边界；该接口不会赋予 provider 修改项目文档的权限，也不持有仓库写锁。
+适配器的 `fetchFeedback(connection, options)` 返回 Effect，结果包含绑定后的连接、规范化条目及读取时间。可注入 transport 以模拟 HTTP 边界；该接口不会赋予 provider 修改项目文档的权限，也不持有[发布租约](../portable-coordination/concepts.md#publication-lease)。
 
 连接 Schema 区分 API 与 GitHub gh：API 分支的 `transport` 省略或为 `api`，必须包含 `credentialEnv`；gh 分支必须显式指定 `transport: gh`，并拒绝 `credentialEnv`。transport 不进入远端对象去重键，适配器返回值不能自行修改连接的读取方式或目标范围。
 

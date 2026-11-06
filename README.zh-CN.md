@@ -233,7 +233,7 @@ concord view
 | `concord-review` | 对照 Spec 与实际运行验收一组改动 |
 | `concord-fix` | 按缺陷流程提交回归测试、修复并核验 |
 
-已经初始化的仓库运行 `concord skills install` 补上它们。详见[用斜杠命令走开发流程](docs/feature/project-onboarding/use-case/run-workflow-from-agent.md)。
+已经初始化的仓库运行 `concord skills install` 补上它们。详见[用工作流 skill 走开发流程](docs/feature/project-onboarding/use-case/run-workflow-from-agent.md)。
 
 Agent 也可以读取当前安装版本随包提供的指引，无需先初始化仓库：
 

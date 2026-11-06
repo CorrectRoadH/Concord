@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 启动工作台 | `view --host <host> --port <port>` | 直接打开与项目导航 |
 | 当前项目完整快照 | `workspace show --json` | 定向当前读取提供编辑前像 |
-| 工作区历史结构投影 | `workspace projection --json` | 概览、列表、搜索 |
+| 工作区投影 | `workspace projection --json` | 概览、列表、搜索 |
 | 创建文档 | `new <类别> <名称>` | 对应入口的创建表单；Use Case 在所属 Feature 内创建 |
 | 读取文档 | `show <路径或选择器>`、`list [类别]` | 分类列表与详情 |
 | 正文与页面 | 直接编辑文件 | 富文本与源码编辑 |

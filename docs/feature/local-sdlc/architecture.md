@@ -39,7 +39,7 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 ## 写入管线
 
-文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整前像，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配前像也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由 `concord check` 检查，`--since` 另读基线差异（[操作依赖](#操作依赖)）。
+文档 mutation 在取得[发布租约](../portable-coordination/concepts.md#publication-lease)后校验 canonical relative path、每个 symlink 组件与完整前像，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配前像也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由 `concord check` 检查，`--since` 另读基线差异（[操作依赖](#操作依赖)）。
 
 新增配置、来源和写入口必须同时定义资源所有权与恢复授权，写入的可观察保证见[写入保护](use-case/recover-local-state.md#写入保护)。
 
@@ -49,7 +49,7 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 `issue close` 同样使用专用的 `issue-close` 授权范围：在唯一 journal 与发布租约下删除 Issue 文件，并从回归测试源码中删除指向它的 `@issue` 行。规划在 `app` 中完成，由测试领域的标记解析器找出这些行；该范围绑定项目、worktree、冻结配置、测试成员集合、Issue 路径、每个被改文件的完整前后像、摘要与 mode。发布与恢复时经 `PublicationValidation` 以冻结输入重新规划，只接受与之完全相同的写集：每个测试文件的后像必须恰好等于前像删去这些 `@issue` 行，其余字节不变。重新规划结果不同、前像不符或无法解码时保留 journal 并阻断写入。
 
-规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[写入保护](use-case/recover-local-state.md#写入保护)）。
+规划在同一次来源快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[写入保护](use-case/recover-local-state.md#写入保护)）。
 
 ## 代码声明引用
 

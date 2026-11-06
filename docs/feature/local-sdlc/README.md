@@ -2,13 +2,13 @@
 
 功能该做成什么样、代码怎么实现、哪些测试在守护它，通常散落在聊天记录、PR 描述和各人的记忆里。Concord 把它们放回同一个 Git 仓库：Spec 写在 `docs/`，测试和代码用一行标记指向 Spec，`concord check` 核对三者是否仍然一致。
 
-面向的读者是维护者和 coding agent。全部内容都是仓库里的普通文件，可以直接编辑，不需要账号、模型 API 或云服务。`new`、`roadmap start`、`issue close` 等命令只执行需要运行的步骤，并把结果写进文件。
+面向的读者是维护者和 coding agent。全部内容都是仓库里的普通文件，可以直接编辑，不需要账号、模型 API 或云服务。`new`、`roadmap start`、`issue close` 等命令只做必须由程序完成的操作，并把结果写进文件。
 
 ## 你可以做什么
 
 - **先写 Spec 再动手。** 用 Feature 描述能力，用 Use Case 一步一步写出使用者的路径；方案有争议时，先比较候选方案再裁决。
 - **把测试和代码连到 Spec。** 在测试或实现文件里写一行标记，Concord 从源码反查出某个 Use Case 由哪些测试守护、由哪些代码实现。
-- **找出没有关联 Use Case 的测试。** 每个测试标注它验证的 Use Case 或其中一步；`concord test discover` 收集测试运行器认识的全部测试后，`concord trace gaps` 列出没有关联任何 Use Case 的测试。缺少关联不表示测试没有价值，维护者需要结合测试目的决定如何处理（[只声称证明过的](../../taste.md#t-5)）。
+- **找出没有关联 Use Case 的测试。** 每个测试标注它验证的 Use Case 或其中一步；`concord test discover` 收集测试框架认识的全部测试后，`concord trace gaps` 列出没有关联任何 Use Case 的测试。缺少关联不表示测试没有价值，维护者需要结合测试目的决定如何处理（[只声称证明过的](../../taste.md#t-5)）。
 - **让 check 守住一致性。** Spec 被删除、改名或标记写错时，`concord check` 指出出错的文件和行。
 - **用证据关闭缺陷。** 缺陷记为 Issue。回归测试在缺陷提交上失败、在修复提交上通过，Concord 核验这两点后才把 Issue 关为已修复。
 - **积累工程知识。** 调查结论、根因和裁决写成 Memory，之后可以按关键词检索。

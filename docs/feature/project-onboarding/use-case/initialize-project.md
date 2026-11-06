@@ -61,7 +61,7 @@
    - `docs/architecture.md`：系统设计入口；各 Feature 的内部设计放在所属的 architecture 页。
    - `docs/writing.md`：缺失时采用随包预设，见[写作管理](../../documentation-quality/use-case/manage-writing.md)。
    - `AGENTS.md` 中的 Concord 托管区块：引导 coding agent 运行 `concord --skill` 读取当前安装版本的说明。
-   - 四个工作流 skill，见[用斜杠命令走开发流程](run-workflow-from-agent.md)。
+   - 四个工作流 skill，见[用工作流 skill 走开发流程](run-workflow-from-agent.md)。
 
 3. 需要 `test run` 或修复核验时，初始化时就配置 runner。 {#runner}
 

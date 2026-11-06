@@ -12,7 +12,7 @@ agent 按 skill 的建议在会话开始时运行 `trace show`，第一次调用
 
 ## 调查结果
 
-在隔离 Git 消费仓库中，以构建后的公开 CLI 执行 `init --docs-only --yes` 并创建 `probe` Feature。首次执行以下三个独立查询均退出 1，JSON 错误为 `QueryPending`，`details.refresh` 为 `requested`：
+在隔离的 Git 接入项目中，以构建后的公开 CLI 执行 `init --docs-only --yes` 并创建 `probe` Feature。首次执行以下三个独立查询均退出 1，JSON 错误为 `QueryPending`，`details.refresh` 为 `requested`：
 
 ```text
 concord --json trace show docs/feature/probe/README.md

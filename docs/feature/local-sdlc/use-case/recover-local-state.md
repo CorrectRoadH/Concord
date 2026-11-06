@@ -25,7 +25,7 @@
    {"operation":"recover","status":"clean","changedPaths":[],"journalStatus":"clean","coordination":{"publication":{"reclaimedTokens":[]},"runner":{"status":"absent"}}}
    ```
 
-   有未完成写入时，`changedPaths` 列出被完成或回退的文件，`journalStatus` 报告处理结果，`coordination.publication.reclaimedTokens` 列出回收的写入占用，`coordination.runner.status` 报告测试进程的清理状态。
+   有未完成写入时，`changedPaths` 列出被完成或回退的文件，`journalStatus` 报告处理结果，`coordination.publication.reclaimedTokens` 列出回收的发布 token，`coordination.runner.status` 报告测试进程的清理状态。
 
 3. 恢复被拒绝时，查看冲突文件，人工决定保留哪一份内容，再重新运行 `recover`。 {#resolve-conflict}
 

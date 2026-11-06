@@ -6,7 +6,7 @@ Concord 用 Node 文件租约协调一个 worktree 的写入，HawDB 只是可�
 
 ## 实体归属 {#entity-ownership}
 
-来源查询不取得发布所有权。它记录文件前像、缺失路径和目录成员，并在返回前核对它们。
+来源查询不持有发布租约。它记录文件前像、缺失路径和目录成员，并在返回前核对它们。
 
 独占持有者进入和退出时，持久化的发布修订号都会前进。修订号变化时，当前结果以 `SourceChanged` 拒绝。未完成的 journal 仍然阻止当前快照成功。
 
@@ -14,13 +14,13 @@ Concord 用 Node 文件租约协调一个 worktree 的写入，HawDB 只是可�
 
 历史诊断投影存放在 HawDB 中，异步刷新。它们的新鲜度与失败行为见[查询异步投影](../local-data-engine/use-case/query-asynchronous-projections.md)。它们从不授权发布，也不决定检查成功或证据结论。
 
-runner 状态与数据库目录所有权各自保持边界。持久句柄在来源快照结束前关闭。访问缓存从不需要发布所有权。
+runner 状态与数据库目录所有权各自保持边界。持久句柄在来源快照结束前关闭。访问缓存从不需要发布租约。
 
 ## 访问模式 {#access-modes}
 
 `LocalRepository` 接受显式的 `access: 'read' | 'write'`。read 使用乐观的来源快照，拒绝真实发布。普通 write 乐观地制定计划，只在提交时取得独占租约。
 
-dry-run 决定计划是否发布，与 access 无关；它复用乐观快照，从不授权发布。已有的 `dryRun` 调用方保持预览语义。
+dry-run 决定计划是否发布，与 access 无关；它复用来源快照，从不授权发布。已有的 `dryRun` 调用方保持预览语义。
 
 每个普通 CLI 查询都声明 read，CLI 动作与 Web 共用一套动作分类。只有外部执行、恢复、缓存重建或清除，以及文档写入使用 write。
 

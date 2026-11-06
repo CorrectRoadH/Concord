@@ -49,7 +49,7 @@ findings: none
 - 品味文件存在即生效，没有状态字段；其中的条目都是现行规则。Feature 可以推动品味新增、修订条目：直接编辑 `docs/taste.md`，理由写在提交说明或 Memory 中（[总则](../../taste.md#general-amend)），不把功能细节无限追加为全局规则。
 - 创建 Feature 时以参数选择页面：README 必需，其余页面可选。
 - 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，`check` 检查结果是否一致。
-- init 在根 `AGENTS.md` 中维护带托管标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
+- init 在根 `AGENTS.md` 中维护 Concord 的[托管区块](concepts.md#managed-block)，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
 - init 结束时按仓库有没有项目文件推荐一份写作指南：新项目读 `docs-from-scratch`，已有代码的项目读 `docs-from-code`。
 - init 与 `concord skills install` 在项目中安装四个工作流 skill（`concord-spec`、`concord-implement`、`concord-review`、`concord-fix`），Claude Code 与 Codex 共用同一份文件。
 - 还没有初始化的仓库里，CLI、Web 工作台与 Concord mod 都提示先初始化，不给出空的通过结果。
@@ -66,7 +66,7 @@ findings: none
 日常维护：
 
 - [安全维护项目配置](use-case/maintain-project-config.md)
-- [用斜杠命令走开发流程](use-case/run-workflow-from-agent.md)
+- [用工作流 skill 走开发流程](use-case/run-workflow-from-agent.md)
 
 ## 范围
 
@@ -74,7 +74,7 @@ findings: none
 
 ### 接入项目采用的范式
 
-以下规则约束使用 Concord 的消费仓库。
+以下规则约束[接入项目](concepts.md#adopting-project)。
 
 1. Concord 规定一套工作范式，接入项目必须采用：统一 Spec 布局；Spec 先于实现；每项事实一个 owner；`docs/` 只写声明（[页面职责](../../document-model.md#页面职责)）；测试与实现通过显式源码标记关联 Spec。工程过程进入 Memory 与 Issue；Issue 按关闭种类的规则关闭，fixed 经过修复核验；写入遵守前像与恢复 Spec。
 2. 不提供关闭事实归属、关系解释、生命周期、证据下限及安全写入不变量的配置。项目可以配置来源位置、执行适配、文档页面和写作规则参数，配置不得绕过已采用的不变量。
@@ -85,7 +85,7 @@ findings: none
 
 ## 验收方式
 
-使用打包后的公开 CLI 在隔离 Git 消费仓库中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `pnpm gate`，并使用 Concord 的 check、trace 与 review 检查自身 Spec 关联。
+使用打包后的公开 CLI 在隔离的 Git 接入项目中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `pnpm gate`，并使用 Concord 的 check、trace 与 review 检查自身 Spec 关联。
 
 ## 细节
 

@@ -142,6 +142,8 @@ advisory 是不使检查失败的提示，不算 finding。原生诊断与缓存
 
 某一时刻读取到的一组来源内容及其摘要。基于快照得出的结论只对这组内容成立。
 
+读取用的[来源快照](feature/portable-coordination/concepts.md#source-snapshot)与读取配置得到的[配置快照](feature/project-onboarding/concepts.md#config-snapshot)都是快照。
+
 ## 漂移 {#drift}
 
 读取开始到返回之间，读过的文件字节或目录成员发生变化。有漂移的结果不作为结论发布。
@@ -162,7 +164,9 @@ advisory 是不使检查失败的提示，不算 finding。原生诊断与缓存
 
 ## 租约 {#lease}
 
-写入者在提交期间对工作区写入的短期独占占用。同一 worktree 同时只有一个[持有者](#holder)；持有者异常退出后，由[恢复](#recovery)回收。
+进程对 worktree 中一项协调资源的短期独占占用，由持有者文件记下[持有者](#holder)。同一 worktree 中每种租约同时只有一个持有者。
+
+文档写入在提交期间持有[发布租约](feature/portable-coordination/concepts.md#publication-lease)，持有者异常退出后由[恢复](#recovery)回收；执行修复核验等测试命令时持有 runner 租约，清理结果由 [runner 状态](feature/portable-coordination/concepts.md#runner-state)报告。
 
 ## 持有者 {#holder}
 

@@ -171,7 +171,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | RuntimeEnvironment | `base/environment` 的只读端口：一次调用或一个进程的绝对 cwd 与完整环境变量快照，不含 argv、标准流与退出码。`makeRuntimeEnvironment(cwd, env)` 要求绝对 cwd 并冻结副本，`RuntimeEnvironment.layer(snapshot)` 只提供值、不读取宿主。每个入口的组合根提供它：CLI 的 `entry.ts`、工作区服务、计算、操作、刷新与读写进程、LSP、库与测试；相对路径、Git、临时目录、runner、LSP、OwnedProcess、安装资源与缓存路径都从它派生，缺少的变量不回落到宿主进程。`ConfigProvider` 绑定同一快照。模块只依赖 Effect 与平台的纯路径查询，不依赖其它 base 模块 |
 | Installation | 安装目录根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自安装目录）、模板与 skill 资源、工作进程入口，以及安装身份。安装身份是安装目录全部 JS 与原生产物的内容摘要，按各文件的 device、inode、大小、mtime、ctime 与目录成员组成的元数据指纹缓存在用户缓存目录；指纹任一变化时重新计算内容摘要，因此产物被替换时仍能发现 |
 | Workspace | 项目目录、对应的 Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
-| Sources | 路径安全的读取、乐观快照与返回前核验 |
+| Sources | 路径安全的读取、来源快照与返回前核验 |
 | Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作规则、概念目录、步骤重命名与 Issue 关闭的规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
 | Cache | 解析缓存（内存或持久）、只读快照（`CacheSnapshot`，进程内不可写的行，不经内存 HawDB）、持久命名空间的独占写入，三种能力分开提供；计算进程另有 `CacheDerivations`，只在请求内收集新产生的派生行，随结果交回主进程写入，不持有句柄或写入能力 |
 | Git | 状态、diff、提交与 worktree 操作 |
@@ -257,7 +257,7 @@ HawDB 句柄的所有权、只读与可写打开、dry-run 与 cache-off 的行�
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。每篇文档每个进程最多解析一次，元数据、标题锚点、steps 与链接事实取自同一棵语法树。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
-CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验。集合解析按批读取和写入缓存，逐文件保留解析失败；大批键查询使用有界命名空间扫描后选择请求的键，单键查询保持定向读取。当前来源查询的临时结果只属于当前调用。Web 工作区导航独立读取异步结构投影，不把历史结果用于当前事实授权。缓存命中仍核对原文摘要、解析器身份和 Schema，来源前后核验保留。
+CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验。集合解析按批读取和写入缓存，逐文件保留解析失败；大批键查询使用有界命名空间扫描后选择请求的键，单键查询保持定向读取。当前来源查询的临时结果只属于当前调用。Web 工作区导航独立读取[工作区投影](feature/web-workbench/concepts.md#workspace-projection)，不把历史结果用于当前事实授权。缓存命中仍核对原文摘要、解析器身份和 Schema，来源前后核验保留。
 
 同次关系图编译复用相同引用与目标类型的解析结果。读取的目标及 README 边界在返回前逐一复核字节和安全路径；变化或复核失败保留 finding，不能返回完整图。临时引用结果随本次编译结束释放，不跨请求保存。
 
@@ -268,7 +268,7 @@ flowchart TD
   Query -. 请求刷新 .-> QueryRefresh[后台刷新进程，每查询键一个 owner]
   QueryRefresh -->|内部 query-scan-worker| Scan
   QueryRefresh -->|一致结果，或没有一致结果时标注漂移的结果| QueryCache
-  Web[Web workspace] --> WorkspaceCache[HawDB workspace_projection 结构投影]
+  Web[Web workspace] --> WorkspaceCache[HawDB workspace_projection 工作区投影]
   WorkspaceRefresh[工作区服务，每项目目录一个] --> Scan
   WorkspaceRefresh -->|推送结果变化| Clients[Web 与 CLI]
   WorkspaceRefresh -->|一致的结果| WorkspaceCache
@@ -370,7 +370,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 引用由 canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用。文件移动、改名、作用域和顺序变化可能使引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list 或 locate。派生算法见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)。
 
-`code marker` 与对应 action 不接收或返回 ID，在乐观快照中验证指定 canonical reference、归属链、类型和 anchor。`code list` 与 `code at` 提供声明查询。Web 以符号、位置和显式关联呈现实现。无效 begin 仍参与边界检查，普通扫描不写源码。
+`code marker` 与对应 action 不接收或返回 ID，在来源快照中验证指定 canonical reference、归属链、类型和 anchor。`code list` 与 `code at` 提供声明查询。Web 以符号、位置和显式关联呈现实现。无效 begin 仍参与边界检查，普通扫描不写源码。
 
 代码错误阻断 code、check、trace、review 与 doctor。test list、show、run 与 verify 不包含代码投影，保留全部文档与测试关系校验；修复核验的输入不包含 code 引用。
 
@@ -417,7 +417,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 1. 每个操作按目标与不变量声明所需输入。局部读取与精确引用验证不以无关 owner、代码或测试全部有效为前提；目标身份、来源、归属与路径安全仍须严格校验。
 2. 全局诊断保留可读取记录和全部已发现错误。完整性随投影与关系输出传播，不完整输入不能授权依赖完整图的裁决。
-3. 只读来源访问使用乐观快照，返回前核对观察到的文件摘要、目录集合与未完成的 journal；普通写入规划不持锁，提交使用短期独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
+3. 只读来源访问使用[来源快照](feature/portable-coordination/concepts.md#source-snapshot)，返回前核对观察到的文件摘要、目录集合与未完成的 journal；普通写入规划不持锁，提交使用短期独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
 4. 恢复区分 journal 结果、实际回收 token 与 runner 状态，返回成功前核验恢复后的协调状态，不用无 journal 推断仓库整体可写。
 
 ## 凭据

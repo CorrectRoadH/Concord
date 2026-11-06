@@ -42,7 +42,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 ## 工作区投影
 
-工作区导航是可重建的派生视图，来源文件仍是事实 owner（[缓存与原生边界的约束](../local-data-engine/architecture.md#缓存与原生边界的约束)、[缓存与原生边界的约束](../local-data-engine/architecture.md#缓存与原生边界的约束)）。Web 与 `workspace projection` 共享服务端维护的一份结构投影，使读取与全量扫描解耦；当前查询与定向编辑保留严格前像。公开字段与错误见 [CLI 页](cli.md#工作区投影)。
+工作区导航是可重建的派生视图，来源文件仍是事实 owner（[缓存与原生边界的约束](../local-data-engine/architecture.md#缓存与原生边界的约束)、[缓存与原生边界的约束](../local-data-engine/architecture.md#缓存与原生边界的约束)）。Web 与 `workspace projection` 共享服务端维护的一份工作区投影，使读取与全量扫描解耦；当前查询与定向编辑保留严格前像。公开字段与错误见 [CLI 页](cli.md#工作区投影)。
 
 ### 读取与发布
 
@@ -97,9 +97,9 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 投影类型由 `src/view-contract.ts` 导出，去掉正文而不以空字符串代替；`WorkspaceSnapshot` 只属当前来源查询。Schema 与读写归 `src/workspace-projection.ts`，调度归 `src/view-projection.ts`，监听归 `src/view-source-watch.ts`；scan worker 只编译候选，HTTP 与 CLI 共用缓存读取。
 
-## p5 图解
+## p5 图块 {#p5-图解}
 
-编辑器与阅读渲染器共用 p5 组件。`POST /api/p5/compile` 严格解码文档路径、源码和选项，验证文档可读后捕获相对依赖。读取使用乐观快照，编译后核对读取文件的字节。TypeScript 检查只访问捕获的模块与随包的可信类型；esbuild 不使用消费者的插件、构建配置或包解析，不在服务端执行 sketch。
+编辑器与阅读渲染器共用 p5 组件。`POST /api/p5/compile` 严格解码文档路径、源码和选项，验证文档可读后捕获相对依赖。读取使用来源快照，编译后核对读取文件的字节。TypeScript 检查只访问捕获的模块与随包的可信类型；esbuild 不使用消费者的插件、构建配置或包解析，不在服务端执行 sketch。
 
 编译结果只在当前浏览器使用，不生成文件 owner 或持久缓存。`/p5-frame` 提供随包的 p5 运行时，iframe 与响应 CSP 同时设置无同源权限的沙箱。子页面使用独立 CSP，父工作台不开放内联脚本；API 和其他页面拒绝 frame 导航。来源窗口与消息 Schema 共同限制控制消息，沙箱不拥有读取仓库的消息接口。
 
