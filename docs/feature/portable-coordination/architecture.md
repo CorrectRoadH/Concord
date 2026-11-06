@@ -1,74 +1,74 @@
-# Short publication leases
+# 短发布租约
 
-Concord coordinates one worktree with Node file leases. HawDB remains a disposable cache. This page owns optimistic source access, exclusive commit, and recovery results. The user path is [Coordinate local publications](use-case/coordinate-local-publications.md).
+Concord 用 Node 文件租约协调一个 worktree 的写入，HawDB 只是可丢弃的缓存。本页负责乐观的来源访问、独占提交与恢复结果。用户路径见[协调本地发布](use-case/coordinate-local-publications.md)。
 
-The per-operation dependency matrix is in the [local SDLC architecture](../local-sdlc/architecture.md#操作依赖). Runner leases and evidence finalization are in the [project architecture](../../architecture.md#发布协调). Rationale: operation boundaries.
+每种操作的依赖矩阵见[本地 SDLC 架构](../local-sdlc/architecture.md#操作依赖)。runner 租约与证据定稿见[项目架构](../../architecture.md#发布协调)。理由：操作边界。
 
-## Entity ownership
+## 实体归属 {#entity-ownership}
 
-Source queries do not acquire publication ownership. They record file preimages, missing paths and directory membership, then verify them before returning.
+来源查询不取得发布所有权。它记录文件前像、缺失路径和目录成员，并在返回前核对它们。
 
-A persistent publication revision advances when an exclusive owner enters and exits. A changed revision rejects the current result with SourceChanged. Unfinished journals still prevent a current successful snapshot.
+独占持有者进入和退出时，持久化的发布修订号都会前进。修订号变化时，当前结果以 `SourceChanged` 拒绝。未完成的 journal 仍然阻止当前快照成功。
 
-Ordinary document mutations plan optimistically and acquire an exclusive lease only for commit. Commit verifies configuration, observations and the entire change set before writing the journal and publishing files. Concurrent plans cannot overwrite the winning writer. Explicit write snapshots protect runner transitions and recovery; they do not wrap ordinary queries.
+普通文档修改乐观地制定计划，只在提交时取得独占租约。提交先核对配置、观察记录和整个变更集，再写 journal 并发布文件。并发的计划不能覆盖胜出的写入者。显式写快照保护 runner 状态转换与恢复，不包裹普通查询。
 
-Historical diagnostic projections live in HawDB and refresh asynchronously. Their [query contract](../local-data-engine/use-case/query-asynchronous-projections.md) defines freshness and failure behavior. They never authorize publication, check success or evidence decisions.
+历史诊断投影存放在 HawDB 中，异步刷新。它们的新鲜度与失败行为见[查询异步投影](../local-data-engine/use-case/query-asynchronous-projections.md)。它们从不授权发布，也不决定检查成功或证据结论。
 
-Runner state and database directory ownership retain their own boundaries. Persistent handles close before the source snapshot ends. Cache access never requires publication ownership.
+runner 状态与数据库目录所有权各自保持边界。持久句柄在来源快照结束前关闭。访问缓存从不需要发布所有权。
 
-## Access modes
+## 访问模式 {#access-modes}
 
-LocalRepository takes an explicit `access: 'read' | 'write'`. Read uses optimistic source snapshots and rejects real publication. Ordinary write plans optimistically and takes the exclusive lease only to commit.
+`LocalRepository` 接受显式的 `access: 'read' | 'write'`。read 使用乐观的来源快照，拒绝真实发布。普通 write 乐观地制定计划，只在提交时取得独占租约。
 
-Dry-run decides whether a plan is published; it is independent of access, reuses optimistic snapshots and never authorizes publication. Existing `dryRun` callers keep preview semantics.
+dry-run 决定计划是否发布，与 access 无关；它复用乐观快照，从不授权发布。已有的 `dryRun` 调用方保持预览语义。
 
-Every ordinary CLI query declares read, and CLI actions and Web share one action classification. Only external execution, recovery, cache rebuild/clear and document writes use write.
+每个普通 CLI 查询都声明 read，CLI 动作与 Web 共用一套动作分类。只有外部执行、恢复、缓存重建或清除，以及文档写入使用 write。
 
-Constructing a repository does not retain a lease. Synchronous planning and reading run in short snapshots; interaction, network requests and test execution do not. Fixed-evidence validation and its Memory write share one snapshot. Cache updates during a read never justify taking the exclusive lease; when the cache cannot be used safely, the read falls back to sources.
+构造仓库对象不持有租约。同步的计划与读取在短快照中运行，交互、网络请求和测试执行不在快照中运行。固定证据校验与它的 Memory 写入共用一个快照。读取期间的缓存更新从不构成取得独占租约的理由；缓存无法安全使用时，读取回退到来源。
 
-## Data flow
+## 数据流 {#data-flow}
 
-A claim writes a complete owner file with a new token into a unique temporary directory beside the lease and fsyncs it. It renames the directory onto the lease path and fsyncs the parent before protected work. An occupied lease cannot be replaced. Unknown metadata, symlinks, extra files, failed durability or uncertain identity fail closed.
+申领时，在租约旁的唯一临时目录中写入带新 token 的完整持有者文件并 fsync。随后把该目录 rename 到租约路径，并在受保护的工作开始前 fsync 父目录。已被占用的租约不能被替换。未知元数据、symlink、多余文件、持久化失败或身份不确定时 fail closed。
 
-Release and dead-owner recovery unlink only the observed token file. Only a successful unlink may attempt a nonrecursive rmdir; ENOTEMPTY preserves a new owner.
+释放与失效持有者回收只 unlink 观察到的那个 token 文件。只有 unlink 成功后才可以尝试非递归 rmdir；`ENOTEMPTY` 时保留新的持有者。
 
-The lease directory is never removed recursively or stolen by age. Close is idempotent. Ordinary write admission can reclaim an entirely dead observed set and retry once, without processing journals or runner ownership. Unknown hosts, live or reused PIDs, EPERM and unknown records preserve the scene.
+租约目录从不被递归删除，也不因存在时间长而被夺取。关闭是幂等的。普通写入准入可以回收一组观察到的、全部失效的持有者并重试一次，不处理 journal 或 runner 所有权。未知主机、存活或被复用的 PID、`EPERM` 和未知记录都保留现场。
 
-Source queries do not reclaim live or dead publication tokens. Writers and recovery serialize changes; source readers detect drift. A historical cache hit remains readable during source publication when the cache engine is available.
+来源查询不回收存活或失效的发布 token。写入者与恢复串行修改，来源读者检测漂移。缓存引擎可用时，来源发布期间历史缓存的命中仍可读取。
 
-Recover first records and reclaims observed dead publication tokens. It then selects the single journal under exclusive protection. Later engine stages do not reclaim again.
+恢复先记录并回收观察到的失效发布 token，再在独占保护下选出唯一的 journal。之后的引擎阶段不再回收。
 
-A new owner, even if it subsequently dies, makes this call Busy; a later explicit recovery records its reclamation. Ordinary or Trace recovery takes a fresh short exclusive snapshot, followed by final journal and runner verification.
+新的持有者出现时，即使它随后失效，本次调用也返回 `Busy`；之后的显式恢复会记录对它的回收。普通恢复或 Trace 恢复取一个新的短独占快照，随后做最终的 journal 与 runner 核对。
 
-That check uses the worktree-private coordination path directly. It does not require a configuration file to remain after init rollback. A concurrent publication can make the final check Busy. The earlier journal result is not a completed recovery in that case.
+这次核对直接使用 worktree 私有的协调路径，不要求 init 回滚后仍保留配置文件。并发的发布可以使最终核对返回 `Busy`；这时之前的 journal 结果不算一次完成的恢复。
 
-## Invariants
+## 不变量 {#invariants}
 
-- Read access rejects publication. Dry-run expresses a preview and never publishes source changes or starts background refresh.
-- Source reads validate observations and publication revision without shared ownership. Partial parsing follows the same rule.
-- Prepared and committed journals remain recoverable; unknown edits cannot be overwritten.
-- HawDB directory ownership and runner cleanup remain independent of query projections.
-- Recovery success describes the verified coordination state, not the absence of journals alone.
+- read 访问拒绝发布。dry-run 表示预览，从不发布来源改动，也不启动后台刷新。
+- 来源读取不取得共享所有权，而是核对观察记录与发布修订号。部分解析遵循同一规则。
+- 处于 prepared 与 committed 的 journal 保持可恢复；未知编辑不能被覆盖。
+- HawDB 目录所有权与 runner 清理不依赖查询投影。
+- 恢复成功描述的是经过核对的协调状态，而不只是没有 journal。
 
-## Errors
+## 错误 {#errors}
 
-Competing writers report Busy. Multiple journals are a named conflict. That conflict is reported before the runner result, and the scene stays. Content that matches neither the preimage nor the planned digest stays for a person to judge.
+相互竞争的写入者报告 `Busy`。多个 journal 是一个具名冲突；该冲突先于 runner 结果报告，并保留现场。既不匹配前像也不匹配 planned digest 的内容保留下来，由人判断。
 
-The recovery result keeps operation, the journal outcome, and changedPaths. It also adds coordination. Publication lists reclaimedTokens. Runner status is absent, running, or blocked. Blocked carries a named reason.
+恢复结果保留 `operation`、journal 结果和 `changedPaths`，另加 `coordination`。发布部分列出 `reclaimedTokens`。runner 状态为 `absent`、`running` 或 `blocked`，`blocked` 带具名原因。
 
-With no transaction, absent or healthy running may return clean. An uncertain runner returns blocked and keeps the journal result actually produced.
+没有事务时，`absent` 或健康的 `running` 可以返回 `clean`。runner 状态不确定时返回 `blocked`，并保留实际产生的 journal 结果。
 
-If the first exclusive check already finds runner blocked, journal recovery does not start. Journal status is pending when a journal exists and clean when it does not. Changed paths is empty.
+如果第一次独占核对已经发现 runner 为 `blocked`，不开始 journal 恢复。此时存在 journal 则 journal 状态为 `pending`，不存在则为 `clean`；changed paths 为空。
 
-If the runner becomes blocked after journal handling, the completed journal status remains. The overall status becomes blocked. The CLI fails on blocked. Web and action return the same status fields.
+如果 runner 在 journal 处理之后变为 `blocked`，已完成的 journal 状态保留，整体状态变为 `blocked`。CLI 在 `blocked` 时失败，Web 与动作返回相同的状态字段。
 
-## Identity and reuse
+## 身份与复用 {#identity-and-reuse}
 
-Each token is exact. Release and dead-owner recovery delete only that token. A new writer that arrives during recovery is not deleted. Independent worktrees do not share a lease. Only the current coordination protocol is supported. Prior lock formats are not migrated, and mixed executable versions are not coordinated.
+每个 token 都是精确的。释放与失效持有者回收只删除那个 token；恢复期间到来的新写入者不会被删除。独立的 worktree 不共享租约。只支持当前的协调协议：旧的锁格式不迁移，不同版本的可执行程序混用时不做协调。
 
 ## Trace 发布与恢复协议
 
-`concord repo` 的关系写入、结构写入和 Feedback 信封导入共用一套 Trace 发布协议。基础 CLI 的本地 Issue 写入使用基础发布 journal，由 `concord recover` 恢复。两者争用同一 `publication.lease`，不并发发布。短期租约、读者准入与恢复结果见上文 [Access modes](#access-modes)，本节只声明 Trace 专属的 journal 与恢复规则。
+`concord repo` 的关系写入、结构写入和 Feedback 信封导入共用一套 Trace 发布协议。基础 CLI 的本地 Issue 写入使用基础发布 journal，由 `concord recover` 恢复。两者争用同一 `publication.lease`，不并发发布。短期租约、读者准入与恢复结果见上文[访问模式](#access-modes)，本节只声明 Trace 专属的 journal 与恢复规则。
 
 ### 协调目录与租约
 
