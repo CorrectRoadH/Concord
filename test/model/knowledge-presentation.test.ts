@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { humanOutput } from '../../src/entry/cli/index.js';
+import { humanOutput } from '../../src/entry/cli/index.ts';
 
 // @feature docs/feature/local-sdlc/README.md
 test('human mutation hints follow the operation and camelCase labels remain intact', () => {

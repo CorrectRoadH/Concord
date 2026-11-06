@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Effect, Schema } from 'effect';
-import { RemoteFeedbackSchema, type RemoteFeedback } from '../../model/index.js';
-import { WorkspaceServerError } from './protocol.js';
+import { RemoteFeedbackSchema, type RemoteFeedback } from '../../model/index.ts';
+import { WorkspaceServerError } from './protocol.ts';
 
 interface Batch { readonly connectionId: string; items: RemoteFeedback[]; bytes: number }
 /** Only unfinished input is retained; a disconnected client has no transaction. */

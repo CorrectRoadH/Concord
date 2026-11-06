@@ -5,9 +5,9 @@ import { Effect, FileSystem, Schema, Scope, Stream } from 'effect';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { digest, SkillsInstallReceiptSchema, workflowSkillPaths } from '../../src/model/index.js';
-import { tmpdir } from '../support/temporary.js';
-import { installedConcordCli } from '../support/support.js';
+import { digest, SkillsInstallReceiptSchema, workflowSkillPaths } from '../../src/model/index.ts';
+import { tmpdir } from '../support/temporary.ts';
+import { installedConcordCli } from '../support/support.ts';
 
 type Requirements = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
 const entry = installedConcordCli();

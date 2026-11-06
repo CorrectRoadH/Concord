@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema, Stream } from 'effect';
-import { installationRootForBin } from '../../src/base/installation/index.js';
-import { installedConcordCli, pollUntil } from '../support/support.js';
-import { tmpdir } from '../support/temporary.js';
-import { startViewServer } from '../e2e/server.js';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
+import { installationRootForBin } from '../../src/base/installation/index.ts';
+import { installedConcordCli, pollUntil } from '../support/support.ts';
+import { tmpdir } from '../support/temporary.ts';
+import { startViewServer } from '../e2e/server.ts';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
 
-import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
+import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('CLI cache clear drains the running persistent owner and publishes a new generation under the same service token', { timeout: 25_000 }, async () => {

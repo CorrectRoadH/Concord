@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ReviewRenderValue, TraceGapsValue, TraceShowValue } from "./query-values.js";
+import { ReviewRenderValue, TraceGapsValue, TraceShowValue } from "./query-values.ts";
 export const QueryScanMessage = Schema.Union([
   Schema.Struct({ format: Schema.Literal('concord.query-scan/v1'), ok: Schema.Literal(true), scannedAt: Schema.Number, finishedAt: Schema.Number,
     value: Schema.Union([TraceGapsValue, TraceShowValue, ReviewRenderValue]), complete: Schema.Boolean, unknown: Schema.Array(Schema.Literal('code')),

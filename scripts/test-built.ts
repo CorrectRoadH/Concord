@@ -8,9 +8,9 @@ import { existsSync, readFileSync, watch } from 'node:fs';
 import { availableParallelism, loadavg } from 'node:os';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { runNodeTests } from './test-reporter.js';
-import { currentGateMemoryMax, gateConcurrency } from './gate-resources.js';
-import { auditTestLayers, classifyTestLayer, summarizeTestLayers } from './test-layers.js';
+import { runNodeTests } from './test-reporter.ts';
+import { currentGateMemoryMax, gateConcurrency } from './gate-resources.ts';
+import { auditTestLayers, classifyTestLayer, summarizeTestLayers } from './test-layers.ts';
 
 const Concurrency = Schema.NumberFromString.pipe(Schema.check(Schema.isInt(), Schema.isGreaterThan(0)));
 class TestArgumentsInvalid extends Schema.TaggedError<TestArgumentsInvalid>()('TestArgumentsInvalid', {

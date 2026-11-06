@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/format.md#owner
 import { Schema } from "effect";
-import { stringify } from './markdown-dependencies.js';
-import { FeedbackSourceSchema } from "./feedback-schema.js";
-import { Text, decode, type DocumentMeta } from "./shared.js";
+import { stringify } from './markdown-dependencies.ts';
+import { FeedbackSourceSchema } from "./feedback-schema.ts";
+import { Text, decode, type DocumentMeta } from "./shared.ts";
 
 const NonEmpty = Text.check(Schema.isTrimmed());
 const Path = NonEmpty.check(Schema.isPattern(/^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[^\r\n\0]+$/u));

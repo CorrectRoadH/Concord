@@ -2,8 +2,8 @@ import { closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, mkdt
 import { tmpdir, userInfo } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { Effect } from 'effect';
-import { ConcordError, failure } from '../../model/index.js';
-import { ensureGenericPrivateDirectorySync, genericPrivateDirectorySync } from './coordination.js';
+import { ConcordError, failure } from '../../model/index.ts';
+import { ensureGenericPrivateDirectorySync, genericPrivateDirectorySync } from './coordination.ts';
 
 export interface PublicationScratch {
   readonly path: string;

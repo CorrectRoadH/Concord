@@ -1,15 +1,15 @@
-import { initialize } from '../support/operations.js';
+import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs, { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join, sep } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { Effect } from 'effect';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
-import { readRepositoryFileSync } from "../../src/base/workspace/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { readRepositoryFileSync } from "../../src/base/workspace/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
 
 function fixture(t: TestContext): { container: string; parent: string; root: string } {

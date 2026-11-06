@@ -1,21 +1,21 @@
-import { snapshotBytes } from '../base/sources/index.js';
+import { snapshotBytes } from '../base/sources/index.ts';
 import { Effect } from "effect";
-import { buildTrace, requireValidTrace } from "../domain/trace/index.js";
-import { worktreeIdentity } from "../base/git/index.js";
-import { openReadRepository, type LocalRepository } from "../base/workspace/index.js";
-import { closeRepositoryCache, PersistentCache } from "../base/cache/index.js";
-import { readCachePayloads, writeCachePayloads } from "../base/cache/index.js";
-import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../base/publication/index.js";
-import { beginRun, finalizeRun, finishRun, quarantineRun } from "../base/publication/index.js";
-import { hasConfirmedOwnedGroupCleanup, OwnedProcess } from "../base/process/index.js";
-import { ConcordError, decode, digest, failure, objectDigest, type Repository } from "../model/index.js";
-import { observation } from "../model/index.js";
-import { AnalysisObservationSchema, type AnalysisObservation, type AnalysisValue } from "../model/index.js";
-import { analyzeLanguageServer } from "../base/process/index.js";
-import { typescriptDependencies } from "../domain/code/index.js";
-import { typescriptPackageVersion } from "../base/process/index.js";
-import { ANALYSIS_LIMITS } from "../model/index.js";
-import { captureNativeAnalysis } from "./native-analysis.js";
+import { buildTrace, requireValidTrace } from "../domain/trace/index.ts";
+import { worktreeIdentity } from "../base/git/index.ts";
+import { openReadRepository, type LocalRepository } from "../base/workspace/index.ts";
+import { closeRepositoryCache, PersistentCache } from "../base/cache/index.ts";
+import { readCachePayloads, writeCachePayloads } from "../base/cache/index.ts";
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../base/publication/index.ts";
+import { beginRun, finalizeRun, finishRun, quarantineRun } from "../base/publication/index.ts";
+import { hasConfirmedOwnedGroupCleanup, OwnedProcess } from "../base/process/index.ts";
+import { ConcordError, decode, digest, failure, objectDigest, type Repository } from "../model/index.ts";
+import { observation } from "../model/index.ts";
+import { AnalysisObservationSchema, type AnalysisObservation, type AnalysisValue } from "../model/index.ts";
+import { analyzeLanguageServer } from "../base/process/index.ts";
+import { typescriptDependencies } from "../domain/code/index.ts";
+import { typescriptPackageVersion } from "../base/process/index.ts";
+import { ANALYSIS_LIMITS } from "../model/index.ts";
+import { captureNativeAnalysis } from "./native-analysis.ts";
 
 
 const ALGORITHM = 'concord.analysis/v1';

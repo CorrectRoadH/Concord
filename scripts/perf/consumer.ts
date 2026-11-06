@@ -1,7 +1,7 @@
 import { join, resolve } from 'node:path';
-import { packageBin } from '../package-location.js';
+import { packageBin } from '../package-location.ts';
 import { Effect, FileSystem, Schema } from 'effect';
-import { io, mustRun, PerfError } from './process.js';
+import { io, mustRun, PerfError } from './process.ts';
 
 export interface ScaleSpec { readonly sources: number; readonly tests: number; readonly pages: number }
 /** The default synthetic scale mirrors a large adopted game repository: thousands of sources and a thousand supporting pages. */

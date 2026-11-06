@@ -1,14 +1,14 @@
-import { packageBin } from '../support/installed-package.js';
+import { packageBin } from '../support/installed-package.ts';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { before, after, test } from 'node:test';
 import { Schema } from 'effect';
-import { decode, FixVerificationSchema } from "../../src/model/index.js";
-import { createFixConsumer, gitCommand, gitCommit } from '../support/fix-consumer.js';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
+import { decode, FixVerificationSchema } from "../../src/model/index.ts";
+import { createFixConsumer, gitCommand, gitCommit } from '../support/fix-consumer.ts';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-fix-cli-'));
 let cli: string;

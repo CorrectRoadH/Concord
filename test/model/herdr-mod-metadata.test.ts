@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compareModVersions, modManifest } from '../../src/model/herdr-mod/index.js';
+import { compareModVersions, modManifest } from '../../src/model/herdr-mod/index.ts';
 
 // @use-case docs/feature/herdr-mod/use-case/install-from-herdr.md
 test('mod minimum follows its package and CLI compatibility uses SemVer precedence', () => {

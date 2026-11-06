@@ -1,6 +1,6 @@
-import { ConcordError, type Repository, type DocumentRecord } from "../../model/index.js";
-import { decodeDocumentSource } from "./document-codec.js";
-import { documentDisposition, documentPlacementError, isDocumentName, matchingOwners } from "../../model/index.js";
+import { ConcordError, type Repository, type DocumentRecord } from "../../model/index.ts";
+import { decodeDocumentSource } from "./document-codec.ts";
+import { documentDisposition, documentPlacementError, isDocumentName, matchingOwners } from "../../model/index.ts";
 
 export type LeafOwnerKind = 'memory' | 'issue';
 const ownerRoot = (kind: LeafOwnerKind): string => kind === 'memory' ? 'memory' : 'docs/issues';

@@ -4,9 +4,9 @@ import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Duration, Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join } from 'node:path';
-import { checkoutRoot } from './build-output.js';
-import { withGateResources } from './gate-resources.js';
-import { selectGateTests } from './gate-selection.js';
+import { checkoutRoot } from './build-output.ts';
+import { withGateResources } from './gate-resources.ts';
+import { selectGateTests } from './gate-selection.ts';
 
 class DistInCheckout extends Schema.TaggedError<DistInCheckout>()('DistInCheckout', { message: Schema.String }) {}
 

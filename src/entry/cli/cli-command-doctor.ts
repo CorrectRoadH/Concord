@@ -2,10 +2,10 @@
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#结果
 // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
 import { Command } from "effect/unstable/cli";
-import { doctor, projectInitializationRequired, uninitializedDoctor } from "../../app/index.js";
+import { doctor, projectInitializationRequired, uninitializedDoctor } from "../../app/index.ts";
 import { Effect, Option } from 'effect';
-import { root, emit, sync } from "./cli-base.js";
-import { withReadRepo } from "./cli-repository.js";
+import { root, emit, sync } from "./cli-base.ts";
+import { withReadRepo } from "./cli-repository.ts";
 
 const diagnose = Command.make('doctor', {}, () => Effect.gen(function*() {
   const settings = yield* root;

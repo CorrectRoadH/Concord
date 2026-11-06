@@ -1,6 +1,6 @@
 import { Schema } from "effect";
-import { ConcordError, Nat, Text, decode } from "../index.js";
-import { PositionSchema, lsp_symbols_RangeSchema as RangeSchema, validRange } from "../index.js";
+import { ConcordError, Nat, Text, decode } from "../index.ts";
+import { PositionSchema, lsp_symbols_RangeSchema as RangeSchema, validRange } from "../index.ts";
 export const editorLimits = { message: 4 * 1024 * 1024, messages: 100000, document: 2 * 1024 * 1024, overlay: 16 * 1024 * 1024, documents: 64, tasks: 8, output: 8 * 1024 * 1024, files: 10000, input: 64 * 1024 * 1024, timeout: 30000 } as const;
 export const RpcId = Schema.Union([Schema.String, Schema.Int]);
 export type RpcId = typeof RpcId.Type;

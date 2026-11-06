@@ -1,7 +1,7 @@
-import { analysisView } from "./analysis-view.js";
-import { readDocumentReference } from "../domain/documents/index.js";
-import { buildTrace, requireValidTrace } from "../domain/trace/index.js";
-import { ConcordError, digest, inRepositorySnapshot, type Repository } from "../model/index.js";
+import { analysisView } from "./analysis-view.ts";
+import { readDocumentReference } from "../domain/documents/index.ts";
+import { buildTrace, requireValidTrace } from "../domain/trace/index.ts";
+import { ConcordError, digest, inRepositorySnapshot, type Repository } from "../model/index.ts";
 
 
 // Code Declaration: an author's explicit implementation association, not evidence.

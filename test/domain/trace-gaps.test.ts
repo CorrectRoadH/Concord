@@ -1,18 +1,18 @@
-import { createDocument, initialize } from '../support/operations.js';
+import { createDocument, initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { resolveReference } from "../../src/domain/documents/index.js";
+import { resolveReference } from "../../src/domain/documents/index.ts";
 
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.js";
-import { documentShow, renderReview, traceGaps, traceShow } from "../../src/app/index.js";
-import { referenceResolver } from "../../src/domain/documents/index.js";
+import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.ts";
+import { documentShow, renderReview, traceGaps, traceShow } from "../../src/app/index.ts";
+import { referenceResolver } from "../../src/domain/documents/index.ts";
 
 function naiveGaps(repo: LocalRepository) {
   return repo.snapshot(() => {

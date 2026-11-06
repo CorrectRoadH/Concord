@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
-import { writeConceptFile } from '../support/writing-files.js';
+import { writeConceptFile } from '../support/writing-files.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
-import { test } from './fixtures.js';
-import { type ViewServerHandle } from './server.js';
+import { test } from './fixtures.ts';
+import { type ViewServerHandle } from './server.ts';
 
-import { LocalRepository } from '../support/repository.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
-import { showConcepts } from '../../src/domain/concepts/index.js';
+import { LocalRepository } from '../support/repository.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
+import { showConcepts } from '../../src/domain/concepts/index.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('a late successful concepts index preserves the newer writing report', ({ page, workspace }) => Effect.runPromise(Effect.tryPromise(async () => {

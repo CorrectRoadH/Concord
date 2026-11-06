@@ -2,8 +2,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { installedConcordCli, pollUntil } from '../support/support.js';
-import { tmpdir } from '../support/temporary.js';
+import { installedConcordCli, pollUntil } from '../support/support.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 const Record = Schema.Struct({ token: Schema.String, pid: Schema.Int, installation: Schema.String, sourceDigest: Schema.optional(Schema.String), socket: Schema.Struct({ path: Schema.String }) });
 export const recordPath = (root: string) => join(root, '.git/concord/server/current.json');
@@ -22,7 +22,7 @@ export const command = (root: string, args: readonly string[], entry = installed
   child.once('error', reject); child.once('close', status => resolve({ status, stdout, stderr }));
 });
 // The peer uses the source protocol; the system under test is the installed service.
-export const rpcModule = () => import('../../src/entry/server/index.js');
+export const rpcModule = () => import('../../src/entry/server/index.ts');
 export const stop = async (root: string) => {
   if (existsSync(recordPath(root))) await command(root, ['server', 'stop']);
   await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'service record removed after confirmed cleanup', timeoutMs: 8000 });

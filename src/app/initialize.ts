@@ -1,17 +1,17 @@
 import { Effect } from 'effect';
-import { canonicalPath } from "../model/index.js";
-import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, InitializationReceiptSchema, decode, type Change, type WritingGuide, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.js";
-import { renderTypeScriptConfig } from "../base/workspace/index.js";
-import { onboardingGuide } from "../domain/onboarding/index.js";
-import { projectTemplateFiles, templateCatalog } from "../domain/documents/index.js";
-import { defaultWritingSource } from "../model/index.js";
-import { EMPTY_CONCEPT_CATALOG } from "../model/index.js";
-import { forbiddenSourcePart } from "../base/workspace/index.js";
-import { AGENT_RULE_BEGIN } from "../base/workspace/index.js";
-import { AGENT_RULE_END } from "../base/workspace/index.js";
-import { AGENT_RULE_CONTENT } from "../base/workspace/index.js";
-import { selectWritingGuide } from './project-onboarding.js';
-import { planWorkflowSkills } from './workflow-skills.js';
+import { canonicalPath } from "../model/index.ts";
+import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, InitializationReceiptSchema, decode, type Change, type WritingGuide, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.ts";
+import { renderTypeScriptConfig } from "../base/workspace/index.ts";
+import { onboardingGuide } from "../domain/onboarding/index.ts";
+import { projectTemplateFiles, templateCatalog } from "../domain/documents/index.ts";
+import { defaultWritingSource } from "../model/index.ts";
+import { EMPTY_CONCEPT_CATALOG } from "../model/index.ts";
+import { forbiddenSourcePart } from "../base/workspace/index.ts";
+import { AGENT_RULE_BEGIN } from "../base/workspace/index.ts";
+import { AGENT_RULE_END } from "../base/workspace/index.ts";
+import { AGENT_RULE_CONTENT } from "../base/workspace/index.ts";
+import { selectWritingGuide } from './project-onboarding.ts';
+import { planWorkflowSkills } from './workflow-skills.ts';
 
 
 export function withAgentInstructions(source: string): string {

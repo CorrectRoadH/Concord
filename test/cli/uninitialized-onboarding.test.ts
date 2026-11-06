@@ -3,8 +3,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { tmpdir } from '../support/temporary.js';
-import { installedPackageRoot, packageBin } from '../support/installed-package.js';
+import { tmpdir } from '../support/temporary.ts';
+import { installedPackageRoot, packageBin } from '../support/installed-package.ts';
 
 const cli = packageBin(installedPackageRoot());
 const requiredCommands = [

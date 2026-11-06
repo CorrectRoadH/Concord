@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
 import { Effect } from 'effect';
-import { ConcordError, failure, inRepositorySnapshot, workflowSkillPaths, WORKFLOW_SKILL_TOPICS, type Change, type Repository, type WorkflowSkillTopic } from '../model/index.js';
+import { ConcordError, failure, inRepositorySnapshot, workflowSkillPaths, WORKFLOW_SKILL_TOPICS, type Change, type Repository, type WorkflowSkillTopic } from '../model/index.ts';
 
 const managedLine = '<!-- concord-managed -->';
 const descriptions: Record<WorkflowSkillTopic, string> = {

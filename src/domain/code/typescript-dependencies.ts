@@ -1,15 +1,15 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#验收
-import { withinRoots } from "../../model/index.js";
+import { withinRoots } from "../../model/index.ts";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import * as ts from 'typescript/ast';
 import { createFileSystem } from "typescript/fs";
 import type { API, RawCompilerOptions } from "typescript/sync";
-import { nativeTypeScript, typescriptPackageVersion, typescriptRequest, withTypeScriptFiles } from "../../base/process/index.js";
-import { ConcordError, type AnnotatedCase, type Repository } from "../../model/index.js";
-import type { CodeDeclaration } from "../../model/index.js";
-import type { AnalysisValue, DependencyObservation } from "../../model/index.js";
-import { analysisBudgets } from "../../model/index.js";
+import { nativeTypeScript, typescriptPackageVersion, typescriptRequest, withTypeScriptFiles } from "../../base/process/index.ts";
+import { ConcordError, type AnnotatedCase, type Repository } from "../../model/index.ts";
+import type { CodeDeclaration } from "../../model/index.ts";
+import type { AnalysisValue, DependencyObservation } from "../../model/index.ts";
+import { analysisBudgets } from "../../model/index.ts";
 
 export const JS_SOURCE = /\.(?:[cm]?[jt]sx?)$/u;
 

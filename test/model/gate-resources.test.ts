@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { gateConcurrency, gateMemoryMax, GiB } from '../../scripts/gate-resources.js';
+import { gateConcurrency, gateMemoryMax, GiB } from '../../scripts/gate-resources.ts';
 
 // @feature docs/engineering/testing/cli.md#并发
 test('gate defaults converge on CPU and memory budgets, reserving browser memory first', () => Effect.runPromise(Effect.sync(() => {

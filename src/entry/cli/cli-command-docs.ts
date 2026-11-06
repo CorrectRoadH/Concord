@@ -1,13 +1,13 @@
 // @concord-file
 // @concord-implements docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
-import { checkWriting } from "../../app/index.js";
+import { checkWriting } from "../../app/index.ts";
 
 import { Effect, Option } from "effect";
 import { Command } from "effect/unstable/cli";
-import { root, optional, sync } from "./cli-base.js";
-import { withRepo, withQuery } from "./cli-repository.js";
+import { root, optional, sync } from "./cli-base.ts";
+import { withRepo, withQuery } from "./cli-repository.ts";
 
-import { makeDocsWorkCommand } from "./repo-docs-work-command.js";
+import { makeDocsWorkCommand } from "./repo-docs-work-command.ts";
 
 const docs = Command.make('docs').pipe(Command.withDescription('Check authored prose and terminology using consumer-owned writing policy.'), Command.withSubcommands([
   makeDocsWorkCommand(

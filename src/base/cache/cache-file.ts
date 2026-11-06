@@ -2,8 +2,8 @@
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { lstatSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { ConcordError } from "../../model/index.js";
-import { assertLeasePath } from "../publication/index.js";
+import { ConcordError } from "../../model/index.ts";
+import { assertLeasePath } from "../publication/index.ts";
 
 export function cacheDatabasePath(privateDir: string): string { return join(privateDir, 'cache.hawdb'); }
 

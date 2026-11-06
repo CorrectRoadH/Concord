@@ -1,16 +1,16 @@
-import { nativeArtifactRoot } from "../../src/base/installation/index.js";
+import { nativeArtifactRoot } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { cpSync, mkdtempSync, realpathSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, linkSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { hawdbTarget } from "../../src/base/installation/index.js";
-import { acquireHawdbClearGuard, createMemoryHawdb, hawdbIdentity, openHawdb, type HawdbFailureCode } from "../../src/base/cache/index.js";
-import { deleteInspectedCache, inspectCacheClear } from "../../src/base/cache/index.js";
+import { hawdbTarget } from "../../src/base/installation/index.ts";
+import { acquireHawdbClearGuard, createMemoryHawdb, hawdbIdentity, openHawdb, type HawdbFailureCode } from "../../src/base/cache/index.ts";
+import { deleteInspectedCache, inspectCacheClear } from "../../src/base/cache/index.ts";
 
 interface RawDatabase { get(namespace: string, keys: string[]): unknown; close(): void }
 function rawEngine(path: string, admit = true): RawDatabase {

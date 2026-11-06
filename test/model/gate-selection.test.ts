@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { affectedTestContract, gateSelectionArguments } from '../../scripts/gate-selection.js';
+import { affectedTestContract, gateSelectionArguments } from '../../scripts/gate-selection.ts';
 
 // @feature docs/engineering/testing/cli.md#完整门禁
 test('changed gate matches package ownership and Use Case boundaries without anchor or prefix leakage', () => Effect.runPromise(Effect.sync(() => {

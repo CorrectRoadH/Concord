@@ -3,10 +3,10 @@ import { mkdtempSync } from 'node:fs';
 import { request } from 'node:http';
 import { connect } from 'node:net';
 import { join } from 'node:path';
-import { tmpdir } from './temporary.js';
-import type { ViewServerHandle } from '../e2e/server.js';
-import type { WorkspaceProjection } from '../../src/model/index.js';
-import { parseWorkspaceProjection, pollUntil } from './support.js';
+import { tmpdir } from './temporary.ts';
+import type { ViewServerHandle } from '../e2e/server.ts';
+import type { WorkspaceProjection } from '../../src/model/index.ts';
+import { parseWorkspaceProjection, pollUntil } from './support.ts';
 export const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-'));
   execFileSync('git', ['init', '-q', root]);

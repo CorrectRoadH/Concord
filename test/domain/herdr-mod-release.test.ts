@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { prepareHerdrModMirror } from '../../scripts/herdr-mod-release.js';
+import { prepareHerdrModMirror } from '../../scripts/herdr-mod-release.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('Herdr mirror maps an installed package to the catalog directory without rebuilding its assets', () => Effect.runPromise(Effect.gen(function*() {

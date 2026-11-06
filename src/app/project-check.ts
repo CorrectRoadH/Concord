@@ -1,9 +1,9 @@
-import { ConcordError, type Finding, type Repository } from "../model/index.js";
-import { buildTrace } from "../domain/trace/index.js";
-import { indexConcepts } from "../domain/concepts/index.js";
-import { inlineLinks, markdownLinks, relativeMarkdownLink, relativeMarkdownLinkTarget } from "../domain/taste/index.js";
-import { checkWriting } from "../domain/writing/index.js";
-import { canonicalPath } from "../model/index.js";
+import { ConcordError, type Finding, type Repository } from "../model/index.ts";
+import { buildTrace } from "../domain/trace/index.ts";
+import { indexConcepts } from "../domain/concepts/index.ts";
+import { inlineLinks, markdownLinks, relativeMarkdownLink, relativeMarkdownLinkTarget } from "../domain/taste/index.ts";
+import { checkWriting } from "../domain/writing/index.ts";
+import { canonicalPath } from "../model/index.ts";
 
 // @concord-code
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的合并检查

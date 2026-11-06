@@ -6,9 +6,9 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { installedConcordCli, pollUntil } from '../support/support.js';
-import { tmpdir } from '../support/temporary.js';
-import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
+import { installedConcordCli, pollUntil } from '../support/support.ts';
+import { tmpdir } from '../support/temporary.ts';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 
 interface Task { cancel(): void; is_done(): boolean }
 interface Context {

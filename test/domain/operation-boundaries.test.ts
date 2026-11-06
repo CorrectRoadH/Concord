@@ -1,23 +1,23 @@
-import { createDocument, initialize } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
-import { createConsumer } from '../support/consumer.js';
+import { createDocument, initialize } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getWorkspaceSnapshot } from "../../src/app/index.js";
-import { diagnoseDocuments, readDocumentReference, readDocumentSelector } from "../../src/domain/documents/index.js";
+import { getWorkspaceSnapshot } from "../../src/app/index.ts";
+import { diagnoseDocuments, readDocumentReference, readDocumentSelector } from "../../src/domain/documents/index.ts";
 
-import { renderDocument } from "../../src/model/index.js";
-import { editKnowledge } from "../../src/app/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { renderDocument } from "../../src/model/index.ts";
+import { editKnowledge } from "../../src/app/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../src/base/publication/index.js";
-import { beginRun } from "../../src/base/publication/index.js";
-import { setSource } from "../../src/app/index.js";
-import { digest } from "../../src/model/index.js";
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../src/base/publication/index.ts";
+import { beginRun } from "../../src/base/publication/index.ts";
+import { setSource } from "../../src/app/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 
 function withConsumer(run: (root: string) => void): void {

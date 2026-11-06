@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { commandObservation } from "../../src/domain/tests/index.js";
-import { type OwnedProcessResult } from "../../src/base/process/index.js";
+import { commandObservation } from "../../src/domain/tests/index.ts";
+import { type OwnedProcessResult } from "../../src/base/process/index.ts";
 
 const normal: OwnedProcessResult = { command: ['node'], exitCode: 1, signal: null, timedOut: false, cancelled: false, outputLimitExceeded: false, stdout: '', stderr: '', outputBytes: 0, processGroupOwned: true, groupCleanup: { owned: true, checked: true, aliveAfterLeaderClose: false, signalsSent: [], gone: true, detail: 'gone' } };
 const runner = { kind: 'command' as const, argv: ['node'] as [string], sourceFiles: [], timeoutMs: 1000 };

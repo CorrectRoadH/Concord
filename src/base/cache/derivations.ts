@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Context } from 'effect';
-import { HawdbFailure, type HawdbEntry, type HawdbNamespace } from './hawdb-native.js';
-import { CacheDerivationBatch } from '../../model/index.js';
+import { HawdbFailure, type HawdbEntry, type HawdbNamespace } from './hawdb-native.ts';
+import { CacheDerivationBatch } from '../../model/index.ts';
 
 /** Request-local output only. It has neither a database handle nor read authority. */
 export class CacheDerivations extends Context.Service<CacheDerivations, {

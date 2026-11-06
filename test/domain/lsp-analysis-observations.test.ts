@@ -3,13 +3,13 @@ import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { clearWorkspaceCache } from '../../src/app/index.js';
-import { AnalysisObservationSchema, AnalysisViewSchema, CodeDeclarationSchema, type language_server_config_LanguageServer as LanguageServer } from '../../src/model/index.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
-import { PersistentCache } from '../../src/base/cache/index.js';
-import { query, analyze, codeList, projectCheck } from '../support/lsp-observation-operations.js';
-import { consumer, server, target, write } from '../support/lsp-analysis-source-fixture.js';
+import { clearWorkspaceCache } from '../../src/app/index.ts';
+import { AnalysisObservationSchema, AnalysisViewSchema, CodeDeclarationSchema, type language_server_config_LanguageServer as LanguageServer } from '../../src/model/index.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { PersistentCache } from '../../src/base/cache/index.ts';
+import { query, analyze, codeList, projectCheck } from '../support/lsp-observation-operations.ts';
+import { consumer, server, target, write } from '../support/lsp-analysis-source-fixture.ts';
 
 // These cases validate relevance and invalidation, rather than timeout budgets.
 // Dedicated budget tests retain the short fake-server limits and their failure assertions.

@@ -1,15 +1,15 @@
 import { posix } from "node:path";
 import { Effect, Schema } from "effect";
-import { renderDocument } from "../model/index.js";
-import { ConcordError, failure, DocumentName, decode, inRepositorySnapshot, type DocumentKind, type DocumentMeta, type MutationReceipt, type Repository } from "../model/index.js";
-import { templateCatalog } from "../domain/documents/index.js";
-import { TEMPLATE_PAGES } from "../model/index.js";
-import { defaultDocumentPath, documentPlacementError } from "../model/index.js";
-import { now } from "../domain/documents/index.js";
-import { required } from "../domain/documents/index.js";
-import { authorBody } from "../domain/documents/index.js";
-import { loadDocuments } from "../domain/documents/index.js";
-import { findDocument } from "../domain/documents/index.js";
+import { renderDocument } from "../model/index.ts";
+import { ConcordError, failure, DocumentName, decode, inRepositorySnapshot, type DocumentKind, type DocumentMeta, type MutationReceipt, type Repository } from "../model/index.ts";
+import { templateCatalog } from "../domain/documents/index.ts";
+import { TEMPLATE_PAGES } from "../model/index.ts";
+import { defaultDocumentPath, documentPlacementError } from "../model/index.ts";
+import { now } from "../domain/documents/index.ts";
+import { required } from "../domain/documents/index.ts";
+import { authorBody } from "../domain/documents/index.ts";
+import { loadDocuments } from "../domain/documents/index.ts";
+import { findDocument } from "../domain/documents/index.ts";
 
 
 export interface CreateDocumentInput {

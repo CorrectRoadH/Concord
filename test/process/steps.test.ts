@@ -1,30 +1,30 @@
-import { createDocument, initialize } from '../support/operations.js';
-import { packageBin } from '../support/installed-package.js';
+import { createDocument, initialize } from '../support/operations.ts';
+import { packageBin } from '../support/installed-package.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test, { before, after } from 'node:test';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
 import { Effect, Schema } from 'effect';
-import { extractSteps } from "../../src/domain/documents/index.js";
-import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../src/app/index.js";
-import { planStepRename } from "../../src/app/index.js";
-import { loadDocuments } from "../../src/domain/documents/index.js";
+import { extractSteps } from "../../src/domain/documents/index.ts";
+import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../src/app/index.ts";
+import { planStepRename } from "../../src/app/index.ts";
+import { loadDocuments } from "../../src/domain/documents/index.ts";
 
-import { renderDocument } from "../../src/model/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { renderDocument } from "../../src/model/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { buildTrace } from "../../src/domain/trace/index.js";
-import { renderReview, traceGaps, traceShow } from "../../src/app/index.js";
-import { clearCache, parseTestDeclarations } from "../../src/domain/tests/index.js";
-import { digest } from "../../src/model/index.js";
-import { genericPrivateDirectorySync } from "../../src/base/publication/index.js";
-import { checkWriting } from "../../src/domain/writing/index.js";
-import { runCase } from "../../src/domain/tests/index.js";
-import { OwnedProcess, type OwnedProcessResult } from "../../src/base/process/index.js";
+import { buildTrace } from "../../src/domain/trace/index.ts";
+import { renderReview, traceGaps, traceShow } from "../../src/app/index.ts";
+import { clearCache, parseTestDeclarations } from "../../src/domain/tests/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { genericPrivateDirectorySync } from "../../src/base/publication/index.ts";
+import { checkWriting } from "../../src/domain/writing/index.ts";
+import { runCase } from "../../src/domain/tests/index.ts";
+import { OwnedProcess, type OwnedProcessResult } from "../../src/base/process/index.ts";
 
 const path = 'docs/feature/sample/use-case/flow.md';
 const packedRoot = mkdtempSync(join(tmpdir(), 'concord-steps-packed-'));

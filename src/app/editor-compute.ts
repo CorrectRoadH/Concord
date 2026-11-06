@@ -1,18 +1,18 @@
 import { pathToFileURL } from "node:url";
 import { Effect } from "effect";
-import { openReadRepository } from "../base/workspace/index.js";
-import { scanAnnotations } from "../domain/tests/index.js";
-import { diagnoseDocuments } from "../domain/documents/index.js";
-import { codeReferenceTokens, scanCode } from "../domain/code/index.js";
-import { checkWriting } from "../domain/writing/index.js";
-import { markdown_facts_markdownAnchor as markdownAnchor } from "../model/index.js";
-import { extractSteps } from "../domain/documents/index.js";
-import { resolveReference } from "../domain/documents/index.js";
-import { parseReference } from "../model/index.js";
-import { excludedSourcePath } from "../model/index.js";
-import { ConcordError, digest, failure, type Finding, type Repository } from "../model/index.js";
-import { positionOffset } from "../model/index.js";
-import { editorLimits, type Computed, type Job } from "../model/editor/index.js";
+import { openReadRepository } from "../base/workspace/index.ts";
+import { scanAnnotations } from "../domain/tests/index.ts";
+import { diagnoseDocuments } from "../domain/documents/index.ts";
+import { codeReferenceTokens, scanCode } from "../domain/code/index.ts";
+import { checkWriting } from "../domain/writing/index.ts";
+import { markdown_facts_markdownAnchor as markdownAnchor } from "../model/index.ts";
+import { extractSteps } from "../domain/documents/index.ts";
+import { resolveReference } from "../domain/documents/index.ts";
+import { parseReference } from "../model/index.ts";
+import { excludedSourcePath } from "../model/index.ts";
+import { ConcordError, digest, failure, type Finding, type Repository } from "../model/index.ts";
+import { positionOffset } from "../model/index.ts";
+import { editorLimits, type Computed, type Job } from "../model/editor/index.ts";
 
 
 const range = (line: number, character = 0, end = character) => ({ start: { line: Math.max(0, line - 1), character }, end: { line: Math.max(0, line - 1), character: end } });

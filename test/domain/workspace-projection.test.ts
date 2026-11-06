@@ -1,37 +1,37 @@
-import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.js';
-import { createDocument, initialize } from '../support/operations.js';
-import { Workspace } from '../../src/base/workspace/index.js';
+import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.ts';
+import { createDocument, initialize } from '../support/operations.ts';
+import { Workspace } from '../../src/base/workspace/index.ts';
 import { NodeServices } from '@effect/platform-node';
-import { runApplication } from '../support/repository.js';
-import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
-import { installationResources } from "../../src/base/installation/index.js";
-import { packageBin } from '../support/installed-package.js';
+import { runApplication } from '../support/repository.ts';
+import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.ts';
+import { installationResources } from "../../src/base/installation/index.ts";
+import { packageBin } from '../support/installed-package.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getWorkspaceSnapshot } from "../../src/app/index.js";
-import { cacheDatabasePath } from "../../src/base/cache/index.js";
-import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from "../../src/base/publication/index.js";
+import { getWorkspaceSnapshot } from "../../src/app/index.ts";
+import { cacheDatabasePath } from "../../src/base/cache/index.ts";
+import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from "../../src/base/publication/index.ts";
 
-import { openHawdb } from "../../src/base/cache/index.js";
-import { digest } from "../../src/model/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { openHawdb } from "../../src/base/cache/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { type WorkspaceProjection } from "../../src/model/index.js";
-import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
-import { type ViewServerHandle } from '../e2e/server.js';
-import { startViewServer } from '../e2e/server.js';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
-import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
+import { type WorkspaceProjection } from "../../src/model/index.ts";
+import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.ts";
+import { type ViewServerHandle } from '../e2e/server.ts';
+import { startViewServer } from '../e2e/server.ts';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
+import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 
-import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.js';
-import { PersistentCache } from '../../src/base/cache/index.js';
-import { ConcordError } from '../../src/model/index.js';
-import { storeWorkspaceProjection as publishProjection, readWorkspaceProjection as readPublishedProjection } from '../../src/app/index.js';
+import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.ts';
+import { PersistentCache } from '../../src/base/cache/index.ts';
+import { ConcordError } from '../../src/model/index.ts';
+import { storeWorkspaceProjection as publishProjection, readWorkspaceProjection as readPublishedProjection } from '../../src/app/index.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a completed workspace scan survives brief contention at publication', async () => {

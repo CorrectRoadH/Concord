@@ -3,11 +3,11 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { renderWritingPolicy } from '../../src/model/index.js';
-import { executeQuery } from '../../src/app/index.js';
-import { runApplication } from '../support/repository.js';
-import { createConsumer } from '../support/consumer.js';
-import { query } from '../support/application-fixture.js';
+import { renderWritingPolicy } from '../../src/model/index.ts';
+import { executeQuery } from '../../src/app/index.ts';
+import { runApplication } from '../support/repository.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { query } from '../support/application-fixture.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('writing checks consumer policy, readable prose and safe input boundaries while excluding SVG', async () => {

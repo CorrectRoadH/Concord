@@ -1,10 +1,10 @@
 import { Context, Effect, Layer, type Scope } from "effect";
-import type { Change, Repository, StepRename } from "../../model/index.js";
-import { failure, ConcordError } from "../../model/index.js";
-import { acquireTraceLease, releaseTraceLease, type TraceLease } from './coordination.js';
-import { makePublicationReceiptStore } from './issue-receipts.js';
-import { inspectExportAncestors, publishExport } from './preview-tree.js';
-import { scratchDirectory } from './scratch.js';
+import type { Change, Repository, StepRename } from "../../model/index.ts";
+import { failure, ConcordError } from "../../model/index.ts";
+import { acquireTraceLease, releaseTraceLease, type TraceLease } from './coordination.ts';
+import { makePublicationReceiptStore } from './issue-receipts.ts';
+import { inspectExportAncestors, publishExport } from './preview-tree.ts';
+import { scratchDirectory } from './scratch.ts';
 
 export interface PublicationCatalog {
   readonly operation: string;

@@ -1,14 +1,14 @@
-import { createDocument, initialize } from '../support/operations.js';
+import { createDocument, initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 
-import { parseTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { parseTypeScriptConfig } from "../../src/base/workspace/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
 
 function consumer(run: (root: string) => void): void {

@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Effect } from 'effect';
-import { loadArtifact } from '../../scripts/perf/artifact.js';
-import { executeScenario, loadScenarios, makeContext, prepareServer } from '../../scripts/perf/scenario.js';
-import { io, mustRun } from '../../scripts/perf/process.js';
-import { prepareConsumer, workDirectory } from '../../scripts/perf/workspace.js';
-import { installedConcordCli } from './support.js';
+import { loadArtifact } from '../../scripts/perf/artifact.ts';
+import { executeScenario, loadScenarios, makeContext, prepareServer } from '../../scripts/perf/scenario.ts';
+import { io, mustRun } from '../../scripts/perf/process.ts';
+import { prepareConsumer, workDirectory } from '../../scripts/perf/workspace.ts';
+import { installedConcordCli } from './support.ts';
 
 /** Inner consumers share the gate's process pool; bound their parallel work. */
 export const benchmarkSmoke = Effect.fn('test.benchmarkSmoke')(function*(service: boolean) {

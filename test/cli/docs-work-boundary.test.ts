@@ -4,9 +4,9 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { installedConcordCli } from '../support/support.js';
-import { fixture, custom } from '../support/docs-work-fixture.js';
-import { plan, report, verify, finalize, item } from '../support/docs-work-domain-fixture.js';
+import { installedConcordCli } from '../support/support.ts';
+import { fixture, custom } from '../support/docs-work-fixture.ts';
+import { plan, report, verify, finalize, item } from '../support/docs-work-domain-fixture.ts';
 
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 test('docs work exposes named receipt, ownership and state failures with exit one', async () => {

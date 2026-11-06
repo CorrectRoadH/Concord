@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#刷新与推送
 import { Effect } from 'effect';
-import { Workspace } from '../base/workspace/index.js';
-import { workspaceInstallationIdentity } from '../base/installation/index.js';
-import { ConcordError, digest, failure } from '../model/index.js';
+import { Workspace } from '../base/workspace/index.ts';
+import { workspaceInstallationIdentity } from '../base/installation/index.ts';
+import { ConcordError, digest, failure } from '../model/index.ts';
 
 /** Content identity includes input membership and the installed parsers and schemas. */
 export const workspaceSourceDigest = Effect.fn('workspaceSourceDigest')(function*(root: string) {

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { command, installer, run, withInstaller } from '../support/install-script-fixture.js';
+import { command, installer, run, withInstaller } from '../support/install-script-fixture.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md
 test('first install verifies the local release and runs the real production CLI', { timeout: 55_000 }, () => withInstaller(f => {

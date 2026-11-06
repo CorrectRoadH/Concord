@@ -1,14 +1,14 @@
-import { installationResources } from '../support/source-resources.js';
+import { installationResources } from '../support/source-resources.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readdirSync } from 'node:fs';
 import test from 'node:test';
 import { Effect, Schema, Stream } from 'effect';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
-import { pollUntil } from '../support/support.js';
-import { tmpdir } from '../support/temporary.js';
-import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
+import { pollUntil } from '../support/support.ts';
+import { tmpdir } from '../support/temporary.ts';
+import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('runtime native validation degrades the locked service and a repaired artifact reopens its persistent owner', { timeout: 30_000 }, async () => {

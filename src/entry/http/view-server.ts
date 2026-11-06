@@ -1,17 +1,17 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
-import { builtAssetRoot, sourceInstallation, sourceWebServer, sourceP5Runtime } from "../../app/index.js";
+import { builtAssetRoot, sourceInstallation, sourceWebServer, sourceP5Runtime } from "../../app/index.ts";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { Schema } from "effect";
-import { decodeViewAction, validateViewRoot } from "../../app/index.js";
-import type { GitArea } from "../../model/index.js";
-import { ConcordError, decode, digest, failure } from "../../model/index.js";
-import type { ViewFailure, ViewResponse } from "../../model/index.js";
-import { ViewRequestLog } from "./view-request-log.js";
-import type { RequestTiming } from "../../app/index.js";
-import type { ViewFile, WorkspaceProjection, ViewJob } from '../../model/index.js';
+import { decodeViewAction, validateViewRoot } from "../../app/index.ts";
+import type { GitArea } from "../../model/index.ts";
+import { ConcordError, decode, digest, failure } from "../../model/index.ts";
+import type { ViewFailure, ViewResponse } from "../../model/index.ts";
+import { ViewRequestLog } from "./view-request-log.ts";
+import type { RequestTiming } from "../../app/index.ts";
+import type { ViewFile, WorkspaceProjection, ViewJob } from '../../model/index.ts';
 
 export interface HostedViewPorts {
   readonly verify: () => Promise<void>;

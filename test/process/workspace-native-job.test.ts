@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { OwnedProcessLive } from '../../src/base/process/index.js';
-import { externalCase } from '../support/external-adapter-fixture.js';
-import { call } from '../support/test-adapters-consumer-fixture.js';
-import { pollUntil, fetchFresh, waitForWorkspaceProjection } from '../support/support.js';
-import { startViewServer } from '../e2e/server.js';
+import { OwnedProcessLive } from '../../src/base/process/index.ts';
+import { externalCase } from '../support/external-adapter-fixture.ts';
+import { call } from '../support/test-adapters-consumer-fixture.ts';
+import { pollUntil, fetchFresh, waitForWorkspaceProjection } from '../support/support.ts';
+import { startViewServer } from '../e2e/server.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a native Web job returns derived observations to the persistent workspace owner', { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

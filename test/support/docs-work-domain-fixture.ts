@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Effect, Result, Schema } from 'effect';
-import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from '../../src/app/index.js';
-import { model_DocsWorkError as DocsWorkError } from '../../src/model/index.js';
-import { runApplication } from './repository.js';
+import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from '../../src/app/index.ts';
+import { model_DocsWorkError as DocsWorkError } from '../../src/model/index.ts';
+import { runApplication } from './repository.ts';
 
 const OutputSchema = Schema.Struct({
   operation: Schema.optional(Schema.String), runId: Schema.optional(Schema.String), statePath: Schema.optional(Schema.String), error: Schema.optional(Schema.String),

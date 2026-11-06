@@ -1,13 +1,13 @@
-import { openWriteRepository } from "../base/workspace/index.js";
-import * as recovery from "../base/publication/index.js";
-import { Sources } from '../base/sources/index.js';
+import { openWriteRepository } from "../base/workspace/index.ts";
+import * as recovery from "../base/publication/index.ts";
+import { Sources } from '../base/sources/index.ts';
 import { join } from "node:path";
 import { Effect } from "effect";
-import { genericPrivateDirectorySync, recoverPublicationLeaseSync, Publication } from "../base/publication/index.js";
-import { CoordinationError } from "../base/publication/index.js";
-import { ConcordError, failure } from "../model/index.js";
-import { assertCurrentRuntimeFormat, discoverRoot } from "../base/workspace/index.js";
-import { inspectRunner } from "../base/publication/index.js";
+import { genericPrivateDirectorySync, recoverPublicationLeaseSync, Publication } from "../base/publication/index.ts";
+import { CoordinationError } from "../base/publication/index.ts";
+import { ConcordError, failure } from "../model/index.ts";
+import { assertCurrentRuntimeFormat, discoverRoot } from "../base/workspace/index.ts";
+import { inspectRunner } from "../base/publication/index.ts";
 
 
 export const pendingJournals = Effect.fn('recovery.pendingJournals')(function*(root: string) {

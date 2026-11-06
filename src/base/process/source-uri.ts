@@ -1,6 +1,6 @@
 import { relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ConcordError, type Repository } from "../../model/index.js";
+import { ConcordError, type Repository } from "../../model/index.ts";
 export function sourceUri(repo: Repository, path: string): string { return pathToFileURL(repo.absolute(path)).href; }
 export function uriPath(repo: Repository, uri: string): string;
 export function uriPath(repo: Repository, uri: string, allowExternal: true): string | undefined;

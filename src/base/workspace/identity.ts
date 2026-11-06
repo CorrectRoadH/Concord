@@ -1,9 +1,9 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import { ConcordError, digest, failure } from '../../model/index.js';
-import { discoverRoot } from './bootstrap.js';
-import { assertLeasePath, genericPrivateDirectorySync } from '../publication/index.js';
+import { ConcordError, digest, failure } from '../../model/index.ts';
+import { discoverRoot } from './bootstrap.ts';
+import { assertLeasePath, genericPrivateDirectorySync } from '../publication/index.ts';
 
 /** Service startup locates the worktree before inspecting its potentially broken configuration. */
 export const locateWorkspace = Effect.fn('Workspace.locate')((input: string | undefined, allowUninitialized = false) => Effect.try({

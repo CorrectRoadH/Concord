@@ -3,15 +3,15 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Clock, Effect, Fiber, Result } from 'effect';
-import { IssueMutationUncertain, IssueNoChange } from '../../src/model/index.js';
+import { IssueMutationUncertain, IssueNoChange } from '../../src/model/index.ts';
 import { TestClock } from 'effect/testing';
-import { OwnedProcess, makeOwnedProcessService } from '../../src/base/process/index.js';
-import { makeNodeIssueCommandRunner, planRemoteIssue, executeRemoteIssue, setConfig, showConfig } from '../../src/app/index.js';
-import { createConsumer } from '../support/consumer.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { tmpdir } from '../support/temporary.js';
-import { pollUntil } from '../support/support.js';
-import { writeGhFixture } from '../support/gh-fixture.js';
+import { OwnedProcess, makeOwnedProcessService } from '../../src/base/process/index.ts';
+import { makeNodeIssueCommandRunner, planRemoteIssue, executeRemoteIssue, setConfig, showConfig } from '../../src/app/index.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { tmpdir } from '../support/temporary.ts';
+import { pollUntil } from '../support/support.ts';
+import { writeGhFixture } from '../support/gh-fixture.ts';
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 test('write deadline produces uncertain outcome and a fresh close observes applied state', { skip: process.platform === 'win32', timeout: 30_000 }, async () => {

@@ -1,19 +1,19 @@
-import { openWriteRepository, openReadRepository } from "../../base/workspace/index.js";
-import type { Workspace } from '../../base/workspace/index.js';
-import type { Sources } from '../../base/sources/index.js';
-import type { OwnedProcess } from '../../base/process/index.js';
-import type { Publication } from "../../base/publication/index.js";
+import { openWriteRepository, openReadRepository } from "../../base/workspace/index.ts";
+import type { Workspace } from '../../base/workspace/index.ts';
+import type { Sources } from '../../base/sources/index.ts';
+import type { OwnedProcess } from '../../base/process/index.ts';
+import type { Publication } from "../../base/publication/index.ts";
 import { Effect } from "effect";
-import { FeedbackCacheWriter, readFeedbackCache, mergeFeedbackCache } from "../../base/cache/index.js";
-import { FeedbackConnectionSchema, FeedbackSourceSchema, RemoteFeedbackSchema, feedbackIdentity, type feedback_schema_FeedbackConnection as FeedbackConnection, type FeedbackItem, type FeedbackSource, type RemoteFeedback } from "../../model/index.js";
-import { loadDocuments } from "../documents/index.js";
-import { renderDocument } from "../../model/index.js";
-import { fetchFeedback, type FeedbackTransport } from "./feedback-providers.js";
-import { checkGhConnection, fetchGhFeedback } from "./feedback-gh.js";
-import { ConcordError, ProjectSchema, canonical, decode, digest, failure, type DocumentMeta, type DocumentRecord, type MutationReceipt } from "../../model/index.js";
-import { LocalRepository } from "../../base/workspace/index.js";
-import { renderTypeScriptConfig } from "../../base/workspace/index.js";
-import { FeedbackFilterSchema, matchesFeedback, type FeedbackFilter } from "../../model/index.js";
+import { FeedbackCacheWriter, readFeedbackCache, mergeFeedbackCache } from "../../base/cache/index.ts";
+import { FeedbackConnectionSchema, FeedbackSourceSchema, RemoteFeedbackSchema, feedbackIdentity, type feedback_schema_FeedbackConnection as FeedbackConnection, type FeedbackItem, type FeedbackSource, type RemoteFeedback } from "../../model/index.ts";
+import { loadDocuments } from "../documents/index.ts";
+import { renderDocument } from "../../model/index.ts";
+import { fetchFeedback, type FeedbackTransport } from "./feedback-providers.ts";
+import { checkGhConnection, fetchGhFeedback } from "./feedback-gh.ts";
+import { ConcordError, ProjectSchema, canonical, decode, digest, failure, type DocumentMeta, type DocumentRecord, type MutationReceipt } from "../../model/index.ts";
+import { LocalRepository } from "../../base/workspace/index.ts";
+import { renderTypeScriptConfig } from "../../base/workspace/index.ts";
+import { FeedbackFilterSchema, matchesFeedback, type FeedbackFilter } from "../../model/index.ts";
 
 export interface FeedbackSyncOptions {
   readonly url?: string;

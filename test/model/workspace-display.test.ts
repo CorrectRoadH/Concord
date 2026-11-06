@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { workspaceDisplay, featureUseCases, implementationGroups, relatedTests, contractIdentities } from '../../src/model/workspace-display/index.js';
-import * as webDisplay from '../../web/lib/workspace-display.js';
-import { projectDocPages } from '../../web/lib/project-docs.js';
-import { displaySnapshot, feature, featurePath, useCasePath, supportPath } from '../support/workspace-display-fixture.js';
+import { workspaceDisplay, featureUseCases, implementationGroups, relatedTests, contractIdentities } from '../../src/model/workspace-display/index.ts';
+import * as webDisplay from '../../web/lib/workspace-display.ts';
+import { projectDocPages } from '../../web/lib/project-docs.ts';
+import { displaySnapshot, feature, featurePath, useCasePath, supportPath } from '../support/workspace-display-fixture.ts';
 
 // @feature docs/feature/web-workbench/README.md
 test('Web projections derive the same fixed generation, preserving ordered relation groups', () => Effect.runSync(Effect.sync(() => {

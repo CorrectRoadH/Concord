@@ -1,9 +1,9 @@
-import { type AnalysisView, relevanceFor } from "../model/index.js";
-import { referenceResolver } from "../domain/documents/index.js";
-import { readAnalysisObservations } from "./code-analysis.js";
-import type { AnnotatedCase, DocumentRecord, Repository } from "../model/index.js";
-import type { CodeDeclaration } from "../model/index.js";
-import { extractSteps } from "../domain/documents/index.js";
+import { type AnalysisView, relevanceFor } from "../model/index.ts";
+import { referenceResolver } from "../domain/documents/index.ts";
+import { readAnalysisObservations } from "./code-analysis.ts";
+import type { AnnotatedCase, DocumentRecord, Repository } from "../model/index.ts";
+import type { CodeDeclaration } from "../model/index.ts";
+import { extractSteps } from "../domain/documents/index.ts";
 export function analysisView(repo: Repository, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[], documents: readonly DocumentRecord[], references = referenceResolver(repo, documents)): AnalysisView {
   const observations = readAnalysisObservations(repo);
   const stepRefs = new Set(documents.filter(document => document.metadata.kind === 'use-case').flatMap(document =>

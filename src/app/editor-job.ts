@@ -1,8 +1,8 @@
-import { workerEntryArgv } from "../base/installation/index.js";
+import { workerEntryArgv } from "../base/installation/index.ts";
 import { Effect } from "effect";
-import { OwnedProcess, makeOwnedProcessService, type OwnedProcessService } from "../base/process/index.js";
-import { ConcordError, failure } from "../model/index.js";
-import * as P from '../model/editor/index.js';
+import { OwnedProcess, makeOwnedProcessService, type OwnedProcessService } from "../base/process/index.ts";
+import { ConcordError, failure } from "../model/index.ts";
+import * as P from '../model/editor/index.ts';
 
 
 /** Each invocation owns its service, including its completed-output history. */

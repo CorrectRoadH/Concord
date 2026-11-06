@@ -3,8 +3,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { createConsumer } from '../support/consumer.js';
-import { installedConcordCli } from '../support/support.js';
+import { createConsumer } from '../support/consumer.ts';
+import { installedConcordCli } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('built creation combines repeated page flags and preserves the named occupied-owner error', () => {

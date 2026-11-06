@@ -3,13 +3,13 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Layer, Schema } from 'effect';
-import { executeQuery, type QueryRequest } from '../../src/app/index.js';
-import { CacheSnapshot, CacheDerivations, PersistentCache } from '../../src/base/cache/index.js';
-import { genericPrivateDirectorySync } from '../../src/base/publication/index.js';
-import { computationLayer } from '../../src/entry/server/main.js';
-import { createConsumer } from '../support/consumer.js';
-import { createDocument } from '../support/operations.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
+import { executeQuery, type QueryRequest } from '../../src/app/index.ts';
+import { CacheSnapshot, CacheDerivations, PersistentCache } from '../../src/base/cache/index.ts';
+import { genericPrivateDirectorySync } from '../../src/base/publication/index.ts';
+import { computationLayer } from '../../src/entry/server/main.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { createDocument } from '../support/operations.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('fresh computation requests retain the annotation parser cache owned by the long-lived process', async () => {

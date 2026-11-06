@@ -2,18 +2,18 @@
 // @concord-implements docs/engineering/build/architecture.md#从源码运行
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { packageRoot } from "./location.js";
-export { packageRoot } from "./location.js";
-import { hawdbTarget } from "./hawdb-native-contract.js";
-import { ConcordError, digest } from "../../model/index.js";
-import { installationIdentity } from './identity-cache.js';
-import { sourceInstallation, runtimeDirectory, runtimeLoader } from './runtime.js';
-export { sourceInstallation } from './runtime.js';
+import { packageRoot } from "./location.ts";
+export { packageRoot } from "./location.ts";
+import { hawdbTarget } from "./hawdb-native-contract.ts";
+import { ConcordError, digest } from "../../model/index.ts";
+import { installationIdentity } from './identity-cache.ts';
+import { sourceInstallation, runtimeDirectory, runtimeLoader } from './runtime.ts';
+export { sourceInstallation } from './runtime.ts';
 
 const directory = runtimeDirectory;
 const distribution = join(packageRoot, 'dist');
-export { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.js";
-import { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.js";
+export { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.ts";
+import { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.ts";
 export const resourcePath = (path: string): string => join(packageRoot, path);
 export const helpManifestPath = join(distribution, 'startup-data.js');
 
@@ -81,10 +81,10 @@ export function workspaceInstallationIdentity(): string {
     ? installationIdentity(directory, [{ root: directory, prefix: 'src', accept: () => true }, { root: join(packageRoot, 'web'), prefix: 'web', accept: () => true }, { root: nativeArtifactRoot, prefix: 'native', accept: () => true }], [['mode', 'source']])
     : installationIdentity(directory, [{ root: directory, prefix: '', accept: (name, relative) => name.endsWith('.js') || relative.startsWith('native/') }]);
 }
-export * from './hawdb-native-contract.js';
-export { nativeSourceDigest, nativeCacheRoot, nativeSourceFiles, nativeLockDigest } from './native-artifact.js';
-export { installationResources, installationRootForBin } from './resources.js';
-export { Installation } from './service.js';
-export { sourceWebServer, sourceP5Runtime, sourcePreviewFiles } from './source-web.js';
-export type { TemplateResources } from './service.js';
-export type { HerdrModReceipt } from './herdr-mod.js';
+export * from './hawdb-native-contract.ts';
+export { nativeSourceDigest, nativeCacheRoot, nativeSourceFiles, nativeLockDigest } from './native-artifact.ts';
+export { installationResources, installationRootForBin } from './resources.ts';
+export { Installation } from './service.ts';
+export { sourceWebServer, sourceP5Runtime, sourcePreviewFiles } from './source-web.ts';
+export type { TemplateResources } from './service.ts';
+export type { HerdrModReceipt } from './herdr-mod.ts';

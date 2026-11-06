@@ -1,15 +1,15 @@
-import { knowledgeSearchRecords, knowledgeIndex, removeIssue, setMarkdown, recoverLocalState, linkIssue, type CreateDocumentInput } from '../../src/app/index.js';
+import { knowledgeSearchRecords, knowledgeIndex, removeIssue, setMarkdown, recoverLocalState, linkIssue, type CreateDocumentInput } from '../../src/app/index.ts';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { parseDocumentRecord } from '../../src/domain/documents/index.js';
-import { ConcordError, renderDocument, digest, type DocumentKind } from '../../src/model/index.js';
-import { humanOutput } from '../../src/entry/cli/index.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { createDocument } from '../support/operations.js';
-import { createConsumer } from '../support/consumer.js';
+import { parseDocumentRecord } from '../../src/domain/documents/index.ts';
+import { ConcordError, renderDocument, digest, type DocumentKind } from '../../src/model/index.ts';
+import { humanOutput } from '../../src/entry/cli/index.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { createDocument } from '../support/operations.ts';
+import { createConsumer } from '../support/consumer.ts';
 const Output = Schema.Struct({ operation: Schema.optional(Schema.String), query: Schema.optional(Schema.String), error: Schema.optional(Schema.String), documents: Schema.optional(Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String, title: Schema.String, type: Schema.optional(Schema.String), body: Schema.optional(Schema.String), provider: Schema.optional(Schema.String) }))) });
 function result(root: string, operation: (repo: LocalRepository) => unknown, status = 0) {
  const repo = new LocalRepository(root);

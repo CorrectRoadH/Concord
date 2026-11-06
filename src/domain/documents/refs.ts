@@ -1,11 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
-import { parseReference } from "../../model/index.js";
+import { parseReference } from "../../model/index.ts";
 import { posix } from "node:path";
-import { ConcordError, type DocumentKind, type DocumentRecord, type Finding, type Repository } from "../../model/index.js";
-import { decodeDocumentSource } from "./document-codec.js";
-import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/index.js";
-import { extractSteps } from "./steps.js";
+import { ConcordError, type DocumentKind, type DocumentRecord, type Finding, type Repository } from "../../model/index.ts";
+import { decodeDocumentSource } from "./document-codec.ts";
+import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/index.ts";
+import { extractSteps } from "./steps.ts";
 
 function hasAnchor(source: string, expected: string): boolean {
   const collapsed = (value: string) => value.replace(/-+/gu, '-').replace(/^-+|-+$/gu, '');

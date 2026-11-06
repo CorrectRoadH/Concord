@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
-import { parseDocument } from './markdown-dependencies.js';
+import { parseDocument } from './markdown-dependencies.ts';
 import type { Nodes, Root } from "mdast";
-import { fromMarkdown } from "./markdown-parser.js";
-import { IssueFrontmatterSchema, MemoryFrontmatterSchema } from "./owner-frontmatter.js";
-import { ConcordError, DocumentSchema, decode, digest, type DocumentKind, type DocumentRecord } from "./shared.js";
+import { fromMarkdown } from "./markdown-parser.ts";
+import { IssueFrontmatterSchema, MemoryFrontmatterSchema } from "./owner-frontmatter.ts";
+import { ConcordError, DocumentSchema, decode, digest, type DocumentKind, type DocumentRecord } from "./shared.ts";
 
 function text(node: Nodes): string {
   if (node.type === 'text' || node.type === 'inlineCode') return node.value;

@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import type { FileSystemCallbacks } from "typescript/fs";
 import type { SourceFile } from "typescript/ast";
 import type { API, Diagnostic } from "typescript/sync";
-import { ConcordError } from "../../model/index.js";
+import { ConcordError } from "../../model/index.ts";
 
 const require = createRequire(import.meta.url);
 let packageVersion: string | undefined;

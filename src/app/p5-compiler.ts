@@ -1,18 +1,18 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
-import { snapshotBytes, snapshotMetadata } from '../base/sources/index.js';
-import { Installation, builtAssetRoot, requireBuiltAssets } from "../base/installation/index.js";
+import { snapshotBytes, snapshotMetadata } from '../base/sources/index.ts';
+import { Installation, builtAssetRoot, requireBuiltAssets } from "../base/installation/index.ts";
 import { dirname, extname, join, posix } from "node:path";
 import { Effect } from "effect";
 import { build, type Loader } from "esbuild";
 import * as ts from 'typescript/ast';
 import type { RawCompilerOptions } from "typescript/sync";
 import { createFileSystem } from "typescript/fs";
-import { nativeTypeScript, typescriptLibraries, typescriptRequest, withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../base/process/index.js";
-import { openReadRepository } from "../base/workspace/index.js";
-import { getViewFile } from "./application.js";
-import { ConcordError, decode, failure } from "../model/index.js";
-import { P5_LIBRARIES, P5RequestSchema, parseP5Options, type P5Bundle } from "../model/p5/index.js";
+import { nativeTypeScript, typescriptLibraries, typescriptRequest, withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../base/process/index.ts";
+import { openReadRepository } from "../base/workspace/index.ts";
+import { getViewFile } from "./application.ts";
+import { ConcordError, decode, failure } from "../model/index.ts";
+import { P5_LIBRARIES, P5RequestSchema, parseP5Options, type P5Bundle } from "../model/p5/index.ts";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 128;

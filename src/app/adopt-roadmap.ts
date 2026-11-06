@@ -1,11 +1,11 @@
 import { posix } from "node:path";
-import { fromMarkdown } from "../model/index.js";
-import { renderDocument } from "../model/index.js";
-import { ConcordError, DocumentName, decode, digest, inRepositorySnapshot, type DocumentMeta, type MutationReceipt, type Repository } from "../model/index.js";
-import { rebaseAdoptedMarkdown } from "../domain/documents/index.js";
-import { defaultDocumentPath } from "../model/index.js";
-import { loadDocuments } from "../domain/documents/index.js";
-import { findDocument } from "../domain/documents/index.js";
+import { fromMarkdown } from "../model/index.ts";
+import { renderDocument } from "../model/index.ts";
+import { ConcordError, DocumentName, decode, digest, inRepositorySnapshot, type DocumentMeta, type MutationReceipt, type Repository } from "../model/index.ts";
+import { rebaseAdoptedMarkdown } from "../domain/documents/index.ts";
+import { defaultDocumentPath } from "../model/index.ts";
+import { loadDocuments } from "../domain/documents/index.ts";
+import { findDocument } from "../domain/documents/index.ts";
 
 
 // @concord-code
@@ -23,7 +23,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId?: str
   if (repo.files(featureDirectory).length > 0 || (repo.exists?.(featureDirectory) ?? false)) throw new ConcordError('DocumentExists', `${featureDirectory} already exists`);
   const sourcePaths = repo.files(roadmapDirectory).sort();
   const observed = new Map<string, string>();
-  const changes: import("../model/index.js").Change[] = [];
+  const changes: import("../model/index.ts").Change[] = [];
   for (const sourcePath of sourcePaths) {
     if (!sourcePath.endsWith('.md')) throw new ConcordError('UnsupportedAttachment', `Roadmap adoption only moves Markdown pages: ${sourcePath}`);
     const source = repo.read(sourcePath);

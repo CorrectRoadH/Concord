@@ -10,6 +10,9 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
     "types": ["vite/client", "node"],
     "paths": { "@/*": ["./web/*"] }
   },

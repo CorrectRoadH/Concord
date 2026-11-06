@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 import { Schema } from "effect";
-import type { FeedbackItem } from "./feedback-schema.js";
+import type { FeedbackItem } from "./feedback-schema.ts";
 
 export const FeedbackFilterFields = {
   provider: Schema.optional(Schema.Literals(['local', 'github', 'linear'])),

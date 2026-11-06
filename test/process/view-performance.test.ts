@@ -1,25 +1,25 @@
-import { createDocument, initialize } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
-import { installationResources } from "../../src/base/installation/index.js";
-import { installedConcordCli } from "../support/support.js";
+import { createDocument, initialize } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
+import { installationResources } from "../../src/base/installation/index.ts";
+import { installedConcordCli } from "../support/support.ts";
 import { dirname } from "node:path";
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getWorkspaceSnapshot } from "../../src/app/index.js";
-import { recoverPublicationLeaseSync } from "../../src/base/publication/index.js";
+import { getWorkspaceSnapshot } from "../../src/app/index.ts";
+import { recoverPublicationLeaseSync } from "../../src/base/publication/index.ts";
 
-import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from "../../src/app/index.js";
-import { LocalRepository } from "../support/repository.js";
-import { openHawdb } from '../../src/base/cache/index.js';
+import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from "../../src/app/index.ts";
+import { LocalRepository } from "../support/repository.ts";
+import { openHawdb } from '../../src/base/cache/index.ts';
 
-import { startViewServer } from '../e2e/server.js';
-import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
+import { startViewServer } from '../e2e/server.ts';
+import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-performance-'));

@@ -1,13 +1,13 @@
-import { packConcord } from '../release-package.js';
-import { workspaceInstallationIdentity, installationRootForBin } from '../../src/base/installation/index.js';
+import { packConcord } from '../release-package.ts';
+import { workspaceInstallationIdentity, installationRootForBin } from '../../src/base/installation/index.ts';
 import { createHash } from 'node:crypto';
 import { cpus, totalmem, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { packageBin } from '../package-location.js';
+import { packageBin } from '../package-location.ts';
 import { Effect, FileSystem, Schema } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
-import { BuildIdentity } from '../build-identity.js';
-import { io, mustRun, PerfError } from './process.js';
+import { BuildIdentity } from '../build-identity.ts';
+import { io, mustRun, PerfError } from './process.ts';
 
 export interface Artifact { readonly label: 'candidate' | 'baseline'; readonly dir: string; readonly entry: string; readonly commit: string; readonly dirty: boolean; readonly digest: string }
 

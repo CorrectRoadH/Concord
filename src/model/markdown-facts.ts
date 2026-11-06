@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
 import type { Nodes, ListItem, Paragraph, Root } from "mdast";
-import { DOCUMENT_NAME_PATTERN } from "./document-name.js";
-import type { Finding } from "./shared.js";
+import { DOCUMENT_NAME_PATTERN } from "./document-name.ts";
+import type { Finding } from "./shared.ts";
 
 export interface UseCaseStep { readonly id: string; readonly ordinal: number; readonly line: number; readonly endLine: number; readonly listOrdinal: number }
 export interface RootOrderedList { readonly ordinal: number; readonly line: number; readonly endLine: number; readonly items: number; readonly marked: number }

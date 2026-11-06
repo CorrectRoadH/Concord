@@ -1,10 +1,10 @@
 import { isAbsolute, resolve } from "node:path";
-import { Sources } from '../../base/sources/index.js';
+import { Sources } from '../../base/sources/index.ts';
 import { Clock, DateTime, Effect, Schema } from "effect";
-import { fetchFeedback, type FeedbackFetch, type FeedbackTransport } from "./feedback-providers.js";
-import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../../model/index.js";
-import { hasConfirmedOwnedGroupCleanup, OwnedProcess } from "../../base/process/index.js";
-import { ConcordError } from "../../model/index.js";
+import { fetchFeedback, type FeedbackFetch, type FeedbackTransport } from "./feedback-providers.ts";
+import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../../model/index.ts";
+import { hasConfirmedOwnedGroupCleanup, OwnedProcess } from "../../base/process/index.ts";
+import { ConcordError } from "../../model/index.ts";
 
 type GhConnection = Extract<FeedbackConnection, { provider: 'github'; transport: 'gh' }>;
 const PER_CALL = 2 * 1024 * 1024;

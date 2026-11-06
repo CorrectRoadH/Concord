@@ -1,9 +1,9 @@
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import type { TerminalDeliverySink } from "./delivery.js";
-import { readJson } from "./input.js";
-import { problem } from "../../model/index.js";
-import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from "../../app/index.js";
+import type { TerminalDeliverySink } from "./delivery.ts";
+import { readJson } from "./input.ts";
+import { problem } from "../../model/index.ts";
+import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from "../../app/index.ts";
 
 export interface WorkSettings { readonly root?: string | undefined; readonly json: boolean; readonly dryRun?: boolean }
 export function makeDocsWorkCommand<SettingsR = never>(deliver: TerminalDeliverySink, settings?: Effect.Effect<WorkSettings, never, SettingsR>) {

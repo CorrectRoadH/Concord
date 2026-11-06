@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, Fiber, FileSystem } from 'effect';
-import { mustRun, timedRun } from '../../scripts/perf/process.js';
-import { workDirectory } from '../../scripts/perf/workspace.js';
+import { mustRun, timedRun } from '../../scripts/perf/process.ts';
+import { workDirectory } from '../../scripts/perf/workspace.ts';
 
 // @feature docs/feature/local-sdlc/README.md
 test('measured commands inherit regular output files and preserve observed exit timing', () => Effect.runPromise(Effect.gen(function*() {

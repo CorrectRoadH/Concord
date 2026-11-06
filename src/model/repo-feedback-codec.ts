@@ -1,9 +1,9 @@
 import { Schema } from "effect";
-import { IssueSchema, type IssueMeta } from "./shared.js";
-import { decodeUncachedDocumentSource as decodeDocumentSource } from "./document-source.js";
-import { renderDocument } from "./document-render.js";
-import { FeedbackContentInvalid } from "./repo-feedback-errors.js";
-import { documentPlacementError } from "./document-layout.js";
+import { IssueSchema, type IssueMeta } from "./shared.ts";
+import { decodeUncachedDocumentSource as decodeDocumentSource } from "./document-source.ts";
+import { renderDocument } from "./document-render.ts";
+import { FeedbackContentInvalid } from "./repo-feedback-errors.ts";
+import { documentPlacementError } from "./document-layout.ts";
 
 export interface FeedbackDocument { readonly metadata: IssueMeta; readonly body: string }
 

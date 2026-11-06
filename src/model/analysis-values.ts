@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 import { Schema } from "effect";
-import { observationSchema } from "./observation.js";
-import { SymbolLocatorSchema } from "./lsp-symbols.js";
-import { RangeSchema } from "./test-adapter-protocol.js";
-import { Sha256, Text } from "./shared.js";
+import { observationSchema } from "./observation.ts";
+import { SymbolLocatorSchema } from "./lsp-symbols.ts";
+import { RangeSchema } from "./test-adapter-protocol.ts";
+import { Sha256, Text } from "./shared.ts";
 
 export const NativeAnalysisScopeSchema = Schema.Struct({
   adapterId: Text, manifestInputs: Sha256, manifestDigest: Sha256,

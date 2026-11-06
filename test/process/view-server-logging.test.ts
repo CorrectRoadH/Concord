@@ -3,9 +3,9 @@ import { spawn, spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
-import { installedConcordCli, pollUntil } from '../support/support.js';
-import { fixture, send, parsed } from '../support/view-http-fixture.js';
+import { startViewServer, type ViewServerHandle } from '../e2e/server.ts';
+import { installedConcordCli, pollUntil } from '../support/support.ts';
+import { fixture, send, parsed } from '../support/view-http-fixture.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view writes request failure codes without copying request targets or diagnostics into logs', async () => {

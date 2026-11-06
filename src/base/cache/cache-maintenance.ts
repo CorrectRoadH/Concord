@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { spawn } from "node:child_process";
-import { cachePhysicalBytes } from "./cache-file.js";
-import { CACHE_MAINTENANCE_THRESHOLD_BYTES } from "../installation/index.js";
-import { workerEntryArgv } from "../installation/index.js";
-import type { Repository } from "../../model/index.js";
+import { cachePhysicalBytes } from "./cache-file.ts";
+import { CACHE_MAINTENANCE_THRESHOLD_BYTES } from "../installation/index.ts";
+import { workerEntryArgv } from "../installation/index.ts";
+import type { Repository } from "../../model/index.ts";
 
 const pending = new Set<string>();
 /** Coalesce synchronous writes; the referenced immediate runs before CLI exit. */

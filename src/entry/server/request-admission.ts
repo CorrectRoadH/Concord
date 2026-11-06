@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import { Effect } from 'effect';
-import { ConcordError } from '../../model/index.js';
+import { ConcordError } from '../../model/index.ts';
 
 /** One pool belongs to the service, across all request transports. */
 export function makeRequestAdmission() {

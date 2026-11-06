@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 import { Option } from "effect";
 import { Flag } from "effect/unstable/cli";
-import { optional } from "./cli-base.js";
+import { optional } from "./cli-base.ts";
 
 const feedbackFilters = {
   provider: Flag.choice('provider', ['local', 'github', 'linear']).pipe(Flag.optional),

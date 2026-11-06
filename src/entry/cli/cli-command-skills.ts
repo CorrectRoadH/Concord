@@ -2,8 +2,8 @@
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
 import { Effect, Option } from 'effect';
 import { Command } from 'effect/unstable/cli';
-import { installWorkflowSkills, openWriteRepository } from '../../app/index.js';
-import { emit, root } from './cli-base.js';
+import { installWorkflowSkills, openWriteRepository } from '../../app/index.ts';
+import { emit, root } from './cli-base.ts';
 
 export const skills = Command.make('skills').pipe(
   Command.withDescription('Install or update managed Concord workflow skills for Codex and Claude Code.'),

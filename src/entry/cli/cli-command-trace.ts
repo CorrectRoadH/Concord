@@ -3,10 +3,10 @@
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 // @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md#list-gaps
 import { Argument, Command } from "effect/unstable/cli";
-import { buildTrace } from "../../app/index.js";
-import { traceGaps, traceShow } from "../../app/index.js";
-import { sync, cached } from "./cli-base.js";
-import { withReadRepo, withQuery } from "./cli-repository.js";
+import { buildTrace } from "../../app/index.ts";
+import { traceGaps, traceShow } from "../../app/index.ts";
+import { sync, cached } from "./cli-base.ts";
+import { withReadRepo, withQuery } from "./cli-repository.ts";
 
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
   Command.make('show',{ref:Argument.string('reference')},args=>withReadRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))), ['trace', 'show', args.ref])),

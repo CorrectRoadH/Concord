@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { setMarkdown } from '../../src/app/index.js';
-import { parseDocumentRecord } from '../../src/domain/documents/index.js';
-import { digest, fromMarkdown, renderDocument } from '../../src/model/index.js';
-import { createConsumer } from './consumer.js';
-import { LocalRepository } from './repository.js';
-import { addPage, createDocument } from './operations.js';
-import { writeProjectConfig } from './support.js';
+import { setMarkdown } from '../../src/app/index.ts';
+import { parseDocumentRecord } from '../../src/domain/documents/index.ts';
+import { digest, fromMarkdown, renderDocument } from '../../src/model/index.ts';
+import { createConsumer } from './consumer.ts';
+import { LocalRepository } from './repository.ts';
+import { addPage, createDocument } from './operations.ts';
+import { writeProjectConfig } from './support.ts';
 
 export function authoringConsumer(): string {
   const root = createConsumer();

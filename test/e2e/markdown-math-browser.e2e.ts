@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { createDocument } from '../support/operations.js';
+import { createDocument } from '../support/operations.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect, type Locator } from '@playwright/test';
 import { Effect } from 'effect';
-import { LocalRepository } from '../support/repository.js';
-import { type ViewServerHandle } from './server.js';
+import { LocalRepository } from '../support/repository.ts';
+import { type ViewServerHandle } from './server.ts';
 
 const example = String.raw`P(\Phi_h(S))=P(S)`;
 const inline = String.raw`\frac{a}{b} + x^2`;

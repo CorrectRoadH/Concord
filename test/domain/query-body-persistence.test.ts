@@ -3,12 +3,12 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { queryContext, scanQueryProcess, scanQueryValue, hydrateQueryValue, renderReview, type Query } from '../../src/app/index.js';
-import { cacheDatabasePath, openHawdb } from '../../src/base/cache/index.js';
-import { type QueryValue, TraceGapsValue } from '../../src/model/index.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { readQuery, storeQuery } from '../support/operations.js';
-import { queryFactsConsumer, ownerPath, flow } from '../support/query-facts-fixture.js';
+import { queryContext, scanQueryProcess, scanQueryValue, hydrateQueryValue, renderReview, type Query } from '../../src/app/index.ts';
+import { cacheDatabasePath, openHawdb } from '../../src/base/cache/index.ts';
+import { type QueryValue, TraceGapsValue } from '../../src/model/index.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { readQuery, storeQuery } from '../support/operations.ts';
+import { queryFactsConsumer, ownerPath, flow } from '../support/query-facts-fixture.ts';
 
 const current = (root: string, query: Query) => {
   const repo = new LocalRepository(root, { access: 'read', dryRun: true, persistentCache: 'off' });

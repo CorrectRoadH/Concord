@@ -1,15 +1,15 @@
-import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
+import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { tmpdir } from '../support/temporary.js';
-import { git, fixture, custom } from '../support/docs-work-fixture.js';
-import { plan, report, verify, prepare, check, finalize, show, item, readPlan } from '../support/docs-work-domain-fixture.js';
-import { LocalRepository } from '../support/repository.js';
-import { initialize } from '../support/operations.js';
+import { tmpdir } from '../support/temporary.ts';
+import { git, fixture, custom } from '../support/docs-work-fixture.ts';
+import { plan, report, verify, prepare, check, finalize, show, item, readPlan } from '../support/docs-work-domain-fixture.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { initialize } from '../support/operations.ts';
 
 test('C5/C6 public CLI dynamically owns directory writes and binds verified dependency receipts', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = fixture(custom);

@@ -1,12 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#句柄与打开模式
 import { Effect, Schema } from 'effect';
-import { PersistentCache, HawdbFailure, type CacheStatus } from '../base/cache/index.js';
-import { Workspace } from '../base/workspace/index.js';
-import { Sources } from '../base/sources/index.js';
-import { scanAnnotations, cacheStatus } from '../domain/tests/index.js';
-import { scanCode } from '../domain/code/index.js';
-import { AnnotatedCaseSchema, ConcordError, failure, type Repository } from '../model/index.js';
+import { PersistentCache, HawdbFailure, type CacheStatus } from '../base/cache/index.ts';
+import { Workspace } from '../base/workspace/index.ts';
+import { Sources } from '../base/sources/index.ts';
+import { scanAnnotations, cacheStatus } from '../domain/tests/index.ts';
+import { scanCode } from '../domain/code/index.ts';
+import { AnnotatedCaseSchema, ConcordError, failure, type Repository } from '../model/index.ts';
 
 const Counter = Schema.Struct({ status: Schema.String, hits: Schema.Number, misses: Schema.Number, path: Schema.String, detail: Schema.optional(Schema.String) });
 const Projection = Schema.Struct({ cases: Schema.Array(AnnotatedCaseSchema), findings: Schema.Array(Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int) })), files: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })), digest: Schema.String, cache: Counter, codeCache: Counter });

@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Deferred, Effect, Fiber, Layer, SubscriptionRef } from 'effect';
 import { TestClock } from 'effect/testing';
-import { WorkspaceState, waitForServerHandshake } from '../../src/entry/server/state.js';
-import { makeWorkspaceService, type RuntimePorts } from '../../src/entry/server/service.js';
-import { ConcordError, type WorkspaceProjection, type WorkspaceProjectionRecord } from '../../src/model/index.js';
-import { displaySnapshot } from '../support/workspace-display-fixture.js';
+import { WorkspaceState, waitForServerHandshake } from '../../src/entry/server/state.ts';
+import { makeWorkspaceService, type RuntimePorts } from '../../src/entry/server/service.ts';
+import { ConcordError, type WorkspaceProjection, type WorkspaceProjectionRecord } from '../../src/model/index.ts';
+import { displaySnapshot } from '../support/workspace-display-fixture.ts';
 
-import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.js';
+import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('service expiry uses the Effect clock and a connected client prevents idle shutdown', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

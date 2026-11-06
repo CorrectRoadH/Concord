@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { scanAnnotations } from "../../src/domain/tests/index.js";
-import { scanCode } from "../../src/domain/code/index.js";
-import { loadDocuments } from "../../src/domain/documents/index.js";
-import { LocalRepository } from "../support/repository.js";
-import { readWritingPolicy } from "../../src/domain/writing/index.js";
-import { projectConfigPath, readProjectConfig } from '../support/support.js';
+import { scanAnnotations } from "../../src/domain/tests/index.ts";
+import { scanCode } from "../../src/domain/code/index.ts";
+import { loadDocuments } from "../../src/domain/documents/index.ts";
+import { LocalRepository } from "../support/repository.ts";
+import { readWritingPolicy } from "../../src/domain/writing/index.ts";
+import { projectConfigPath, readProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('current checkout configures a version-matched runner whose annotations scan cleanly', () => Effect.runPromise(Effect.sync(() => {

@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Deferred, Effect, Fiber, Stream, SubscriptionRef } from 'effect';
 import { TestClock } from 'effect/testing';
-import { workspaceSourceDigest } from '../../src/app/workspace-source.js';
-import { workspaceEvents, WorkspaceState } from '../../src/entry/server/state.js';
-import { makeWorkspaceService } from '../../src/entry/server/service.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { fixture } from '../support/workspace-projection-fixture.js';
-import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.js';
+import { workspaceSourceDigest } from '../../src/app/workspace-source.ts';
+import { workspaceEvents, WorkspaceState } from '../../src/entry/server/state.ts';
+import { makeWorkspaceService } from '../../src/entry/server/service.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { fixture } from '../support/workspace-projection-fixture.ts';
+import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('workspace source identity survives ABA between refreshes and includes supporting sources', async () => {

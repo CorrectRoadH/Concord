@@ -1,12 +1,12 @@
-import { installationResources } from "../../src/base/installation/index.js";
-import { packageBin } from './installed-package.js';
+import { installationResources } from "../../src/base/installation/index.ts";
+import { packageBin } from './installed-package.ts';
 import assert from 'node:assert/strict';
 import { execFile, spawnSync } from 'node:child_process';
 import { readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
-import { fullCommand } from "../../src/entry/cli/index.js";
+import { fullCommand } from "../../src/entry/cli/index.ts";
 
 const environment: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', TERM: 'dumb', NODE_OPTIONS: '', NODE_DISABLE_COMPILE_CACHE: '1' };
 delete environment.FORCE_COLOR;

@@ -1,13 +1,13 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/review-pull-request.md
 import { join, resolve } from "node:path";
-import { requireBuiltAssets } from "../base/installation/index.js";
+import { requireBuiltAssets } from "../base/installation/index.ts";
 import { Effect, Schema } from "effect";
-import { ConcordError, failure } from "../model/index.js";
-import { decodeChangePreview, PREVIEW_DATA_LIMIT, PREVIEW_ENTRY_LIMIT, type ChangePreviewEntry, type PreviewSide } from "../model/index.js";
-import { Publication } from '../base/publication/index.js';
-import { Sources } from '../base/sources/index.js';
-import { previewGit, previewGitEnvironment } from "../base/git/index.js";
+import { ConcordError, failure } from "../model/index.ts";
+import { decodeChangePreview, PREVIEW_DATA_LIMIT, PREVIEW_ENTRY_LIMIT, type ChangePreviewEntry, type PreviewSide } from "../model/index.ts";
+import { Publication } from '../base/publication/index.ts';
+import { Sources } from '../base/sources/index.ts';
+import { previewGit, previewGitEnvironment } from "../base/git/index.ts";
 
 const MiB = 1024 * 1024;
 const utf8 = new TextDecoder('utf-8', { fatal: true });

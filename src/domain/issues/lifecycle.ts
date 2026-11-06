@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
-import type { LocalRepository } from '../../base/workspace/index.js';
+import type { LocalRepository } from '../../base/workspace/index.ts';
 import { posix } from 'node:path';
-import { fromMarkdown, markdownBody, ConcordError, parseReference, digest, inRepositorySnapshot, type IssueRelation, type MutationReceipt, type Repository } from '../../model/index.js';
-import { CONTRACT_KINDS, changed, loadDocuments, readDocumentReference, readDocumentSelector } from '../documents/index.js';
+import { fromMarkdown, markdownBody, ConcordError, parseReference, digest, inRepositorySnapshot, type IssueRelation, type MutationReceipt, type Repository } from '../../model/index.ts';
+import { CONTRACT_KINDS, changed, loadDocuments, readDocumentReference, readDocumentSelector } from '../documents/index.ts';
 import type { Nodes } from 'mdast';
 
 export function linkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueRelation['role'] = 'investigation'): MutationReceipt {

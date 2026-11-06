@@ -5,8 +5,8 @@ import { Effect, Scheduler, Schema } from 'effect';
 import { View, div, type AsyncContext, type Context, type Element, type Task } from 'gpui-kit';
 import { h_flex, v_flex, TextView, Editor, EditorState, Input, InputState } from 'gpui-base';
 import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, focused, panes, spaces, run, closeOverlay, appHome, props as hostProps, theme } from 'herdr';
-import { ModSession, markdownTarget } from './session.js';
-import { ModManifest, ModVersion, compareModVersions } from '../../model/herdr-mod/index.js';
+import { ModSession, markdownTarget } from './session.ts';
+import { ModManifest, ModVersion, compareModVersions } from '../../model/herdr-mod/index.ts';
 
 const color = (name: string) => theme()[name] ?? '#888888';
 const text = (value: string) => div().child(value);

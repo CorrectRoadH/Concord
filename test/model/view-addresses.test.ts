@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { NetworkInterfaceInfo } from 'node:os';
-import { viewAddresses } from "../../src/entry/http/index.js";
-import { humanOutput } from "../../src/entry/cli/index.js";
+import { viewAddresses } from "../../src/entry/http/index.ts";
+import { humanOutput } from "../../src/entry/cli/index.ts";
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('startup URLs respect the actual bind family and do not advertise wildcard or link-local addresses', () => {

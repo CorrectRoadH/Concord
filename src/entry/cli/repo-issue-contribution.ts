@@ -1,11 +1,11 @@
-import { planRemoteIssue, readRemoteIssueBody, executeRemoteIssue } from "../../app/index.js";
+import { planRemoteIssue, readRemoteIssueBody, executeRemoteIssue } from "../../app/index.ts";
 
-import type { IssueCommandRequirements, IssueCommandRunner } from "../../app/index.js";
+import type { IssueCommandRequirements, IssueCommandRunner } from "../../app/index.ts";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import type { TerminalDeliverySink } from "./delivery.js";
+import type { TerminalDeliverySink } from "./delivery.ts";
 
-import { ConcordError, type IssueError } from "../../model/index.js";
+import { ConcordError, type IssueError } from "../../model/index.ts";
 
 export function makeIssueRemoteSubcommands<R>(deliver: TerminalDeliverySink, run: IssueCommandRunner<R>, sharedJson?: boolean): readonly Command.Command<any, never, unknown, never, R>[];
 export function makeIssueRemoteSubcommands<R = never>(deliver: TerminalDeliverySink, run?: IssueCommandRunner<R>, sharedJson?: boolean): readonly Command.Command<any, never, unknown, never, IssueCommandRequirements | R>[];

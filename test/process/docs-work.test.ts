@@ -1,13 +1,13 @@
-import { installedConcordCli } from '../support/support.js';
+import { installedConcordCli } from '../support/support.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { fixture, custom, waitingProcess } from '../support/docs-work-fixture.js';
+import { fixture, custom, waitingProcess } from '../support/docs-work-fixture.ts';
 
 const cli = process.env.CONCORD_DOCS_WORK_CLI ?? installedConcordCli();
 interface Output { operation?: string; runId?: string; statePath?: string; error?: string; details?: { problems?: { code: string; path?: string }[] }; receiptDigest?: string; receipt?: { status: string; writeDigest: string; changedPaths: string[]; checks: { status: string; exitCode: number | null; summary: string }[] }; status?: string; blocked?: { itemId: string; reason: string }[] }

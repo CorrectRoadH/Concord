@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
 import { Schema } from "effect";
-import { Text } from "./shared.js";
+import { Text } from "./shared.ts";
 
 /**
  * Shared shape for disposable observations: native test manifests, language analysis and relevance.

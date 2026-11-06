@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { createDocument } from '../support/operations.js';
+import { createDocument } from '../support/operations.ts';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { type ViewServerHandle } from './server.js';
+import { LocalRepository } from '../support/repository.ts';
+import { type ViewServerHandle } from './server.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('terminology tab discards a previous document response and shows scoped JSON diagnostics', async ({ page, workspace }) => {

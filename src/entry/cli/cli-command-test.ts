@@ -3,16 +3,16 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#原生测试-adapter
 import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { collectNativeTests, readNativeObservations } from "../../app/index.js";
-import { runCase } from "../../app/index.js";
-import { verifyTest } from "../../app/index.js";
-import { buildTrace, requireValidTrace, selectCase } from "../../app/index.js";
-import { ConcordError } from "../../model/index.js";
-import { annotationSnippet } from "../../app/index.js";
-import { analysisView } from "../../app/index.js";
-import { scanCode } from "../../app/index.js";
-import { text, many, id, sync, cached } from "./cli-base.js";
-import { withRepo, withReadRepo, withQuery } from "./cli-repository.js";
+import { collectNativeTests, readNativeObservations } from "../../app/index.ts";
+import { runCase } from "../../app/index.ts";
+import { verifyTest } from "../../app/index.ts";
+import { buildTrace, requireValidTrace, selectCase } from "../../app/index.ts";
+import { ConcordError } from "../../model/index.ts";
+import { annotationSnippet } from "../../app/index.ts";
+import { analysisView } from "../../app/index.ts";
+import { scanCode } from "../../app/index.ts";
+import { text, many, id, sync, cached } from "./cli-base.ts";
+import { withRepo, withReadRepo, withQuery } from "./cli-repository.ts";
 
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
   Command.make('marker', { contract: text('contract'), issue: many('issue') }, args => withReadRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.issue)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),

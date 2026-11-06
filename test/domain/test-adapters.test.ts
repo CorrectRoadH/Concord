@@ -1,16 +1,16 @@
-import { runApplication } from '../support/repository.js';
+import { runApplication } from '../support/repository.ts';
 import assert from 'node:assert/strict';
 import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ProjectSchema, digest, type Repository } from "../../src/model/index.js";
-import { parseTestDeclarations } from "../../src/domain/tests/index.js";
-import { bindNative } from "../../src/domain/tests/index.js";
-import { ManifestSchema, test_adapter_protocol_PlanSchema as PlanSchema, nativeVerdict, protocolDecode, protocolJson, type NativeManifest, type ProcessStatus } from "../../src/model/index.js";
-import { readReports } from "../../src/domain/tests/index.js";
-import { TestAdapterSchema } from "../../src/model/index.js";
+import { ProjectSchema, digest, type Repository } from "../../src/model/index.ts";
+import { parseTestDeclarations } from "../../src/domain/tests/index.ts";
+import { bindNative } from "../../src/domain/tests/index.ts";
+import { ManifestSchema, test_adapter_protocol_PlanSchema as PlanSchema, nativeVerdict, protocolDecode, protocolJson, type NativeManifest, type ProcessStatus } from "../../src/model/index.ts";
+import { readReports } from "../../src/domain/tests/index.ts";
+import { TestAdapterSchema } from "../../src/model/index.ts";
 
 const caps = { realCollection: true, leaf: true, parameterGroups: true, exactSelection: true, perItemReport: true, range: true, rangeTrivia: true, tags: true, skipVisibility: true };
 const config = { testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } };

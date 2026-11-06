@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { checkCurrentProject, traceShow } from '../../src/app/index.js';
-import { createConsumer } from '../support/consumer.js';
-import { gitCommit } from '../support/fix-consumer.js';
-import { createDocument } from '../support/operations.js';
-import { renderOwnerFixture } from '../support/owner-fixture.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { writeProjectConfig } from '../support/support.js';
+import { checkCurrentProject, traceShow } from '../../src/app/index.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { gitCommit } from '../support/fix-consumer.ts';
+import { createDocument } from '../support/operations.ts';
+import { renderOwnerFixture } from '../support/owner-fixture.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
 test('neutral static checks and trace derive source relations without executing the configured runner', async () => {

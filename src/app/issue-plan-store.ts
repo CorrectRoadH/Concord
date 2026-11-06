@@ -1,6 +1,6 @@
 import { Effect, Layer } from 'effect';
-import { Publication } from '../base/publication/index.js';
-import { IssuePlanStore, type IssuePlanStoreService } from '../domain/issues/index.js';
+import { Publication } from '../base/publication/index.ts';
+import { IssuePlanStore, type IssuePlanStoreService } from '../domain/issues/index.ts';
 
 export const makeNodeIssuePlanStore = Effect.fn('Publication.issuePlanStore')(function*(root: string): Effect.fn.Return<IssuePlanStoreService, never, Publication> {
   return (yield* Publication).receiptStore(root);

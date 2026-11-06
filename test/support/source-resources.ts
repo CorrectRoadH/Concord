@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { installationResources as resources, installationRootForBin, nativeArtifactRoot } from '../../src/base/installation/index.js';
+import { installationResources as resources, installationRootForBin, nativeArtifactRoot } from '../../src/base/installation/index.ts';
 export { installationRootForBin };
 
 export function installationResources(root: string) {

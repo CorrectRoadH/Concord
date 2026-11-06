@@ -1,4 +1,4 @@
-import { defineBenchmarks } from '../scripts/perf/scenario.js';
+import { defineBenchmarks } from '../scripts/perf/scenario.ts';
 const commands: Readonly<Record<string, readonly string[]>> = {
   help: ['--help'], skill: ['--skill'],
   'memory-list': ['list', 'memory'], 'memory-search': ['memory', 'search', 'HawDB'],

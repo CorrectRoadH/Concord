@@ -1,7 +1,7 @@
 import { constants, closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, readlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Effect } from 'effect';
-import { ConcordError, digest } from '../../model/index.js';
+import { ConcordError, digest } from '../../model/index.ts';
 
 export interface ReportBudget { files: number; bytes: number }
 export interface ReportLimits { readonly reportFiles?: number; readonly reportFileBytes?: number; readonly reportBytes?: number }

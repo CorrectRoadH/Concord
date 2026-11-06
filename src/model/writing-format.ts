@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/format.md#writingmd
 import { Schema } from 'effect';
-import { fromMarkdown } from './markdown-parser.js';
-import { WritingPolicySchema, type WritingPolicy, type BannedTerm } from './writing-schema.js';
-import { canonicalPath } from './path-rules.js';
+import { fromMarkdown } from './markdown-parser.ts';
+import { WritingPolicySchema, type WritingPolicy, type BannedTerm } from './writing-schema.ts';
+import { canonicalPath } from './path-rules.ts';
 import type { Nodes } from 'mdast';
 const plain = (node: Nodes): string => node.type === 'text' || node.type === 'inlineCode' ? node.value : 'children' in node ? node.children.map(plain).join('') : '';
 const list = (value: string): string[] => value.split(/[、,，]/u).map(item => item.trim()).filter(Boolean);

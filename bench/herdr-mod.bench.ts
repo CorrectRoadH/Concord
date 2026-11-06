@@ -1,4 +1,4 @@
-import { defineBenchmarks } from '../scripts/perf/scenario.js';
+import { defineBenchmarks } from '../scripts/perf/scenario.ts';
 
 // Actual built mod and public CLI; the external native UI boundary is substituted.
 export default defineBenchmarks('herdr-mod', [

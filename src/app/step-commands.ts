@@ -1,9 +1,9 @@
-import { readDocumentSelector } from "../domain/documents/index.js";
-import { buildTrace } from "../domain/trace/index.js";
-import { stepGroups } from "./trace-queries.js";
-import { formatStepSource, planStepRename } from "./step-rewrite.js";
-import { ConcordError, inRepositorySnapshot, type Repository } from "../model/index.js";
-import type { LocalRepository } from "../base/workspace/index.js";
+import { readDocumentSelector } from "../domain/documents/index.ts";
+import { buildTrace } from "../domain/trace/index.ts";
+import { stepGroups } from "./trace-queries.ts";
+import { formatStepSource, planStepRename } from "./step-rewrite.ts";
+import { ConcordError, inRepositorySnapshot, type Repository } from "../model/index.ts";
+import type { LocalRepository } from "../base/workspace/index.ts";
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#步骤分组输出

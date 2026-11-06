@@ -1,28 +1,28 @@
-import { Publication } from '../../src/base/publication/index.js';
-import { createDocument, initialize } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
-import { openWriteRepository } from '../../src/base/workspace/index.js';
-import { Sources } from '../../src/base/sources/index.js';
-import { caseDiscriminator, deriveTestReference } from "../../src/model/index.js";
+import { Publication } from '../../src/base/publication/index.ts';
+import { createDocument, initialize } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
+import { openWriteRepository } from '../../src/base/workspace/index.ts';
+import { Sources } from '../../src/base/sources/index.ts';
+import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts";
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { connect } from 'node:net';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { ViewJobManager } from "../../src/app/index.js";
-import { formatViewAddress } from "../../src/entry/http/index.js";
-import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
-import { parseWorkspaceProjection, pollUntil, installedConcordCli } from '../support/support.js';
-import { type WorkspaceProjection } from "../../src/model/index.js";
+import { ViewJobManager } from "../../src/app/index.ts";
+import { formatViewAddress } from "../../src/entry/http/index.ts";
+import { startViewServer, type ViewServerHandle } from '../e2e/server.ts';
+import { parseWorkspaceProjection, pollUntil, installedConcordCli } from '../support/support.ts';
+import { type WorkspaceProjection } from "../../src/model/index.ts";
 
-import { fixture, send, sendRaw, parsed, jsonHeaders, waitForWorkspace } from '../support/view-http-fixture.js';
+import { fixture, send, sendRaw, parsed, jsonHeaders, waitForWorkspace } from '../support/view-http-fixture.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-scan-keeps-http-responsive

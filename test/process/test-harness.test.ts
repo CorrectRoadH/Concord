@@ -1,18 +1,18 @@
-import { initialize } from '../support/operations.js';
+import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { connect } from 'node:net';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { pollUntil, waitForWorkspaceNotModified, fetchFresh } from '../support/support.js';
-import { startViewServer } from '../e2e/server.js';
+import { pollUntil, waitForWorkspaceNotModified, fetchFresh } from '../support/support.ts';
+import { startViewServer } from '../e2e/server.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('poll deadline aborts an in-flight HTTP request and preserves unexpected HTTP diagnostics', () => Effect.runPromise(Effect.tryPromise(async () => {

@@ -4,11 +4,11 @@ import { NodeSocket } from '@effect/platform-node';
 import { Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
 import * as RpcClient from 'effect/unstable/rpc/RpcClient';
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization';
-import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.js';
-import { collectPackets, collectBytes } from './protocol.js';
-import { ConcordError, decodeWorkspaceRead } from '../../model/index.js';
-import type { RemoteFeedback } from '../../model/index.js';
-import type { CacheDerivationBatch } from '../../model/index.js';
+import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.ts';
+import { collectPackets, collectBytes } from './protocol.ts';
+import { ConcordError, decodeWorkspaceRead } from '../../model/index.ts';
+import type { RemoteFeedback } from '../../model/index.ts';
+import type { CacheDerivationBatch } from '../../model/index.ts';
 
 export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string, scope?: string) {
   const opened = yield* Deferred.make<void, WorkspaceServerError>();
@@ -44,7 +44,7 @@ export const subscribeWorkspace = (connection: WorkspaceConnection) => Stream.ca
   })).pipe(Effect.catch(cause => Queue.fail(queue, cause)), Effect.andThen(Queue.end(queue))));
 }));
 
-export const submitFeedback = Effect.fn('submitFeedback')(function*(connection: import('./client.js').WorkspaceConnection, connectionId: string, items: readonly RemoteFeedback[]) {
+export const submitFeedback = Effect.fn('submitFeedback')(function*(connection: import('./client.ts').WorkspaceConnection, connectionId: string, items: readonly RemoteFeedback[]) {
   const session = crypto.randomUUID();
   yield* requestWorkspace(connection, 'feedback-merge', { action: 'begin', session, connectionId });
   let batch: RemoteFeedback[] = [], bytes = 2;

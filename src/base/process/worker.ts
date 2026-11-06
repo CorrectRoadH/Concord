@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { failure } from '../../model/index.js';
-import { workerEntryArgv } from '../installation/index.js';
+import { failure } from '../../model/index.ts';
+import { workerEntryArgv } from '../installation/index.ts';
 
 /** Explicit transfer to an independent worker; ordinary children stay scoped. */
 export const launchDetachedWorker = Effect.fn('OwnedProcess.launchWorker')(function*(worker: Parameters<typeof workerEntryArgv>[0], args: readonly string[], cwd: string) {

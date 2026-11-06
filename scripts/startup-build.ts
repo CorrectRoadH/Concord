@@ -6,7 +6,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { build } from 'esbuild';
 import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
-import { type StartupData } from "../src/model/index.js";
+import { type StartupData } from "../src/model/index.ts";
 
 let distribution: string;
 const dist = (path = '') => join(distribution, path);

@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md#服务托管
-import { ConcordError, type ViewJob } from '../../model/index.js';
+import { ConcordError, type ViewJob } from '../../model/index.ts';
 
 interface Job { value: ViewJob; controller: AbortController; task: Promise<void> }
 /** The slot belongs to the service; the operation process owns execution. */
@@ -8,7 +8,12 @@ export class ServerJobs {
   private readonly jobs = new Map<string, Job>();
   private active: Job | undefined;
   private stopping = false;
-  constructor(private readonly run: (caseId: string, signal: AbortSignal) => Promise<unknown>, private readonly changed: () => void) {}
+  private readonly run: (caseId: string, signal: AbortSignal) => Promise<unknown>;
+  private readonly changed: () => void;
+  constructor(run: (caseId: string, signal: AbortSignal) => Promise<unknown>, changed: () => void) {
+    this.run = run;
+    this.changed = changed;
+  }
   list() { return [...this.jobs.values()].map(job => job.value).reverse(); }
   start(caseId: string): ViewJob {
     if (this.stopping) throw new ConcordError('ServerStopping', 'The service is stopping');

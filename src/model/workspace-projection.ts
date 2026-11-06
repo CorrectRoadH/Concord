@@ -1,8 +1,8 @@
-import { WorkspaceConceptCatalogSchema } from './concept-directory.js';
+import { WorkspaceConceptCatalogSchema } from './concept-directory.ts';
 import { Schema } from "effect";
-import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, RoadmapSchema, UseCaseSchema } from "./shared.js";
-import { GitHubRemoteFeedbackSchema, LinearRemoteFeedbackSchema, FeedbackSourceSchema } from "./feedback-schema.js";
-import { CodeDeclarationSchema } from "./code-declaration.js";
+import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, RoadmapSchema, UseCaseSchema } from "./shared.ts";
+import { GitHubRemoteFeedbackSchema, LinearRemoteFeedbackSchema, FeedbackSourceSchema } from "./feedback-schema.ts";
+import { CodeDeclarationSchema } from "./code-declaration.ts";
 const { body: _githubBody, ...githubFields } = GitHubRemoteFeedbackSchema.fields;
 const { body: _linearBody, ...linearFields } = LinearRemoteFeedbackSchema.fields;
 const Remote = Schema.Union([Schema.Struct(githubFields), Schema.Struct(linearFields)]);

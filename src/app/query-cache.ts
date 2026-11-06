@@ -1,16 +1,16 @@
-import { launchDetachedWorker } from '../base/process/index.js';
+import { launchDetachedWorker } from '../base/process/index.ts';
 import { Context, Effect, Option, Result, Schema } from "effect";
-import { Workspace } from "../base/workspace/index.js";
-import { genericPrivateDirectorySync } from "../base/publication/index.js";
-import { assertLeasePath } from "../base/publication/index.js";
-import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.js";
-import { CacheSnapshot, HawdbFailure, PersistentCache } from "../base/cache/index.js";
-import { hydrateQueryValue } from "./query-values.js";
-import { TraceGapsValue, TraceShowValue, ReviewRenderValue, queryValueSchema } from "../model/index.js";
-import type { QueryScanMessage } from "../model/index.js";
-import { ConcordError, digest, failure } from "../model/index.js";
-import { queryInstallationIdentity, workerEntryArgv } from "../base/installation/index.js";
-import { requestCacheMaintenance } from "../base/cache/index.js";
+import { Workspace } from "../base/workspace/index.ts";
+import { genericPrivateDirectorySync } from "../base/publication/index.ts";
+import { assertLeasePath } from "../base/publication/index.ts";
+import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.ts";
+import { CacheSnapshot, HawdbFailure, PersistentCache } from "../base/cache/index.ts";
+import { hydrateQueryValue } from "./query-values.ts";
+import { TraceGapsValue, TraceShowValue, ReviewRenderValue, queryValueSchema } from "../model/index.ts";
+import type { QueryScanMessage } from "../model/index.ts";
+import { ConcordError, digest, failure } from "../model/index.ts";
+import { queryInstallationIdentity, workerEntryArgv } from "../base/installation/index.ts";
+import { requestCacheMaintenance } from "../base/cache/index.ts";
 
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md

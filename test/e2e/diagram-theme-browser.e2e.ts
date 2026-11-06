@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { createDocument } from '../support/operations.js';
+import { createDocument } from '../support/operations.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { test } from './fixtures.js';
-import { type ViewServerHandle } from './server.js';
+import { LocalRepository } from '../support/repository.ts';
+import { test } from './fixtures.ts';
+import { type ViewServerHandle } from './server.ts';
 
 const sketch = `let label: import('p5').default.Element;
 p.setup = () => {

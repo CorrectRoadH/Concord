@@ -1,23 +1,23 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 // @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
-import { Installation } from '../../base/installation/index.js';
-import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./launchers.js";
-import { Publication } from "../../base/publication/index.js";
-import type { Queries } from "../../app/index.js";
+import { Installation } from '../../base/installation/index.ts';
+import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./launchers.ts";
+import { Publication } from "../../base/publication/index.ts";
+import type { Queries } from "../../app/index.ts";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Clock, Context, Effect, Fiber, Layer, Schema } from "effect";
 import type { Command } from "effect/unstable/cli";
-import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.js";
-import { humanOutput } from "./presentation.js";
-import { OwnedProcess, OwnedProcessLive } from "../../base/process/index.js";
-import { Git } from '../../base/git/index.js';
-import { Workspace } from '../../base/workspace/index.js';
-import { Sources } from '../../base/sources/index.js';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.js';
-import { ServerRuntime } from '../../base/server-lock/index.js';
-const loadClient = () => Effect.tryPromise(() => import('../server/index.js')).pipe(Effect.mapError(failure));
-const requestWorkspace: typeof import('../server/index.js').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
+import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.ts";
+import { humanOutput } from "./presentation.ts";
+import { OwnedProcess, OwnedProcessLive } from "../../base/process/index.ts";
+import { Git } from '../../base/git/index.ts';
+import { Workspace } from '../../base/workspace/index.ts';
+import { Sources } from '../../base/sources/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.ts';
+import { ServerRuntime } from '../../base/server-lock/index.ts';
+const loadClient = () => Effect.tryPromise(() => import('../server/index.ts')).pipe(Effect.mapError(failure));
+const requestWorkspace: typeof import('../server/index.ts').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
 const ServerFailure = Schema.Struct({ _tag: Schema.Literal('WorkspaceServerError'), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) });
 const remoteFailure = (cause: unknown): ConcordError | undefined => {
   const decoded = Schema.decodeUnknownExit(ServerFailure, { onExcessProperty: 'ignore' })(cause);
@@ -30,10 +30,10 @@ const nativeAvailable = Effect.flatMap(PersistentCache, cache => cache.verifyArt
   Effect.mapError(cause => new ConcordError('HawdbUnavailable', cause.message)),
 );
 
-const loadServerMain = () => Effect.tryPromise(() => import('../server/main.js'));
-const loadApp = () => Effect.tryPromise(() => import('../../app/index.js'));
-const executeQuery: typeof import('../../app/index.js').executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
-const mergeLocalFeedbackObservation: typeof import('../../app/index.js').mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
+const loadServerMain = () => Effect.tryPromise(() => import('../server/main.ts'));
+const loadApp = () => Effect.tryPromise(() => import('../../app/index.ts'));
+const executeQuery: typeof import('../../app/index.ts').executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
+const mergeLocalFeedbackObservation: typeof import('../../app/index.ts').mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
 const builtAssetRoot = (name: 'web') => loadApp().pipe(Effect.flatMap(app => Effect.try({ try: () => app.builtAssetRoot(name), catch: failure })), Effect.mapError(failure));
 const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string, scope?: string) {
   const platform = yield* ServerRuntime;
@@ -149,7 +149,7 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
   return connection;
 });
 
-const awaitQueryReady = Effect.fn('awaitQueryReady')(function*(connection: import('../server/index.js').WorkspaceConnection) {
+const awaitQueryReady = Effect.fn('awaitQueryReady')(function*(connection: import('../server/index.ts').WorkspaceConnection) {
   let hello = connection.hello;
   while (hello.state === 'opening') {
     yield* Effect.sleep('10 millis');
@@ -316,11 +316,11 @@ const launchers = Layer.mergeAll(
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
     return ViewLauncher.of({ serve: (options, ready) => Effect.gen(function*() {
       yield* builtAssetRoot('web');
-      const http = yield* Effect.tryPromise(() => import('../http/index.js'));
+      const http = yield* Effect.tryPromise(() => import('../http/index.ts'));
       return yield* serveWorkspaceView(options, info => ready({ ...info, ...http.viewAddresses(info.host, info.port) }));
     }).pipe(Effect.mapError(failure), Effect.provideContext(context)) });
   })),
-  Layer.succeed(LspLauncher, LspLauncher.of({ serve: root => Effect.tryPromise(() => import('../lsp/index.js')).pipe(Effect.flatMap(lsp => lsp.serveEditor(root)), Effect.mapError(failure)) })),
+  Layer.succeed(LspLauncher, LspLauncher.of({ serve: root => Effect.tryPromise(() => import('../lsp/index.ts')).pipe(Effect.flatMap(lsp => lsp.serveEditor(root)), Effect.mapError(failure)) })),
 );
 
 const validation = Layer.unwrap(loadApp().pipe(Effect.map(app => app.PublicationValidationLive)));
@@ -344,7 +344,7 @@ const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effec
   const version = yield* (yield* Installation).version;
   // @concord-begin
   // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-  const { root } = yield* Effect.tryPromise(() => import('./cli-base.js'));
+  const { root } = yield* Effect.tryPromise(() => import('./cli-base.ts'));
   const guard = (fromSubdirectory = false) => Effect.gen(function*() {
     const settings = yield* root;
     const app = yield* loadApp();
@@ -359,6 +359,6 @@ const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effec
   // @concord-end
   return yield* guarded.pipe(Command.run({ version, renderErrors: !process.argv.includes('--json') }));
 }).pipe(Effect.catch(cliFailure));
-export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
+export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.ts").OwnedProcess>): void {
   runCommand(command).pipe(Effect.provide(cliLayer), NodeRuntime.runMain);
 }

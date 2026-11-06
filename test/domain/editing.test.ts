@@ -1,17 +1,17 @@
-import { createDocument, initialize } from '../support/operations.js';
+import { createDocument, initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 
-import { inspectDocumentFile, inspectDocuments, listSources, readSource, setConfig, setMarkdown, setSource } from "../../src/app/index.js";
-import { digest } from "../../src/model/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { inspectDocumentFile, inspectDocuments, listSources, readSource, setConfig, setMarkdown, setSource } from "../../src/app/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-editing-'));
@@ -95,7 +95,7 @@ test('project documents under docs are readable without becoming category owners
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('config editing rejects retired fields and validates source roots', () => Effect.runPromise(Effect.sync(() => withRepository((_root, repo) => {
   const source = repo.configSnapshot.source;
-  throwsCode('InvalidData', () => setConfig(repo, { ...repo.config, projectId: 'other-project' } as unknown as import("../../src/model/shared.js").ProjectConfig, digest(source)));
+  throwsCode('InvalidData', () => setConfig(repo, { ...repo.config, projectId: 'other-project' } as unknown as import("../../src/model/shared.ts").ProjectConfig, digest(source)));
   throwsCode('InvalidSourcePath', () => setConfig(repo, { ...repo.config, sourceRoots: ['node_modules'] }, digest(source)));
   throwsCode('InvalidSourcePath', () => setConfig(repo, { ...repo.config, testRoots: ['node_modules'] }, digest(source)));
   const receipt = setConfig(repo, { ...repo.config, sourceRoots: ['src', 'test'] }, digest(source));

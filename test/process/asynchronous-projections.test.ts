@@ -1,5 +1,5 @@
-import { assert, test, rmSync, refreshInstalled, packedEnvelope, installedCall, waitForRefreshExit } from '../support/asynchronous-projections-fixture.js';
-import { queryFactsConsumer, ownerPath } from '../support/query-facts-fixture.js';
+import { assert, test, rmSync, refreshInstalled, packedEnvelope, installedCall, waitForRefreshExit } from '../support/asynchronous-projections-fixture.ts';
+import { queryFactsConsumer, ownerPath } from '../support/query-facts-fixture.ts';
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('packed C7 worker publishes a readable body-free envelope and exits', async () => {

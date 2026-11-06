@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { type ViewServerHandle } from './server.js';
+import { type ViewServerHandle } from './server.ts';
 import { Deferred, Effect } from 'effect';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
-import { replayAuthoringState } from '../support/view-authoring-fixture.js';
-import { prepareAuthoringFixture } from './authoring-fixture.js';
+import { pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
+import { replayAuthoringState } from '../support/view-authoring-fixture.ts';
+import { prepareAuthoringFixture } from './authoring-fixture.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser preserves project configuration conflicts and navigates test evidence on narrow screens', async ({ page, workspace }) => {

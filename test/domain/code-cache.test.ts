@@ -1,20 +1,20 @@
-import { createDocument, initialize } from '../support/operations.js';
+import { createDocument, initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Effect } from 'effect';
-import { cacheStatus, clearCache } from "../../src/domain/tests/index.js";
-import { scanCode } from "../../src/domain/code/index.js";
-import { openHawdb, PersistentCache } from "../../src/base/cache/index.js";
+import { cacheStatus, clearCache } from "../../src/domain/tests/index.ts";
+import { scanCode } from "../../src/domain/code/index.ts";
+import { openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
 
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { traceGaps } from "../../src/app/index.js";
+import { traceGaps } from "../../src/app/index.ts";
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 

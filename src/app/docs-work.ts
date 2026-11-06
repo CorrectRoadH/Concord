@@ -1,14 +1,14 @@
-import { ancestors, changedInputs } from "../domain/docs-work/index.js";
+import { ancestors, changedInputs } from "../domain/docs-work/index.ts";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { FinalizeSchema, model_PlanSchema as PlanSchema, ReceiptSchema, RunSchema, fail, problem, type Check, type Item, type Plan, type Problem, type Receipt, type Run } from "../model/index.js";
-import { atomicJson, decode, digestPaths, expand, git, hash, matches, now, nul, objectHash, overlap, readJson, runProcess, safePath, statePath, snapshotPaths, tailSummary, withLock } from "../base/publication/index.js";
-import type { shared_ProjectConfig as ProjectConfig, Repository } from "../model/index.js";
-import * as storage from "../base/workspace/index.js";
-import * as config from "../base/workspace/index.js";
-import * as writing from "../domain/writing/index.js";
-import * as project from "./index.js";
+import { FinalizeSchema, model_PlanSchema as PlanSchema, ReceiptSchema, RunSchema, fail, problem, type Check, type Item, type Plan, type Problem, type Receipt, type Run } from "../model/index.ts";
+import { atomicJson, decode, digestPaths, expand, git, hash, matches, now, nul, objectHash, overlap, readJson, runProcess, safePath, statePath, snapshotPaths, tailSummary, withLock } from "../base/publication/index.ts";
+import type { shared_ProjectConfig as ProjectConfig, Repository } from "../model/index.ts";
+import * as storage from "../base/workspace/index.ts";
+import * as config from "../base/workspace/index.ts";
+import * as writing from "../domain/writing/index.ts";
+import * as project from "./index.ts";
 
 
 interface MainOwners {

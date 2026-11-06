@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
-import { createDocument } from '../support/operations.js';
+import { createDocument } from '../support/operations.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
-import { type BrowserSharedFixture } from '../support/browser-shared-fixture.js';
+import { test } from './fixtures.ts';
+import { type BrowserSharedFixture } from '../support/browser-shared-fixture.ts';
 import { Effect } from 'effect';
 import { expect, type Page } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { type ViewServerHandle } from './server.js';
-import { type WorkspaceProjection } from '../../src/model/index.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
+import { LocalRepository } from '../support/repository.ts';
+import { type ViewServerHandle } from './server.ts';
+import { type WorkspaceProjection } from '../../src/model/index.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
 
 const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((workspace: BrowserSharedFixture, page: Page, incomplete: boolean, run: (page: Page, origin: string, value: WorkspaceProjection) => Promise<void>) => Effect.tryPromise(async () => {
   const root = workspace.root;

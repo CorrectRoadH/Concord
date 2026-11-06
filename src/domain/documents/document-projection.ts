@@ -1,15 +1,15 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
-import { markdownBody } from "../../model/index.js";
+import { markdownBody } from "../../model/index.ts";
 import { Schema } from "effect";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import type { Root } from "mdast";
-import { ContentCache } from "../../base/cache/index.js";
-import { decodeUncachedDocumentSource, ownerKind } from "../../model/index.js";
-import { fromMarkdown } from "../../model/index.js";
-import { MarkdownRoot } from "../../model/index.js";
-import { headingAnchorsFromTree, inlineLinksFromTree, inspectTreeSteps } from "../../model/index.js";
-import { ConcordError, decode, DocumentSchema } from "../../model/index.js";
+import { ContentCache } from "../../base/cache/index.ts";
+import { decodeUncachedDocumentSource, ownerKind } from "../../model/index.ts";
+import { fromMarkdown } from "../../model/index.ts";
+import { MarkdownRoot } from "../../model/index.ts";
+import { headingAnchorsFromTree, inlineLinksFromTree, inspectTreeSteps } from "../../model/index.ts";
+import { ConcordError, decode, DocumentSchema } from "../../model/index.ts";
 
 /** Bump when Markdown/YAML parsers, schemas, masking, or path rules change. */
 export const DOCUMENT_PARSER_VERSION = 'concord-document-memory/v9:engineering-use-cases:mdast-2.0.3:yaml-2.9.0';

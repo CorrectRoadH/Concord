@@ -3,13 +3,13 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ConcordError, type DocumentKind } from '../../src/model/index.js';
-import { adoptRoadmap, documentShow, type CreateDocumentInput } from '../../src/app/index.js';
-import { loadDocuments } from '../../src/domain/documents/index.js';
-import { LocalRepository } from '../support/repository.js';
-import { createDocument } from '../support/operations.js';
-import { createConsumer } from '../support/consumer.js';
-import { writeProjectConfig } from '../support/support.js';
+import { ConcordError, type DocumentKind } from '../../src/model/index.ts';
+import { adoptRoadmap, documentShow, type CreateDocumentInput } from '../../src/app/index.ts';
+import { loadDocuments } from '../../src/domain/documents/index.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { createDocument } from '../support/operations.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { writeProjectConfig } from '../support/support.ts';
 const Ack = Schema.Struct({});
 const ErrorOutput = Schema.Struct({ error: Schema.String });
 function result<A>(root: string, operation: (repo: LocalRepository) => unknown, schema: Schema.ConstraintDecoder<A, never>, status = 0): A {

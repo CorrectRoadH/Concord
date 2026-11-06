@@ -1,11 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { Schema } from "effect";
-import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../cache/index.js";
-import { PersistentCache } from "../cache/index.js";
-import { openHawdb } from "../cache/index.js";
-import { canonical, decode, objectDigest, ProjectSchema, type shared_ProjectConfig as ProjectConfig, type Repository } from "../../model/index.js";
-import { typescriptPackageVersion } from "../process/index.js";
+import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../cache/index.ts";
+import { PersistentCache } from "../cache/index.ts";
+import { openHawdb } from "../cache/index.ts";
+import { canonical, decode, objectDigest, ProjectSchema, type shared_ProjectConfig as ProjectConfig, type Repository } from "../../model/index.ts";
+import { typescriptPackageVersion } from "../process/index.ts";
 
 const CachedConfigSchema = Schema.Struct({ config: ProjectSchema, digest: Schema.String });
 

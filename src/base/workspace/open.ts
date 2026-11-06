@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import type { ReadRepositoryOptions, RepositoryOptions } from './storage.js';
-import { Workspace } from './service.js';
+import type { ReadRepositoryOptions, RepositoryOptions } from './storage.ts';
+import { Workspace } from './service.ts';
 
 export const openReadRepository = Effect.fn('Workspace.openRead')(function*(root: string | undefined, options: ReadRepositoryOptions) {
   return yield* (yield* Workspace).openRead(root, options);

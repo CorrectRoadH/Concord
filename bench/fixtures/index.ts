@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
-import type { Consumer } from '../../scripts/perf/consumer.js';
-import { io, mustRun, PerfError } from '../../scripts/perf/process.js';
+import type { Consumer } from '../../scripts/perf/consumer.ts';
+import { io, mustRun, PerfError } from '../../scripts/perf/process.ts';
 
 export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name: string, entry: string, workDir: string, smoke = false, source?: { readonly repository: string; readonly commit: string }) {
   if (!['minimal', 'smoke', 'web', 'writing', 'writing-scale', 'mod'].includes(name)) return yield* new PerfError({ message: `Unknown fixture: ${name}` });

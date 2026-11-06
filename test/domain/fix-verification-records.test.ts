@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { closeFixedIssue, verifyTest } from '../../src/domain/tests/index.js';
-import { createFixConsumer, gitCommit } from '../support/fix-consumer.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { closeFixedIssue, verifyTest } from '../../src/domain/tests/index.ts';
+import { createFixConsumer, gitCommit } from '../support/fix-consumer.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#verify
 test('explicit verification uses frozen D/F inputs and current preparation after Issue deletion', async () => {

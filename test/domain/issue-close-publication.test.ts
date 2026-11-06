@@ -4,12 +4,12 @@ import { execFileSync } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import test from 'node:test';
-import { tmpdir } from '../support/temporary.js';
-import { LocalRepository } from '../support/repository.js';
-import { closeIssue } from '../../src/domain/issues/index.js';
-import { parseTestDeclarations } from '../../src/domain/tests/index.js';
-import { planIssueClose } from '../../src/app/issue-close.js';
-import { digest } from '../../src/model/index.js';
+import { tmpdir } from '../support/temporary.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { closeIssue } from '../../src/domain/issues/index.ts';
+import { parseTestDeclarations } from '../../src/domain/tests/index.ts';
+import { planIssueClose } from '../../src/app/issue-close.ts';
+import { digest } from '../../src/model/index.ts';
 
 const issue = 'docs/issues/one.md';
 const file = 'test/order.ts';

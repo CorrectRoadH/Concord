@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { commandObservation } from '../../src/domain/tests/evidence.js';
-import type { OwnedProcessResult } from '../../src/base/process/index.js';
+import { commandObservation } from '../../src/domain/tests/evidence.ts';
+import type { OwnedProcessResult } from '../../src/base/process/index.ts';
 
 const result = (stdout: string, exitCode = 0): OwnedProcessResult => ({
   command: ['node', '--test'], exitCode, stdout, stderr: '', outputBytes: Buffer.byteLength(stdout),

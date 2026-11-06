@@ -3,11 +3,11 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { digest } from '../../src/model/index.js';
-import { createConsumer } from '../support/consumer.js';
-import { LocalRepository } from '../support/repository.js';
-import { createDocument } from '../support/operations.js';
-import { installedConcordCli } from '../support/support.js';
+import { digest } from '../../src/model/index.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { createDocument } from '../support/operations.ts';
+import { installedConcordCli } from '../support/support.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/exit-hang-after-output.md

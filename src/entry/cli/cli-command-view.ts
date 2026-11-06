@@ -2,11 +2,11 @@
 // @concord-implements docs/feature/web-workbench/cli.md
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
-import { ConcordError } from "../../model/index.js";
-import { ViewLauncher } from "./launchers.js";
+import { ConcordError } from "../../model/index.ts";
+import { ViewLauncher } from "./launchers.ts";
 
-import { exportChangePreview } from "../../app/index.js";
-import { root, optional, emit, sync, viewRoot } from "./cli-base.js";
+import { exportChangePreview } from "../../app/index.ts";
+import { root, optional, emit, sync, viewRoot } from "./cli-base.ts";
 
 const view = Command.make('view', {
   host: Flag.string('host').pipe(Flag.withDefault('127.0.0.1')),

@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/format.md#writingmd
-import { renderWritingPolicy } from './writing-format.js';
-import type { WritingPolicy } from "./writing-schema.js";
+import { renderWritingPolicy } from './writing-format.ts';
+import type { WritingPolicy } from "./writing-schema.ts";
 
 // Curated from NiceEval docs/writing-rules.json; no consumer checkout dependency.
 export const defaultWritingPolicy: WritingPolicy = {

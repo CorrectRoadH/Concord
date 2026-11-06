@@ -1,2 +1,2 @@
-import { defineBenchmarks } from '../scripts/perf/scenario.js';
+import { defineBenchmarks } from '../scripts/perf/scenario.ts';
 export default defineBenchmarks('feedback', [{ id: 'feedback/list', consumer: 'self', state: 'warm', run: ['feedback', 'list'], expect: { exitCode: 0 } }]);

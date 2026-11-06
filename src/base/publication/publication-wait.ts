@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md#contention
 import { Clock, Effect, Result } from "effect";
-import { ConcordError } from "../../model/index.js";
+import { ConcordError } from "../../model/index.ts";
 
 /** Retry acquisition only, never replay an operation that may have published. */
 export const waitForPublication = Effect.fn('waitForPublication')(function*<A, R>(acquire: (reclaimDead: boolean) => Effect.Effect<A, ConcordError, R>): Effect.fn.Return<A, ConcordError, R> {

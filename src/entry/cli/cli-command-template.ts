@@ -2,8 +2,8 @@
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/unstable/cli";
-import { listTemplates, templateBody } from "../../app/index.js";
-import { root, optional, body, emit, sync } from "./cli-base.js";
+import { listTemplates, templateBody } from "../../app/index.ts";
+import { root, optional, body, emit, sync } from "./cli-base.ts";
 
 const templates = Command.make('template').pipe(Command.withDescription('Inspect built-in writing templates without a project.'), Command.withSubcommands([
   Command.make('list', {}, () => Effect.gen(function*() { const settings = yield* root; const result = { operation: 'template-list', templates: yield* listTemplates() }; yield* Effect.sync(() => emit(result, settings.json)); })),

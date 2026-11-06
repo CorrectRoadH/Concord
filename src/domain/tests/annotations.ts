@@ -1,13 +1,13 @@
-import { snapshotMetadata } from '../../base/sources/index.js';
+import { snapshotMetadata } from '../../base/sources/index.ts';
 import { Schema } from "effect";
-import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from "../../base/cache/index.js";
-import { inspectCacheStatus, type CacheStatus } from "../../base/cache/index.js";
-import { PersistentCache, closeRepositoryCache } from "../../base/cache/index.js";
-import { acquireHawdbClearGuard, hawdbIdentity } from "../../base/cache/index.js";
-import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from "../../model/index.js";
-import { caseDiscriminator, deriveTestReference } from "../../model/index.js";
+import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from "../../base/cache/index.ts";
+import { inspectCacheStatus, type CacheStatus } from "../../base/cache/index.ts";
+import { PersistentCache, closeRepositoryCache } from "../../base/cache/index.ts";
+import { acquireHawdbClearGuard, hawdbIdentity } from "../../base/cache/index.ts";
+import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from "../../model/index.ts";
+import { caseDiscriminator, deriveTestReference } from "../../model/index.ts";
 import * as ts from 'typescript/ast';
-import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from "../../base/process/index.js";
+import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from "../../base/process/index.ts";
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#标记规则

@@ -1,12 +1,12 @@
-import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
-import { nativeArtifactRoot, nativeSourceFiles } from "../../src/base/installation/index.js";
+import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
+import { nativeArtifactRoot, nativeSourceFiles } from "../../src/base/installation/index.ts";
 import { basename, dirname } from "node:path";
 // @concord-file
 // @concord-implements docs/engineering/build/architecture.md#从源码运行
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';

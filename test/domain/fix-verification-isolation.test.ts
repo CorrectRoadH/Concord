@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { closeFixedIssue } from '../../src/domain/tests/index.js';
-import { readDocumentSelector } from '../../src/domain/documents/index.js';
-import { createFixConsumer, gitCommand } from '../support/fix-consumer.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
+import { closeFixedIssue } from '../../src/domain/tests/index.ts';
+import { readDocumentSelector } from '../../src/domain/documents/index.ts';
+import { createFixConsumer, gitCommand } from '../support/fix-consumer.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
 
 const verify = (root: string) => {
   const repo = new LocalRepository(root, { optimistic: true });

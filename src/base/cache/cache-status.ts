@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#句柄与打开模式
-import { cacheDatabasePath, inspectCacheClear, cachePhysicalBytes } from './cache-file.js';
-import { hawdbIdentity, type HawdbDatabase } from './hawdb-native.js';
-import { decodeEnvelope } from '../../model/index.js';
-import { CACHE_PHYSICAL_LIMIT_BYTES } from '../installation/index.js';
+import { cacheDatabasePath, inspectCacheClear, cachePhysicalBytes } from './cache-file.ts';
+import { hawdbIdentity, type HawdbDatabase } from './hawdb-native.ts';
+import { decodeEnvelope } from '../../model/index.ts';
+import { CACHE_PHYSICAL_LIMIT_BYTES } from '../installation/index.ts';
 
 export interface CacheStatus { readonly status: string; readonly path: string; readonly detail?: string; readonly sourceDigest?: string; readonly physicalBytes: number | null; readonly physicalLimitBytes: number }
 

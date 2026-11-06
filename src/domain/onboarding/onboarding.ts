@@ -1,5 +1,5 @@
-import { readDocumentReference } from "../documents/index.js";
-import { ConcordError, inRepositorySnapshot, type Repository } from "../../model/index.js";
+import { readDocumentReference } from "../documents/index.ts";
+import { ConcordError, inRepositorySnapshot, type Repository } from "../../model/index.ts";
 
 
 

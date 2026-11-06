@@ -36,7 +36,8 @@ class Element {
 }
 class State {
   released = false;
-  constructor(private source: string) {}
+  private source: string;
+  constructor(source: string) { this.source = source; }
   value() { assert.equal(this.released, false); return this.source; }
   set_value(value: string) { assert.equal(this.released, false); this.source = value; }
   release() { assert.equal(this.released, false, 'retained state released once'); this.released = true; return true; }
@@ -166,7 +167,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
     },
   });
   try {
-    const { default: Mod } = await import('../../src/entry/herdr-mod/main.js');
+    const { default: Mod } = await import('../../src/entry/herdr-mod/main.ts');
     const start = async (setup?: (boundary: Boundary) => void) => {
       host = new Boundary(); setup?.(host); const view = new Mod(); host.view = view;
       view.init(undefined, host.context()); host.draw();

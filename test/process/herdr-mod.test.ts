@@ -1,13 +1,13 @@
-import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { installedConcordCli } from '../support/support.js';
-import { tmpdir } from '../support/temporary.js';
-import { installedPackageRoot } from '../support/installed-package.js';
-import { verifyInstalledHerdrMod } from '../support/installed-herdr-mod.js';
+import { installedConcordCli } from '../support/support.ts';
+import { tmpdir } from '../support/temporary.ts';
+import { installedPackageRoot } from '../support/installed-package.ts';
+import { verifyInstalledHerdrMod } from '../support/installed-herdr-mod.ts';
 
 // @use-case docs/feature/herdr-mod/use-case/install-with-cli.md#install
 test('packaged CLI installs, updates and uninstalls against isolated Herdr homes and external commands', { timeout: 90_000 }, () => {

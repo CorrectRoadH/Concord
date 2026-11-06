@@ -1,4 +1,4 @@
-import type { WorkspaceProjectionSnapshot, WorkspaceDocument, AnnotatedCase } from '../../src/model/index.js';
+import type { WorkspaceProjectionSnapshot, WorkspaceDocument, AnnotatedCase } from '../../src/model/index.ts';
 export const featurePath = 'docs/feature/reader/README.md';
 export const useCasePath = 'docs/feature/reader/use-case/read.md';
 export const supportPath = 'docs/feature/reader/architecture.md';

@@ -1,18 +1,18 @@
-import { LocalRepository } from './repository.js';
-import { createConsumer } from './consumer.js';
-import { createDocument } from './operations.js';
-import { packageBin } from './installed-package.js';
-import { renderOwnerFixture } from '../support/owner-fixture.js';
+import { LocalRepository } from './repository.ts';
+import { createConsumer } from './consumer.ts';
+import { createDocument } from './operations.ts';
+import { packageBin } from './installed-package.ts';
+import { renderOwnerFixture } from '../support/owner-fixture.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { after, before, test } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 const Position = Schema.Struct({ line: Schema.Int, character: Schema.Int });
 const Range = Schema.Struct({ start: Position, end: Position });
@@ -63,7 +63,9 @@ class Client {
   private sequence = 0;
   stderr = '';
   readonly closed: Promise<number | null>;
-  constructor(readonly root: string, argv = [entry, '--root', root, 'lsp'], env: NodeJS.ProcessEnv = process.env) {
+  readonly root: string;
+  constructor(root: string, argv = [entry, '--root', root, 'lsp'], env: NodeJS.ProcessEnv = process.env) {
+    this.root = root;
     this.child = spawn(process.execPath, argv, { cwd: root, stdio: 'pipe', env });
     this.closed = new Promise(resolve => this.child.once('close', code => { resolve(code); this.changed(); }));
     this.child.stderr.on('data', (chunk: Buffer) => { this.stderr += chunk.toString(); this.changed(); });

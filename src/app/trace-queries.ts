@@ -1,17 +1,17 @@
-import { unlinkedTests } from './unlinked-tests.js';
-import { analysisView } from "./analysis-view.js";
-import type { AnalysisView } from "../model/index.js";
-import { findDocument } from "../domain/documents/index.js";
-import { ConcordError, documentTitle, type DocumentRecord, type Repository } from "../model/index.js";
-import { packagePageKind } from '../model/index.js';
-import { packagePagePaths } from '../domain/documents/index.js';
-import { TASTE_PATH, showTaste } from "../domain/taste/index.js";
-import { referenceResolver } from "../domain/documents/index.js";
-import { extractSteps } from "../domain/documents/index.js";
-import { buildTrace } from "../domain/trace/index.js";
-import { buildUnderSnapshot } from "../domain/trace/index.js";
-import { requireValidTrace } from "../domain/trace/index.js";
-import type { RelationshipKind } from "../domain/trace/index.js";
+import { unlinkedTests } from './unlinked-tests.ts';
+import { analysisView } from "./analysis-view.ts";
+import type { AnalysisView } from "../model/index.ts";
+import { findDocument } from "../domain/documents/index.ts";
+import { ConcordError, documentTitle, type DocumentRecord, type Repository } from "../model/index.ts";
+import { packagePageKind } from '../model/index.ts';
+import { packagePagePaths } from '../domain/documents/index.ts';
+import { TASTE_PATH, showTaste } from "../domain/taste/index.ts";
+import { referenceResolver } from "../domain/documents/index.ts";
+import { extractSteps } from "../domain/documents/index.ts";
+import { buildTrace } from "../domain/trace/index.ts";
+import { buildUnderSnapshot } from "../domain/trace/index.ts";
+import { requireValidTrace } from "../domain/trace/index.ts";
+import type { RelationshipKind } from "../domain/trace/index.ts";
 
 /** Derivation and its temporary resolver share the graph's source snapshot. */
 export function deriveTrace<A>(repo: Repository, cache: 'use' | 'off', strict: boolean, derive: (trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>) => A): A {

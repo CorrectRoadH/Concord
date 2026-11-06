@@ -1,16 +1,16 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
-import { createReadRepository } from "../../app/index.js";
+import { createReadRepository } from "../../app/index.ts";
 import { lstatSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Effect, Schema } from "effect";
-import { discoverRoot, readRepositoryFileSync } from "../../app/index.js";
-import { uriPath } from "../../app/index.js";
+import { discoverRoot, readRepositoryFileSync } from "../../app/index.ts";
+import { uriPath } from "../../app/index.ts";
 import { randomUUID } from "node:crypto";
-import { ConcordError, decode, digest, failure } from "../../model/index.js";
-import * as P from '../../model/editor/index.js';
-import { runEditorJob } from "../../app/index.js";
-import { makeOwnedProcessService } from "../../app/index.js";
+import { ConcordError, decode, digest, failure } from "../../model/index.ts";
+import * as P from '../../model/editor/index.ts';
+import { runEditorJob } from "../../app/index.ts";
+import { makeOwnedProcessService } from "../../app/index.ts";
 
 interface Task {
   readonly id?: P.RpcId;

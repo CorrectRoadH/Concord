@@ -1,16 +1,16 @@
-import type { TraceEdge } from "../../model/index.js";
+import type { TraceEdge } from "../../model/index.ts";
 
 
-import { scanAnnotations } from "../tests/index.js";
-import { scanCode } from "../code/index.js";
-import type { CodeDeclaration } from "../../model/index.js";
-import { checkDocuments, diagnoseDocuments, inspectDocumentRecords, type DocumentInventory } from "../documents/index.js";
-import { ConcordError, type AnnotatedCase, type Finding, type Repository } from "../../model/index.js";
-import { TASTE_PATH, inspectTaste } from "../taste/index.js";
-import { measureScan, type ScanTiming } from "../../base/sources/index.js";
-import { referenceResolver } from "../documents/index.js";
-import { resolveCommit } from "../../base/git/index.js";
-import { extractSteps } from "../documents/index.js";
+import { scanAnnotations } from "../tests/index.ts";
+import { scanCode } from "../code/index.ts";
+import type { CodeDeclaration } from "../../model/index.ts";
+import { checkDocuments, diagnoseDocuments, inspectDocumentRecords, type DocumentInventory } from "../documents/index.ts";
+import { ConcordError, type AnnotatedCase, type Finding, type Repository } from "../../model/index.ts";
+import { TASTE_PATH, inspectTaste } from "../taste/index.ts";
+import { measureScan, type ScanTiming } from "../../base/sources/index.ts";
+import { referenceResolver } from "../documents/index.ts";
+import { resolveCommit } from "../../base/git/index.ts";
+import { extractSteps } from "../documents/index.ts";
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' } = {}) {

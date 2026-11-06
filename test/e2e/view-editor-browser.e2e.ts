@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { addPage, createDocument } from '../support/operations.js';
+import { addPage, createDocument } from '../support/operations.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { type ViewServerHandle } from './server.js';
+import { LocalRepository } from '../support/repository.ts';
+import { type ViewServerHandle } from './server.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('long documents remain reachable and code blocks follow theme without changing Markdown', async ({ page, workspace }) => {

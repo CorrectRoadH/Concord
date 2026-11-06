@@ -1,18 +1,18 @@
-import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
-import { initialize } from '../support/operations.js';
-import { installedConcordCli } from '../support/support.js';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
+import { initialize } from '../support/operations.ts';
+import { installedConcordCli } from '../support/support.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { checkWriting } from "../../src/domain/writing/index.js";
-import { openHawdb } from "../../src/base/cache/index.js";
+import { checkWriting } from "../../src/domain/writing/index.ts";
+import { openHawdb } from "../../src/base/cache/index.ts";
 
 const policy = '# Rules\n\n句子不超过 5 个字符。\n';
 function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeof checkWriting>) => void) {

@@ -1,8 +1,8 @@
-import { ConcordError, type Repository } from "../model/index.js";
-import { checkWriting } from "../domain/writing/index.js";
-import { buildTrace } from "../domain/trace/index.js";
-import { checkTaste } from "../domain/taste/index.js";
-import { selectWritingGuide, uninitializedDoctor } from './project-onboarding.js';
+import { ConcordError, type Repository } from "../model/index.ts";
+import { checkWriting } from "../domain/writing/index.ts";
+import { buildTrace } from "../domain/trace/index.ts";
+import { checkTaste } from "../domain/taste/index.ts";
+import { selectWritingGuide, uninitializedDoctor } from './project-onboarding.ts';
 
 
 

@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { inspect } from 'node:util';
 import { test } from 'node:test';
 import { Effect } from 'effect';
-import { acquireBrowserSharedFixture } from '../support/browser-shared-fixture.js';
-import { fetchFresh, parseWorkspaceProjection } from '../support/support.js';
-import { record } from '../support/workspace-server-fixture.js';
+import { acquireBrowserSharedFixture } from '../support/browser-shared-fixture.ts';
+import { fetchFresh, parseWorkspaceProjection } from '../support/support.ts';
+import { record } from '../support/workspace-server-fixture.ts';
 
 for (const mode of ['success', 'assertion-failure', 'timeout'] as const) {
   // @feature docs/engineering/testing/architecture.md#浏览器与诊断

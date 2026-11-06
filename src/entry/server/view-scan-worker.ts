@@ -1,14 +1,14 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md
 import { NodeRuntime } from "@effect/platform-node";
-import { runReaderMain } from './main.js';
+import { runReaderMain } from './main.ts';
 import { Effect, Queue, Schema } from "effect";
-import { observeWorkspaceProjection } from "../../app/index.js";
-import { makeWorkspaceProjectionCandidate } from "../../app/index.js";
-import { WORKSPACE_PROJECTION_LIMIT } from "../../model/index.js";
-import { ConcordError, failure } from "../../model/index.js";
-import { RequestTiming } from "../../app/index.js";
-import { ScanRequest, ScanMessage } from "../../model/index.js";
+import { observeWorkspaceProjection } from "../../app/index.ts";
+import { makeWorkspaceProjectionCandidate } from "../../app/index.ts";
+import { WORKSPACE_PROJECTION_LIMIT } from "../../model/index.ts";
+import { ConcordError, failure } from "../../model/index.ts";
+import { RequestTiming } from "../../app/index.ts";
+import { ScanRequest, ScanMessage } from "../../model/index.ts";
 
 const scan = (root: string, id: number) => Effect.gen(function*() {
   const timing = new RequestTiming(performance.now());

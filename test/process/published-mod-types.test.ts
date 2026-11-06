@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('all repository TypeScript checks exclude a published mod subtree', () => Effect.runPromise(Effect.sync(() => {

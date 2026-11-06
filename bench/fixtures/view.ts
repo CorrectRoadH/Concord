@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { Effect, Schema } from 'effect';
-import { io, PerfError } from '../../scripts/perf/process.js';
-import type { BenchContext } from '../../scripts/perf/scenario.js';
+import { io, PerfError } from '../../scripts/perf/process.ts';
+import type { BenchContext } from '../../scripts/perf/scenario.ts';
 const Ready = Schema.Struct({ operation: Schema.Literal('view'), root: Schema.String, host: Schema.String, port: Schema.Int, address: Schema.String, local: Schema.Array(Schema.String), network: Schema.Array(Schema.String) });
 const Text = Schema.String;
 const ProjectionError = Schema.Struct({ failedAt: Text, code: Text, message: Text });

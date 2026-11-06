@@ -4,11 +4,11 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { beginRun, finalizeRun } from '../../src/base/publication/index.js';
-import { digest } from '../../src/model/index.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { installedConcordCli } from '../support/support.js';
-import { fixture } from '../support/publication-ownership-fixture.js';
+import { beginRun, finalizeRun } from '../../src/base/publication/index.ts';
+import { digest } from '../../src/model/index.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { installedConcordCli } from '../support/support.ts';
+import { fixture } from '../support/publication-ownership-fixture.ts';
 const entry=installedConcordCli();
 
 

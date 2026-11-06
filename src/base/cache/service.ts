@@ -1,11 +1,11 @@
 import { Context, Effect, Layer, type Scope } from 'effect';
-import { cacheDatabasePath, assertCacheDatabaseSafe, cacheRootOwnerOnly } from './cache-file.js';
-import { createMemoryHawdb, openHawdb, verifyHawdbArtifact, HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace } from './hawdb-native.js';
-import { bindRepositoryCache, nodeRepositoryCache, repositoryCache, type RepositoryCache } from './cache-store.js';
-import { CacheSnapshotUnavailable, ConcordError, type Repository } from '../../model/index.js';
-import { assertLeasePath } from '../publication/index.js';
-import { makePersistentCacheOwner } from './owner.js';
-import { CacheDerivations } from './derivations.js';
+import { cacheDatabasePath, assertCacheDatabaseSafe, cacheRootOwnerOnly } from './cache-file.ts';
+import { createMemoryHawdb, openHawdb, verifyHawdbArtifact, HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace } from './hawdb-native.ts';
+import { bindRepositoryCache, nodeRepositoryCache, repositoryCache, type RepositoryCache } from './cache-store.ts';
+import { CacheSnapshotUnavailable, ConcordError, type Repository } from '../../model/index.ts';
+import { assertLeasePath } from '../publication/index.ts';
+import { makePersistentCacheOwner } from './owner.ts';
+import { CacheDerivations } from './derivations.ts';
 
 export type ReadonlyCacheSnapshot = Readonly<Partial<Record<HawdbNamespace, readonly HawdbEntry[]>> & { unavailable?: typeof CacheSnapshotUnavailable.Type }>;
 export interface CacheService {

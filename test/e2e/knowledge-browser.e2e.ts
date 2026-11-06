@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { test } from './fixtures.js';
-import { act } from './journey.js';
+import { test } from './fixtures.ts';
+import { act } from './journey.ts';
 import { Effect, Schema } from 'effect';
 import { expect } from '@playwright/test';
-import { type ViewServerHandle } from './server.js';
-import { fetchFresh, pollUntil, waitForWorkspaceProjection } from '../support/support.js';
+import { type ViewServerHandle } from './server.ts';
+import { fetchFresh, pollUntil, waitForWorkspaceProjection } from '../support/support.ts';
 
 const ApiResult = Schema.Struct({ ok: Schema.Boolean, value: Schema.optional(Schema.Unknown), error: Schema.optional(Schema.String) });
 

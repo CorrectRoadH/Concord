@@ -1,14 +1,14 @@
-import { packageBin } from '../support/installed-package.js';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
+import { packageBin } from '../support/installed-package.ts';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ProjectSchema } from "../../src/model/index.js";
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { ProjectSchema } from "../../src/model/index.ts";
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('packed CLI manages documentation without test roots and can later discover real tests', () => Effect.runPromise(Effect.sync(() => {

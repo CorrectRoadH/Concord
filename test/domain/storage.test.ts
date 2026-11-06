@@ -1,17 +1,17 @@
-import { initialize } from '../support/operations.js';
-import { recoverLocalState } from '../../src/app/index.js';
+import { initialize } from '../support/operations.ts';
+import { recoverLocalState } from '../../src/app/index.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, symlinkSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { LocalRepository, runApplication } from "../support/repository.js";
+import { LocalRepository, runApplication } from "../support/repository.ts";
 
-import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { digest } from "../../src/model/index.js";
-import { projectConfigPath, readProjectConfig } from '../support/support.js';
+import { renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { projectConfigPath, readProjectConfig } from '../support/support.ts';
 const fixture = () => { const root=mkdtempSync(join(tmpdir(),'concord-storage-'));execFileSync('git',['init','-q',root]);return root; };
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md

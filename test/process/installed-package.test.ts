@@ -1,22 +1,22 @@
-import { startViewServer } from '../e2e/server.js';
-import { waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
+import { startViewServer } from '../e2e/server.ts';
+import { waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 import { execFileSync } from 'node:child_process';
-import { installationResources } from "../support/source-resources.js";
+import { installationResources } from "../support/source-resources.ts";
 import { relative } from "node:path";
-import { packageBin } from '../support/installed-package.js';
-import { hawdbTarget } from "../../src/base/installation/index.js";
+import { packageBin } from '../support/installed-package.ts';
+import { hawdbTarget } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
-import { replaceInstalledNativeBinary } from '../../scripts/verify-installed-native.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
+import { replaceInstalledNativeBinary } from '../../scripts/verify-installed-native.ts';
 
-import { pollUntil } from '../support/support.js';
+import { pollUntil } from '../support/support.ts';
 
 // @feature docs/engineering/testing/README.md#检查入口
 test('parallel consumers share the build while damage stays in a private copy', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

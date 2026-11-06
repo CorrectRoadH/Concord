@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-import { ConcordError, objectDigest, type Change, type Repository } from '../model/index.js';
-import { readDocumentSelector } from '../domain/documents/index.js';
-import { issueMarkerLines, scanAnnotations } from '../domain/tests/index.js';
+import { ConcordError, objectDigest, type Change, type Repository } from '../model/index.ts';
+import { readDocumentSelector } from '../domain/documents/index.ts';
+import { issueMarkerLines, scanAnnotations } from '../domain/tests/index.ts';
 
 export function planIssueClose(repo: Repository, request: { readonly issue: string }) {
   const issue = readDocumentSelector(repo, request.issue, 'issue');

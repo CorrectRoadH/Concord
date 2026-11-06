@@ -4,12 +4,12 @@ import { join, sep } from 'node:path';
 import { userInfo } from 'node:os';
 import { Schema } from 'effect';
 import test from 'node:test';
-import { closeFixedIssue, verifyTest, runCommandCase, scanAnnotations } from '../../src/domain/tests/index.js';
-import { readDocumentSelector } from '../../src/domain/documents/index.js';
-import { createFixConsumer, gitCommit } from '../support/fix-consumer.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
-import { parseTypeScriptConfig } from '../../src/base/workspace/index.js';
+import { closeFixedIssue, verifyTest, runCommandCase, scanAnnotations } from '../../src/domain/tests/index.ts';
+import { readDocumentSelector } from '../../src/domain/documents/index.ts';
+import { createFixConsumer, gitCommit } from '../support/fix-consumer.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { parseTypeScriptConfig } from '../../src/base/workspace/index.ts';
 
 const setPrepare = (root: string, prepare: readonly (readonly [string, ...string[]])[]) => {
   const config = readProjectConfig(root);

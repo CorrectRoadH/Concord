@@ -1,9 +1,9 @@
-import { launchDetachedWorker } from '../base/process/index.js';
+import { launchDetachedWorker } from '../base/process/index.ts';
 import { Effect, Result } from "effect";
-import { HawdbFailure } from "../base/cache/index.js";
-import { queryContext, storeQuery, type QueryContext, type QueryUpdate } from "./query-cache.js";
-import { failure } from "../model/index.js";
-import { workerEntryArgv } from "../base/installation/index.js";
+import { HawdbFailure } from "../base/cache/index.ts";
+import { queryContext, storeQuery, type QueryContext, type QueryUpdate } from "./query-cache.ts";
+import { failure } from "../model/index.ts";
+import { workerEntryArgv } from "../base/installation/index.ts";
 
 
 // @concord-begin

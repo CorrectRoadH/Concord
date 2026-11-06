@@ -1,18 +1,18 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
-import type { StepRename } from "../model/index.js";
+import type { StepRename } from "../model/index.ts";
 import { posix } from "node:path";
 import type { Nodes } from "mdast";
-import { fromMarkdown } from "../model/index.js";
+import { fromMarkdown } from "../model/index.ts";
 
-import { inspectSteps, headingAnchors } from "../domain/documents/index.js";
-import { documentMarkdown } from "../domain/documents/index.js";
-import { parseTestDeclarations } from "../domain/tests/index.js";
-import { codeReferenceTokens } from "../domain/code/index.js";
-import { loadDocuments, readDocumentSelector } from "../domain/documents/index.js";
-import { decodeDocumentSource } from "../domain/documents/index.js";
-import { DOCUMENT_NAME_PATTERN } from "../model/index.js";
-import { ConcordError, canonical, digest, type Change, type Repository } from "../model/index.js";
+import { inspectSteps, headingAnchors } from "../domain/documents/index.ts";
+import { documentMarkdown } from "../domain/documents/index.ts";
+import { parseTestDeclarations } from "../domain/tests/index.ts";
+import { codeReferenceTokens } from "../domain/code/index.ts";
+import { loadDocuments, readDocumentSelector } from "../domain/documents/index.ts";
+import { decodeDocumentSource } from "../domain/documents/index.ts";
+import { DOCUMENT_NAME_PATTERN } from "../model/index.ts";
+import { ConcordError, canonical, digest, type Change, type Repository } from "../model/index.ts";
 
 interface Replacement { readonly start: number; readonly end: number; readonly text: string }
 const incomplete = (path: string): never => { throw new ConcordError('ReferenceScanIncomplete', `Cannot reliably locate or scan reference tokens in ${path}`); };

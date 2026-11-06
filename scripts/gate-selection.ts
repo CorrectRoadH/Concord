@@ -4,11 +4,11 @@ import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { relative, resolve, join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { parseTestDeclarations } from '../src/domain/tests/index.js';
-import { codeReferenceTokens } from '../src/domain/code/index.js';
-import { withTypeScript } from '../src/base/process/index.js';
-import { parseReference, validPackagePath } from '../src/model/index.js';
-import { checkoutRoot } from './build-output.js';
+import { parseTestDeclarations } from '../src/domain/tests/index.ts';
+import { codeReferenceTokens } from '../src/domain/code/index.ts';
+import { withTypeScript } from '../src/base/process/index.ts';
+import { parseReference, validPackagePath } from '../src/model/index.ts';
+import { checkoutRoot } from './build-output.ts';
 
 export class GateSelectionInvalid extends Schema.TaggedError<GateSelectionInvalid>()('GateSelectionInvalid', {
   detail: Schema.String,

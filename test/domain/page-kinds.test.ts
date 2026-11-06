@@ -4,9 +4,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { LocalRepository } from '../support/repository.js';
-import { checkProject } from '../../src/app/project-check.js';
-import { documentShow, traceGaps } from '../../src/app/trace-queries.js';
+import { LocalRepository } from '../support/repository.ts';
+import { checkProject } from '../../src/app/project-check.ts';
+import { documentShow, traceGaps } from '../../src/app/trace-queries.ts';
 
 function fixture(run: (repo: LocalRepository, write: (path: string, source?: string) => void) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-page-kinds-'));

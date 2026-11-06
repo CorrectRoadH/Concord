@@ -1,29 +1,29 @@
-import { git, discoverRoot, darwinPathCollisionKey, hasExactDarwinEntry, assertNoSymlink } from './bootstrap.js';
-export { git, discoverRoot, darwinPathCollisionKey, hasExactDarwinEntry } from './bootstrap.js';
-import { adapterRuntimeInputs } from '../process/index.js';
-import type { PublicationValidation } from "../publication/index.js";
-import type { StepRename } from "../../model/index.js";
+import { git, discoverRoot, darwinPathCollisionKey, hasExactDarwinEntry, assertNoSymlink } from './bootstrap.ts';
+export { git, discoverRoot, darwinPathCollisionKey, hasExactDarwinEntry } from './bootstrap.ts';
+import { adapterRuntimeInputs } from '../process/index.ts';
+import type { PublicationValidation } from "../publication/index.ts";
+import type { StepRename } from "../../model/index.ts";
 
-import { canonicalPath } from "../../model/index.js";
+import { canonicalPath } from "../../model/index.ts";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, rmdirSync, writeFileSync, type BigIntStats } from "node:fs";
 import { release } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { Schema } from "effect";
-import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from "../publication/index.js";
-import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.js";
-import { snapshot } from "./config.js";
-import { closeRepositoryCache } from "../cache/index.js";
-import { invalidateActiveRun } from "../publication/index.js";
-import { acquireFileLease, acquireRecoverablePublicationLease } from "../publication/index.js";
+import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from "../publication/index.ts";
+import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.ts";
+import { snapshot } from "./config.ts";
+import { closeRepositoryCache } from "../cache/index.ts";
+import { invalidateActiveRun } from "../publication/index.ts";
+import { acquireFileLease, acquireRecoverablePublicationLease } from "../publication/index.ts";
 
 
 
-import { defaultWritingSource } from "../../model/index.js";
-import { EMPTY_CONCEPT_CATALOG } from "../../model/index.js";
-import { catalogName, policyName, scopeOf } from "../../model/index.js";
-import { excludedSourcePath } from "../../model/index.js";
+import { defaultWritingSource } from "../../model/index.ts";
+import { EMPTY_CONCEPT_CATALOG } from "../../model/index.ts";
+import { catalogName, policyName, scopeOf } from "../../model/index.ts";
+import { excludedSourcePath } from "../../model/index.ts";
 
 // @concord-begin
 // @concord-implements docs/feature/portable-coordination/architecture.md#invariants
@@ -31,7 +31,8 @@ const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
 type RootAnchor = { readonly path: string; readonly dev: bigint; readonly ino: bigint };
 class ObservationChanged extends ConcordError {
-  constructor(readonly path: string) { super('FileChangedSinceRead', `${path} changed after planning; take a fresh snapshot`, 'source-observation'); }
+  readonly path: string;
+  constructor(path: string) { super('FileChangedSinceRead', `${path} changed after planning; take a fresh snapshot`, 'source-observation'); this.path = path; }
 }
 const errno = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code;
 function storageCoordinationFailure(cause: unknown): ConcordError {
@@ -261,9 +262,11 @@ export class LocalRepository implements Repository {
   private readonly listings = new Map<string, Buffer[]>();
   private readonly checkedSegments = new Set<string>();
   private verifyListings: Map<string, Buffer[]> | undefined;
+  private readonly validation?: PublicationValidation['Service'];
   constructor(input: string | undefined, options: ReadRepositoryOptions);
   constructor(input: string | undefined, options: RepositoryOptions, validation: PublicationValidation['Service']);
-  constructor(input?: string, options: RepositoryOptions = {}, private readonly validation?: PublicationValidation['Service']) {
+  constructor(input?: string, options: RepositoryOptions = {}, validation?: PublicationValidation['Service']) {
+    this.validation = validation;
     this.executionEnvironment = Object.freeze({ ...(options.environment ?? process.env) });
     this.root = discoverRoot(input, options.initialize);
     assertNoSymlink(this.root);

@@ -3,8 +3,8 @@ import fs, { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSy
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import test from 'node:test';
-import { installationIdentity } from '../../src/base/installation/identity-cache.js';
-import { tmpdir } from '../support/temporary.js';
+import { installationIdentity } from '../../src/base/installation/identity-cache.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('installation fingerprints reuse verified bytes and detect ctime, inode, membership and native replacement', t => {

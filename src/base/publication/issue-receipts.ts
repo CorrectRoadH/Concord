@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { lstat, link, mkdir, readFile, unlink, writeFile, open, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import { IssuePlanConsumed, IssuePlanCorrupt, IssuePlanExpired, IssuePlanIoError, IssuePlanNotPlanned } from "../../model/index.js";
-import { IssuePlanReceiptSchema, type IssuePlanReceipt, type IssueOutcome } from "../../model/index.js";
-import { receiptName } from "./repo-issue-plan-store.js";
-import { encoded } from "./repo-issue-plan-store.js";
-import { digest } from "./repo-issue-plan-store.js";
-import { detail } from "./repo-issue-plan-store.js";
-import { isCode } from "./repo-issue-plan-store.js";
-import { gitDirectory } from "./repo-issue-plan-store.js";
+import { IssuePlanConsumed, IssuePlanCorrupt, IssuePlanExpired, IssuePlanIoError, IssuePlanNotPlanned } from "../../model/index.ts";
+import { IssuePlanReceiptSchema, type IssuePlanReceipt, type IssueOutcome } from "../../model/index.ts";
+import { receiptName } from "./repo-issue-plan-store.ts";
+import { encoded } from "./repo-issue-plan-store.ts";
+import { digest } from "./repo-issue-plan-store.ts";
+import { detail } from "./repo-issue-plan-store.ts";
+import { isCode } from "./repo-issue-plan-store.ts";
+import { gitDirectory } from "./repo-issue-plan-store.ts";
 
 
 /** Git-private, cross-process receipt coordination. No authorization is stored here. */

@@ -1,4 +1,4 @@
-import { parseWritingPolicy } from '../../src/model/index.js';
+import { parseWritingPolicy } from '../../src/model/index.ts';
 import { readFileSync } from 'node:fs';
 import { expect, type Page } from '@playwright/test';
 import { Effect } from 'effect';

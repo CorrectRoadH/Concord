@@ -1,15 +1,15 @@
 // @concord-file
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-import { waitForPublication, withSourceSnapshot } from "../../app/index.js";
-import { cachedQuery, type Query } from "../../app/index.js";
+import { waitForPublication, withSourceSnapshot } from "../../app/index.ts";
+import { cachedQuery, type Query } from "../../app/index.ts";
 import { Effect, Option, Result } from "effect";
-import { ConcordError } from '../../model/index.js';
-import { type LocalRepository, openWriteRepository, openReadRepository } from "../../app/index.js";
+import { ConcordError } from '../../model/index.ts';
+import { type LocalRepository, openWriteRepository, openReadRepository } from "../../app/index.ts";
 
-import { root, emit, sync } from "./cli-base.js";
-import { Queries, type QueryRequest } from '../../app/index.js';
-import { QueryServerMode, ServerLauncher } from './launchers.js';
+import { root, emit, sync } from "./cli-base.ts";
+import { Queries, type QueryRequest } from '../../app/index.ts';
+import { QueryServerMode, ServerLauncher } from './launchers.ts';
 
 export const withQuery = (request: QueryRequest) => Effect.gen(function*() {
   const settings = yield* root;

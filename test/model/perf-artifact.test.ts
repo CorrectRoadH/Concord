@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { loadArtifact, verifyArtifact } from '../../scripts/perf/artifact.js';
-import { tmpdir } from '../support/temporary.js';
+import { loadArtifact, verifyArtifact } from '../../scripts/perf/artifact.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/feature/local-sdlc/README.md
 test('benchmark identity follows the built artifact while source HEAD advances', async () => {

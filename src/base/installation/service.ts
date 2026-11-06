@@ -2,10 +2,10 @@ import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { Context, Effect, Layer, Schema } from 'effect';
-import { ConcordError, failure } from '../../model/index.js';
-import { packageRoot } from './location.js';
-import { workerEntryArgv, workspaceInstallationIdentity, sourceInstallation } from './index.js';
-import { manageHerdrMod } from './herdr-mod.js';
+import { ConcordError, failure } from '../../model/index.ts';
+import { packageRoot } from './location.ts';
+import { workerEntryArgv, workspaceInstallationIdentity, sourceInstallation } from './index.ts';
+import { manageHerdrMod } from './herdr-mod.ts';
 
 export interface TemplateResources {
   readonly manifest: string;

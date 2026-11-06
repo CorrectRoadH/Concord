@@ -1,4 +1,4 @@
-import { ConcordError } from "./shared.js";
+import { ConcordError } from "./shared.ts";
 export interface ParsedReference {
   readonly path: string;
   readonly anchor?: string;

@@ -5,11 +5,11 @@ import { join, resolve } from 'node:path';
 import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
 import { decode, encode } from '@jridgewell/sourcemap-codec';
-import { packJavaScript, p5RuntimeNotice } from './pack-javascript.js';
-import { buildStartup } from './startup-build.js';
-import { P5_LIBRARIES } from "../src/model/p5/index.js";
-import { captureBuildSource, writeBuildIdentity, type BuildIdentity } from './build-identity.js';
-import { modManifest } from '../src/model/herdr-mod/index.js';
+import { packJavaScript, p5RuntimeNotice } from './pack-javascript.ts';
+import { buildStartup } from './startup-build.ts';
+import { P5_LIBRARIES } from "../src/model/p5/index.ts";
+import { captureBuildSource, writeBuildIdentity, type BuildIdentity } from './build-identity.ts';
+import { modManifest } from '../src/model/herdr-mod/index.ts';
 
 let sourceIdentity: BuildIdentity | undefined;
 let outputRoot: string;

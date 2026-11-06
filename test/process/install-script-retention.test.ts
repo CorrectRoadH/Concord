@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { run, withInstaller } from '../support/install-script-fixture.js';
+import { run, withInstaller } from '../support/install-script-fixture.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md
 test('latest, explicit versions and custom links keep the two most recent successful installations', { timeout: 55_000 }, () => withInstaller(f => {

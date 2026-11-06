@@ -1,15 +1,15 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Clock, Effect, Exit, Scope } from 'effect';
-import { ConcordError } from '../../model/index.js';
-import { PersistentCache, type PersistentCacheService, type ReadonlyCacheSnapshot } from './service.js';
-import { HawdbFailure, validateHawdbArtifact, type HawdbDatabase, type HawdbNamespace, type HawdbEntry } from './hawdb-native.js';
-import { CacheDerivationBatch } from '../../model/index.js';
+import { ConcordError } from '../../model/index.ts';
+import { PersistentCache, type PersistentCacheService, type ReadonlyCacheSnapshot } from './service.ts';
+import { HawdbFailure, validateHawdbArtifact, type HawdbDatabase, type HawdbNamespace, type HawdbEntry } from './hawdb-native.ts';
+import { CacheDerivationBatch } from '../../model/index.ts';
 import { Schema } from 'effect';
-import { writeCachePayloads } from './cache-query.js';
-import { mergeFeedbackRows } from './feedback-cache.js';
-import type { RemoteFeedback } from '../../model/index.js';
-import { inspectCacheStatus } from './cache-status.js';
+import { writeCachePayloads } from './cache-query.ts';
+import { mergeFeedbackRows } from './feedback-cache.ts';
+import type { RemoteFeedback } from '../../model/index.ts';
+import { inspectCacheStatus } from './cache-status.ts';
 
 /** One scoped owner, with an explicit close/reopen boundary for maintenance. */
 export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(function*(privateDir: string) {

@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Effect, FileSystem, Schema } from 'effect';
-import { io, mustRun, PerfError } from './perf/process.js';
+import { io, mustRun, PerfError } from './perf/process.ts';
 
 export const PackageArtifact = Schema.Struct({
   name: Schema.String, version: Schema.String, filename: Schema.String,

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { genericPrivateDirectorySync } from '../../src/base/publication/index.js';
-import { installedConcordCli } from './support.js';
+import { genericPrivateDirectorySync } from '../../src/base/publication/index.ts';
+import { installedConcordCli } from './support.ts';
 
 /** Stop only the service belonging to this fixture, before removing its sources or installation. */
 export function stopWorkspaceServer(root: string, entry = installedConcordCli(), env = process.env, runtime: readonly string[] = []): void {

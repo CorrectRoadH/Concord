@@ -1,11 +1,11 @@
-import { nativeArtifactRoot } from "../../src/base/installation/index.js";
-import { hawdbTarget, decodeNativeArtifact, HAWDB_MACOS_DEPLOYMENT_TARGET } from "../../src/base/installation/index.js";
+import { nativeArtifactRoot } from "../../src/base/installation/index.ts";
+import { hawdbTarget, decodeNativeArtifact, HAWDB_MACOS_DEPLOYMENT_TARGET } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';

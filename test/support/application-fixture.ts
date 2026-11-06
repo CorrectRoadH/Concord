@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { Schema } from 'effect';
-import { executeQuery, executeViewAction, type QueryRequest } from '../../src/app/index.js';
-import { LocalRepository, runApplication } from './repository.js';
+import { executeQuery, executeViewAction, type QueryRequest } from '../../src/app/index.ts';
+import { LocalRepository, runApplication } from './repository.ts';
 
 /** Use the transport's real application reply, including its exit decision and JSON value. */
 export async function query<A>(root: string, request: QueryRequest, schema: Schema.ConstraintDecoder<A, never>, exitCode = 0): Promise<A> {

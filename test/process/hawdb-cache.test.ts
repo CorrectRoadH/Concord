@@ -1,21 +1,21 @@
-import { initialize } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
-import { installedConcordCli } from '../support/support.js';
+import { initialize } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
+import { installedConcordCli } from '../support/support.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.js";
-import { acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache } from "../../src/base/cache/index.js";
-import { getWorkspaceSnapshot } from "../../src/app/index.js";
-import { deleteInspectedCache, inspectCacheClear } from "../../src/base/cache/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.ts";
+import { acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
+import { getWorkspaceSnapshot } from "../../src/app/index.ts";
+import { deleteInspectedCache, inspectCacheClear } from "../../src/base/cache/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { ensureGenericPrivateDirectorySync } from "../../src/base/publication/index.js";
+import { ensureGenericPrivateDirectorySync } from "../../src/base/publication/index.ts";
 
 const CacheReport = Schema.Struct({ status: Schema.String });
 const ScanReport = Schema.Struct({ cache: CacheReport, codeCache: CacheReport });

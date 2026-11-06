@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { type ViewServerHandle } from './server.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
+import { type ViewServerHandle } from './server.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('project Markdown deep links edit and persist custom paths, frontmatter and constitution source', async ({ page, workspace }) => {

@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 import { Effect, Option } from 'effect';
-import { CacheSnapshot, PersistentCache } from '../cache/index.js';
-import { Publication } from '../publication/index.js';
-import { failure } from '../../model/index.js';
-import { LocalRepository, type ReadRepositoryOptions, type RepositoryOptions } from './storage.js';
+import { CacheSnapshot, PersistentCache } from '../cache/index.ts';
+import { Publication } from '../publication/index.ts';
+import { failure } from '../../model/index.ts';
+import { LocalRepository, type ReadRepositoryOptions, type RepositoryOptions } from './storage.ts';
 
 const attachCache = Effect.fn('Workspace.attachCache')(function*(repo: LocalRepository) {
   const persistent = yield* Effect.serviceOption(PersistentCache);

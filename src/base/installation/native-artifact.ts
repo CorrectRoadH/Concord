@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { packageRoot as root } from "./location.js";
-import { decodeNativeArtifact, hawdbTarget } from "./hawdb-native-contract.js";
-import { sourceInstallation } from './runtime.js';
+import { packageRoot as root } from "./location.ts";
+import { decodeNativeArtifact, hawdbTarget } from "./hawdb-native-contract.ts";
+import { sourceInstallation } from './runtime.ts';
 
 export const nativeSourceFiles = ['native/hawdb/Cargo.toml', 'native/hawdb/build.rs', 'native/hawdb/rust-toolchain.toml', 'native/hawdb/src/lib.rs', 'native/hawdb/UPSTREAM.txt', 'native/hawdb/HAWDB-LICENSE.txt', 'src/base/cache/hawdb-native.ts', 'src/base/installation/hawdb-native-contract.ts', 'scripts/build-native.ts'] as const;
 const hash = (value: Buffer | string): string => createHash('sha256').update(value).digest('hex');

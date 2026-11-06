@@ -1,11 +1,11 @@
-import { createDocument } from './operations.js';
-import { createConsumer } from './consumer.js';
-import { LocalRepository } from './repository.js';
-import { readProjectConfig, writeProjectConfig } from './support.js';
+import { createDocument } from './operations.ts';
+import { createConsumer } from './consumer.ts';
+import { LocalRepository } from './repository.ts';
+import { readProjectConfig, writeProjectConfig } from './support.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { buildSync } from 'esbuild';
-import type { language_server_config_LanguageServer as LanguageServer } from '../../src/model/index.js';
+import type { language_server_config_LanguageServer as LanguageServer } from '../../src/model/index.ts';
 
 export const target = 'docs/feature/sample/use-case/sample.md';
 export const source = `# @concord-code\n# @concord-implements ${target}\ndef implementation():\n    return 1\n`;

@@ -1,9 +1,9 @@
 import { Layer } from "effect";
-import { PublicationValidation } from "../base/publication/index.js";
-import { readWritingPolicy } from "../domain/writing/index.js";
-import { EMPTY_CONCEPT_CATALOG } from "../model/index.js";
-import { planIssueClose } from './issue-close.js';
-import { planStepRename } from "./step-rewrite.js";
+import { PublicationValidation } from "../base/publication/index.ts";
+import { readWritingPolicy } from "../domain/writing/index.ts";
+import { EMPTY_CONCEPT_CATALOG } from "../model/index.ts";
+import { planIssueClose } from './issue-close.ts';
+import { planStepRename } from "./step-rewrite.ts";
 
 export const PublicationValidationLive = Layer.succeed(PublicationValidation, PublicationValidation.of({
   validateWriting: (source, path) => { readWritingPolicy(source, path); },

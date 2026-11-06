@@ -2,12 +2,12 @@
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 
 import { Clock, Effect, Schema } from "effect";
-import { openReadRepository } from "../base/workspace/index.js";
-import { Query } from "./query-cache.js";
-import { scanQueryValue } from "./trace-queries.js";
-import { stripQueryBodies } from "../model/index.js";
-import { decodeQueryScanMessage } from "../model/index.js";
-import { ConcordError } from "../model/index.js";
+import { openReadRepository } from "../base/workspace/index.ts";
+import { Query } from "./query-cache.ts";
+import { scanQueryValue } from "./trace-queries.ts";
+import { stripQueryBodies } from "../model/index.ts";
+import { decodeQueryScanMessage } from "../model/index.ts";
+import { ConcordError } from "../model/index.ts";
 
 export const scanQueryProcess = Effect.fn('query.scanProcess')(function*(root: string | undefined, rawQuery: string | undefined) {
   const scannedAt = Date.now();

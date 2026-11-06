@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { type ViewServerHandle } from './server.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
-import { prepareAuthoringFixture } from './authoring-fixture.js';
+import { type ViewServerHandle } from './server.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
+import { prepareAuthoringFixture } from './authoring-fixture.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser navigates owner directories and preserves implementation and document layouts', async ({ page, workspace }) => {

@@ -3,8 +3,8 @@
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join } from 'node:path';
-import { ConcordError, failure } from '../../model/index.js';
-import { modManifest } from '../../model/herdr-mod/index.js';
+import { ConcordError, failure } from '../../model/index.ts';
+import { modManifest } from '../../model/herdr-mod/index.ts';
 
 export interface HerdrInstallHost {
   readonly available: Effect.Effect<boolean, ConcordError>;

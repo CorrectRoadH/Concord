@@ -3,9 +3,9 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from '@playwright/test';
-import { test } from './fixtures.js';
-import { startViewServer, type ViewServerHandle } from './server.js';
-import { tmpdir } from '../support/temporary.js';
+import { test } from './fixtures.ts';
+import { startViewServer, type ViewServerHandle } from './server.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 for (const withCode of [false, true]) {
   // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#web

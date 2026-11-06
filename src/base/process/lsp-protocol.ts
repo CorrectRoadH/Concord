@@ -1,6 +1,6 @@
 import { Effect, Predicate, Schema } from "effect";
-import { ConcordError, decode } from "../../model/index.js";
-import type { AnalysisBudgets } from "../../model/index.js";
+import { ConcordError, decode } from "../../model/index.ts";
+import type { AnalysisBudgets } from "../../model/index.ts";
 
 
 export const id = Schema.Union([Schema.Int, Schema.String]);
@@ -27,7 +27,8 @@ export class LspConnection {
   private readonly ready = new Promise<void>(resolve => { this.readyResolve = resolve; });
   readonly endedProgress = new Set<string>();
   readonly gaps = new Set<string>();
-  constructor(readonly budgets: AnalysisBudgets) {}
+  readonly budgets: AnalysisBudgets;
+  constructor(budgets: AnalysisBudgets) { this.budgets = budgets; }
   connect(write: (bytes: string) => void): void { this.writer = write; this.readyResolve(); }
   failure(code: string, message: string): void {
     this.failed ??= new ConcordError(code, message);

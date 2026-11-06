@@ -1,8 +1,8 @@
-import type { MemoryMeta } from "./shared.js";
-import { MemoryContentInvalid } from "./repo-memory-errors.js";
-import type { MemoryDocument } from "./repo-memory-schema.js";
-import { decodeUncachedDocumentSource as decodeDocumentSource } from "./document-source.js";
-import { renderDocument } from "./document-render.js";
+import type { MemoryMeta } from "./shared.ts";
+import { MemoryContentInvalid } from "./repo-memory-errors.ts";
+import type { MemoryDocument } from "./repo-memory-schema.ts";
+import { decodeUncachedDocumentSource as decodeDocumentSource } from "./document-source.ts";
+import { renderDocument } from "./document-render.ts";
 
 export function decodeMemoryDocument(path: string, _id: string, source: string): MemoryDocument {
   try {

@@ -1,9 +1,9 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
-import { fixtureConsumer } from '../../bench/fixtures/index.js';
-import { defaultScale, pathConsumer, scaleConsumer, selfConsumer, type Consumer, type ScaleSpec } from './consumer.js';
-import { mustRun, PerfError, refreshPids, settleRefreshes } from './process.js';
+import { fixtureConsumer } from '../../bench/fixtures/index.ts';
+import { defaultScale, pathConsumer, scaleConsumer, selfConsumer, type Consumer, type ScaleSpec } from './consumer.ts';
+import { mustRun, PerfError, refreshPids, settleRefreshes } from './process.ts';
 
 /** Temporary directories are canonical before any CLI observes them. */
 export const workDirectory = Effect.fn('perf.workDirectory')(function*(prefix: string, keep: boolean) {

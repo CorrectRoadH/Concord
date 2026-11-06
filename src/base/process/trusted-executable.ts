@@ -1,7 +1,7 @@
 import { accessSync, constants, realpathSync } from 'node:fs';
 import { delimiter, isAbsolute, join, relative, sep } from 'node:path';
 import { Effect } from 'effect';
-import { OwnedProcessError } from './owned-process-error.js';
+import { OwnedProcessError } from './owned-process-error.ts';
 
 const within = (path: string, root: string): boolean => path === root || (!relative(root, path).startsWith(`..${sep}`) && relative(root, path) !== '..' && !isAbsolute(relative(root, path)));
 const packagePath = (path: string): boolean => path.split(sep).includes('node_modules');

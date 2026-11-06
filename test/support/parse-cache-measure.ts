@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { Effect } from 'effect';
-import { cachePhysicalBytes } from "../../src/base/cache/index.js";
+import { cachePhysicalBytes } from "../../src/base/cache/index.ts";
 
 // Manual fresh-process measurements; never part of the test discovery pattern.
 Effect.runSync(Effect.sync(() => {

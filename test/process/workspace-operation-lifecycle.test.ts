@@ -3,11 +3,11 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { digest } from '../../src/model/index.js';
-import { createConsumer } from '../support/consumer.js';
-import { command, record, recordPath, stop } from '../support/workspace-server-fixture.js';
-import { pollUntil, fetchFresh, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
-import { startViewServer } from '../e2e/server.js';
+import { digest } from '../../src/model/index.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { command, record, recordPath, stop } from '../support/workspace-server-fixture.ts';
+import { pollUntil, fetchFresh, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
+import { startViewServer } from '../e2e/server.ts';
 
 const children = (pid: number) => execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' }).split('\n').flatMap(line => {
   const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/u.exec(line);

@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { WorkspaceResponse } from '../../bench/fixtures/view.js';
-import { loadBudgets, missingOwner, parseBudgetTable } from '../../scripts/perf/budgets.js';
-import { judge, median, summarize } from '../../scripts/perf/stats.js';
+import { WorkspaceResponse } from '../../bench/fixtures/view.ts';
+import { loadBudgets, missingOwner, parseBudgetTable } from '../../scripts/perf/budgets.ts';
+import { judge, median, summarize } from '../../scripts/perf/stats.ts';
 
 // @feature docs/feature/local-sdlc/README.md
 test('budget discovery reads only Feature performance pages and preserves scenario identities', () => Effect.runPromise(Effect.gen(function*() {

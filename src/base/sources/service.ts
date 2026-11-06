@@ -1,10 +1,10 @@
 import { Context, Effect, FileSystem, Layer, Path, Stdio, Stream, type Scope } from 'effect';
-import { failure, ConcordError } from '../../model/index.js';
-import { inspectPendingJournals, waitForPublication } from '../publication/index.js';
-import { readRepositoryBytesSync, readRepositoryFileSync, type LocalRepository } from '../workspace/index.js';
-import { NodeSourceWatch } from './source-watch.js';
-import { readReportFiles } from './report-files.js';
-import { untrackedFile } from './untracked-file.js';
+import { failure, ConcordError } from '../../model/index.ts';
+import { inspectPendingJournals, waitForPublication } from '../publication/index.ts';
+import { readRepositoryBytesSync, readRepositoryFileSync, type LocalRepository } from '../workspace/index.ts';
+import { NodeSourceWatch } from './source-watch.ts';
+import { readReportFiles } from './report-files.ts';
+import { untrackedFile } from './untracked-file.ts';
 export type SourceWatch = Pick<NodeSourceWatch, 'reconcile' | 'close'>;
 
 export interface SourcesService {

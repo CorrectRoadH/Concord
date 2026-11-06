@@ -1,9 +1,9 @@
 import { Predicate } from "effect";
-import { readCachedProjectConfig } from "./config-cache.js";
-import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type shared_ProjectConfig as ProjectConfig } from "../../model/index.js";
+import { readCachedProjectConfig } from "./config-cache.ts";
+import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type shared_ProjectConfig as ProjectConfig } from "../../model/index.ts";
 import * as ts from 'typescript/ast';
-import { withTypeScriptSource, typescriptPackageVersion } from "../process/index.js";
-import { ContentCache } from "../cache/index.js";
+import { withTypeScriptSource, typescriptPackageVersion } from "../process/index.ts";
+import { ContentCache } from "../cache/index.ts";
 
 const configContentCache = new ContentCache<ProjectConfig>('document_parse', `typescript-ast/${typescriptPackageVersion()}/concord-config-parse/v1`, ProjectSchema, { maxEntries: 128, maxBytes: 1024 * 1024 });
 

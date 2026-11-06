@@ -2,9 +2,9 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#启动与裁决
 import { Effect } from 'effect';
 import { Command } from 'effect/unstable/cli';
-import { ConcordError } from '../../model/index.js';
-import { ServerLauncher } from './launchers.js';
-import { root, viewRoot, emit } from './cli-base.js';
+import { ConcordError } from '../../model/index.ts';
+import { ServerLauncher } from './launchers.ts';
+import { root, viewRoot, emit } from './cli-base.ts';
 
 const operation = (name: 'start' | 'stop' | 'status' | 'run') => Command.make(name, {}, () => Effect.gen(function*() {
   const settings = yield* root;

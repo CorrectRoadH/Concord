@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from './temporary.js';
+import { tmpdir } from './temporary.ts';
 import { join } from 'node:path';
 import { after } from 'node:test';
-import { defaultWritingSource } from '../../src/model/index.js';
-import { writeProjectConfig } from './support.js';
+import { defaultWritingSource } from '../../src/model/index.ts';
+import { writeProjectConfig } from './support.ts';
 export function git(root: string, ...args: string[]) { const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' }); assert.equal(result.status, 0, result.stderr); return result.stdout.trim(); }
 function buildFixture(docsWork?: unknown, initialConfig = true) {
   const root = mkdtempSync(join(tmpdir(), 'concord-docs-work-'));

@@ -1,8 +1,8 @@
 import { createRequire } from "node:module";
 import type { Nodes } from "mdast";
 import type * as Esbuild from "esbuild";
-import { ConcordError } from "../../model/index.js";
-import { fromMarkdown } from "../../model/index.js";
+import { ConcordError } from "../../model/index.ts";
+import { fromMarkdown } from "../../model/index.ts";
 
 
 export let javascript: typeof Esbuild | undefined;

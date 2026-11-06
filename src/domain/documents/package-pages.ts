@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/cli.md#页面种类
-import { SPLIT_PAGE_KINDS, type Repository } from '../../model/index.js';
+import { SPLIT_PAGE_KINDS, type Repository } from '../../model/index.ts';
 
 /** Include empty directories so a single-page conflict cannot disappear. */
 export function packagePagePaths(repo: Repository, owner: string): ReadonlySet<string> {

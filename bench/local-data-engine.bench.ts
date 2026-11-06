@@ -1,4 +1,4 @@
-import { defineBenchmarks, waitForProjection } from '../scripts/perf/scenario.js';
+import { defineBenchmarks, waitForProjection } from '../scripts/perf/scenario.ts';
 const queries = { 'trace-gaps': ['trace', 'gaps'], 'trace-show': ['trace', 'show', 'docs/feature/local-sdlc/README.md'], 'review': ['review', 'local-sdlc'] } as const;
 export default defineBenchmarks('local-data-engine', [
   ...Object.entries(queries).flatMap(([name, argv]) => [

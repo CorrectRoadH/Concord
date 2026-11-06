@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md#服务托管
 import { Clock, Effect, Semaphore } from 'effect';
-import { ConcordError } from '../../model/index.js';
+import { ConcordError } from '../../model/index.ts';
 
 export interface HostedHttp { readonly host: string; readonly port: number; readonly address: string; close(): Promise<void> }
 interface Listener { readonly handle: HostedHttp; readonly leases: Map<string, { readonly transient: boolean; readonly owner?: number }>; sse: number; idleSince: number }

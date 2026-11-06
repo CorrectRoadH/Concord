@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
-import { rounded, RequestTiming } from "../../app/index.js";
+import { rounded, RequestTiming } from "../../app/index.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 function routeLabel(target: string | undefined): string {
@@ -19,14 +19,20 @@ export class ViewRequestLog {
   private count = 0;
   private suppressed = 0;
   private readonly timer: ReturnType<typeof setInterval>;
+  private readonly write: (line: string) => boolean;
+  private readonly now: () => number;
+  private readonly thresholdMs: number;
   constructor(
-    private readonly write: (line: string) => boolean = line => {
+    write: (line: string) => boolean = line => {
       if (process.stderr.destroyed || process.stderr.errored || process.stderr.writableLength >= 64 * 1024) return false;
       process.stderr.write(line); return true;
     },
-    private readonly now: () => number = performance.now.bind(performance),
-    private readonly thresholdMs = 250,
+    now: () => number = performance.now.bind(performance),
+    thresholdMs = 250,
   ) {
+    this.write = write;
+    this.now = now;
+    this.thresholdMs = thresholdMs;
     this.tick = this.window = now();
     this.timer = setInterval(() => {
       const time = this.now();

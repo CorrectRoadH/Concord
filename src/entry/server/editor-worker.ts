@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md#文件与资源边界
 import { Effect } from "effect";
-import { readerLayer } from './main.js';
-import { Job, editorLimits } from "../../model/editor/index.js";
-import { computeEditor } from "../../app/index.js";
-import { ConcordError, decode, failure } from "../../model/index.js";
+import { readerLayer } from './main.ts';
+import { Job, editorLimits } from "../../model/editor/index.ts";
+import { computeEditor } from "../../app/index.ts";
+import { ConcordError, decode, failure } from "../../model/index.ts";
 
 // One bounded request per process; the parent owns this process and its compiler group.
 const program = Effect.tryPromise({ try: async () => {

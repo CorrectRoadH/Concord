@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { TestClock } from 'effect/testing';
-import { makeHttpLeases } from '../../src/entry/server/http-leases.js';
+import { makeHttpLeases } from '../../src/entry/server/http-leases.ts';
 
 // @feature docs/feature/web-workbench/README.md
 test('HTTP leases share a listener, retain SSE across owner disconnect and close after the last connection', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

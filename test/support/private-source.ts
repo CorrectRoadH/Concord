@@ -1,6 +1,6 @@
 import { cpSync, mkdirSync, symlinkSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
-import { nativeArtifactRoot, nativeSourceFiles } from '../../src/base/installation/index.js';
+import { nativeArtifactRoot, nativeSourceFiles } from '../../src/base/installation/index.ts';
 
 /** Only tests of source-mode behavior own a copied source installation. */
 export function privateSourceInstallation(target: string): string {

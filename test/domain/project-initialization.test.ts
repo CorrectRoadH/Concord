@@ -4,8 +4,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { requireInitializedProject, projectInitializationRequired, uninitializedDoctor } from '../../src/app/index.js';
-import { tmpdir } from '../support/temporary.js';
+import { requireInitializedProject, projectInitializationRequired, uninitializedDoctor } from '../../src/app/index.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
 test('initialization requires taste and derives the writing guide from tracked and unignored files', () => {

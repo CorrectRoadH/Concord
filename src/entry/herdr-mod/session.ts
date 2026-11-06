@@ -65,7 +65,8 @@ export class ModSession {
   closed = false;
   private observation = {};
   private selection = {};
-  constructor(readonly host: ModHost, cwd: string) { this.root = cwd; }
+  readonly host: ModHost;
+  constructor(host: ModHost, cwd: string) { this.host = host; this.root = cwd; }
 
   command<S extends Schema.Top & { readonly DecodingServices: never }>(args: readonly string[], schema: S, diagnostic = false, discoverRoot = false) {
     return Effect.gen({ self: this }, function*() {

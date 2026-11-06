@@ -1,18 +1,18 @@
-import { createDocument, initialize } from '../support/operations.js';
+import { createDocument, initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { P5BundleSchema } from '../../src/model/p5/index.js';
-import { compileP5 } from '../../src/app/index.js';
-import { runApplication } from '../support/repository.js';
+import { P5BundleSchema } from '../../src/model/p5/index.ts';
+import { compileP5 } from '../../src/app/index.ts';
+import { runApplication } from '../support/repository.ts';
 
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/web-workbench/use-case/embed-p5-sketch.md
 test('p5 compiler checks captured modules, resources, options and repository boundaries without executing code', () => Effect.runPromise(Effect.tryPromise(async () => {

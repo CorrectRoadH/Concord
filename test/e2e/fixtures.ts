@@ -1,8 +1,8 @@
 import { test as base, surfaceOf, type Browser } from '@e2e-dev/web';
 import { Effect } from 'effect';
 import { type TestAPI, type TestFixtures } from 'e2e';
-import { webEngine } from './engine.js';
-import { browserWorkerFixture, type BrowserSharedFixture } from '../support/browser-shared-fixture.js';
+import { webEngine } from './engine.ts';
+import { browserWorkerFixture, type BrowserSharedFixture } from '../support/browser-shared-fixture.ts';
 
 type Page = ReturnType<NonNullable<ReturnType<typeof surfaceOf>>['page']>;
 

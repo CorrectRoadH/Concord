@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import { Schema } from 'effect';
-import { CacheSnapshotUnavailable, CacheDerivationBatch, ViewActionSchema } from '../../model/index.js';
-import { strict } from './protocol.js';
+import { CacheSnapshotUnavailable, CacheDerivationBatch, ViewActionSchema } from '../../model/index.ts';
+import { strict } from './protocol.ts';
 
 const Row = strict(Schema.Struct({ key: Schema.String, payload: Schema.String }));
 export const Snapshot = strict(Schema.Struct({

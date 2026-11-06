@@ -1,24 +1,24 @@
-import { writeConceptFile, writeWritingFile } from '../support/writing-files.js';
-import { initialize, createDocument, addPage } from '../support/operations.js';
+import { writeConceptFile, writeWritingFile } from '../support/writing-files.ts';
+import { initialize, createDocument, addPage } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { EMPTY_CONCEPT_CATALOG } from "../../src/model/index.js";
-import { indexConcepts, readConceptCatalog, showConcepts } from "../../src/domain/concepts/index.js";
-import { checkWriting } from "../../src/domain/writing/index.js";
-import { showWriting } from "../../src/domain/writing/index.js";
-import { checkProject } from "../../src/app/index.js";
-import { setAuthor } from "../../src/domain/documents/index.js";
+import { EMPTY_CONCEPT_CATALOG } from "../../src/model/index.ts";
+import { indexConcepts, readConceptCatalog, showConcepts } from "../../src/domain/concepts/index.ts";
+import { checkWriting } from "../../src/domain/writing/index.ts";
+import { showWriting } from "../../src/domain/writing/index.ts";
+import { checkProject } from "../../src/app/index.ts";
+import { setAuthor } from "../../src/domain/documents/index.ts";
 
-import { setPage } from "../../src/domain/documents/index.js";
-import { setMarkdown } from "../../src/app/index.js";
-import { digest } from "../../src/model/index.js";
+import { setPage } from "../../src/domain/documents/index.ts";
+import { setMarkdown } from "../../src/app/index.ts";
+import { digest } from "../../src/model/index.ts";
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-markdown-concepts-'));

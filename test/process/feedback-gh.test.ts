@@ -1,23 +1,23 @@
-import { installedConcordCli } from '../support/support.js';
+import { installedConcordCli } from '../support/support.ts';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { fetchFresh } from '../support/support.js';
+import { fetchFresh } from '../support/support.ts';
 
 if (process.platform === 'win32') {
   // @use-case docs/feature/feedback/use-case/triage-feedback.md
   test('Windows reports gh capability missing while API feedback remains available', async () => {
-    const { runApplication } = await import('../support/repository.js');
-    const { ConcordError } = await import('../../src/model/index.js');
-    const { checkGhConnection } = await import("../../src/domain/feedback/feedback-gh.js");
-    const { fetchFeedback } = await import("../../src/domain/feedback/feedback-providers.js");
+    const { runApplication } = await import('../support/repository.ts');
+    const { ConcordError } = await import('../../src/model/index.ts');
+    const { checkGhConnection } = await import("../../src/domain/feedback/feedback-gh.ts");
+    const { fetchFeedback } = await import("../../src/domain/feedback/feedback-providers.ts");
     const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
     await assert.rejects(runApplication(checkGhConnection(process.cwd(), connection)), (cause) => cause instanceof ConcordError && cause.code === 'GhPlatformUnsupported');
     const api = await runApplication(fetchFeedback({ id: 'github-api', provider: 'github', credentialEnv: 'TEST_TOKEN', owner: 'acme', repo: 'widgets' }, {
@@ -68,12 +68,12 @@ process.env.GH_TOKEN = 'fixture-token';
 process.env.GH_DEBUG = 'api';
 process.env.GH_REPO = 'attacker/elsewhere';
 
-const { LocalRepository, initialize, runApplication } = await import('../support/repository.js');
-const { setConfig, showConfig } = await import('../../src/app/index.js');
-const { ConcordError } = await import('../../src/model/index.js');
-const { checkGhConnection, fetchGhFeedback } = await import("../../src/domain/feedback/feedback-gh.js");
-const { syncFeedback } = await import("../../src/domain/feedback/feedback.js");
-const { startViewServer } = await import('../e2e/server.js');
+const { LocalRepository, initialize, runApplication } = await import('../support/repository.ts');
+const { setConfig, showConfig } = await import('../../src/app/index.ts');
+const { ConcordError } = await import('../../src/model/index.ts');
+const { checkGhConnection, fetchGhFeedback } = await import("../../src/domain/feedback/feedback-gh.ts");
+const { syncFeedback } = await import("../../src/domain/feedback/feedback.ts");
+const { startViewServer } = await import('../e2e/server.ts');
 const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
 
 function configure(): void {

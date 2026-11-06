@@ -1,11 +1,11 @@
 import { Context, Effect, Layer, Path, type Scope } from 'effect';
-import { failure, type ConcordError } from '../../model/index.js';
-import type { Publication } from '../publication/index.js';
-import type { LocalRepository, ReadRepositoryOptions, RepositoryOptions } from './storage.js';
-import type { inspectConfiguration } from './config-inspection.js';
-import { identifyWorkspace, locateWorkspace } from './identity.js';
+import { failure, type ConcordError } from '../../model/index.ts';
+import type { Publication } from '../publication/index.ts';
+import type { LocalRepository, ReadRepositoryOptions, RepositoryOptions } from './storage.ts';
+import type { inspectConfiguration } from './config-inspection.ts';
+import { identifyWorkspace, locateWorkspace } from './identity.ts';
 
-const repository = () => Effect.tryPromise(() => import('./repository-service.js')).pipe(Effect.mapError(failure));
+const repository = () => Effect.tryPromise(() => import('./repository-service.ts')).pipe(Effect.mapError(failure));
 
 export interface WorkspaceService {
   readonly locate: typeof locateWorkspace;
@@ -22,7 +22,7 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
       const path = yield* Path.Path;
       const openRead: WorkspaceService['openRead'] = (root, options) => repository().pipe(Effect.flatMap(module => module.openRead(root === undefined ? root : path.resolve(root), { ...options, ...(environment === undefined ? {} : { environment }) })));
       const openWrite: WorkspaceService['openWrite'] = (root, options) => repository().pipe(Effect.flatMap(module => module.openWrite(root === undefined ? root : path.resolve(root), { ...options, ...(environment === undefined ? {} : { environment }) })));
-      return Workspace.of({ openRead, openWrite, inspectConfiguration: (...args) => Effect.tryPromise(() => import('./config-inspection.js')).pipe(Effect.flatMap(module => module.inspectConfiguration(...args)), Effect.mapError(failure)), identify: identifyWorkspace, locate: locateWorkspace });
+      return Workspace.of({ openRead, openWrite, inspectConfiguration: (...args) => Effect.tryPromise(() => import('./config-inspection.ts')).pipe(Effect.flatMap(module => module.inspectConfiguration(...args)), Effect.mapError(failure)), identify: identifyWorkspace, locate: locateWorkspace });
     }));
   }
   static readonly layer = Workspace.layerWithEnvironment();

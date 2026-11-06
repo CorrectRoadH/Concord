@@ -1,18 +1,18 @@
-import { createDocument } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
-import { createFixConsumer as fixture, gitCommand as git, gitCommit as commit } from '../support/fix-consumer.js';
+import { createDocument } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
+import { createFixConsumer as fixture, gitCommand as git, gitCommit as commit } from '../support/fix-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
-import { readDocumentSelector } from "../../src/domain/documents/index.js";
+import { LocalRepository } from "../support/repository.ts";
+import { readDocumentSelector } from "../../src/domain/documents/index.ts";
 
-import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { closeFixedIssue, verifyTest, scanAnnotations } from "../../src/domain/tests/index.js";
-import { OwnedProcessLive } from "../../src/base/process/index.js";
+import { renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
+import { closeFixedIssue, verifyTest, scanAnnotations } from "../../src/domain/tests/index.ts";
+import { OwnedProcessLive } from "../../src/base/process/index.ts";
 
 async function verify(root: string, defect?: string) {
   const repo = new LocalRepository(root, { optimistic: true });

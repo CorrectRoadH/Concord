@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
-import { Installation, type TemplateResources } from "../../base/installation/index.js";
+import { Installation, type TemplateResources } from "../../base/installation/index.ts";
 import { Effect, Schema } from "effect";
-import { ConcordError, failure } from "../../model/index.js";
-import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../model/index.js";
+import { ConcordError, failure } from "../../model/index.ts";
+import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../model/index.ts";
 
 
 const TEMPLATE_NAMES = [

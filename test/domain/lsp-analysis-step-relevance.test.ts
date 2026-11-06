@@ -3,12 +3,12 @@ import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { AnalysisViewSchema, TraceShowValue } from '../../src/model/index.js';
-import { hydrateQueryValue, renameUseCaseStep } from '../../src/app/index.js';
-import { LocalRepository } from '../support/repository.js';
-import { query, analyze, projectCheck } from '../support/lsp-observation-operations.js';
-import { consumer, server, target, source, write } from '../support/lsp-analysis-source-fixture.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { AnalysisViewSchema, TraceShowValue } from '../../src/model/index.ts';
+import { hydrateQueryValue, renameUseCaseStep } from '../../src/app/index.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { query, analyze, projectCheck } from '../support/lsp-observation-operations.ts';
+import { consumer, server, target, source, write } from '../support/lsp-analysis-source-fixture.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#inspect-associations
 // @name analyzed-step-relevance

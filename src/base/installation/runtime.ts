@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { packageRoot } from './location.js';
+import { packageRoot } from './location.ts';
 
 /** The source and installed runtimes choose their entries in one place. */
 export const sourceInstallation = import.meta.url.endsWith('.ts');

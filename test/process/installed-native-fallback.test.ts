@@ -3,9 +3,9 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { hawdbTarget, installationResources } from '../../src/base/installation/index.js';
-import { packageBin, prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
-import { tmpdir } from '../support/temporary.js';
+import { hawdbTarget, installationResources } from '../../src/base/installation/index.ts';
+import { packageBin, prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
+import { tmpdir } from '../support/temporary.ts';
 import { Schema } from 'effect';
 
 // @feature docs/feature/local-data-engine/architecture.md#cli-查询

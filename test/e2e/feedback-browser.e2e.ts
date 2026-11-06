@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
-import { initialize, createDocument } from '../support/operations.js';
+import { initialize, createDocument } from '../support/operations.ts';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { loadDocuments } from '../../src/domain/documents/index.js';
-import { renderDocument, type FeedbackSource } from '../../src/model/index.js';
-import { mergeFeedbackCache, openHawdb, cacheDatabasePath } from '../../src/base/cache/index.js';
-import { type ViewServerHandle } from './server.js';
-import { projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
+import { LocalRepository } from '../support/repository.ts';
+import { loadDocuments } from '../../src/domain/documents/index.ts';
+import { renderDocument, type FeedbackSource } from '../../src/model/index.ts';
+import { mergeFeedbackCache, openHawdb, cacheDatabasePath } from '../../src/base/cache/index.ts';
+import { type ViewServerHandle } from './server.ts';
+import { projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('feedback browser separates remote observations from local editing and protects connection drafts', async ({ page, workspace }) => {

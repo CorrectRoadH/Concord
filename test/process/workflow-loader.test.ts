@@ -5,8 +5,8 @@ import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { SkillsInstallReceiptSchema, workflowSkillPaths } from '../../src/model/index.js';
-import { tmpdir } from '../support/temporary.js';
+import { SkillsInstallReceiptSchema, workflowSkillPaths } from '../../src/model/index.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
 test('the lightweight command loader routes skills install to the same managed publication', { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

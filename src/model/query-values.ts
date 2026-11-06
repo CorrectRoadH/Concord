@@ -1,8 +1,8 @@
 import { Schema } from "effect";
-import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, RoadmapSchema, UseCaseSchema } from "./shared.js";
-import { FeedbackSourceSchema } from "./feedback-schema.js";
-import { CodeDeclarationSchema } from "./code-declaration.js";
-import { AnalysisViewSchema, TestRelevanceSchema } from "./analysis-view.js";
+import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, RoadmapSchema, UseCaseSchema } from "./shared.ts";
+import { FeedbackSourceSchema } from "./feedback-schema.ts";
+import { CodeDeclarationSchema } from "./code-declaration.ts";
+import { AnalysisViewSchema, TestRelevanceSchema } from "./analysis-view.ts";
 
 const sourceWithoutBody = Schema.Union(FeedbackSourceSchema.members.map(member => {
   const { body: _body, ...fields } = member.fields;

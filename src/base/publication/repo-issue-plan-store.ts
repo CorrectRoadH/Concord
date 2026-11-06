@@ -4,9 +4,9 @@ import { dirname, isAbsolute, resolve } from "node:path";
 
 import { Schema } from "effect";
 
-import { IssuePlanCorrupt } from "../../model/index.js";
+import { IssuePlanCorrupt } from "../../model/index.ts";
 
-import { IssuePlanReceiptSchema, type IssuePlanReceipt } from "../../model/index.js";
+import { IssuePlanReceiptSchema, type IssuePlanReceipt } from "../../model/index.ts";
 
 export const receiptName = (receipt: IssuePlanReceipt): string => {
   if (!/^[0-9a-f-]{36}$/u.test(receipt.id)) throw new IssuePlanCorrupt({ receiptId: receipt.id, message: "receipt id is not a UUID" });

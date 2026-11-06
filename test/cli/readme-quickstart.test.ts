@@ -1,16 +1,16 @@
-import { packageBin } from '../support/installed-package.js';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
+import { packageBin } from '../support/installed-package.ts';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { CodeDeclarationSchema } from "../../src/model/index.js";
-import { ProjectSchema } from "../../src/model/index.js";
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
-import { caseDiscriminator, deriveTestReference } from "../../src/model/index.js";
+import { CodeDeclarationSchema } from "../../src/model/index.ts";
+import { ProjectSchema } from "../../src/model/index.ts";
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts";
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('the shipped README quick start executes through the built bin and traces its exact snippets', () => Effect.runPromise(Effect.sync(() => {

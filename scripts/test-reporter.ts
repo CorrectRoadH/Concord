@@ -6,7 +6,7 @@ import { tap } from 'node:test/reporters';
 import { createHash } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { inspect } from 'node:util';
-import { summarizeTestLayers } from './test-layers.js';
+import { summarizeTestLayers } from './test-layers.ts';
 
 type TestEvent = Parameters<typeof tap>[0] extends AsyncIterable<infer Event> ? Event : never;
 class TestRunnerFailed extends Schema.TaggedError<TestRunnerFailed>()('TestRunnerFailed', {

@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { Effect, Schema } from 'effect';
 import type { E2EConfig } from 'e2e';
-import config from './e2e.config.js';
+import config from './e2e.config.ts';
 
 const Required = Schema.String.pipe(Schema.check(Schema.isMinLength(1)));
 const Settings = Schema.Struct({ key: Required, baseURL: Required, model: Required });

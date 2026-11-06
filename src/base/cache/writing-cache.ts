@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/format.md
 import { Schema } from "effect";
-import { repositoryCache } from "./cache-store.js";
-import { readCachePayloads, writeCachePayloads } from "./cache-query.js";
-import { canonical, decode, Nat, objectDigest, type Repository } from "../../model/index.js";
-import type { WritingFinding } from "../../model/index.js";
+import { repositoryCache } from "./cache-store.ts";
+import { readCachePayloads, writeCachePayloads } from "./cache-query.ts";
+import { canonical, decode, Nat, objectDigest, type Repository } from "../../model/index.ts";
+import type { WritingFinding } from "../../model/index.ts";
 
 const Source = Schema.Struct({ path: Schema.String, pointer: Schema.optional(Schema.String), line: Schema.optional(Nat), entry: Schema.optional(Nat), column: Schema.optional(Schema.String), ref: Schema.optional(Schema.String) });
 const Findings = Schema.Array(Schema.Struct({

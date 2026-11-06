@@ -1,19 +1,19 @@
 // Application operations used by transport adapters. Domain policy remains in its owner.
-import * as Module0 from "../base/workspace/index.js";
-import * as Module1 from "../domain/tests/index.js";
-import * as Module2 from "../domain/code/index.js";
-import * as Module3 from "../domain/concepts/index.js";
-import * as Module4 from "../domain/taste/index.js";
-import * as Module5 from "../domain/writing/index.js";
-import * as Module6 from "../domain/documents/index.js";
-import * as Module8 from "../domain/feedback/index.js";
-import * as Module9 from "../domain/issues/index.js";
-import * as Module11 from "../domain/trace/index.js";
-import * as Module12 from "../domain/onboarding/index.js";
-import * as Module13 from "../base/publication/index.js";
-import * as Module14 from "../base/installation/index.js";
-import * as Module15 from "../base/process/index.js";
-import { Sources } from '../base/sources/index.js';
+import * as Module0 from "../base/workspace/index.ts";
+import * as Module1 from "../domain/tests/index.ts";
+import * as Module2 from "../domain/code/index.ts";
+import * as Module3 from "../domain/concepts/index.ts";
+import * as Module4 from "../domain/taste/index.ts";
+import * as Module5 from "../domain/writing/index.ts";
+import * as Module6 from "../domain/documents/index.ts";
+import * as Module8 from "../domain/feedback/index.ts";
+import * as Module9 from "../domain/issues/index.ts";
+import * as Module11 from "../domain/trace/index.ts";
+import * as Module12 from "../domain/onboarding/index.ts";
+import * as Module13 from "../base/publication/index.ts";
+import * as Module14 from "../base/installation/index.ts";
+import * as Module15 from "../base/process/index.ts";
+import { Sources } from '../base/sources/index.ts';
 import { Effect } from 'effect';
 export const withSourceSnapshot = <A, E, R>(repo: Module0.LocalRepository, operation: Effect.Effect<A, E, R>) => Effect.flatMap(Sources, sources => sources.snapshot(repo, operation));
 export const discoverRoot: typeof Module0.discoverRoot = (...args) => Module0.discoverRoot(...args);
@@ -59,13 +59,13 @@ export const sourceInstallation = Module14.sourceInstallation;
 export const sourceWebServer: typeof Module14.sourceWebServer = (...args) => Module14.sourceWebServer(...args);
 export const sourceP5Runtime: typeof Module14.sourceP5Runtime = (...args) => Module14.sourceP5Runtime(...args);
 export const readRepositoryFileSync: typeof Module0.readRepositoryFileSync = (...args) => Module0.readRepositoryFileSync(...args);
-export function uriPath(repo: import('../model/index.js').Repository, uri: string): string;
-export function uriPath(repo: import('../model/index.js').Repository, uri: string, allowExternal: true): string | undefined;
-export function uriPath(repo: import('../model/index.js').Repository, uri: string, allowExternal = false): string | undefined {
+export function uriPath(repo: import('../model/index.ts').Repository, uri: string): string;
+export function uriPath(repo: import('../model/index.ts').Repository, uri: string, allowExternal: true): string | undefined;
+export function uriPath(repo: import('../model/index.ts').Repository, uri: string, allowExternal = false): string | undefined {
   return allowExternal ? Module15.uriPath(repo, uri, true) : Module15.uriPath(repo, uri);
 }
 export const makeOwnedProcessService: typeof Module15.makeOwnedProcessService = (...args) => Module15.makeOwnedProcessService(...args);
 
-export function createReadRepository(root: string | undefined, options: import('../base/workspace/index.js').ReadRepositoryOptions) {
+export function createReadRepository(root: string | undefined, options: import('../base/workspace/index.ts').ReadRepositoryOptions) {
   return new Module0.LocalRepository(root, options);
 }

@@ -1,13 +1,13 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
-import { workerEntryArgv } from "../../base/installation/index.js";
-import { Sources } from '../../base/sources/index.js';
+import { workerEntryArgv } from "../../base/installation/index.ts";
+import { Sources } from '../../base/sources/index.ts';
 import { dirname, join, relative } from "node:path";
 
 import { Effect, Schema } from "effect";
-import { ConcordError, Text, failure } from "../../model/index.js";
-import type { test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.js";
-import { type AdapterContext, type AdapterPlan, type AdapterReport, type Captured, type Capabilities, type NativeCase, type NativeManifest, ManifestSchema, test_adapter_protocol_PlanSchema as PlanSchema, protocolDecode, protocolJson } from "../../model/index.js";
+import { ConcordError, Text, failure } from "../../model/index.ts";
+import type { test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.ts";
+import { type AdapterContext, type AdapterPlan, type AdapterReport, type Captured, type Capabilities, type NativeCase, type NativeManifest, ManifestSchema, test_adapter_protocol_PlanSchema as PlanSchema, protocolDecode, protocolJson } from "../../model/index.ts";
 
 const capabilities = (changes: Partial<Capabilities> = {}): Capabilities => ({ realCollection: true, leaf: true, parameterGroups: false, exactSelection: true, perItemReport: true, range: false, rangeTrivia: false, tags: false, skipVisibility: true, ...changes });
 const regex = (text: string) => text.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&');

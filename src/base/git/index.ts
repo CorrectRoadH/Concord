@@ -1,8 +1,8 @@
-export { commitRepository } from './verification-git.js';
-export { firstParentPath } from './verification-git.js';
-export { gitBlob } from './verification-git.js';
-export { gitBlobBytes } from './verification-git.js';
-export { resolveCommit } from './verification-git.js';
-export { worktreeIdentity } from './verification-git.js';
-export { Git, OUTPUT_LIMIT, runGit, previewGit, previewGitEnvironment } from './service.js';
-export type { GitService } from './service.js';
+export { commitRepository } from './verification-git.ts';
+export { firstParentPath } from './verification-git.ts';
+export { gitBlob } from './verification-git.ts';
+export { gitBlobBytes } from './verification-git.ts';
+export { resolveCommit } from './verification-git.ts';
+export { worktreeIdentity } from './verification-git.ts';
+export { Git, OUTPUT_LIMIT, runGit, previewGit, previewGitEnvironment } from './service.ts';
+export type { GitService } from './service.ts';

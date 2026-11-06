@@ -1,4 +1,4 @@
-import { defineBenchmarks } from '../scripts/perf/scenario.js';
+import { defineBenchmarks } from '../scripts/perf/scenario.ts';
 export default defineBenchmarks('documentation-quality', [
   { id: 'documentation-quality/docs-check', consumer: 'fixture:writing', state: 'warm', run: ['docs', 'check'], expect: { exitCode: 0 } },
   { id: 'documentation-quality/check', consumer: 'fixture:writing', state: 'warm', run: ['check'], expect: { exitCode: 0 } },

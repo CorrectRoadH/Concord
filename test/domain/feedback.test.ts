@@ -1,30 +1,30 @@
-import { createDocument, initialize } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
-import { createConsumer } from '../support/consumer.js';
+import { createDocument, initialize } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getViewFile, getWorkspaceSnapshot } from "../../src/app/index.js";
-import { cacheStatus, scanAnnotations, clearCache } from "../../src/domain/tests/index.js";
-import { checkDocuments, loadDocuments, setAuthor } from "../../src/domain/documents/index.js";
+import { getViewFile, getWorkspaceSnapshot } from "../../src/app/index.ts";
+import { cacheStatus, scanAnnotations, clearCache } from "../../src/domain/tests/index.ts";
+import { checkDocuments, loadDocuments, setAuthor } from "../../src/domain/documents/index.ts";
 
-import { adoptIssue, closeIssue } from "../../src/domain/issues/index.js";
-import { renderDocument } from "../../src/model/index.js";
-import { mergeFeedbackCache, readFeedbackCache, PersistentCache } from "../../src/base/cache/index.js";
-import { openHawdb } from "../../src/base/cache/index.js";
-import { listFeedback, syncFeedback } from "../../src/domain/feedback/index.js";
-import { type RemoteFeedback } from "../../src/model/index.js";
-import { type FeedbackTransport } from "../../src/domain/feedback/index.js";
-import { setConfig, showConfig } from "../../src/app/index.js";
-import { ConcordError } from "../../src/model/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { adoptIssue, closeIssue } from "../../src/domain/issues/index.ts";
+import { renderDocument } from "../../src/model/index.ts";
+import { mergeFeedbackCache, readFeedbackCache, PersistentCache } from "../../src/base/cache/index.ts";
+import { openHawdb } from "../../src/base/cache/index.ts";
+import { listFeedback, syncFeedback } from "../../src/domain/feedback/index.ts";
+import { type RemoteFeedback } from "../../src/model/index.ts";
+import { type FeedbackTransport } from "../../src/domain/feedback/index.ts";
+import { setConfig, showConfig } from "../../src/app/index.ts";
+import { ConcordError } from "../../src/model/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { humanOutput } from "../../src/entry/cli/index.js";
-import { projectConfigPath } from '../support/support.js';
+import { humanOutput } from "../../src/entry/cli/index.ts";
+import { projectConfigPath } from '../support/support.ts';
 
 const issue = (overrides: Record<string, unknown> = {}) => ({
   id: 9001,

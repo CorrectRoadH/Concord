@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { closeFixedIssue } from '../../src/domain/tests/index.js';
-import { readDocumentSelector } from '../../src/domain/documents/index.js';
-import { createFixConsumer, gitCommand as git, gitCommit } from '../support/fix-consumer.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { closeFixedIssue } from '../../src/domain/tests/index.ts';
+import { readDocumentSelector } from '../../src/domain/documents/index.ts';
+import { createFixConsumer, gitCommand as git, gitCommit } from '../support/fix-consumer.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 async function close(root: string, defect: string, fix: string) {
   const repo = new LocalRepository(root, { optimistic: true });

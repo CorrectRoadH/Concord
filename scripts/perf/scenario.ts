@@ -1,11 +1,11 @@
-import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
+import { installationResources, installationRootForBin } from '../../src/base/installation/index.ts';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, FileSystem, Schema } from 'effect';
 import type { Scope } from 'effect';
-import type { Artifact } from './artifact.js';
-import type { Consumer } from './consumer.js';
-import { io, mustRun, PerfError, timedRun, type TimedRun } from './process.js';
+import type { Artifact } from './artifact.ts';
+import type { Consumer } from './consumer.ts';
+import { io, mustRun, PerfError, timedRun, type TimedRun } from './process.ts';
 
 export interface BenchContext {
   readonly artifact: Artifact; readonly consumer: Consumer; readonly outputDir: string;

@@ -1,14 +1,14 @@
-import { initialize } from '../support/operations.js';
+import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { checkWriting } from "../../src/domain/writing/index.js";
+import { checkWriting } from "../../src/domain/writing/index.ts";
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('writing scan refuses edits to inputs and directory membership during a real repository read', () => Effect.runPromise(Effect.sync(() => {

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { Effect, FileSystem, Schema } from 'effect';
-import { io, PerfError } from './process.js';
+import { io, PerfError } from './process.ts';
 export interface BudgetRow { readonly scenarios: readonly string[]; readonly limitMs: number }
 export interface OwnedBudget extends BudgetRow { readonly owner: string; readonly heading: string; readonly featureId: string; readonly limitKind: 'p50' | 'max' }
 const Budget = Schema.Struct({ scenarios: Schema.Array(Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/u))).check(Schema.isMinLength(1)), limitMs: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)) });

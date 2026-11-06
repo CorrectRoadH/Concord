@@ -1,9 +1,9 @@
 import { Effect, Layer } from 'effect';
 import { TestClock } from 'effect/testing';
-import { WorkspaceState } from '../../src/entry/server/state.js';
-import type { RuntimePorts } from '../../src/entry/server/service.js';
-import type { WorkspaceProjection, WorkspaceProjectionRecord } from '../../src/model/index.js';
-import { displaySnapshot } from './workspace-display-fixture.js';
+import { WorkspaceState } from '../../src/entry/server/state.ts';
+import type { RuntimePorts } from '../../src/entry/server/service.ts';
+import type { WorkspaceProjection, WorkspaceProjectionRecord } from '../../src/model/index.ts';
+import { displaySnapshot } from './workspace-display-fixture.ts';
 export const record: WorkspaceProjectionRecord = { sourceDigest: 'fixture-sources', builtAt: '2026-10-30T00:00:00.000Z', builtFrom: '2026-10-30T00:00:00.000Z', builtUntil: '2026-10-30T00:00:00.000Z', complete: true, changedPaths: [], unknownRelations: false, snapshot: { ...displaySnapshot, cache: { status: 'ready' }, diagnostics: { operation: 'doctor', ok: true, root: '/worktree', node: 'test', configuration: {}, missingTestRoots: [], missingSourceRoots: [], codeDeclarations: 1, documents: 2, cases: 2, findings: [], nextSteps: [] } } };
 const { snapshot, ...status } = record;
 export const projection: WorkspaceProjection = { snapshot, projection: { ...status, status: 'ready', current: false, refreshOwner: 'active' } };

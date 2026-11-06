@@ -1,11 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的合并检查
 import { Effect, Result } from "effect";
-import { ConcordError, failure } from "../model/index.js";
-import { openReadRepository } from "../base/workspace/index.js";
-import { Sources } from '../base/sources/index.js';
-import { checkProject } from "./project-check.js";
-import { waitForPublication } from "../base/publication/index.js";
+import { ConcordError, failure } from "../model/index.ts";
+import { openReadRepository } from "../base/workspace/index.ts";
+import { Sources } from '../base/sources/index.ts';
+import { checkProject } from "./project-check.ts";
+import { waitForPublication } from "../base/publication/index.ts";
 
 const sync = <A>(run: () => A) => Effect.try({ try: run, catch: failure });
 

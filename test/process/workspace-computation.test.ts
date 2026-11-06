@@ -4,11 +4,11 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Fiber, Schema } from 'effect';
-import { acquireTraceLeaseSync, releaseTraceLeaseSync } from '../../src/base/publication/index.js';
-import { digest, WorkspaceProjectionSchema } from '../../src/model/index.js';
-import { installedConcordCli, pollUntil } from '../support/support.js';
-import { tmpdir } from '../support/temporary.js';
-import { command, record, rpcModule, stop } from '../support/workspace-server-fixture.js';
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from '../../src/base/publication/index.ts';
+import { digest, WorkspaceProjectionSchema } from '../../src/model/index.ts';
+import { installedConcordCli, pollUntil } from '../support/support.ts';
+import { tmpdir } from '../support/temporary.ts';
+import { command, record, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-computation-'));

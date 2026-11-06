@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
-import { io, mustRun, PerfError } from './process.js';
-import type { BenchScenario } from './scenario.js';
+import { io, mustRun, PerfError } from './process.ts';
+import type { BenchScenario } from './scenario.ts';
 const Declarations = Schema.Struct({ operation: Schema.Literal('code-list'), codes: Schema.Array(Schema.Struct({ id: Schema.String, file: Schema.String, line: Schema.Int, endLine: Schema.Int, scope: Schema.Literals(['file', 'node', 'region']), symbol: Schema.optionalKey(Schema.String), contracts: Schema.Array(Schema.String) })), sourceRoots: Schema.Array(Schema.String), analysis: Schema.Json });
 export const defaultBase = Effect.fn('perf.defaultBase')(function*(root: string, outputDir: string) {
   return (yield* mustRun(['git', 'merge-base', 'origin/master', 'HEAD'], { cwd: root, outputDir })).stdout.trim();

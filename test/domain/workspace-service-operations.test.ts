@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Deferred, Effect, Fiber, SubscriptionRef } from 'effect';
 import { TestClock } from 'effect/testing';
-import { makeWorkspaceService } from '../../src/entry/server/service.js';
-import { makeRequestAdmission } from '../../src/entry/server/request-admission.js';
-import { ConcordError } from '../../src/model/index.js';
-import { ports, stateLayer } from '../support/workspace-service-fixture.js';
+import { makeWorkspaceService } from '../../src/entry/server/service.ts';
+import { makeRequestAdmission } from '../../src/entry/server/request-admission.ts';
+import { ConcordError } from '../../src/model/index.ts';
+import { ports, stateLayer } from '../support/workspace-service-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('draining waits for accepted operations and queues later writes until maintenance releases', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

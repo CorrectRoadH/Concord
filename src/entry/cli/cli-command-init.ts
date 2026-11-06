@@ -3,14 +3,14 @@
 // @concord-implements docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md#完整路径
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#init
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
-import { openWriteRepository } from "../../app/index.js";
+import { openWriteRepository } from "../../app/index.ts";
 import { Effect, Option } from "effect";
 import { Command, Flag, Prompt } from "effect/unstable/cli";
 
-import { initialize } from "../../app/index.js";
-import { ConcordError, RunnerSchema } from "../../model/index.js";
-import { root, optional, many, body, jsonBody, emit, sync } from "./cli-base.js";
-import { withRepo } from "./cli-repository.js";
+import { initialize } from "../../app/index.ts";
+import { ConcordError, RunnerSchema } from "../../model/index.ts";
+import { root, optional, many, body, jsonBody, emit, sync } from "./cli-base.ts";
+import { withRepo } from "./cli-repository.ts";
 
 const init = Command.make('init', {
   testRoot: many('test-root'), sourceRoot: many('source-root'), docsOnly: Flag.boolean('docs-only').pipe(Flag.withDefault(false)), runnerConfig: optional('runner-config'),

@@ -1,10 +1,10 @@
-import { ConcordError, inRepositorySnapshot, type MutationReceipt, type Repository } from "../model/index.js";
-import { parseReference } from "../model/index.js";
-import { CONTRACT_KINDS } from "../domain/documents/index.js";
-import { changed } from "../domain/documents/index.js";
-import { memory } from "../domain/documents/index.js";
-import { readDocumentReference } from "../domain/documents/index.js";
-import { readDocumentSelector } from "../domain/documents/index.js";
+import { ConcordError, inRepositorySnapshot, type MutationReceipt, type Repository } from "../model/index.ts";
+import { parseReference } from "../model/index.ts";
+import { CONTRACT_KINDS } from "../domain/documents/index.ts";
+import { changed } from "../domain/documents/index.ts";
+import { memory } from "../domain/documents/index.ts";
+import { readDocumentReference } from "../domain/documents/index.ts";
+import { readDocumentSelector } from "../domain/documents/index.ts";
 
 
 /** Lifecycle-independent relation helper used by the current Memory command surface. */

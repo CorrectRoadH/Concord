@@ -2,15 +2,15 @@
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { listFeedback, syncFeedback } from "../../app/index.js";
-import { FeedbackConnectionSchema } from "../../model/index.js";
-import { setConfig, showConfig } from "../../app/index.js";
-import { documentShow } from "../../app/index.js";
-import { ConcordError, decode } from "../../model/index.js";
-import { executeViewAction } from "../../app/index.js";
-import { root, text, optional, id, emit, sync, cached, viewRoot } from "./cli-base.js";
-import { withRepo, withQuery } from "./cli-repository.js";
-import { feedbackFilters, selectedFeedbackFilters } from "./cli-feedback-flags.js";
+import { listFeedback, syncFeedback } from "../../app/index.ts";
+import { FeedbackConnectionSchema } from "../../model/index.ts";
+import { setConfig, showConfig } from "../../app/index.ts";
+import { documentShow } from "../../app/index.ts";
+import { ConcordError, decode } from "../../model/index.ts";
+import { executeViewAction } from "../../app/index.ts";
+import { root, text, optional, id, emit, sync, cached, viewRoot } from "./cli-base.ts";
+import { withRepo, withQuery } from "./cli-repository.ts";
+import { feedbackFilters, selectedFeedbackFilters } from "./cli-feedback-flags.ts";
 
 const retiredFeedback = (name: string, replacement: string) => Command.make(name, {}, () => sync(() => { throw new ConcordError('CommandRetired', `Use ${replacement}`, { command: `concord feedback ${name}`, replacement }); })).pipe(Command.withDescription(`Use ${replacement} to maintain an Issue.`));
 

@@ -1,4 +1,4 @@
-import type { Repository } from '../../model/index.js';
+import type { Repository } from '../../model/index.ts';
 
 /** Scoped source views can also be virtual Git/overlay inputs without OS metadata. */
 export function snapshotBytes(repo: Repository, path: string): Uint8Array | undefined {

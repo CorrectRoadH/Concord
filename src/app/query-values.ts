@@ -1,15 +1,15 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-import { historicalAnalysis } from "../model/index.js";
+import { historicalAnalysis } from "../model/index.ts";
 
-import { ConcordError, digest } from "../model/index.js";
+import { ConcordError, digest } from "../model/index.ts";
 
 
-import { readRepositoryFileSync } from "../base/workspace/index.js";
-import { decodeDocumentSource } from "../domain/documents/index.js";
-import { parseTaste } from "../domain/taste/index.js";
+import { readRepositoryFileSync } from "../base/workspace/index.ts";
+import { decodeDocumentSource } from "../domain/documents/index.ts";
+import { parseTaste } from "../domain/taste/index.ts";
 
-import type { QueryValue } from "../model/index.js";
+import type { QueryValue } from "../model/index.ts";
 
 /** Owner bodies are read through the repository's single standalone path guard. */
 export function readQueryBody(root: string, path: string): string {

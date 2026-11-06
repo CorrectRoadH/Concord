@@ -1,22 +1,22 @@
-import { addPage, createDocument, initialize } from '../support/operations.js';
-import { renderOwnerFixture } from '../support/owner-fixture.js';
-import { createConsumer } from '../support/consumer.js';
+import { addPage, createDocument, initialize } from '../support/operations.ts';
+import { renderOwnerFixture } from '../support/owner-fixture.ts';
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, renameSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { checkDocuments, findDocument, loadDocuments, parseDocumentRecord, resolveReference, setAuthor, setPage, showPage } from "../../src/domain/documents/index.js";
-import { adoptRoadmap } from "../../src/app/index.js";
+import { checkDocuments, findDocument, loadDocuments, parseDocumentRecord, resolveReference, setAuthor, setPage, showPage } from "../../src/domain/documents/index.ts";
+import { adoptRoadmap } from "../../src/app/index.ts";
 
-import { closeIssue, linkIssue } from "../../src/domain/issues/index.js";
-import { linkMemory } from "../../src/app/index.js";
-import { renderDocument } from "../../src/model/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { closeIssue, linkIssue } from "../../src/domain/issues/index.ts";
+import { linkMemory } from "../../src/app/index.ts";
+import { renderDocument } from "../../src/model/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { inspectDocuments } from "../../src/app/index.js";
+import { inspectDocuments } from "../../src/app/index.ts";
 
 function useConsumer(run: (repo: LocalRepository, root: string) => void): void {
   const root = createConsumer();

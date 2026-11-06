@@ -1,21 +1,21 @@
-import { createDocument } from '../support/operations.js';
-import { createConsumer } from '../support/consumer.js';
-import { LocalRepository } from '../support/repository.js';
-import type { DocumentKind } from '../../src/model/index.js';
-import type { CreateDocumentInput } from '../../src/app/index.js';
-import { packageBin } from '../support/installed-package.js';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
+import { createDocument } from '../support/operations.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { LocalRepository } from '../support/repository.ts';
+import type { DocumentKind } from '../../src/model/index.ts';
+import type { CreateDocumentInput } from '../../src/app/index.ts';
+import { packageBin } from '../support/installed-package.ts';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { CodeDeclarationSchema } from "../../src/model/index.js";
-import { ProjectSchema } from "../../src/model/index.js";
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
-import { caseDiscriminator, deriveTestReference } from "../../src/model/index.js";
+import { CodeDeclarationSchema } from "../../src/model/index.ts";
+import { ProjectSchema } from "../../src/model/index.ts";
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts";
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('packed CLI traces code scopes and keeps command execution independent of code findings', () => Effect.runPromise(Effect.sync(() => {

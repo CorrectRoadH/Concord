@@ -2,9 +2,9 @@
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
 import { Option } from "effect";
 import { Argument, Command } from "effect/unstable/cli";
-import { renderReview } from "../../app/index.js";
-import { optional, sync, cached } from "./cli-base.js";
-import { withReadRepo } from "./cli-repository.js";
+import { renderReview } from "../../app/index.ts";
+import { optional, sync, cached } from "./cli-base.ts";
+import { withReadRepo } from "./cli-repository.ts";
 
 const review = Command.make('review', { ref: Argument.string('reference').pipe(Argument.optional) }, args =>
   withReadRepo((repo, settings) => sync(() => renderReview(repo, Option.getOrUndefined(args.ref), cached(settings.dryRun))),

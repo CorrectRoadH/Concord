@@ -4,8 +4,8 @@ import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'n
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Effect } from 'effect';
-import { FrozenBrowserRepository } from '../support/browser-shared-fixture.js';
-import { tmpdir } from '../support/temporary.js';
+import { FrozenBrowserRepository } from '../support/browser-shared-fixture.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/engineering/testing/architecture.md#浏览器与诊断
 test('frozen browser worktree recovers changed, deleted and added files without following symlinks or replacing Git state', () => Effect.runPromise(Effect.sync(() => {

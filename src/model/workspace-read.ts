@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import { Schema } from 'effect';
-import { ConcordError, digest } from './shared.js';
-import { decodeUncachedDocumentSource } from './document-source.js';
+import { ConcordError, digest } from './shared.ts';
+import { decodeUncachedDocumentSource } from './document-source.ts';
 
 const File = Schema.Struct({ path: Schema.String, digest: Schema.String, length: Schema.Int, diagnostics: Schema.Array(Schema.String) });
 export const WorkspaceRead = Schema.Struct({

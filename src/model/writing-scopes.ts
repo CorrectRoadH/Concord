@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/format.md#writingmd
 // @concord-implements docs/feature/documentation-quality/format.md#conceptsmd
-import { repositoryDirname as dirname } from "./repo-path.js";
-import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from "./shared.js";
-import { canonicalPath } from "./path-rules.js";
+import { repositoryDirname as dirname } from "./repo-path.ts";
+import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from "./shared.ts";
+import { canonicalPath } from "./path-rules.ts";
 
 export const policyName = 'writing.md';
 export const catalogName = 'concepts.md';

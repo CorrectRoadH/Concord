@@ -4,7 +4,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#follow
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Schema } from "effect";
-import { resourcePath } from "../../app/index.js";
+import { resourcePath } from "../../app/index.ts";
 
 const TOPICS = ['init', 'docs-from-scratch', 'docs-from-code', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback', 'spec', 'implement', 'review', 'fix'] as const;
 const TopicSchema = Schema.Literals(TOPICS);

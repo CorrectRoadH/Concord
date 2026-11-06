@@ -1,6 +1,6 @@
 import type { E2EConfig } from 'e2e';
-import { browserTestReport } from './scripts/browser-test-report.js';
-import { engine } from './test/e2e/engine.js';
+import { browserTestReport } from './scripts/browser-test-report.ts';
+import { engine } from './test/e2e/engine.ts';
 
 export default {
   tests: 'test/e2e/*.e2e.ts',

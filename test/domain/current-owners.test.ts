@@ -3,12 +3,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { tmpdir } from '../support/temporary.js';
-import { LocalRepository } from '../support/repository.js';
-import { closeIssue, linkIssue } from '../../src/domain/issues/index.js';
-import { decodeDocumentSource, loadDocuments } from '../../src/domain/documents/index.js';
-import { linkMemory } from '../../src/app/index.js';
-import { ConcordError, renderDocument } from '../../src/model/index.js';
+import { tmpdir } from '../support/temporary.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { closeIssue, linkIssue } from '../../src/domain/issues/index.ts';
+import { decodeDocumentSource, loadDocuments } from '../../src/domain/documents/index.ts';
+import { linkMemory } from '../../src/app/index.ts';
+import { ConcordError, renderDocument } from '../../src/model/index.ts';
 
 function fixture(run: (repo: LocalRepository, root: string, write: (path: string, source: string) => void) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-current-owner-'));

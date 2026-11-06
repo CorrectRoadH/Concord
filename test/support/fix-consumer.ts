@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from './temporary.js';
-import { LocalRepository } from "./repository.js";
+import { tmpdir } from './temporary.ts';
+import { LocalRepository } from "./repository.ts";
 
-import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
+import { renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
 
 export const gitCommand = (root: string, ...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_AUTHOR_NAME: 'Concord', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Concord', GIT_COMMITTER_EMAIL: 'test@example.invalid' } }).trim();
 export const gitCommit = (root: string, message: string) => { gitCommand(root, 'add', '.'); gitCommand(root, 'commit', '-qm', message); return gitCommand(root, 'rev-parse', 'HEAD'); };

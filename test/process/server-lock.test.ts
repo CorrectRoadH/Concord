@@ -6,8 +6,8 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { acquireServerLock, scopedServerLock } from '../../src/base/server-lock/index.js';
-import { tmpdir } from '../support/temporary.js';
+import { acquireServerLock, scopedServerLock } from '../../src/base/server-lock/index.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 if (process.env.CONCORD_SERVER_LOCK_CHILD) {
   const handle = await Effect.runPromise(acquireServerLock(process.env.CONCORD_SERVER_LOCK_CHILD));

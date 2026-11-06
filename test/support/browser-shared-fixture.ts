@@ -5,12 +5,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { Effect, Exit, Scope } from 'effect';
-import { installedBrowserBin, startViewServer, ViewServerStartupFailed, type ViewServerHandle, type ViewServerOptions } from '../e2e/server.js';
-import { initialize } from './operations.js';
-import { LocalRepository } from './repository.js';
-import { fetchFresh, parseWorkspaceProjection, pollUntil } from './support.js';
-import { tmpdir } from './temporary.js';
-import { stopWorkspaceServer } from './stop-workspace-server.js';
+import { installedBrowserBin, startViewServer, ViewServerStartupFailed, type ViewServerHandle, type ViewServerOptions } from '../e2e/server.ts';
+import { initialize } from './operations.ts';
+import { LocalRepository } from './repository.ts';
+import { fetchFresh, parseWorkspaceProjection, pollUntil } from './support.ts';
+import { tmpdir } from './temporary.ts';
+import { stopWorkspaceServer } from './stop-workspace-server.ts';
 
 /** Files are recovered from an immutable Git tree; .git and live handles stay owned by the worker. */
 export class FrozenBrowserRepository {
@@ -102,7 +102,11 @@ export class BrowserSharedFixture {
   signal: AbortSignal | undefined;
   private frozenSourceDigest: string | undefined;
 
-  constructor(readonly repository: FrozenBrowserRepository, readonly server: ViewServerHandle) {
+  readonly repository: FrozenBrowserRepository;
+  readonly server: ViewServerHandle;
+  constructor(repository: FrozenBrowserRepository, server: ViewServerHandle) {
+    this.repository = repository;
+    this.server = server;
     this.root = repository.root;
   }
 

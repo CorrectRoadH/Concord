@@ -1,25 +1,25 @@
-import { initialize } from '../support/operations.js';
-import { parseTaste } from "../../src/domain/taste/index.js";
+import { initialize } from '../support/operations.ts';
+import { parseTaste } from "../../src/domain/taste/index.ts";
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { scanCode } from "../../src/domain/code/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { scanCode } from "../../src/domain/code/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
 import { Effect, Schema } from 'effect';
-import { QueryCacheEnvelope, queryRequestSatisfied, replaceQueryEnvelope, type QueryUpdate } from "../../src/app/index.js";
-import { classifyQueryRefresh, classifyQueryScan } from "../../src/app/index.js";
-import { decodeQueryScanMessage } from "../../src/model/index.js";
-import { hydrateQueryValue } from "../../src/app/index.js";
-import { TraceShowValue, stripQueryBodies } from "../../src/model/index.js";
-import { requireValidTrace, type buildTrace } from "../../src/domain/trace/index.js";
-import { siftQueryDrift } from "../../src/app/index.js";
-import { ConcordError, digest, type Finding, type Repository } from "../../src/model/index.js";
-import { renderDocument } from "../../src/model/index.js";
-import { type OwnedProcessResult } from "../../src/base/process/index.js";
+import { QueryCacheEnvelope, queryRequestSatisfied, replaceQueryEnvelope, type QueryUpdate } from "../../src/app/index.ts";
+import { classifyQueryRefresh, classifyQueryScan } from "../../src/app/index.ts";
+import { decodeQueryScanMessage } from "../../src/model/index.ts";
+import { hydrateQueryValue } from "../../src/app/index.ts";
+import { TraceShowValue, stripQueryBodies } from "../../src/model/index.ts";
+import { requireValidTrace, type buildTrace } from "../../src/domain/trace/index.ts";
+import { siftQueryDrift } from "../../src/app/index.ts";
+import { ConcordError, digest, type Finding, type Repository } from "../../src/model/index.ts";
+import { renderDocument } from "../../src/model/index.ts";
+import { type OwnedProcessResult } from "../../src/base/process/index.ts";
 
 const value = { operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } };
 function candidate(at: number, paths: string[] = [], publicationChanged = false): QueryUpdate {

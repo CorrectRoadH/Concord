@@ -2,13 +2,13 @@
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { Command } from "effect/unstable/cli";
 import { Effect } from 'effect';
-import { ServerLauncher } from './launchers.js';
-import { rebuildCache } from '../../app/index.js';
-import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../../app/index.js";
-import { ConcordError } from "../../model/index.js";
-import { scanCode } from "../../app/index.js";
-import { sync, root, viewRoot, emit } from "./cli-base.js";
-import { withRepo, withReadRepo } from "./cli-repository.js";
+import { ServerLauncher } from './launchers.ts';
+import { rebuildCache } from '../../app/index.ts';
+import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../../app/index.ts";
+import { ConcordError } from "../../model/index.ts";
+import { scanCode } from "../../app/index.ts";
+import { sync, root, viewRoot, emit } from "./cli-base.ts";
+import { withRepo, withReadRepo } from "./cli-repository.ts";
 
 const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear, or rebuild disposable HawDB projections.'),Command.withSubcommands([
   Command.make('status',{},()=>Effect.gen(function*() {

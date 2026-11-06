@@ -1,6 +1,6 @@
-import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
-import { pollUntil } from '../support/support.js';
-import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.js';
+import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
+import { pollUntil } from '../support/support.ts';
+import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.ts';
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 // @name editor-disk-and-policy
 test('packed editor C9/C17 rereads disk configuration, policy, deletion and rename without moving overlays', { timeout: 90000 }, () => run(async (c, root) => {

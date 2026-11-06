@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
-import { startupData } from "../../app/startup/index.js";
+import { startupData } from "../../app/startup/index.ts";
 import { enableCompileCache } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { StartupData } from "../../model/index.js";
+import type { StartupData } from "../../model/index.ts";
 
 // Enable before any dynamic application import. Node treats disabled or
 // unwritable caches as an optimization failure, without changing CLI results.
@@ -29,7 +29,7 @@ function selectedGroup(data: StartupData): string | undefined {
 
 try {
   if (args.includes('--skill')) {
-    await import("./entry-full.js");
+    await import("./entry-full.ts");
   } else {
     const data = await startupData();
     // Effect's pinned formatter uses no colors for non-TTY output. Restrict the
@@ -48,11 +48,11 @@ try {
       let run: (() => void) | undefined;
       if (group !== undefined && data !== undefined) {
         try {
-          run = await (await import("./cli.js")).loadCommand(group, data);
+          run = await (await import("./cli.ts")).loadCommand(group, data);
         }
         catch { /* Missing or mismatched command code uses the complete bundle. */ }
       }
-      if (run === undefined) await import("./entry-full.js");
+      if (run === undefined) await import("./entry-full.ts");
       else run();
     }
   }

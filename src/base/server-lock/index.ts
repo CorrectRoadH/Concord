@@ -5,9 +5,9 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
-import { HAWDB_ABI, HAWDB_REVISION, decodeNativeArtifact, hawdbTarget, nativeArtifactRoot, sourceInstallation, verifySourceNativeArtifact } from '../installation/index.js';
-import type { NativeServerLock, ServerLockBinding } from './native.js';
-export { acquireServerRuntime, readServerRecord, serverInstallation, serverSourceDigest, serverCwd, ServerRecord, ServerRuntime } from './runtime.js';
+import { HAWDB_ABI, HAWDB_REVISION, decodeNativeArtifact, hawdbTarget, nativeArtifactRoot, sourceInstallation, verifySourceNativeArtifact } from '../installation/index.ts';
+import type { NativeServerLock, ServerLockBinding } from './native.ts';
+export { acquireServerRuntime, readServerRecord, serverInstallation, serverSourceDigest, serverCwd, ServerRecord, ServerRuntime } from './runtime.ts';
 
 const Reason = Schema.Literals(['permission', 'io', 'type', 'identity', 'closed', 'native']);
 export class ServerLockUnavailable extends Schema.TaggedError<ServerLockUnavailable>()('ServerLockUnavailable', {

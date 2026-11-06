@@ -1,13 +1,13 @@
-import { runApplication } from '../support/repository.js';
+import { runApplication } from '../support/repository.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { closeGitBaselineCache, getGitDiff, getGitStatus, type GitBaselineCache } from "../../src/app/index.js";
-import { caseDiscriminator, deriveTestReference } from "../../src/model/index.js";
+import { closeGitBaselineCache, getGitDiff, getGitStatus, type GitBaselineCache } from "../../src/app/index.ts";
+import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts";
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('Git panel distinguishes staged changes, later edits, odd filenames, binary and symlinks', async () => {

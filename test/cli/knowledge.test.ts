@@ -4,12 +4,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { parseDocumentRecord } from '../../src/domain/documents/index.js';
-import { renderDocument } from '../../src/model/index.js';
-import { LocalRepository } from '../support/repository.js';
-import { createConsumer } from '../support/consumer.js';
-import { createDocument } from '../support/operations.js';
-import { installedConcordCli } from '../support/support.js';
+import { parseDocumentRecord } from '../../src/domain/documents/index.ts';
+import { renderDocument } from '../../src/model/index.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { createDocument } from '../support/operations.ts';
+import { installedConcordCli } from '../support/support.ts';
 
 const cli = installedConcordCli();
 const Result = Schema.Struct({ operation: Schema.optional(Schema.String), error: Schema.optional(Schema.String), documents: Schema.optional(Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String, body: Schema.optional(Schema.String), provider: Schema.optional(Schema.String) }))) });

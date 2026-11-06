@@ -3,7 +3,7 @@
 import { Effect, Scope } from 'effect';
 import { RpcServer } from 'effect/unstable/rpc';
 import { Socket, SocketServer } from 'effect/unstable/socket';
-import { makeRequestAdmission, type RequestAdmission } from './request-admission.js';
+import { makeRequestAdmission, type RequestAdmission } from './request-admission.ts';
 
 /** Connection and request admission surrounds the actual Effect RPC protocol. */
 export const makeAdmittedProtocol = Effect.fn('makeAdmittedProtocol')(function*(server: SocketServer.SocketServer['Service'], connected: Effect.Effect<unknown, never, Scope.Scope>, disconnected: (client: number) => void, admission: RequestAdmission = makeRequestAdmission()) {

@@ -4,14 +4,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import project from '../../concord.config.js';
-import { checkProject } from '../../src/app/index.js';
-import { scanCode } from '../../src/domain/code/index.js';
-import { scanAnnotations } from '../../src/domain/tests/index.js';
-import { LocalRepository } from '../support/repository.js';
-import { initialize } from '../support/operations.js';
-import { writeProjectConfig } from '../support/support.js';
-import { tmpdir } from '../support/temporary.js';
+import project from '../../concord.config.ts';
+import { checkProject } from '../../src/app/index.ts';
+import { scanCode } from '../../src/domain/code/index.ts';
+import { scanAnnotations } from '../../src/domain/tests/index.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { initialize } from '../support/operations.ts';
+import { writeProjectConfig } from '../support/support.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('published mod files stay outside Concord source, tests and document checks', () => Effect.runPromise(Effect.sync(() => {

@@ -1,12 +1,15 @@
-import type { GitDiff, GitStatus, ViewAction, ViewFailure, ViewFile, ViewJob, ViewResponse, WorkspaceProjection } from '../../src/model/index.js';
+import type { GitDiff, GitStatus, ViewAction, ViewFailure, ViewFile, ViewJob, ViewResponse, WorkspaceProjection } from '../../src/model/index.ts';
 
 export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly details?: unknown;
   constructor(
-    readonly status: number,
-    readonly code: string,
+    status: number,
+    code: string,
     message: string,
-    readonly details?: unknown,
-  ) { super(message); }
+    details?: unknown,
+  ) { super(message); this.status = status; this.code = code; this.details = details; }
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

@@ -1,22 +1,22 @@
-import { projectConceptCatalogs } from '../model/index.js';
-import { WorkspaceProjectionEnvelope as Envelope } from "../model/index.js";
+import { projectConceptCatalogs } from '../model/index.ts';
+import { WorkspaceProjectionEnvelope as Envelope } from "../model/index.ts";
 import { join } from "node:path";
 
-import { Workspace } from "../base/workspace/index.js";
-import { Sources } from '../base/sources/index.js';
+import { Workspace } from "../base/workspace/index.ts";
+import { Sources } from '../base/sources/index.ts';
 import { Effect } from "effect";
-import { genericPrivateDirectorySync } from "../base/publication/index.js";
-import { ownerIsAlive, readLeaseOwner, PUBLICATION_LEASE } from "../base/publication/index.js";
-import { HawdbFailure, hawdbIdentity, PersistentCache } from "../base/cache/index.js";
-import { workspaceInstallationIdentity } from "../base/installation/index.js";
-import { requestCacheMaintenance } from "../base/cache/index.js";
-import { ConcordError, digest, failure } from "../model/index.js";
+import { genericPrivateDirectorySync } from "../base/publication/index.ts";
+import { ownerIsAlive, readLeaseOwner, PUBLICATION_LEASE } from "../base/publication/index.ts";
+import { HawdbFailure, hawdbIdentity, PersistentCache } from "../base/cache/index.ts";
+import { workspaceInstallationIdentity } from "../base/installation/index.ts";
+import { requestCacheMaintenance } from "../base/cache/index.ts";
+import { ConcordError, digest, failure } from "../model/index.ts";
 
 
-import type { WorkspaceProjection, WorkspaceSnapshot } from "../model/index.js";
+import type { WorkspaceProjection, WorkspaceSnapshot } from "../model/index.ts";
 
 const key = 'workspace';
-import { type WorkspaceProjectionCandidate, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord, decodeWorkspaceProjectionCandidate } from "../model/index.js";
+import { type WorkspaceProjectionCandidate, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord, decodeWorkspaceProjectionCandidate } from "../model/index.ts";
 
 export const assertWorkspacePublicationReady = Effect.fn('workspaceProjection.publicationReady')(function*(context: WorkspaceProjectionContext) {
   const pending = yield* (yield* Sources).pendingPublications(context.privateDir);

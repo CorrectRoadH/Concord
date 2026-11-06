@@ -1,9 +1,9 @@
-import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.js";
-import { renderTypeScriptConfig } from "../base/workspace/index.js";
-import { documentRoots, inspectDocumentRecords, parseDocumentRecord } from "../domain/documents/index.js";
-import type { LocalRepository } from "../base/workspace/index.js";
-import { documentDisposition } from "../model/index.js";
-import type { ViewFile } from "../model/index.js";
+import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.ts";
+import { renderTypeScriptConfig } from "../base/workspace/index.ts";
+import { documentRoots, inspectDocumentRecords, parseDocumentRecord } from "../domain/documents/index.ts";
+import type { LocalRepository } from "../base/workspace/index.ts";
+import { documentDisposition } from "../model/index.ts";
+import type { ViewFile } from "../model/index.ts";
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
 const sourceForbidden = (path: string): boolean => path.split('/').some(part => part === '.git' || part === 'node_modules');

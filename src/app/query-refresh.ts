@@ -1,13 +1,13 @@
 import { join } from "node:path";
 import { Effect, Result } from "effect";
-import { acquireFileLease, CoordinationError, recoverFileLease, releaseFileLease } from "../base/publication/index.js";
-import { Query, queryContext, queryRequestSatisfied, readQuery, type QueryUpdate } from "./query-cache.js";
-import { makeOwnedProcessService, hasConfirmedOwnedGroupCleanup, type OwnedProcessResult } from "../base/process/index.js";
-import { decodeQueryScanMessage, type QueryScanMessage } from "../model/index.js";
-import { failure } from "../model/index.js";
-import { workerEntryArgv } from "../base/installation/index.js";
-import { requestNewIdentity } from "./query-refresh-store.js";
-import { persist } from "./query-refresh-store.js";
+import { acquireFileLease, CoordinationError, recoverFileLease, releaseFileLease } from "../base/publication/index.ts";
+import { Query, queryContext, queryRequestSatisfied, readQuery, type QueryUpdate } from "./query-cache.ts";
+import { makeOwnedProcessService, hasConfirmedOwnedGroupCleanup, type OwnedProcessResult } from "../base/process/index.ts";
+import { decodeQueryScanMessage, type QueryScanMessage } from "../model/index.ts";
+import { failure } from "../model/index.ts";
+import { workerEntryArgv } from "../base/installation/index.ts";
+import { requestNewIdentity } from "./query-refresh-store.ts";
+import { persist } from "./query-refresh-store.ts";
 
 
 // @concord-code

@@ -1,14 +1,14 @@
 import { posix } from "node:path";
 import type { Heading, Nodes, Paragraph, PhrasingContent } from "mdast";
 import { Predicate } from "effect";
-import { ConcordError, digest, type Finding, type Repository } from "../../model/index.js";
+import { ConcordError, digest, type Finding, type Repository } from "../../model/index.ts";
 
-import { fromMarkdown } from "../../model/index.js";
-import { mdxProse } from "../../base/process/index.js";
-import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/index.js";
-import { markdownBody } from "../../model/index.js";
-import { documentMarkdown, documentMarkdownProjection } from "../documents/index.js";
-import { inspectDocumentRecords } from "../documents/index.js";
+import { fromMarkdown } from "../../model/index.ts";
+import { mdxProse } from "../../base/process/index.ts";
+import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/index.ts";
+import { markdownBody } from "../../model/index.ts";
+import { documentMarkdown, documentMarkdownProjection } from "../documents/index.ts";
+import { inspectDocumentRecords } from "../documents/index.ts";
 
 
 

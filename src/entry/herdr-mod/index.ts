@@ -1,2 +1,2 @@
-export { ModSession, ModFailure, fixedPages, markdownTarget } from './session.js';
-export type { ModHost, ModPage, ModDetail, ModCheck, ModConcept } from './session.js';
+export { ModSession, ModFailure, fixedPages, markdownTarget } from './session.ts';
+export type { ModHost, ModPage, ModDetail, ModCheck, ModConcept } from './session.ts';

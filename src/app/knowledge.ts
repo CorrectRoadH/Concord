@@ -1,7 +1,7 @@
-import { closeIssue } from '../domain/issues/index.js';
-import { findDocument, loadDocuments, readDocumentSelector, setAuthor } from "../domain/documents/index.js";
-import { buildTrace, requireValidTrace } from "../domain/trace/index.js";
-import { ConcordError, digest, inRepositorySnapshot, type DocumentKind, type DocumentRecord, type MutationReceipt, type Repository } from "../model/index.js";
+import { closeIssue } from '../domain/issues/index.ts';
+import { findDocument, loadDocuments, readDocumentSelector, setAuthor } from "../domain/documents/index.ts";
+import { buildTrace, requireValidTrace } from "../domain/trace/index.ts";
+import { ConcordError, digest, inRepositorySnapshot, type DocumentKind, type DocumentRecord, type MutationReceipt, type Repository } from "../model/index.ts";
 
 
 type KnowledgeKind = Extract<DocumentKind, 'memory' | 'issue'>;
@@ -84,7 +84,7 @@ export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: s
 
 // @concord-code
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
-export function removeIssue(repo: import('../base/workspace/index.js').LocalRepository, selector: string, expectedDigest: string, dryRun = false): MutationReceipt {
+export function removeIssue(repo: import('../base/workspace/index.ts').LocalRepository, selector: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const trace = buildTrace(repo, 'off', { includeCode: false });
     requireValidTrace(trace);

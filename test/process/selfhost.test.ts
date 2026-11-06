@@ -1,13 +1,13 @@
-import { installedConcordCli } from '../support/support.js';
+import { installedConcordCli } from '../support/support.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { readWritingPolicy } from "../../src/domain/writing/index.js";
-import { projectConfigPath, readProjectConfig } from '../support/support.js';
+import { readWritingPolicy } from "../../src/domain/writing/index.ts";
+import { projectConfigPath, readProjectConfig } from '../support/support.ts';
 
 const PackageVersion = Schema.Struct({ version: Schema.String });
 const CheckOutput = Schema.Struct({ ok: Schema.Boolean });

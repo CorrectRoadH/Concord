@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from '@playwright/test';
-import { createDocument } from '../support/operations.js';
-import { LocalRepository } from '../support/repository.js';
-import { test } from './fixtures.js';
-import { type ViewServerHandle } from './server.js';
+import { createDocument } from '../support/operations.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { test } from './fixtures.ts';
+import { type ViewServerHandle } from './server.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('Feature and Engineering kind directories open README and retain deep leaf navigation', async ({ page, workspace }) => {

@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import { Effect } from 'effect';
-import { Workspace } from '../base/workspace/index.js';
-import { Sources } from '../base/sources/index.js';
-import { ConcordError, digest, failure, type WorkspaceRead } from '../model/index.js';
-import { inspectDocumentFile, isSourcePath } from './editing.js';
+import { Workspace } from '../base/workspace/index.ts';
+import { Sources } from '../base/sources/index.ts';
+import { ConcordError, digest, failure, type WorkspaceRead } from '../model/index.ts';
+import { inspectDocumentFile, isSourcePath } from './editing.ts';
 
 export const getWorkspaceRead = Effect.fn('getWorkspaceRead')(function*(root: string, path: string) {
   return yield* Effect.scoped(Effect.gen(function*() {

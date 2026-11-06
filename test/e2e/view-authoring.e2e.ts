@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { type ViewServerHandle } from './server.js';
+import { type ViewServerHandle } from './server.ts';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { waitForWorkspaceProjection } from '../support/support.js';
-import { prepareAuthoringFixture } from './authoring-fixture.js';
+import { waitForWorkspaceProjection } from '../support/support.ts';
+import { prepareAuthoringFixture } from './authoring-fixture.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser creates a Feature, edits Markdown, preserves conflicts and opens Git changes', async ({ page, workspace }) => {

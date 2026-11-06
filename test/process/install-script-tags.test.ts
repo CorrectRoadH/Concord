@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { withInstaller } from '../support/install-script-fixture.js';
+import { withInstaller } from '../support/install-script-fixture.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md
 test('latest and explicit versions install releases using the supported concord-v tag prefix', { timeout: 55_000 }, () => withInstaller(f => {

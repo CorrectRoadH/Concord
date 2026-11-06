@@ -5,7 +5,7 @@ import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { parse, stringify } from 'yaml';
-import { HAWDB_MACOS_DEPLOYMENT_TARGET } from "../../src/base/installation/index.js";
+import { HAWDB_MACOS_DEPLOYMENT_TARGET } from "../../src/base/installation/index.ts";
 
 const Workflow = Schema.Struct({
   on: Schema.Record(Schema.String, Schema.Unknown),

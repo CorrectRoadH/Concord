@@ -4,10 +4,10 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { manageHerdrMod, type HerdrInstallHost } from '../../src/base/installation/herdr-mod.js';
-import { ConcordError } from '../../src/model/index.js';
-import { modManifest } from '../../src/model/herdr-mod/index.js';
-import { tmpdir } from '../support/temporary.js';
+import { manageHerdrMod, type HerdrInstallHost } from '../../src/base/installation/herdr-mod.ts';
+import { ConcordError } from '../../src/model/index.ts';
+import { modManifest } from '../../src/model/herdr-mod/index.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 const unavailable: HerdrInstallHost = { available: Effect.succeed(false), check: () => Effect.die('unavailable host must not be checked') };
 const run = (operation: 'install' | 'uninstall', home: string, resources: string, host = unavailable, dryRun = false, sourceRoot?: string) =>

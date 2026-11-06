@@ -1,23 +1,23 @@
-import { createDocument, initialize } from '../support/operations.js';
+import { createDocument, initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test, { after } from 'node:test';
 import { Effect } from 'effect';
 import { parse } from 'yaml';
-import { decodeDocumentSource } from "../../src/domain/documents/index.js";
-import { renderDocument } from "../../src/model/index.js";
-import { checkDocuments, findDocument, loadDocuments } from "../../src/domain/documents/index.js";
-import { adoptRoadmap } from "../../src/app/index.js";
+import { decodeDocumentSource } from "../../src/domain/documents/index.ts";
+import { renderDocument } from "../../src/model/index.ts";
+import { checkDocuments, findDocument, loadDocuments } from "../../src/domain/documents/index.ts";
+import { adoptRoadmap } from "../../src/app/index.ts";
 
-import { linkIssue, unlinkIssue } from "../../src/domain/issues/index.js";
-import { linkMemory } from "../../src/app/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { linkIssue, unlinkIssue } from "../../src/domain/issues/index.ts";
+import { linkMemory } from "../../src/app/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { type DocumentMeta } from "../../src/model/index.js";
-import { withConsumer as consumer } from '../support/consumer.js';
+import { type DocumentMeta } from "../../src/model/index.ts";
+import { withConsumer as consumer } from '../support/consumer.ts';
 
 const base = { format: 'concord.document/v1' as const, id: 'sample', title: '样例' };
 const issue = { ...base, kind: 'issue' as const, relations: [] };

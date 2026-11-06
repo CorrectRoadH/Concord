@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
-import { parseWritingPolicy } from '../../src/model/index.js';
+import { parseWritingPolicy } from '../../src/model/index.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
-import { test } from './fixtures.js';
-import { type ViewServerHandle } from './server.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
-import { waitForWritingSave } from '../support/writing-save.js';
+import { test } from './fixtures.ts';
+import { type ViewServerHandle } from './server.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
+import { waitForWritingSave } from '../support/writing-save.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('writing save wait keeps reload behind the successful HTTP receipt', ({ page, workspace }) => Effect.runPromise(Effect.tryPromise(async () => {

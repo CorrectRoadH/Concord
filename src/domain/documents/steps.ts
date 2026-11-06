@@ -1,7 +1,7 @@
-import { documentMarkdown, documentMarkdownProjection, projectionRecord } from "./document-projection.js";
-import { inspectTreeSteps } from "../../model/index.js";
-import { ConcordError, type Finding } from "../../model/index.js";
-import type { UseCaseStep, RootOrderedList, StepMarkerRange } from "../../model/index.js";
+import { documentMarkdown, documentMarkdownProjection, projectionRecord } from "./document-projection.ts";
+import { inspectTreeSteps } from "../../model/index.ts";
+import { ConcordError, type Finding } from "../../model/index.ts";
+import type { UseCaseStep, RootOrderedList, StepMarkerRange } from "../../model/index.ts";
 export function headingAnchors(source: string, path = 'document.md'): ReadonlySet<string> {
   return new Set(documentMarkdownProjection(path, source).anchors);
 }

@@ -1,9 +1,9 @@
-import { selectEffectiveConcepts, splitConceptReference } from '../../model/index.js';
-import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.js";
-import { fromMarkdown } from "../../model/index.js";
-import { documentMarkdown } from "../documents/index.js";
-import { parseConceptCatalog, conceptSpellingKey, type ConceptCatalog, type ConceptDefinition } from "../../model/index.js";
-import { discovered, globalCatalogPath, scopeOf, under } from "../../model/index.js";
+import { selectEffectiveConcepts, splitConceptReference } from '../../model/index.ts';
+import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.ts";
+import { fromMarkdown } from "../../model/index.ts";
+import { documentMarkdown } from "../documents/index.ts";
+import { parseConceptCatalog, conceptSpellingKey, type ConceptCatalog, type ConceptDefinition } from "../../model/index.ts";
+import { discovered, globalCatalogPath, scopeOf, under } from "../../model/index.ts";
 
 
 // @concord-begin

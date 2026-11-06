@@ -2,14 +2,14 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#创建与编辑文档
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { loadDocuments, readDocumentReference, findDocument } from "../../app/index.js";
-import { adoptRoadmap } from "../../app/index.js";
-import { createDocument } from "../../app/index.js";
-import { documentShow } from "../../app/index.js";
-import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../app/index.js";
-import { ConcordError, type DocumentKind } from "../../model/index.js";
-import { text, optional, many, id, body, sync, cached } from "./cli-base.js";
-import { withRepo, withReadRepo, withQuery } from "./cli-repository.js";
+import { loadDocuments, readDocumentReference, findDocument } from "../../app/index.ts";
+import { adoptRoadmap } from "../../app/index.ts";
+import { createDocument } from "../../app/index.ts";
+import { documentShow } from "../../app/index.ts";
+import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../app/index.ts";
+import { ConcordError, type DocumentKind } from "../../model/index.ts";
+import { text, optional, many, id, body, sync, cached } from "./cli-base.ts";
+import { withRepo, withReadRepo, withQuery } from "./cli-repository.ts";
 
 const kinds = ['feature', 'use-case', 'design', 'roadmap', 'engineering', 'issue', 'memory'] as const;
 const category = Argument.choice('category', kinds);

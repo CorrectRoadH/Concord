@@ -1,15 +1,15 @@
-import { initialize } from '../support/operations.js';
+import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.js";
-import { openHawdb, PersistentCache } from "../../src/base/cache/index.js";
+import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.ts";
+import { openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
 
 function consumer() {
   const root = mkdtempSync(join(tmpdir(), 'concord-annotations-'));

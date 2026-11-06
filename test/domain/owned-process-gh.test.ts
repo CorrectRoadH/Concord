@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { makeOwnedProcessService } from "../../src/base/process/index.js";
+import { makeOwnedProcessService } from "../../src/base/process/index.ts";
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('owned process counts raw bytes and decodes UTF-8 across chunks', { skip: process.platform === 'win32' }, async () => {

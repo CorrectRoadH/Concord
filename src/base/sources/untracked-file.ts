@@ -1,7 +1,7 @@
 import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { Effect } from 'effect';
-import { ConcordError } from '../../model/index.js';
+import { ConcordError } from '../../model/index.ts';
 
 export type UntrackedFile = { readonly kind: 'symlink' } | { readonly kind: 'other' } | { readonly kind: 'over-limit' }
   | { readonly kind: 'file'; readonly bytes: Buffer; readonly mode: number };

@@ -17,7 +17,12 @@ export class RequestTiming {
   private readonly phases = new Map<string, Phase>();
   readonly observations = new Set<Observation>();
   readonly caches: Partial<Record<'annotations' | 'code', CacheObservation>> = {};
-  constructor(readonly started: number, private readonly now: () => number = performance.now.bind(performance)) {}
+  readonly started: number;
+  private readonly now: () => number;
+  constructor(started: number, now: () => number = performance.now.bind(performance)) {
+    this.started = started;
+    this.now = now;
+  }
   sync<A>(name: string, operation: () => A): A {
     const started = this.now();
     try { return operation(); } finally { this.record(name, this.now() - started); }

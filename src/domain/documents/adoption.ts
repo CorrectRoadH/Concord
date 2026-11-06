@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#adopt
 import { posix } from "node:path";
-import { ConcordError } from "../../model/index.js";
+import { ConcordError } from "../../model/index.ts";
 
 /** A deliberately bounded Markdown link transform, never a best-effort rewrite. */
 export function rebaseAdoptedMarkdown(source: string, sourcePath: string, destinationPath: string, sourceDirectory: string, targetDirectory?: string): string {

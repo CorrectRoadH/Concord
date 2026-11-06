@@ -3,8 +3,8 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ViewRequestLog } from "../../src/entry/http/index.js";
-import { fetchFresh } from '../support/support.js';
+import { ViewRequestLog } from "../../src/entry/http/index.ts";
+import { fetchFresh } from '../support/support.ts';
 
 const Record = Schema.Struct({
   method: Schema.String, route: Schema.String, status: Schema.Number, completed: Schema.Boolean,

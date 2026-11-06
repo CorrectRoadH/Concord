@@ -5,20 +5,20 @@ import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Context, Deferred, Effect, Fiber, Layer, Option } from 'effect';
 import { ChildProcessSpawner } from 'effect/unstable/process';
-import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService } from '../../src/base/process/index.js';
+import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService } from '../../src/base/process/index.ts';
 import { TestClock } from 'effect/testing';
-import { Workspace } from '../../src/base/workspace/index.js';
-import { renderTypeScriptConfig } from '../../src/base/workspace/index.js';
-import { Sources } from '../../src/base/sources/index.js';
-import { createConsumer } from '../support/consumer.js';
-import { Cache, CacheSnapshot, HawdbFailure, cacheDatabasePath, openHawdb } from '../../src/base/cache/index.js';
-import { waitForPublication, acquireTraceLeaseSync, releaseTraceLeaseSync, Publication } from '../../src/base/publication/index.js';
-import { publicationLayer } from '../support/repository.js';
-import { cliLayer } from '../../src/entry/cli/index.js';
-import { readerLayer, writerLayer, refreshLayer } from '../../src/entry/server/main.js';
-import { operationLayer } from '../../src/entry/server/operation/main.js';
-import { PersistentCache } from '../../src/base/cache/index.js';
-import { Git } from '../../src/base/git/index.js';
+import { Workspace } from '../../src/base/workspace/index.ts';
+import { renderTypeScriptConfig } from '../../src/base/workspace/index.ts';
+import { Sources } from '../../src/base/sources/index.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { Cache, CacheSnapshot, HawdbFailure, cacheDatabasePath, openHawdb } from '../../src/base/cache/index.ts';
+import { waitForPublication, acquireTraceLeaseSync, releaseTraceLeaseSync, Publication } from '../../src/base/publication/index.ts';
+import { publicationLayer } from '../support/repository.ts';
+import { cliLayer } from '../../src/entry/cli/index.ts';
+import { readerLayer, writerLayer, refreshLayer } from '../../src/entry/server/main.ts';
+import { operationLayer } from '../../src/entry/server/operation/main.ts';
+import { PersistentCache } from '../../src/base/cache/index.ts';
+import { Git } from '../../src/base/git/index.ts';
 
 // @feature docs/feature/local-sdlc/README.md
 test('OwnedProcess preserves cancellation received while the platform is acquiring a real child', async () => {
@@ -116,7 +116,7 @@ test('entry layers build the declared reader and operation capabilities', async 
 test('PersistentCache reuses nested source ownership and releases the native handle at the outer boundary', async () => {
   const root = createConsumer();
   const live = Layer.mergeAll(Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provide(NodeServices.layer));
-  let captured: import('../../src/base/workspace/index.js').LocalRepository | undefined;
+  let captured: import('../../src/base/workspace/index.ts').LocalRepository | undefined;
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const workspace = yield* Workspace, sources = yield* Sources;
@@ -161,7 +161,7 @@ test('memory Cache owns its handle and read-only snapshots retain detached immut
   const rows = [{ key: 'a', payload: 'before' }];
   const live = Layer.merge(Cache.layer, CacheSnapshot.layer({ document_parse: rows }));
   rows[0]!.payload = 'after';
-  let closed: import('../../src/base/cache/index.js').HawdbDatabase | undefined;
+  let closed: import('../../src/base/cache/index.ts').HawdbDatabase | undefined;
   await Effect.runPromise(Effect.gen(function*() {
     const cache = yield* Cache;
     const snapshot = yield* CacheSnapshot;

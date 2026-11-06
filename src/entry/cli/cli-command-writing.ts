@@ -1,12 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/manage-writing.md
-import { checkWriting } from "../../app/index.js";
-import { showWriting, writingIndex } from "../../app/index.js";
-import { readWritingPolicy } from "../../app/index.js";
+import { checkWriting } from "../../app/index.ts";
+import { showWriting, writingIndex } from "../../app/index.ts";
+import { readWritingPolicy } from "../../app/index.ts";
 import { Option } from "effect";
 import { Command } from "effect/unstable/cli";
-import { text, optional, body, sync, expected } from "./cli-base.js";
-import { withRepo, withQuery } from "./cli-repository.js";
+import { text, optional, body, sync, expected } from "./cli-base.ts";
+import { withRepo, withQuery } from "./cli-repository.ts";
 
 const writing = Command.make('writing').pipe(Command.withDescription('Discover and manage directory-owned writing policies.'), Command.withSubcommands([
   Command.make('index', {}, () => withQuery({ name: 'writing.index', input: {} })),

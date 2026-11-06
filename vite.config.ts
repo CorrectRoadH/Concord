@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { unplugin as stylex } from '@stylexjs/unplugin';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { externalBuildOutput } from './scripts/build-output.js';
+import { externalBuildOutput } from './scripts/build-output.ts';
 import { Effect } from 'effect';
 import { NodeServices } from '@effect/platform-node';
 
@@ -16,8 +16,8 @@ const distribution = (output: string): Plugin => ({
     config.build.outDir = resolve(output, 'dist/web');
     if (config.environments.client) config.environments.client.build.outDir = resolve(output, 'dist/web');
   },
-  async buildStart() { await (await import('./scripts/distribution.js')).prepareDistribution(output); },
-  async writeBundle() { await (await import('./scripts/distribution.js')).finishDistribution(output); },
+  async buildStart() { await (await import('./scripts/distribution.ts')).prepareDistribution(output); },
+  async writeBundle() { await (await import('./scripts/distribution.ts')).finishDistribution(output); },
 });
 
 export default defineConfig(async ({ command }) => {

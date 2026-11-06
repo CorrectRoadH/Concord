@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#状态
 import { Clock, Context, Effect, Layer, Schedule, Stream, SubscriptionRef } from 'effect';
-import { ConcordError } from '../../model/index.js';
-import type { WorkspaceProjection } from '../../model/index.js';
-import type { ServerState } from './protocol.js';
+import { ConcordError } from '../../model/index.ts';
+import type { WorkspaceProjection } from '../../model/index.ts';
+import type { ServerState } from './protocol.ts';
 const transitions: Readonly<Record<ServerState, readonly ServerState[]>> = {
   opening: ['opening', 'running', 'degraded', 'draining', 'blocked', 'stopping'],
   running: ['running', 'degraded', 'draining', 'blocked', 'stopping'],
@@ -51,7 +51,7 @@ export class WorkspaceState extends Context.Service<WorkspaceState, {
 export const serviceHeartbeat = Schedule.spaced('5 seconds');
 export const compensationRefresh = Schedule.spaced('30 seconds');
 
-export { waitForServerHandshake } from './client.js';
+export { waitForServerHandshake } from './client.ts';
 
 /** State changes always flow; each subscription retains its own last result identity. */
 export function workspaceEvents(events: import('effect').Stream.Stream<WorkspaceEvent>): Stream.Stream<WorkspaceEvent> {

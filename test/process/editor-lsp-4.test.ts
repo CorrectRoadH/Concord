@@ -1,5 +1,5 @@
-import { pollUntil } from '../support/support.js';
-import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.js';
+import { pollUntil } from '../support/support.ts';
+import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.ts';
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 // @name editor-read-only-and-eof
 test('packed editor C17/C18 rejects unsafe input and edits, never launches configured commands, and cleans up EOF', { timeout: 90000 }, () => run(async (c, root) => {

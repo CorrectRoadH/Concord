@@ -3,12 +3,12 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { tmpdir } from '../support/temporary.js';
-import { LocalRepository } from '../support/repository.js';
-import { initialize } from '../support/operations.js';
-import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
-import { checkWriting } from '../../src/domain/writing/index.js';
-import { readConceptCatalog } from '../../src/domain/concepts/index.js';
+import { tmpdir } from '../support/temporary.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { initialize } from '../support/operations.ts';
+import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
+import { checkWriting } from '../../src/domain/writing/index.ts';
+import { readConceptCatalog } from '../../src/domain/concepts/index.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('Markdown rules round-trip escaped cells, limits, roots and longer exceptions and reject malformed sections', () => {

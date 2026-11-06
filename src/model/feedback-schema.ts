@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/architecture.md
 import { Schema } from "effect";
-import type { DocumentMeta, DocumentRecord } from "./shared.js";
+import type { DocumentMeta, DocumentRecord } from "./shared.ts";
 
 const BoundedBody = Schema.String.check(
   Schema.isMaxLength(1024 * 1024),

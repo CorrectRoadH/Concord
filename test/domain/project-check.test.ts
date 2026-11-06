@@ -1,21 +1,21 @@
-import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
-import { initialize } from '../support/operations.js';
-import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.js';
-import { executeQuery } from '../../src/app/index.js';
-import { runApplication } from '../support/repository.js';
+import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
+import { initialize } from '../support/operations.ts';
+import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.ts';
+import { executeQuery } from '../../src/app/index.ts';
+import { runApplication } from '../support/repository.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test, { mock } from 'node:test';
 import { Effect } from 'effect';
-import { executeViewAction } from "../../src/app/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { executeViewAction } from "../../src/app/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { checkProject } from "../../src/app/index.js";
-import { checkCurrentProject } from "../../src/app/index.js";
-import { ConcordError } from "../../src/model/index.js";
+import { checkProject } from "../../src/app/index.ts";
+import { checkCurrentProject } from "../../src/app/index.ts";
+import { ConcordError } from "../../src/model/index.ts";
 
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md

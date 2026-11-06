@@ -1,14 +1,14 @@
-import { refreshQuery } from "../../app/index.js";
+import { refreshQuery } from "../../app/index.ts";
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { NodeRuntime } from "@effect/platform-node";
-import { runRefreshMain } from './main.js';
+import { runRefreshMain } from './main.ts';
 import { Effect, Schema } from "effect";
 
 
-import { Query } from "../../app/index.js";
+import { Query } from "../../app/index.ts";
 
 
 

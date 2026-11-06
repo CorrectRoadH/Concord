@@ -2,10 +2,10 @@
 // @concord-implements docs/feature/local-sdlc/architecture.md#修复核验
 import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
-import { snapshot } from "../workspace/index.js";
-import { git } from "../workspace/index.js";
-import { canonicalPath } from "../../model/index.js";
-import { ConcordError, digest, objectDigest, type Repository, type ConfigSnapshot } from "../../model/index.js";
+import { snapshot } from "../workspace/index.ts";
+import { git } from "../workspace/index.ts";
+import { canonicalPath } from "../../model/index.ts";
+import { ConcordError, digest, objectDigest, type Repository, type ConfigSnapshot } from "../../model/index.ts";
 
 export function resolveCommit(root: string, revision: string, code = 'FixUnverifiable'): string {
   try { return git(root, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`]); }
@@ -42,7 +42,7 @@ export function commitRepository(repo: Repository, commit: string): Repository {
 }
 
 import { execFileSync } from "node:child_process";
-import { safeRunnerEnvironment } from "../process/index.js";
+import { safeRunnerEnvironment } from "../process/index.ts";
 export function gitBlobBytes(root: string, commit: string, path: string): Buffer {
   canonicalPath(path);
   try { return execFileSync('git', ['-C', root, 'show', `${commit}:${path}`], { env: safeRunnerEnvironment(), stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024, timeout: 10000 }); }

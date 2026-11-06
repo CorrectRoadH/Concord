@@ -1,10 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { setMarkdown } from '../../src/app/index.js';
-import { digest } from '../../src/model/index.js';
-import { LocalRepository } from '../support/repository.js';
-import { addPage, createDocument } from '../support/operations.js';
-import { writeProjectConfig } from '../support/support.js';
+import { setMarkdown } from '../../src/app/index.ts';
+import { digest } from '../../src/model/index.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { addPage, createDocument } from '../support/operations.ts';
+import { writeProjectConfig } from '../support/support.ts';
 
 /** Add the authoring scenario to the worker's restored consumer. */
 export function prepareAuthoringFixture(root: string): void {

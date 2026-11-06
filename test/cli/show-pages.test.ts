@@ -3,8 +3,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { installedConcordCli } from '../support/support.js';
-import { tmpdir } from '../support/temporary.js';
+import { installedConcordCli } from '../support/support.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/feature/local-sdlc/README.md
 test('show enumerates sorted package pages and their current headings before relationships', () => {

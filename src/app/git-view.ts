@@ -1,13 +1,13 @@
-import type { GitEntry, GitStatus, GitArea, GitDiff } from "../model/index.js";
+import type { GitEntry, GitStatus, GitArea, GitDiff } from "../model/index.ts";
 import { Effect, Schema } from "effect";
-import { parseTestDeclarations } from "../domain/tests/index.js";
-import { createMemoryHawdb, type HawdbDatabase } from "../base/cache/index.js";
-import { ConcordError, decode, objectDigest } from "../model/index.js";
-import { typescriptPackageVersion } from "../base/process/index.js";
-import { OUTPUT_LIMIT } from "../base/git/index.js";
-import { runGit } from "../base/git/index.js";
-import type { Git } from '../base/git/index.js';
-import { Sources } from '../base/sources/index.js';
+import { parseTestDeclarations } from "../domain/tests/index.ts";
+import { createMemoryHawdb, type HawdbDatabase } from "../base/cache/index.ts";
+import { ConcordError, decode, objectDigest } from "../model/index.ts";
+import { typescriptPackageVersion } from "../base/process/index.ts";
+import { OUTPUT_LIMIT } from "../base/git/index.ts";
+import { runGit } from "../base/git/index.ts";
+import type { Git } from '../base/git/index.ts';
+import { Sources } from '../base/sources/index.ts';
 export interface GitBaselineCache { database?: HawdbDatabase; }
 
 export const BaselineSchema = Schema.Struct({ root: Schema.String, revision: Schema.String, roots: Schema.String, parser: Schema.String, caseIds: Schema.Array(Schema.String) });
@@ -74,7 +74,7 @@ export const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(roo
 });
 
 
-export function untrackedDiff(path: string, inspected: import('../base/sources/index.js').UntrackedFile): GitDiff {
+export function untrackedDiff(path: string, inspected: import('../base/sources/index.ts').UntrackedFile): GitDiff {
   const empty = { path, area: 'untracked' as const, patch: '', binary: false, truncated: false };
   if (inspected.kind === 'symlink') return { ...empty, message: 'Symbolic link: its target is not read.' };
   if (inspected.kind === 'other') return { ...empty, message: 'This entry is not a regular file.' };

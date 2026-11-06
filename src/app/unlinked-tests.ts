@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/find-unlinked-tests.md#list
-import { bindNative, readNativeObservations } from '../domain/tests/index.js';
-import type { AnnotatedCase, Repository } from '../model/index.js';
+import { bindNative, readNativeObservations } from '../domain/tests/index.ts';
+import type { AnnotatedCase, Repository } from '../model/index.ts';
 
 /** Reads collected observations only; trace queries never run a test adapter. */
 export function unlinkedTests(repo: Repository, markers: readonly AnnotatedCase[]) {

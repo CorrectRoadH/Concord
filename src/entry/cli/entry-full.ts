@@ -4,7 +4,7 @@ try {
   if (process.argv.includes('--skill')) {
     // @concord-begin
     // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
-    const { runSkillMain } = await import("./skill.js");
+    const { runSkillMain } = await import("./skill.ts");
     await runSkillMain(process.argv.slice(2));
     // @concord-end
   } else {

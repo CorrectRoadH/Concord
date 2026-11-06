@@ -1,22 +1,22 @@
-import { createDocument } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
+import { createDocument } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { buildSync } from 'esbuild';
-import { readProjectConfig, writeProjectConfig, pollUntil } from '../support/support.js';
-import { createConsumer } from '../support/consumer.js';
-import { analyzeCode } from "../../src/app/index.js";
+import { readProjectConfig, writeProjectConfig, pollUntil } from '../support/support.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { analyzeCode } from "../../src/app/index.ts";
 
-import { LocalRepository } from "../support/repository.js";
-import { openHawdb } from "../../src/base/cache/index.js";
-import { ConcordError } from "../../src/model/index.js";
-import { OwnedProcessLive } from "../../src/base/process/index.js";
-import { tracePrivateDirectorySync } from "../../src/base/publication/index.js";
-import { inspectRunner } from "../../src/base/publication/index.js";
-import { collectNativeTests } from "../../src/domain/tests/index.js";
+import { LocalRepository } from "../support/repository.ts";
+import { openHawdb } from "../../src/base/cache/index.ts";
+import { ConcordError } from "../../src/model/index.ts";
+import { OwnedProcessLive } from "../../src/base/process/index.ts";
+import { tracePrivateDirectorySync } from "../../src/base/publication/index.ts";
+import { inspectRunner } from "../../src/base/publication/index.ts";
+import { collectNativeTests } from "../../src/domain/tests/index.ts";
 
 const target = 'docs/feature/sample/use-case/sample.md';
 function consumer(): string {

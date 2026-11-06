@@ -4,7 +4,7 @@ import { Effect, Schema, Stream } from 'effect';
 import * as Rpc from 'effect/unstable/rpc/Rpc';
 import * as RpcGroup from 'effect/unstable/rpc/RpcGroup';
 import * as SchemaBinary from 'effect/unstable/encoding/SchemaBinary';
-import { WorkspaceRead } from '../../model/index.js';
+import { WorkspaceRead } from '../../model/index.ts';
 
 export const PROTOCOL = 'concord.workspace/v2';
 export const FRAME_LIMIT = 1024 * 1024;

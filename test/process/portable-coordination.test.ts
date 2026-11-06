@@ -1,35 +1,35 @@
-import { initialize, createDocument } from '../support/operations.js';
-import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.js';
-import { runApplication } from '../support/repository.js';
-import { createConsumer } from '../support/consumer.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
-import { installedConcordCli } from '../support/support.js';
+import { initialize, createDocument } from '../support/operations.ts';
+import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.ts';
+import { runApplication } from '../support/repository.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { installedConcordCli } from '../support/support.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../../src/base/publication/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../../src/base/publication/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { beginRun, finalizeRun } from "../../src/base/publication/index.js";
-import { runCase } from "../../src/domain/tests/index.js";
-import { OwnedProcessLive } from "../../src/base/process/index.js";
-import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.js";
+import { beginRun, finalizeRun } from "../../src/base/publication/index.ts";
+import { runCase } from "../../src/domain/tests/index.ts";
+import { OwnedProcessLive } from "../../src/base/process/index.ts";
+import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.ts";
 
-import { type FileLease } from "../../src/base/publication/index.js";
-import { digest, failure } from "../../src/model/index.js";
-import { waitForPublication } from "../../src/base/publication/index.js";
-import { recoverLocalState } from "../../src/app/index.js";
-import { mutateTraceFiles } from "../../src/base/publication/index.js";
+import { type FileLease } from "../../src/base/publication/index.ts";
+import { digest, failure } from "../../src/model/index.ts";
+import { waitForPublication } from "../../src/base/publication/index.ts";
+import { recoverLocalState } from "../../src/app/index.ts";
+import { mutateTraceFiles } from "../../src/base/publication/index.ts";
 
 const entry = installedConcordCli();
-import { fixture } from '../support/publication-ownership-fixture.js';
+import { fixture } from '../support/publication-ownership-fixture.ts';
 
 async function line(child: ChildProcess): Promise<string> {
   return await new Promise((accept, reject) => {

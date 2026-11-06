@@ -1,28 +1,28 @@
-import { runApplication } from '../support/repository.js';
-import { PersistentCache } from '../../src/base/cache/index.js';
-import { initialize } from '../support/operations.js';
-import { installedConcordCli } from '../support/support.js';
-import { packageBin } from '../support/installed-package.js';
-import { publicationService } from '../support/repository.js';
-import { workerEntryArgv, CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../../src/base/installation/index.js";
+import { runApplication } from '../support/repository.ts';
+import { PersistentCache } from '../../src/base/cache/index.ts';
+import { initialize } from '../support/operations.ts';
+import { installedConcordCli } from '../support/support.ts';
+import { packageBin } from '../support/installed-package.ts';
+import { publicationService } from '../support/repository.ts';
+import { workerEntryArgv, CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { cachePhysicalBytes } from "../../src/base/cache/index.js";
-import { cacheStatus } from "../../src/domain/tests/index.js";
-import { openHawdb, createMemoryHawdb, HawdbFailure } from "../../src/base/cache/index.js";
-import { maintainCache } from "../../src/app/index.js";
+import { cachePhysicalBytes } from "../../src/base/cache/index.ts";
+import { cacheStatus } from "../../src/domain/tests/index.ts";
+import { openHawdb, createMemoryHawdb, HawdbFailure } from "../../src/base/cache/index.ts";
+import { maintainCache } from "../../src/app/index.ts";
 
 
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
-import { pollUntil } from '../support/support.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { pollUntil } from '../support/support.ts';
 
 function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-maintenance-')));

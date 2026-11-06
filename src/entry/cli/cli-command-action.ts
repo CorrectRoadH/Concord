@@ -2,9 +2,9 @@
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 import { Effect } from "effect";
 import { Command } from "effect/unstable/cli";
-import { ConcordError } from "../../model/index.js";
-import { applyViewDryRun, executeViewAction } from "../../app/index.js";
-import { root, text, body, emit, sync, viewRoot } from "./cli-base.js";
+import { ConcordError } from "../../model/index.ts";
+import { applyViewDryRun, executeViewAction } from "../../app/index.ts";
+import { root, text, body, emit, sync, viewRoot } from "./cli-base.ts";
 
 const action = Command.make('action', { input: text('input') }, args => Effect.gen(function*() {
   const settings = yield* root;

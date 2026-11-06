@@ -5,7 +5,7 @@ import { Deferred, Duration, Effect, Fiber, FileSystem, Schema, Scope, Stream } 
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 
 type Requirements = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
 const runnerTest = (name: string, body: (root: string) => Effect.Effect<void, unknown, Requirements>) =>

@@ -1,14 +1,14 @@
-import { writeWritingFile } from '../support/writing-files.js';
-import { initialize } from '../support/operations.js';
+import { writeWritingFile } from '../support/writing-files.ts';
+import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
-import { LocalRepository } from '../support/repository.js';
-import { digest, parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
-import { showWriting, checkWriting } from '../../src/domain/writing/index.js';
+import { LocalRepository } from '../support/repository.ts';
+import { digest, parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
+import { showWriting, checkWriting } from '../../src/domain/writing/index.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('ordinary Markdown saves create, repair and compare writing file preimages', () => {

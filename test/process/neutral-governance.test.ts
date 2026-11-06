@@ -1,8 +1,8 @@
 import {
   Ack, AnnotationOutput, Schema, Effect, assert, call, callString,
   consumer, existsSync, join, readFileSync, test, write, writeProjectConfig,
-} from '../support/cli-fixture.js';
-import { gitCommit, gitCommand } from '../support/fix-consumer.js';
+} from '../support/cli-fixture.ts';
+import { gitCommit, gitCommand } from '../support/fix-consumer.ts';
 
 const Cases = Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: Schema.String, file: Schema.String })) });
 const Verification = Schema.Struct({ verification: Schema.Struct({ defect: Schema.String, fix: Schema.String }) });

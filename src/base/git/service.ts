@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from 'effect';
-import { ConcordError } from '../../model/index.js';
-import { OwnedProcess, hasConfirmedOwnedGroupCleanup } from '../process/index.js';
+import { ConcordError } from '../../model/index.ts';
+import { OwnedProcess, hasConfirmedOwnedGroupCleanup } from '../process/index.ts';
 
 export const OUTPUT_LIMIT = 2 * 1024 * 1024;
 export function previewGitEnvironment(): NodeJS.ProcessEnv {

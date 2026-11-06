@@ -3,22 +3,22 @@ import { posix } from "node:path";
 
 
 
-import { decodeDocumentSource as parseDocumentSource } from "./document-codec.js";
-import { renderDocument } from "../../model/index.js";
+import { decodeDocumentSource as parseDocumentSource } from "./document-codec.ts";
+import { renderDocument } from "../../model/index.ts";
 
-import { ConcordError, DocumentName, Text, decode, digest, inRepositorySnapshot, type DocumentKind, type DocumentMeta, type DocumentRecord, type Finding, type MemoryMeta, type MutationReceipt, type Repository } from "../../model/index.js";
+import { ConcordError, DocumentName, Text, decode, digest, inRepositorySnapshot, type DocumentKind, type DocumentMeta, type DocumentRecord, type Finding, type MemoryMeta, type MutationReceipt, type Repository } from "../../model/index.ts";
 
-import { resolveReference } from "./refs.js";
-import { parseReference } from "../../model/index.js";
-
-
+import { resolveReference } from "./refs.ts";
+import { parseReference } from "../../model/index.ts";
 
 
-import { inspectDocumentProjections, projectionRecord } from "./document-projection.js";
 
-import { DOCUMENT_ROOTS, documentDisposition, documentPlacementError, matchingOwners } from "../../model/index.js";
-import { packagePageKind, pageKindSuggestions } from '../../model/index.js';
-import { packagePagePaths } from './package-pages.js';
+
+import { inspectDocumentProjections, projectionRecord } from "./document-projection.ts";
+
+import { DOCUMENT_ROOTS, documentDisposition, documentPlacementError, matchingOwners } from "../../model/index.ts";
+import { packagePageKind, pageKindSuggestions } from '../../model/index.ts';
+import { packagePagePaths } from './package-pages.ts';
 
 
 // @concord-code

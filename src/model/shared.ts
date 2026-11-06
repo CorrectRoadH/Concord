@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
-import { LanguageServersSchema } from "./language-server-config.js";
-import { TestAdapterSchema, validAdapters } from "./test-adapter-config.js";
-import { validSourceIgnore } from "./source-discovery.js";
-import { DOCUMENT_NAME_PATTERN } from "./document-name.js";
-import { FeedbackConnectionsSchema, FeedbackSourceSchema } from "./feedback-schema.js";
+import { LanguageServersSchema } from "./language-server-config.ts";
+import { TestAdapterSchema, validAdapters } from "./test-adapter-config.ts";
+import { validSourceIgnore } from "./source-discovery.ts";
+import { DOCUMENT_NAME_PATTERN } from "./document-name.ts";
+import { FeedbackConnectionsSchema, FeedbackSourceSchema } from "./feedback-schema.ts";
 
 
 
@@ -12,7 +12,9 @@ import { FeedbackConnectionsSchema, FeedbackSourceSchema } from "./feedback-sche
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 export class ConcordError extends Error {
   readonly name = 'ConcordError';
-  constructor(readonly code: string, message: string, readonly details?: unknown) { super(message); }
+  readonly code: string;
+  readonly details?: unknown;
+  constructor(code: string, message: string, details?: unknown) { super(message); this.code = code; this.details = details; }
 }
 export function failure(cause: unknown): ConcordError {
   return cause instanceof ConcordError ? cause : new ConcordError('OperationFailed', cause instanceof Error ? cause.message : String(cause));

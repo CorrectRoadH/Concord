@@ -1,12 +1,12 @@
-import { createDocument } from '../support/operations.js';
+import { createDocument } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createConsumer } from '../support/consumer.js';
-import { LocalRepository } from "../support/repository.js";
+import { createConsumer } from '../support/consumer.ts';
+import { LocalRepository } from "../support/repository.ts";
 
-import { checkProject } from "../../src/app/index.js";
+import { checkProject } from "../../src/app/index.ts";
 
 // @use-case docs/feature/taste/use-case/cite-taste.md
 test('check reports a body link to a missing taste clause with its path and line', () => {

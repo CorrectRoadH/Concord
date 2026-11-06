@@ -2,8 +2,8 @@
 // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 import { Effect } from 'effect';
-import { discoverRoot, git, readRepositoryFileSync } from '../base/workspace/index.js';
-import { ConcordError, failure, type shared_ProjectConfig as ProjectConfig, type WritingGuide } from '../model/index.js';
+import { discoverRoot, git, readRepositoryFileSync } from '../base/workspace/index.ts';
+import { ConcordError, failure, type shared_ProjectConfig as ProjectConfig, type WritingGuide } from '../model/index.ts';
 
 export function selectWritingGuide(root: string): WritingGuide {
   return git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']).split('\0').some(path => {

@@ -1,18 +1,18 @@
-import { initialize } from '../support/operations.js';
+import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { checkWriting } from "../../src/domain/writing/index.js";
-import { showWriting } from "../../src/domain/writing/index.js";
-import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { digest } from "../../src/model/index.js";
-import { defaultWritingSource } from "../../src/model/index.js";
+import { checkWriting } from "../../src/domain/writing/index.ts";
+import { showWriting } from "../../src/domain/writing/index.ts";
+import { renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { defaultWritingSource } from "../../src/model/index.ts";
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('init adopts a complete writing preset, checks it immediately, and preserves existing policy bytes', () => Effect.runPromise(Effect.sync(() => {

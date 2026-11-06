@@ -1,6 +1,6 @@
-import { installationResources, decodeNativeArtifact, hawdbTarget } from '../src/base/installation/index.js';
+import { installationResources, decodeNativeArtifact, hawdbTarget } from '../src/base/installation/index.ts';
 import assert from 'node:assert/strict';
-import { packageBin } from './package-location.js';
+import { packageBin } from './package-location.ts';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { dependencyViolations, inspectArchitecture } from './support/architecture.js';
+import { dependencyViolations, inspectArchitecture } from './support/architecture.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 

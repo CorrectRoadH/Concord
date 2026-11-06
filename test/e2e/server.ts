@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { Schema } from 'effect';
-import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly installedBin?: string; readonly signal?: AbortSignal }
 export interface ViewServerHandle {
@@ -31,8 +31,12 @@ export function installedBrowserBin(packageRoot = process.env.CONCORD_TEST_PACKA
 }
 
 export class ViewServerStartupFailed extends Error {
-  constructor(readonly root: string, readonly cleanupComplete: boolean, cause: unknown) {
+  readonly root: string;
+  readonly cleanupComplete: boolean;
+  constructor(root: string, cleanupComplete: boolean, cause: unknown) {
     super(`View startup failed for ${root}; cleanup=${cleanupComplete ? 'complete' : 'unconfirmed'}`, { cause });
+    this.root = root;
+    this.cleanupComplete = cleanupComplete;
     this.name = 'ViewServerStartupFailed';
   }
 }

@@ -1,6 +1,6 @@
 import { Effect, FileSystem } from 'effect';
 import { tmpdir } from 'node:os';
-import { io, mustRun } from './perf/process.js';
+import { io, mustRun } from './perf/process.ts';
 
 /** Every measurement owns a complete candidate outside the source checkout. */
 export const buildForMeasurement = Effect.fn('perf.buildForMeasurement')(function*(root: string, outputDir: string) {

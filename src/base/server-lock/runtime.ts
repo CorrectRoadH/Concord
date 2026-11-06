@@ -5,10 +5,10 @@ import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Context, Effect, Layer, Schema } from 'effect';
-import { ConcordError, digest, failure } from '../../model/index.js';
-import { workspaceInstallationIdentity, packageRoot, sourceInstallation } from '../installation/index.js';
-import { ensureGenericPrivateDirectorySync } from '../publication/index.js';
-import { scopedServerLock } from './index.js';
+import { ConcordError, digest, failure } from '../../model/index.ts';
+import { workspaceInstallationIdentity, packageRoot, sourceInstallation } from '../installation/index.ts';
+import { ensureGenericPrivateDirectorySync } from '../publication/index.ts';
+import { scopedServerLock } from './index.ts';
 
 const Identity = Schema.Struct({ device: Schema.String, inode: Schema.String });
 export const ServerRecord = Schema.Struct({

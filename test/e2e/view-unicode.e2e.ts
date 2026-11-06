@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
-import { act } from './journey.js';
+import { test } from './fixtures.ts';
+import { act } from './journey.ts';
 import { expect } from '@playwright/test';
 
-import { type ViewServerHandle } from './server.js';
+import { type ViewServerHandle } from './server.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('browser creates Unicode Feature and Use Case names and restores their encoded routes', { tags: ['journey'] }, async fixtures => {

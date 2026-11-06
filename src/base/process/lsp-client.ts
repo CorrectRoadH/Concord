@@ -2,15 +2,15 @@
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 import { pathToFileURL } from "node:url";
 import { Effect, Fiber, Predicate, Schema } from "effect";
-import { ConcordError, decode, failure, objectDigest, type AnnotatedCase, type Repository } from "../../model/index.js";
-import { OwnedProcess, hasConfirmedOwnedGroupCleanup, type OwnedProcessResult } from "./owned-process.js";
-import { analysisBudgets, type language_server_config_LanguageServer as LanguageServer } from "../../model/index.js";
-import { LspConnection } from "./lsp-protocol.js";
-import { bindSymbol, documentSymbols, flattenSymbols, OutgoingSchema, PrepareSchema, validRange, type CallItem, type DocumentSymbol, type PositionEncoding, type SymbolLocator } from "../../model/index.js";
-import { sourceUri, uriPath } from "./source-uri.js";
-import type { CodeDeclaration } from "../../model/index.js";
-import type { AnalysisValue, DependencyObservation, NativeAnalysisScope } from "../../model/index.js";
-import { withinRoots } from "../../model/index.js";
+import { ConcordError, decode, failure, objectDigest, type AnnotatedCase, type Repository } from "../../model/index.ts";
+import { OwnedProcess, hasConfirmedOwnedGroupCleanup, type OwnedProcessResult } from "./owned-process.ts";
+import { analysisBudgets, type language_server_config_LanguageServer as LanguageServer } from "../../model/index.ts";
+import { LspConnection } from "./lsp-protocol.ts";
+import { bindSymbol, documentSymbols, flattenSymbols, OutgoingSchema, PrepareSchema, validRange, type CallItem, type DocumentSymbol, type PositionEncoding, type SymbolLocator } from "../../model/index.ts";
+import { sourceUri, uriPath } from "./source-uri.ts";
+import type { CodeDeclaration } from "../../model/index.ts";
+import type { AnalysisValue, DependencyObservation, NativeAnalysisScope } from "../../model/index.ts";
+import { withinRoots } from "../../model/index.ts";
 
 const sync = <A>(run: () => A) => Effect.try({ try: run, catch: cause => cause instanceof ConcordError && cause.code === 'InvalidData' ? new ConcordError('LanguageServerFailed', 'Language server returned an invalid result') : failure(cause) });
 const InitializeSchema = Schema.Struct({ capabilities: Schema.Record(Schema.String, Schema.Unknown), serverInfo: Schema.optional(Schema.Struct({ name: Schema.String, version: Schema.optional(Schema.String) })), offsetEncoding: Schema.optional(Schema.String) });

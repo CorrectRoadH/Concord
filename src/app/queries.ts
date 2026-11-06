@@ -1,28 +1,28 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
 import { Effect, Schedule, Schema } from 'effect';
-import type { QueryReply } from './query-port.js';
-export { Queries, QueryReply } from './query-port.js';
-import { ConcordError, failure, FeedbackFilterSchema } from '../model/index.js';
-import { Workspace } from '../base/workspace/index.js';
-import { Sources } from '../base/sources/index.js';
-import { waitForPublication } from '../base/publication/index.js';
-import { buildTrace, requireValidTrace, selectCase } from '../domain/trace/index.js';
-import { loadDocuments, readDocumentReference, findDocument } from '../domain/documents/index.js';
-import { tasteShow } from '../domain/taste/index.js';
-import { showWriting, checkWriting, writingIndex } from '../domain/writing/index.js';
-import { showConcepts, indexConcepts } from '../domain/concepts/index.js';
-import { listFeedback } from '../domain/feedback/index.js';
-import { readNativeObservations } from '../domain/tests/index.js';
-import { scanCode } from '../domain/code/index.js';
-import { checkCurrentProject } from './check-current.js';
-import { knowledgeIndex, knowledgeSearchRecords } from './knowledge.js';
-import { listCode } from './code-commands.js';
-import { showConfig } from './editing.js';
-import { documentShow, traceShow, traceGaps, renderReview } from './trace-queries.js';
-import { analysisView } from './analysis-view.js';
-import { Query, cachedQuery } from './query-cache.js';
-import { getWorkspaceSnapshot } from './application.js';
+import type { QueryReply } from './query-port.ts';
+export { Queries, QueryReply } from './query-port.ts';
+import { ConcordError, failure, FeedbackFilterSchema } from '../model/index.ts';
+import { Workspace } from '../base/workspace/index.ts';
+import { Sources } from '../base/sources/index.ts';
+import { waitForPublication } from '../base/publication/index.ts';
+import { buildTrace, requireValidTrace, selectCase } from '../domain/trace/index.ts';
+import { loadDocuments, readDocumentReference, findDocument } from '../domain/documents/index.ts';
+import { tasteShow } from '../domain/taste/index.ts';
+import { showWriting, checkWriting, writingIndex } from '../domain/writing/index.ts';
+import { showConcepts, indexConcepts } from '../domain/concepts/index.ts';
+import { listFeedback } from '../domain/feedback/index.ts';
+import { readNativeObservations } from '../domain/tests/index.ts';
+import { scanCode } from '../domain/code/index.ts';
+import { checkCurrentProject } from './check-current.ts';
+import { knowledgeIndex, knowledgeSearchRecords } from './knowledge.ts';
+import { listCode } from './code-commands.ts';
+import { showConfig } from './editing.ts';
+import { documentShow, traceShow, traceGaps, renderReview } from './trace-queries.ts';
+import { analysisView } from './analysis-view.ts';
+import { Query, cachedQuery } from './query-cache.ts';
+import { getWorkspaceSnapshot } from './application.ts';
 
 const strict = <S extends Schema.Top>(schema: S): S['Rebuild'] => schema.annotate({ parseOptions: { onExcessProperty: 'error' } });
 const operation = <const N extends string, F extends Schema.Struct.Fields>(name: N, fields: F) => strict(Schema.Struct({ name: Schema.Literal(name), input: strict(Schema.Struct(fields)) }));
@@ -47,7 +47,7 @@ export const QueryRequest = Schema.Union([
 ]);
 export type QueryRequest = typeof QueryRequest.Type;
 
-const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, request: QueryRequest, cache: 'use' | 'off'): unknown => {
+const queryValue = (repo: import('../base/workspace/index.ts').LocalRepository, request: QueryRequest, cache: 'use' | 'off'): unknown => {
   switch (request.name) {
     case 'trace.check': { const t = buildTrace(repo, cache); return { operation: 'trace-check', ok: t.complete, complete: t.complete, findings: t.findings, edges: t.edges }; }
     case 'trace.show': return traceShow(repo, request.input.reference, cache);

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { lstatSync, mkdirSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
 import { Effect } from "effect";
-import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, errno, recoverFileLease, releaseFileLease, type FileLease } from "./file-lease.js";
+import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, errno, recoverFileLease, releaseFileLease, type FileLease } from "./file-lease.ts";
 
 
 

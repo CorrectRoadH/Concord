@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import type { StartupData } from "../../../model/index.js";
+import type { StartupData } from "../../../model/index.ts";
 
 const source = import.meta.url.endsWith('.ts');
 const installation = new URL('../../../../', import.meta.url);

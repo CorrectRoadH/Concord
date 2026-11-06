@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
-import { type ViewServerHandle } from './server.js';
-import { createDocument } from '../support/operations.js';
+import { type ViewServerHandle } from './server.ts';
+import { createDocument } from '../support/operations.ts';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
 import { Effect } from 'effect';
-import { LocalRepository } from '../support/repository.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { LocalRepository } from '../support/repository.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 const inline = `let label: import('p5').default.Element;
 p.setup = () => { p.createCanvas(240, 100); label = p.createSpan('0'); label.id('ticks').style('display', 'inline-block').style('width', '5ch'); p.createButton('重新绘制').class('restart').mousePressed(() => p.redraw()); p.createButton('关闭循环').mousePressed(() => p.noLoop()); };

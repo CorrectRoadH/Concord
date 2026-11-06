@@ -3,12 +3,12 @@ import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { createConsumer } from '../support/consumer.js';
-import { createDocument } from '../support/operations.js';
-import { writeProjectConfig } from '../support/support.js';
-import { setAuthor } from '../../src/domain/documents/index.js';
-import { digest } from '../../src/model/index.js';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { createDocument } from '../support/operations.ts';
+import { writeProjectConfig } from '../support/support.ts';
+import { setAuthor } from '../../src/domain/documents/index.ts';
+import { digest } from '../../src/model/index.ts';
 function consumer() {
   const root = createConsumer(); writeProjectConfig(root, { testRoots: [], sourceRoots: ['src'] });
   const repo = new LocalRepository(root);

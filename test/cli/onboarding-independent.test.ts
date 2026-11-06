@@ -1,14 +1,14 @@
-import { packageBin } from '../support/installed-package.js';
+import { packageBin } from '../support/installed-package.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
-import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
+import { tmpdir } from '../support/temporary.ts';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { join } from 'node:path';
 import test, { before, after } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { InitializationReceiptSchema } from '../../src/model/index.js';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
+import { InitializationReceiptSchema } from '../../src/model/index.ts';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-public-onboarding-'));
 const consumers: string[] = [];

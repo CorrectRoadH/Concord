@@ -3,9 +3,9 @@
 import { readFileSync } from "node:fs";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { ConcordError, decode, failure } from "../../model/index.js";
-import { discoverRoot } from "../../app/workspace-location/index.js";
-import { humanOutput } from "./presentation.js";
+import { ConcordError, decode, failure } from "../../model/index.ts";
+import { discoverRoot } from "../../app/workspace-location/index.ts";
+import { humanOutput } from "./presentation.ts";
 
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
   root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise use the Git worktree containing cwd; configuration is optional.')),

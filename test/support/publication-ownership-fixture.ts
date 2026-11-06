@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import type { TestContext } from 'node:test';
-import { createConsumer } from './consumer.js';
-import { writeProjectConfig } from './support.js';
+import { createConsumer } from './consumer.ts';
+import { writeProjectConfig } from './support.ts';
 
 export function fixture(t: TestContext): string {
   const root = createConsumer();

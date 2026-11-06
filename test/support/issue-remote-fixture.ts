@@ -1,19 +1,19 @@
-import { initialize } from './operations.js';
-import { writeGhFixture } from './gh-fixture.js';
-import { packageBin } from './installed-package.js';
-import { sourceConcord, prepareSourceConsumer } from './installed-package.js';
+import { initialize } from './operations.ts';
+import { writeGhFixture } from './gh-fixture.ts';
+import { packageBin } from './installed-package.ts';
+import { sourceConcord, prepareSourceConsumer } from './installed-package.ts';
 // @concord-file
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, statSync } from 'node:fs';
-import { tmpdir } from './temporary.js';
+import { tmpdir } from './temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { makeOwnedProcessService } from "../../src/base/process/index.js";
-import { LocalRepository } from "./repository.js";
+import { makeOwnedProcessService } from "../../src/base/process/index.ts";
+import { LocalRepository } from "./repository.ts";
 
-import { setConfig, showConfig } from "../../src/app/index.js";
+import { setConfig, showConfig } from "../../src/app/index.ts";
 
 export interface Call { readonly args: readonly string[]; readonly stdin: string; readonly env: Readonly<Record<string, unknown>> }
 const ReceiptSchema = Schema.Struct({

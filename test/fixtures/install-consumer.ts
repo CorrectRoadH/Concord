@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { Effect, Schema } from 'effect';
-import { prepareSourceConsumer } from '../support/installed-package.js';
-import { PackageArtifact } from '../../scripts/release-package.js';
+import { prepareSourceConsumer } from '../support/installed-package.ts';
+import { PackageArtifact } from '../../scripts/release-package.ts';
 
 Effect.runSync(Effect.sync(() => {
   const [directory, manifest] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String]))(process.argv.slice(2));

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { Schema } from 'effect';
-import { analyzeCode, executeQuery, type QueryRequest } from '../../src/app/index.js';
-import { AnalysisObservationSchema, AnalysisViewSchema, CodeDeclarationSchema } from '../../src/model/index.js';
-import { LocalRepository, runApplication } from './repository.js';
+import { analyzeCode, executeQuery, type QueryRequest } from '../../src/app/index.ts';
+import { AnalysisObservationSchema, AnalysisViewSchema, CodeDeclarationSchema } from '../../src/model/index.ts';
+import { LocalRepository, runApplication } from './repository.ts';
 
 export const analysis = Schema.Struct({ observations: Schema.Array(AnalysisObservationSchema) });
 export const codeList = Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), analysis: AnalysisViewSchema });

@@ -1,18 +1,18 @@
-import { packageBin } from './package-location.js';
+import { packageBin } from './package-location.ts';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { packJavaScript } from './pack-javascript.js';
+import { packJavaScript } from './pack-javascript.ts';
 import { parseArgs } from 'node:util';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { loadBudgets } from './perf/budgets.js';
-import { environment, loadArtifact } from './perf/artifact.js';
-import { combineProfiles, CpuProfile, hotSpots } from './perf/cpu-profile.js';
-import { io, PerfError, timedRun } from './perf/process.js';
-import { executeScenario, loadScenarios, makeContext, runArguments, cliCommand } from './perf/scenario.js';
-import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.js';
-import { buildForMeasurement } from './measurement-build.js';
+import { loadBudgets } from './perf/budgets.ts';
+import { environment, loadArtifact } from './perf/artifact.ts';
+import { combineProfiles, CpuProfile, hotSpots } from './perf/cpu-profile.ts';
+import { io, PerfError, timedRun } from './perf/process.ts';
+import { executeScenario, loadScenarios, makeContext, runArguments, cliCommand } from './perf/scenario.ts';
+import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.ts';
+import { buildForMeasurement } from './measurement-build.ts';
 
 const usage = 'Usage: vp run bench:profile <scenario ID> [--warm] [--out <dir>] [--keep]\n       vp run bench:profile cli [options] -- <concord arguments>';
 const NonNegative = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));

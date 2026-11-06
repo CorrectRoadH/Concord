@@ -4,7 +4,7 @@ import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFi
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { ConcordError, digest } from '../../model/index.js';
+import { ConcordError, digest } from '../../model/index.ts';
 
 interface IdentityTree { readonly root: string; readonly prefix: string; readonly accept: (name: string, relative: string) => boolean }
 const Hash = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u));

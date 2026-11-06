@@ -1,17 +1,17 @@
-import { initialize } from '../support/operations.js';
-import { packageBin } from '../support/installed-package.js';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
-import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
+import { initialize } from '../support/operations.ts';
+import { packageBin } from '../support/installed-package.ts';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { parseTypeScriptConfig, renderTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { digest } from "../../src/model/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { parseTypeScriptConfig, renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md

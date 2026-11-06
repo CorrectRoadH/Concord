@@ -3,12 +3,12 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { tmpdir } from '../support/temporary.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { initialize, createDocument } from '../support/operations.js';
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
-import { collectNativeTests } from '../../src/domain/tests/index.js';
-import { traceGaps } from '../../src/app/index.js';
+import { tmpdir } from '../support/temporary.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { initialize, createDocument } from '../support/operations.ts';
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { collectNativeTests } from '../../src/domain/tests/index.ts';
+import { traceGaps } from '../../src/app/index.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/find-unlinked-tests.md#list
 test('trace gaps uses real collected inventories, exact bindings, retired and Engineering exclusions, and stale file fallback', async () => {

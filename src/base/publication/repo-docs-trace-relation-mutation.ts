@@ -1,6 +1,6 @@
-import { TraceMutationError, type TraceCoordinationError } from "../../model/index.js";
+import { TraceMutationError, type TraceCoordinationError } from "../../model/index.ts";
 import { execFileSync } from "node:child_process";
-import { validPackagePath } from "../../model/index.js";
+import { validPackagePath } from "../../model/index.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, existsSync, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
@@ -8,10 +8,10 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 
 import { Cause, Effect, Exit, Result, Schema, SchemaIssue } from "effect";
 
-import { acquireTraceLease, genericJournalPath, recoverPublicationLeaseSync, releaseTraceLease, tracePrivateDirectorySync, type TraceLease } from "./coordination.js";
-import { invalidateActiveRun } from "./run-coordination.js";
+import { acquireTraceLease, genericJournalPath, recoverPublicationLeaseSync, releaseTraceLease, tracePrivateDirectorySync, type TraceLease } from "./coordination.ts";
+import { invalidateActiveRun } from "./run-coordination.ts";
 
-import { TraceRecoveryConflict, TraceRecoveryRequired } from "../../model/index.js";
+import { TraceRecoveryConflict, TraceRecoveryRequired } from "../../model/index.ts";
 
 
 const COORDINATION_ID_FILE = "coordination-id";

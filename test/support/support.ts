@@ -1,16 +1,16 @@
-import { tmpdir } from './temporary.js';
+import { tmpdir } from './temporary.ts';
 import { after as nodeAfter, before as nodeBefore } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { installedPackageRoot, packageBin } from './installed-package.js';
+import { installedPackageRoot, packageBin } from './installed-package.ts';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
 import type { Transform } from 'node:stream';
 import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
-import { parseTypeScriptConfig, renderTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { ProjectSchema, decode, type shared_ProjectConfig as ProjectConfig } from "../../src/model/index.js";
-import { type WorkspaceProjection } from "../../src/model/index.js";
-import { WorkspaceProjectionSnapshotSchema } from "../../src/model/index.js";
+import { parseTypeScriptConfig, renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
+import { ProjectSchema, decode, type shared_ProjectConfig as ProjectConfig } from "../../src/model/index.ts";
+import { type WorkspaceProjection } from "../../src/model/index.ts";
+import { WorkspaceProjectionSnapshotSchema } from "../../src/model/index.ts";
 
 type TestEffect = Effect.Effect<void, unknown, never>;
 

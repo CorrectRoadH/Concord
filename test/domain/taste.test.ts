@@ -3,10 +3,10 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { tmpdir } from '../support/temporary.js';
-import { LocalRepository } from '../support/repository.js';
-import { parseTaste, tasteShow, inspectTaste } from '../../src/domain/taste/index.js';
-import { checkProject } from '../../src/app/index.js';
+import { tmpdir } from '../support/temporary.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { parseTaste, tasteShow, inspectTaste } from '../../src/domain/taste/index.ts';
+import { checkProject } from '../../src/app/index.ts';
 
 const source = '# Taste\n\n## General {#general}\n\n1. Read first. {#general-read}\n\n## T-1 Keep one owner {#t-1}\n\nPrefer one source.\n\n## T-8 Read clearly {#t-8}\n';
 const code = (name: string) => (error: unknown) => error instanceof Error && 'code' in error && error.code === name;

@@ -2,8 +2,8 @@
 // @concord-implements docs/feature/herdr-mod/cli.md#安装与卸载
 import { Effect } from 'effect';
 import { Command } from 'effect/unstable/cli';
-import { manageHerdrMod } from '../../app/index.js';
-import { root, emit } from './cli-base.js';
+import { manageHerdrMod } from '../../app/index.ts';
+import { root, emit } from './cli-base.ts';
 
 export const herdr = Command.make('herdr').pipe(
   Command.withDescription('Install or remove Concord’s native Herdr mod.'),

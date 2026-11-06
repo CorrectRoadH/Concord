@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { Schema } from "effect";
-import { createMemoryHawdb, type HawdbDatabase, type HawdbEntry, type HawdbLimits, type HawdbNamespace } from "./hawdb-native.js";
-import { canonical, decode, digest, objectDigest } from "../../model/index.js";
-import { readCachePayloads, writeCachePayloads } from "./cache-query.js";
+import { createMemoryHawdb, type HawdbDatabase, type HawdbEntry, type HawdbLimits, type HawdbNamespace } from "./hawdb-native.ts";
+import { canonical, decode, digest, objectDigest } from "../../model/index.ts";
+import { readCachePayloads, writeCachePayloads } from "./cache-query.ts";
 
 export type ContentResult<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly cause: unknown };
 
@@ -13,7 +13,16 @@ const EnvelopeSchema = Schema.Struct({ parser: Schema.String, sourceDigest: Sche
 export class ContentCache<A> {
   private database: HawdbDatabase | undefined;
 
-  constructor(private readonly namespace: Extract<HawdbNamespace, 'document_parse' | 'code_parse'>, private readonly parser: string, private readonly valueSchema: Schema.ConstraintDecoder<A, never>, private readonly limits?: HawdbLimits) {}
+  private readonly namespace: Extract<HawdbNamespace, 'document_parse' | 'code_parse'>;
+  private readonly parser: string;
+  private readonly valueSchema: Schema.ConstraintDecoder<A, never>;
+  private readonly limits?: HawdbLimits;
+  constructor(namespace: Extract<HawdbNamespace, 'document_parse' | 'code_parse'>, parser: string, valueSchema: Schema.ConstraintDecoder<A, never>, limits?: HawdbLimits) {
+    this.namespace = namespace;
+    this.parser = parser;
+    this.valueSchema = valueSchema;
+    this.limits = limits;
+  }
 
   private engine(): HawdbDatabase | undefined {
     try { return this.database ?? (this.database = createMemoryHawdb()); }

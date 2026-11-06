@@ -1,8 +1,8 @@
 import { Schema } from 'effect';
-import { ConcordError, type Finding } from './shared.js';
-import { parseConceptCatalog, ConceptDefinitionSchema } from './concepts-schema.js';
-import { fromMarkdown } from './markdown-parser.js';
-import { scopeOf, under } from './writing-scopes.js';
+import { ConcordError, type Finding } from './shared.ts';
+import { parseConceptCatalog, ConceptDefinitionSchema } from './concepts-schema.ts';
+import { fromMarkdown } from './markdown-parser.ts';
+import { scopeOf, under } from './writing-scopes.ts';
 
 const { definition: _definition, ...descriptor } = ConceptDefinitionSchema.fields;
 /** id is the Markdown anchor; term is the current spelling for deprecated names. */

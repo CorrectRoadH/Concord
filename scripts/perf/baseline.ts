@@ -1,9 +1,9 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Effect, FileSystem, Option, Schema } from 'effect';
-import { packageBin } from '../package-location.js';
-import { loadArtifact } from './artifact.js';
-import { io, mustRun, PerfError } from './process.js';
+import { packageBin } from '../package-location.ts';
+import { loadArtifact } from './artifact.ts';
+import { io, mustRun, PerfError } from './process.ts';
 const Identity = Schema.Struct({ format: Schema.Literal('concord.bench-baseline/v1'), commit: Schema.String, digest: Schema.String, node: Schema.String });
 export const prepareBaseline = Effect.fn('perf.prepareBaseline')(function*(repository: string, revision: string, outputDir: string) {
   const fs = yield* FileSystem.FileSystem;

@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-import { indexConcepts, showConcepts } from "../../app/index.js";
+import { indexConcepts, showConcepts } from "../../app/index.ts";
 import { Option } from "effect";
 import { Command } from "effect/unstable/cli";
-import { text, optional, body, sync, expected } from "./cli-base.js";
-import { withRepo, withQuery } from "./cli-repository.js";
+import { text, optional, body, sync, expected } from "./cli-base.ts";
+import { withRepo, withQuery } from "./cli-repository.ts";
 
 const concepts = Command.make('concepts').pipe(Command.withDescription('Discover and manage directory-owned concept catalogs.'), Command.withSubcommands([
   Command.make('index', {}, () => withQuery({ name: 'concepts.index', input: {} })),

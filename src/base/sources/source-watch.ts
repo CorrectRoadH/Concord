@@ -2,9 +2,9 @@ import { watch, type FSWatcher } from "node:fs";
 import { lstat, readdir } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
 import { Effect } from "effect";
-import { assertLeasePath } from "../publication/index.js";
-import { ConcordError, type shared_ProjectConfig as ProjectConfig } from "../../model/index.js";
-import { excludedSourcePath } from "../../model/index.js";
+import { assertLeasePath } from "../publication/index.ts";
+import { ConcordError, type shared_ProjectConfig as ProjectConfig } from "../../model/index.ts";
+import { excludedSourcePath } from "../../model/index.ts";
 
 
 interface WatchedDirectory { readonly handle: FSWatcher; readonly identity: string }
@@ -25,7 +25,14 @@ export class NodeSourceWatch {
   private stopped = false;
   private failure: ConcordError | undefined;
 
-  constructor(private readonly root: string, private readonly changed: () => void, private readonly failed: (error: ConcordError) => void) {}
+  private readonly root: string;
+  private readonly changed: () => void;
+  private readonly failed: (error: ConcordError) => void;
+  constructor(root: string, changed: () => void, failed: (error: ConcordError) => void) {
+    this.root = root;
+    this.changed = changed;
+    this.failed = failed;
+  }
 
   reconcile(project: ProjectConfig | null, sources: readonly { readonly path: string }[] = []): Effect.Effect<boolean, ConcordError> {
     return Effect.tryPromise({ try: () => this.update(project, sources), catch: unavailable });

@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
-import { ConcordError, digest, objectDigest, type AnnotatedCase, type Repository } from "../../model/index.js";
-import type { NativeCase, NativeManifest } from "../../model/index.js";
+import { ConcordError, digest, objectDigest, type AnnotatedCase, type Repository } from "../../model/index.ts";
+import type { NativeCase, NativeManifest } from "../../model/index.ts";
 
 export function bindNative(repo: Repository, marker: AnnotatedCase, manifest: NativeManifest): readonly string[] | undefined {
   const text = repo.read(marker.file);

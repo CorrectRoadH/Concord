@@ -5,8 +5,8 @@ import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { GiB } from '../../scripts/gate-resources.js';
-import { tmpdir } from '../support/temporary.js';
+import { GiB } from '../../scripts/gate-resources.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 const Report = Schema.Struct({
   memoryIsolation: Schema.String, reason: Schema.NullOr(Schema.String),

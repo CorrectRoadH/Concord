@@ -6,7 +6,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
-import { distributionRoot, installedPackageRoot } from './installed-package.js';
+import { distributionRoot, installedPackageRoot } from './installed-package.ts';
 
 export const installer = join(distributionRoot, 'install.sh');
 const Manifest = Schema.fromJsonString(Schema.Struct({ bin: Schema.Struct({ concord: Schema.String }) }));

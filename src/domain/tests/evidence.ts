@@ -1,16 +1,16 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
-import { safeRunnerEnvironment } from "../../base/process/index.js";
-import type { CommandEvidence, NativeEvidence, Evidence } from "../../model/index.js";
+import { safeRunnerEnvironment } from "../../base/process/index.ts";
+import type { CommandEvidence, NativeEvidence, Evidence } from "../../model/index.ts";
 import { Effect } from "effect";
-import { ConcordError, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type Repository, type shared_Runner as Runner } from "../../model/index.js";
-import { hasConfirmedOwnedGroupCleanup, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.js";
-import type { Sources } from '../../base/sources/index.js';
-import type { LocalRepository } from "../../base/workspace/index.js";
-import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.js";
-import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.js";
-import { adapterFor, executeNativeCase } from "./test-adapters.js";
-import { nativeVerdict } from "../../model/index.js";
+import { ConcordError, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type Repository, type shared_Runner as Runner } from "../../model/index.ts";
+import { hasConfirmedOwnedGroupCleanup, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
+import type { Sources } from '../../base/sources/index.ts';
+import type { LocalRepository } from "../../base/workspace/index.ts";
+import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
+import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.ts";
+import { adapterFor, executeNativeCase } from "./test-adapters.ts";
+import { nativeVerdict } from "../../model/index.ts";
 
 export function runnerArguments(runner: Runner, selected: AnnotatedCase): readonly string[] {
   if (selected.status !== 'active' || selected.skipped) throw new ConcordError('CaseNotRunnable', 'Only active, runnable markers can execute');

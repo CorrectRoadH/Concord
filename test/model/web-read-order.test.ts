@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ConcordApi } from '../../web/lib/api.js';
+import { ConcordApi } from '../../web/lib/api.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser reads queue after prior reads, including a read requested after a write', async t => {

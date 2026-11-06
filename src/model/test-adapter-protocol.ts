@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
 import { Schema } from "effect";
-import { ConcordError, Nat, Sha256, Text, decode } from "./shared.js";
+import { ConcordError, Nat, Sha256, Text, decode } from "./shared.ts";
 
 export const ADAPTER_FORMAT = 'concord.test-adapter/v1' as const;
 export const ProcessStatusSchema = Schema.Struct({ invocationId: Text, exitCode: Schema.NullOr(Nat), signal: Schema.NullOr(Text), timedOut: Schema.Boolean, cancelled: Schema.Boolean, outputTruncated: Schema.Boolean, cleanup: Schema.Literals(['complete', 'unknown']) });

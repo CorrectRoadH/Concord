@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { startViewServer } from '../e2e/server.js';
-import { fixture, send } from '../support/view-http-fixture.js';
+import { startViewServer } from '../e2e/server.ts';
+import { fixture, send } from '../support/view-http-fixture.ts';
 
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

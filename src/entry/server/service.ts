@@ -1,10 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#状态
 import { Clock, Deferred, Effect, Fiber, Queue, Schema, Schedule, Semaphore, Stream, SubscriptionRef } from 'effect';
-import { ConcordError, failure, decodeWorkspaceProjectionCandidate, type WorkspaceProjection, type WorkspaceProjectionCandidate } from '../../model/index.js';
-import type { WorkspaceProjectionContext } from '../../model/index.js';
-import { WorkspaceState, compensationRefresh, serviceHeartbeat } from './state.js';
-import type { Computation } from './computation.js';
+import { ConcordError, failure, decodeWorkspaceProjectionCandidate, type WorkspaceProjection, type WorkspaceProjectionCandidate } from '../../model/index.ts';
+import type { WorkspaceProjectionContext } from '../../model/index.ts';
+import { WorkspaceState, compensationRefresh, serviceHeartbeat } from './state.ts';
+import type { Computation } from './computation.ts';
 
 export interface RuntimePorts {
   readonly verify: Effect.Effect<void, unknown>;

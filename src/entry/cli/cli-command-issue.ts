@@ -4,19 +4,19 @@
 
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { closeIssue, linkIssue, unlinkIssue } from "../../app/index.js";
-import { closeFixedIssue } from "../../app/index.js";
+import { closeIssue, linkIssue, unlinkIssue } from "../../app/index.ts";
+import { closeFixedIssue } from "../../app/index.ts";
 
-import { knowledgeSearchRecords } from "../../app/index.js";
+import { knowledgeSearchRecords } from "../../app/index.ts";
 
-import { ConcordError, MEMORY_RELATION_KINDS, decode } from "../../model/index.js";
-import { root, text, optional, many, id, sync } from "./cli-base.js";
-import { withRepo, withQuery } from "./cli-repository.js";
+import { ConcordError, MEMORY_RELATION_KINDS, decode } from "../../model/index.ts";
+import { root, text, optional, many, id, sync } from "./cli-base.ts";
+import { withRepo, withQuery } from "./cli-repository.ts";
 
-import type { IssueError } from "../../model/index.js";
-import type { IssueCommandRequirements } from "../../app/index.js";
-import * as issueRemoteContribution from './repo-issue-contribution.js';
-import { makeNodeIssueCommandRunner } from "../../app/index.js";
+import type { IssueError } from "../../model/index.ts";
+import type { IssueCommandRequirements } from "../../app/index.ts";
+import * as issueRemoteContribution from './repo-issue-contribution.ts';
+import { makeNodeIssueCommandRunner } from "../../app/index.ts";
 
 const issueRemoteCommands = issueRemoteContribution.makeIssueRemoteSubcommands(
   (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.sync(() => {

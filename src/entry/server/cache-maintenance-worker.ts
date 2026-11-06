@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
-import { runCacheMaintenance } from "../../app/index.js";
+import { runCacheMaintenance } from "../../app/index.ts";
 
-import { runWriterMain } from "./main.js";
+import { runWriterMain } from "./main.ts";
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";

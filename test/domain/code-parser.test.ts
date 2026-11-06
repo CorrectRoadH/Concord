@@ -1,14 +1,14 @@
-import { initialize } from '../support/operations.js';
+import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { scanCode } from "../../src/domain/code/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { scanCode } from "../../src/domain/code/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';

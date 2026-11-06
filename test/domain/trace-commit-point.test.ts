@@ -5,8 +5,8 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { mutateTraceFiles, recoverTrace, tracePrivateDirectorySync } from '../../src/base/publication/index.js';
-import { fixture } from '../support/publication-ownership-fixture.js';
+import { mutateTraceFiles, recoverTrace, tracePrivateDirectorySync } from '../../src/base/publication/index.ts';
+import { fixture } from '../support/publication-ownership-fixture.ts';
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('durable committed phase alone decides whether an interrupted complete pair finishes or rolls back', async t => {

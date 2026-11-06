@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
-import { parseWritingPolicy } from '../../src/model/index.js';
-import { writeConceptFile, writeWritingFile } from '../support/writing-files.js';
+import { parseWritingPolicy } from '../../src/model/index.ts';
+import { writeConceptFile, writeWritingFile } from '../support/writing-files.ts';
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { type ViewServerHandle } from './server.js';
-import { showWriting } from '../../src/domain/writing/index.js';
-import { showConcepts } from '../../src/domain/concepts/index.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
+import { LocalRepository } from '../support/repository.ts';
+import { type ViewServerHandle } from './server.ts';
+import { showWriting } from '../../src/domain/writing/index.ts';
+import { showConcepts } from '../../src/domain/concepts/index.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('real browser isolates scope responses and drafts, keeps partial save conflicts, and notices inherited concept changes', async ({ page, workspace }) => {

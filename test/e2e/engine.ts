@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 import { web } from '@e2e-dev/web';
 import { defineEngine, type EngineHandle } from 'e2e/engine';
-import { browserWorkerFixture, closeBrowserAttempt, closeBrowserWorker, openBrowserWorker } from '../support/browser-shared-fixture.js';
-import { localBrowser } from './local-browser.js';
+import { browserWorkerFixture, closeBrowserAttempt, closeBrowserWorker, openBrowserWorker } from '../support/browser-shared-fixture.ts';
+import { localBrowser } from './local-browser.ts';
 
 const executable = process.env.CONCORD_BROWSER_PATH ??
   (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : chromium.executablePath());

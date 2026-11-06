@@ -1,5 +1,5 @@
-import type { WorkspaceDocument, WorkspacePage, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../index.js';
-import { DOCUMENT_ROOTS, selectEffectiveConcepts, scopeOf, fromMarkdown, markdownBody } from '../index.js';
+import type { WorkspaceDocument, WorkspacePage, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../index.ts';
+import { DOCUMENT_ROOTS, selectEffectiveConcepts, scopeOf, fromMarkdown, markdownBody } from '../index.ts';
 
 export const documentCategories = [
   { href: '/features', kind: 'feature', label: 'Feature' },

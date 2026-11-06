@@ -1,8 +1,8 @@
 import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, parse, sep } from 'node:path';
 import { Effect, Schema } from 'effect';
-import { sourceInstallation, builtAssetRoot } from '../installation/index.js';
-import { ConcordError, failure } from '../../model/index.js';
+import { sourceInstallation, builtAssetRoot } from '../installation/index.ts';
+import { ConcordError, failure } from '../../model/index.ts';
 const MiB = 1024 * 1024;
 
 interface DirectoryIdentity { path: string; dev: number; ino: number; }
@@ -62,7 +62,7 @@ export const inspectExportAncestors = Effect.fn('Publication.inspectExportAncest
 }));
 export const publishExport = Effect.fn('Publication.publishExport')(function*(out: string, data: string, chain: DirectoryIdentity[]) {
   const files = sourceInstallation
-    ? yield* Effect.tryPromise({ try: async () => (await import('../installation/index.js')).sourcePreviewFiles(), catch: failure })
+    ? yield* Effect.tryPromise({ try: async () => (await import('../installation/index.ts')).sourcePreviewFiles(), catch: failure })
     : yield* Effect.try({ try: staticFiles, catch: failure });
   return yield* Effect.try({ try: () => publishNow(out, data, chain, files), catch: failure });
 });

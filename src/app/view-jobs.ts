@@ -1,13 +1,13 @@
-import { Publication } from '../base/publication/index.js';
+import { Publication } from '../base/publication/index.ts';
 import { randomUUID } from "node:crypto";
 import { Cause, Effect, Exit, Option } from "effect";
-import { runCase } from "../domain/tests/index.js";
-import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService, OwnedProcess, type OwnedProcessService } from "../base/process/index.js";
-import { ConcordError, failure } from "../model/index.js";
-import { LocalRepository } from "../base/workspace/index.js";
-import { Sources } from '../base/sources/index.js';
-import { buildTrace, requireValidTrace, selectCase } from "../domain/trace/index.js";
-import type { ViewJob, ViewJobState } from "../model/index.js";
+import { runCase } from "../domain/tests/index.ts";
+import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService, OwnedProcess, type OwnedProcessService } from "../base/process/index.ts";
+import { ConcordError, failure } from "../model/index.ts";
+import { LocalRepository } from "../base/workspace/index.ts";
+import { Sources } from '../base/sources/index.ts';
+import { buildTrace, requireValidTrace, selectCase } from "../domain/trace/index.ts";
+import type { ViewJob, ViewJobState } from "../model/index.ts";
 
 
 interface JobRecord {
@@ -52,7 +52,14 @@ export class ViewJobManager {
   private active: JobRecord | undefined;
   private stopped = false;
 
-  constructor(readonly root: string, private readonly onEvidencePublished: () => void, private readonly withWriter: <A>(root: string, use: (repo: LocalRepository, sources: Sources['Service'], publication: Publication['Service']) => Promise<A>) => Promise<A>) {}
+  readonly root: string;
+  private readonly onEvidencePublished: () => void;
+  private readonly withWriter: <A>(root: string, use: (repo: LocalRepository, sources: Sources['Service'], publication: Publication['Service']) => Promise<A>) => Promise<A>;
+  constructor(root: string, onEvidencePublished: () => void, withWriter: <A>(root: string, use: (repo: LocalRepository, sources: Sources['Service'], publication: Publication['Service']) => Promise<A>) => Promise<A>) {
+    this.root = root;
+    this.onEvidencePublished = onEvidencePublished;
+    this.withWriter = withWriter;
+  }
 
   list(): readonly ViewJob[] {
     return [...this.jobs.values()].map(publicJob).reverse();

@@ -1,19 +1,19 @@
-import { createDocument, addPage, templateBody } from '../support/operations.js';
-import { createConsumer } from '../support/consumer.js';
+import { createDocument, addPage, templateBody } from '../support/operations.ts';
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { renderOwnerFixture } from '../support/owner-fixture.js';
+import { renderOwnerFixture } from '../support/owner-fixture.ts';
 
-import { setPage, loadDocuments } from "../../src/domain/documents/index.js";
-import { LocalRepository } from "../support/repository.js";
-import { leafOwnerSelection, assertSameLeafSelection } from "../../src/domain/documents/index.js";
-import { traceDigest } from "../../src/base/publication/index.js";
+import { setPage, loadDocuments } from "../../src/domain/documents/index.ts";
+import { LocalRepository } from "../support/repository.ts";
+import { leafOwnerSelection, assertSameLeafSelection } from "../../src/domain/documents/index.ts";
+import { traceDigest } from "../../src/base/publication/index.ts";
 
 
 function write(root: string, path: string, source: string): void { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), source); }

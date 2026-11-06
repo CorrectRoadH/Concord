@@ -1,15 +1,15 @@
-import * as storage from '../base/workspace/index.js';
-import * as gh from '../domain/feedback/index.js';
-import { Sources } from '../base/sources/index.js';
-import type { Publication } from '../base/publication/index.js';
-import type { OwnedProcess } from '../base/process/index.js';
+import * as storage from '../base/workspace/index.ts';
+import * as gh from '../domain/feedback/index.ts';
+import { Sources } from '../base/sources/index.ts';
+import type { Publication } from '../base/publication/index.ts';
+import type { OwnedProcess } from '../base/process/index.ts';
 import { Effect } from "effect";
-import { IssueProject } from "../domain/issues/index.js";
-import type { IssueCommandRunner } from "./issue-operations.js";
-import { IssuePlanStore, IssueRemote } from "../domain/issues/index.js";
-import { makeNodeIssuePlanStore } from "./issue-plan-store.js";
-import { makeGhIssueRemote, type IssueGhRequest } from "../domain/issues/index.js";
-import { IssueConnectionUnbound, IssueInputError, IssueRemoteTransportUnsupported, type IssueGhError } from "../model/index.js";
+import { IssueProject } from "../domain/issues/index.ts";
+import type { IssueCommandRunner } from "./issue-operations.ts";
+import { IssuePlanStore, IssueRemote } from "../domain/issues/index.ts";
+import { makeNodeIssuePlanStore } from "./issue-plan-store.ts";
+import { makeGhIssueRemote, type IssueGhRequest } from "../domain/issues/index.ts";
+import { IssueConnectionUnbound, IssueInputError, IssueRemoteTransportUnsupported, type IssueGhError } from "../model/index.ts";
 interface Connection { readonly id: string; readonly provider: string; readonly transport?: string; readonly repositoryId?: string; readonly owner?: string; readonly repo?: string }
 interface Repository { readonly root: string; readonly config: { readonly feedbackConnections?: readonly Connection[] }; readonly close: () => void }
 interface StorageModule { readonly LocalRepository: new(root?: string, options?: { readonly access: "read"; readonly optimistic: boolean }) => Repository }

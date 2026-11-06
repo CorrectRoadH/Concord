@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 import { Schema } from 'effect';
-import { ProjectSchema } from './shared.js';
+import { ProjectSchema } from './shared.ts';
 
 export const WritingGuideSchema = Schema.Literals(['docs-from-scratch', 'docs-from-code']);
 export type WritingGuide = typeof WritingGuideSchema.Type;

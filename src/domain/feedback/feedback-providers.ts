@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/architecture.md
 import { Config, DateTime, Effect, Option, Predicate, Schema } from "effect";
-import { RemoteFeedbackSchema, type feedback_schema_FeedbackConnection as FeedbackConnection, type RemoteFeedback } from "../../model/index.js";
-import { ConcordError, canonical } from "../../model/index.js";
+import { RemoteFeedbackSchema, type feedback_schema_FeedbackConnection as FeedbackConnection, type RemoteFeedback } from "../../model/index.ts";
+import { ConcordError, canonical } from "../../model/index.ts";
 
 const GITHUB_API = 'https://api.github.com';
 const LINEAR_API = 'https://api.linear.app';

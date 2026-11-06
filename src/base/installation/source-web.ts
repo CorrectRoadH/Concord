@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { packageRoot } from './location.js';
+import { packageRoot } from './location.ts';
 
 /** Compile this server's source snapshot with Vite; no checkout build or HMR client. */
 export async function sourceWebServer() {

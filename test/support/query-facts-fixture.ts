@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { decodeDocumentSource } from '../../src/domain/documents/index.js';
-import { renderDocument } from '../../src/model/index.js';
-import { createConsumer } from './consumer.js';
-import { writeProjectConfig } from './support.js';
-import { LocalRepository } from './repository.js';
-import { createDocument } from './operations.js';
+import { decodeDocumentSource } from '../../src/domain/documents/index.ts';
+import { renderDocument } from '../../src/model/index.ts';
+import { createConsumer } from './consumer.ts';
+import { writeProjectConfig } from './support.ts';
+import { LocalRepository } from './repository.ts';
+import { createDocument } from './operations.ts';
 
 export const ownerPath = 'docs/feature/sample/README.md';
 export const flow = 'docs/feature/sample/use-case/flow.md';

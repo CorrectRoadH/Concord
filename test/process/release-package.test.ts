@@ -1,6 +1,6 @@
-import { verifyInstalledStartup } from '../support/installed-startup.js';
-import { verifyInstalledHerdrMod } from '../support/installed-herdr-mod.js';
-import { verifyInstalledBundles } from '../support/installed-bundles.js';
+import { verifyInstalledStartup } from '../support/installed-startup.ts';
+import { verifyInstalledHerdrMod } from '../support/installed-herdr-mod.ts';
+import { verifyInstalledBundles } from '../support/installed-bundles.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { packConcord } from '../../scripts/release-package.js';
-import { installedPackageRoot, packageBin } from '../support/installed-package.js';
-import { builtConcord } from '../support/installed-package.js';
-import { tmpdir } from '../support/temporary.js';
+import { packConcord } from '../../scripts/release-package.ts';
+import { installedPackageRoot, packageBin } from '../support/installed-package.ts';
+import { builtConcord } from '../support/installed-package.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('release packing preserves source identity bytes and tar contents without a build', () => Effect.runPromise(Effect.gen(function*() {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { auditTestLayers, classifyTestLayer, summarizeTestLayers } from '../../scripts/test-layers.js';
+import { auditTestLayers, classifyTestLayer, summarizeTestLayers } from '../../scripts/test-layers.ts';
 
 // @feature docs/engineering/testing/README.md#分层
 test('test layers classify real boundary directories and reject support and unknown directories', () => Effect.runPromise(Effect.sync(() => {

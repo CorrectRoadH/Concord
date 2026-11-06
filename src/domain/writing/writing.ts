@@ -1,16 +1,16 @@
-import type { WritingFinding, WritingReport } from "../../model/index.js";
-import { fromMarkdown } from "../../model/index.js";
+import type { WritingFinding, WritingReport } from "../../model/index.ts";
+import { fromMarkdown } from "../../model/index.ts";
 import type { Nodes } from "mdast";
-import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.js";
-import { WRITING_PARSER_VERSION, writingBudget, type PolicySource } from "../../model/index.js";
-import { LocalRepository } from "../../base/workspace/index.js";
-import { canonicalPath } from "../../model/index.js";
-import { readWritingPolicy } from "./writing-policy.js";
-import type { BannedTerm, WritingPolicy } from "../../model/index.js";
-import { analyzeCatalogs, effectiveConcepts, spellingKey, spellingPositions } from "../concepts/index.js";
-import { applies, discovered, scopeOf, snapshotDigest, under } from "../../model/index.js";
-import { extractSteps } from "../documents/index.js";
-import { readWritingFindings, writeWritingFindings } from "../../base/cache/index.js";
+import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.ts";
+import { WRITING_PARSER_VERSION, writingBudget, type PolicySource } from "../../model/index.ts";
+import { LocalRepository } from "../../base/workspace/index.ts";
+import { canonicalPath } from "../../model/index.ts";
+import { readWritingPolicy } from "./writing-policy.ts";
+import type { BannedTerm, WritingPolicy } from "../../model/index.ts";
+import { analyzeCatalogs, effectiveConcepts, spellingKey, spellingPositions } from "../concepts/index.ts";
+import { applies, discovered, scopeOf, snapshotDigest, under } from "../../model/index.ts";
+import { extractSteps } from "../documents/index.ts";
+import { readWritingFindings, writeWritingFindings } from "../../base/cache/index.ts";
 // @concord-begin
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
 function withoutStepMarkers(path: string, source: string): string {

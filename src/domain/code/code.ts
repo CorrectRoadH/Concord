@@ -1,17 +1,17 @@
-import { CodeDeclarationSchema, type CodeDeclaration } from "../../model/index.js";
+import { CodeDeclarationSchema, type CodeDeclaration } from "../../model/index.ts";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
-import type { language_server_config_LanguageServer as LanguageServer } from "../../model/index.js";
-import { cacheDatabasePath } from "../../base/cache/index.js";
-import { readCodePayloads, writeCodePayloads } from "../../base/cache/index.js";
-import { persistNotedConfig } from "../../base/workspace/index.js";
-import { decode, canonical, digest, objectDigest, Text, type Finding, type Repository } from "../../model/index.js";
-import { parseReference } from "../../model/index.js";
-import { ContentCache } from "../../base/cache/index.js";
-import { measureScan, type ScanTiming } from "../../base/sources/index.js";
+import type { language_server_config_LanguageServer as LanguageServer } from "../../model/index.ts";
+import { cacheDatabasePath } from "../../base/cache/index.ts";
+import { readCodePayloads, writeCodePayloads } from "../../base/cache/index.ts";
+import { persistNotedConfig } from "../../base/workspace/index.ts";
+import { decode, canonical, digest, objectDigest, Text, type Finding, type Repository } from "../../model/index.ts";
+import { parseReference } from "../../model/index.ts";
+import { ContentCache } from "../../base/cache/index.ts";
+import { measureScan, type ScanTiming } from "../../base/sources/index.ts";
 import * as ts from 'typescript/ast';
 import type { Diagnostic } from "typescript/sync";
-import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from "../../base/process/index.js";
+import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from "../../base/process/index.ts";
 
 export interface CodeCacheStatus {
   readonly status: string;

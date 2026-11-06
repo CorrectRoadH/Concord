@@ -1,5 +1,5 @@
-export { buildTrace } from './trace.js';
-export { requireValidTrace } from './trace.js';
-export { selectCase } from './trace.js';
-export { buildUnderSnapshot } from './trace.js';
-export type { RelationshipKind } from './trace.js';
+export { buildTrace } from './trace.ts';
+export { requireValidTrace } from './trace.ts';
+export { selectCase } from './trace.ts';
+export { buildUnderSnapshot } from './trace.ts';
+export type { RelationshipKind } from './trace.ts';

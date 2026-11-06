@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Effect, Schema } from 'effect';
-import { CacheDerivationBatch } from '../../model/index.js';
-import { WorkspaceServerError } from './protocol.js';
+import { CacheDerivationBatch } from '../../model/index.ts';
+import { WorkspaceServerError } from './protocol.ts';
 
 interface Batch { readonly session: string; readonly chunks: Uint8Array[]; bytes: number }
 /** Only a complete decoded batch can reach the persistent owner. */

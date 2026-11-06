@@ -3,13 +3,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import type { FeedbackTransport } from "../../src/domain/feedback/index.js";
-import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../../src/model/index.js";
+import type { FeedbackTransport } from "../../src/domain/feedback/index.ts";
+import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../../src/model/index.ts";
 
 type Scenario = 'trusted-path' | 'missing' | 'old-version' | 'bad-help' | 'bad-protocol' | 'page-failure' | 'budget' | 'cas' | 'normal' | 'switch';
 type Call = { readonly args: readonly string[]; readonly outputBytes?: number };
@@ -108,7 +108,7 @@ async function child(scenario: Scenario): Promise<void> {
     process.chdir(temporary);
     process.env.PATH = ['', 'relative', modules, join(consumer, 'bin'), symlinkDirectory, linkedExecutable, gitBin, ...(scenario === 'missing' ? [] : [trusted])].join(delimiter);
     const [{ syncFeedback, listFeedback }, { initialize, LocalRepository, runApplication }, { setConfig, showConfig }, { ConcordError }] = await Promise.all([
-      import("../../src/domain/feedback/feedback.js"), import("../support/repository.js"), import("../../src/app/editing.js"), import("../../src/model/index.js"),
+      import("../../src/domain/feedback/feedback.ts"), import("../support/repository.ts"), import("../../src/app/editing.ts"), import("../../src/model/index.ts"),
     ]);
     const first = new LocalRepository(consumer, { initialize: true });
     try { initialize(first); } finally { first.close(); }
@@ -124,7 +124,7 @@ async function child(scenario: Scenario): Promise<void> {
     const configPath = join(consumer, 'concord.config.ts');
     const originalConfig = readFileSync(configPath, 'utf8');
     const issuePath = join(consumer, 'docs', 'issues', 'feedback-github-1001.md');
-    const { OwnedProcess, makeOwnedProcessService } = await import('../../src/base/process/index.js');
+    const { OwnedProcess, makeOwnedProcessService } = await import('../../src/base/process/index.ts');
     const startupOwner = makeOwnedProcessService();
     if (scenario === 'trusted-path') process.env.PATH = [join(consumer, 'bin'), modules, gitBin].join(delimiter);
     if (scenario === 'trusted-path' || scenario === 'normal') {
@@ -210,7 +210,7 @@ if (process.argv[2] === '--fixture-child') {
   test('configuration digest drift during gh read prevents publication', { skip: process.platform === 'win32' }, () => run('cas'));
   test('API to gh switch retains repository binding and one imported source', { skip: process.platform === 'win32' }, () => run('switch'));
   test('connection schema rejects credential and transport combinations outside their modes', async () => {
-    const [{ FeedbackConnectionSchema }, { decode }] = await Promise.all([import("../../src/model/index.js"), import("../../src/model/index.js")]);
+    const [{ FeedbackConnectionSchema }, { decode }] = await Promise.all([import("../../src/model/index.ts"), import("../../src/model/index.ts")]);
     for (const invalid of [
       { ...connection, credentialEnv: 'SHOULD_NOT_BE_ACCEPTED' },
       { ...connection, transport: 'api' },

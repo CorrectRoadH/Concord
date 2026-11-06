@@ -1,16 +1,16 @@
-import { installedConcordCli } from '../support/support.js';
+import { installedConcordCli } from '../support/support.ts';
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { Effect } from "effect";
-import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { LocalRepository } from "../support/repository.js";
-import { acquireTraceLeaseSync, genericJournalPath, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../../src/base/publication/index.js";
-import { mutateTraceFiles, recoverTrace, traceDigest, withTraceLease } from "../../src/base/publication/index.js";
-import { TraceRecoveryConflict, TraceRecoveryRequired } from "../../src/model/index.js";
+import { renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
+import { LocalRepository } from "../support/repository.ts";
+import { acquireTraceLeaseSync, genericJournalPath, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../../src/base/publication/index.ts";
+import { mutateTraceFiles, recoverTrace, traceDigest, withTraceLease } from "../../src/base/publication/index.ts";
+import { TraceRecoveryConflict, TraceRecoveryRequired } from "../../src/model/index.ts";
 
 function isolatedRepository(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), "concord-coordination-"));

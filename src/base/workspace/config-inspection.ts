@@ -1,11 +1,11 @@
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import { ConcordError, digest, failure, type ConfigSnapshot } from '../../model/index.js';
-import { assertCurrentRuntimeFormat } from './storage.js';
-import { snapshot } from './config.js';
-import { discoverRoot } from './storage.js';
-import { assertLeasePath, genericPrivateDirectorySync } from '../publication/index.js';
+import { ConcordError, digest, failure, type ConfigSnapshot } from '../../model/index.ts';
+import { assertCurrentRuntimeFormat } from './storage.ts';
+import { snapshot } from './config.ts';
+import { discoverRoot } from './storage.ts';
+import { assertLeasePath, genericPrivateDirectorySync } from '../publication/index.ts';
 
 export interface ConfigurationInspection {
   readonly path: 'concord.config.ts';
@@ -40,4 +40,4 @@ function inspectNow(root: string): ConfigurationInspection {
 /** Reread the current bytes, including malformed configurations for inspection. */
 export const inspectConfiguration = Effect.fn('Workspace.inspectConfiguration')((root: string) => Effect.try({ try: () => inspectNow(root), catch: failure }));
 
-export { identifyWorkspace, locateWorkspace } from './identity.js';
+export { identifyWorkspace, locateWorkspace } from './identity.ts';

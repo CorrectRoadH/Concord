@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
-import type { HawdbDatabase, HawdbEntry, HawdbLimits, HawdbNamespace } from "./hawdb-native.js";
+import type { HawdbDatabase, HawdbEntry, HawdbLimits, HawdbNamespace } from "./hawdb-native.ts";
 
 /** Query-local selection only. The engine bounds namespace rows and bytes. */
 export function readCachePayloads(database: Pick<HawdbDatabase, 'get' | 'scan'>, namespace: HawdbNamespace, keys: readonly string[]): ReadonlyMap<string, string> {

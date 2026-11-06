@@ -1,8 +1,8 @@
-import { createConsumer } from './consumer.js';
-import { writeProjectConfig } from './support.js';
+import { createConsumer } from './consumer.ts';
+import { writeProjectConfig } from './support.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { renderDocument } from '../../src/model/index.js';
+import { renderDocument } from '../../src/model/index.ts';
 
 export const useCasePath = 'docs/feature/sample/use-case/inspect.md';
 export const engineeringPath = 'docs/engineering/sample/README.md';

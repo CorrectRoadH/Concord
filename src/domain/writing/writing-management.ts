@@ -1,9 +1,9 @@
-import { ConcordError, digest, inRepositorySnapshot, type Repository } from "../../model/index.js";
-import type { LocalRepository } from "../../base/workspace/index.js";
-import { readWritingPolicy } from "./writing-policy.js";
-import type { WritingPolicy } from "../../model/index.js";
-import { applies, discovered, indexWritingScopes, globalPolicyPath, scopeOf } from "../../model/index.js";
-import { effectiveConcepts, indexConcepts, spellingKey } from "../concepts/index.js";
+import { ConcordError, digest, inRepositorySnapshot, type Repository } from "../../model/index.ts";
+import type { LocalRepository } from "../../base/workspace/index.ts";
+import { readWritingPolicy } from "./writing-policy.ts";
+import type { WritingPolicy } from "../../model/index.ts";
+import { applies, discovered, indexWritingScopes, globalPolicyPath, scopeOf } from "../../model/index.ts";
+import { effectiveConcepts, indexConcepts, spellingKey } from "../concepts/index.ts";
 
 export const WRITING_POLICY_PATH = globalPolicyPath;
 // @concord-begin

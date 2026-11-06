@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { hawdbTarget, installationResources } from '../../src/base/installation/index.js';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
-import { tmpdir } from '../support/temporary.js';
+import { hawdbTarget, installationResources } from '../../src/base/installation/index.ts';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('the gate package operates native projections without compilers and restores private damage', () => {

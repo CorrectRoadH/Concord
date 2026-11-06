@@ -6,12 +6,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { Cause, Context, Deferred, Effect, Fiber, Layer, Option, Queue, Result, Scope, Stream } from "effect";
 import { NodeServices } from '@effect/platform-node';
-import { launchDetachedWorker } from './worker.js';
+import { launchDetachedWorker } from './worker.ts';
 import { ChildProcess as ProcessCommand, ChildProcessSpawner } from 'effect/unstable/process';
 import type { ChildProcessHandle } from 'effect/unstable/process/ChildProcessSpawner';
-import { resolveTrustedExecutable } from './trusted-executable.js';
-import { OwnedProcessError } from './owned-process-error.js';
-export { OwnedProcessError } from './owned-process-error.js';
+import { resolveTrustedExecutable } from './trusted-executable.ts';
+import { OwnedProcessError } from './owned-process-error.ts';
+export { OwnedProcessError } from './owned-process-error.ts';
 
 const captureEnvironment = () => Object.freeze({ env: Object.freeze({ ...process.env }), cwd: process.cwd() });
 

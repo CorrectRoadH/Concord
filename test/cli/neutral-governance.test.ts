@@ -1,9 +1,9 @@
 import {
   CheckOutput, ErrorOutput, Schema, Effect, assert, call, consumer, join, readFileSync, rmSync, test, write,
-} from '../support/cli-fixture.js';
-import { gitCommit } from '../support/fix-consumer.js';
-import { createDocument } from '../support/operations.js';
-import { LocalRepository } from '../support/repository.js';
+} from '../support/cli-fixture.ts';
+import { gitCommit } from '../support/fix-consumer.ts';
+import { createDocument } from '../support/operations.ts';
+import { LocalRepository } from '../support/repository.ts';
 
 const Cases = Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: Schema.String })) });
 function configlessConsumer(name: string): string {

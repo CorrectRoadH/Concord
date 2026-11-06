@@ -1,13 +1,13 @@
-import { packageBin } from '../support/installed-package.js';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
-import { createConsumer } from '../support/consumer.js';
+import { packageBin } from '../support/installed-package.ts';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test, { before, after } from 'node:test';
-import { decodeDocumentSource } from "../../src/domain/documents/index.js";
+import { decodeDocumentSource } from "../../src/domain/documents/index.ts";
 
 const packedRoot = mkdtempSync(join(tmpdir(), 'concord-issue-packed-'));
 let cli: string;

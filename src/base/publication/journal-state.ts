@@ -1,8 +1,8 @@
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import { failure } from '../../model/index.js';
-import { assertLeasePath, CoordinationError } from './file-lease.js';
+import { failure } from '../../model/index.ts';
+import { assertLeasePath, CoordinationError } from './file-lease.ts';
 
 /** Read-only journal inspection does not grant publication ownership. */
 export const inspectPendingJournals = Effect.fn('Publication.inspectPendingJournals')((privateDir: string, verifyPaths = true) => Effect.try({

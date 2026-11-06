@@ -1,26 +1,26 @@
-import { createDocument, initialize } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
-import { createConsumer } from '../support/consumer.js';
-import { installedConcordCli } from '../support/support.js';
+import { createDocument, initialize } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
+import { createConsumer } from '../support/consumer.ts';
+import { installedConcordCli } from '../support/support.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getWorkspaceSnapshot } from "../../src/app/index.js";
-import { diagnoseDocuments, readDocumentReference, readDocumentSelector } from "../../src/domain/documents/index.js";
+import { getWorkspaceSnapshot } from "../../src/app/index.ts";
+import { diagnoseDocuments, readDocumentReference, readDocumentSelector } from "../../src/domain/documents/index.ts";
 
-import { renderDocument } from "../../src/model/index.js";
-import { editKnowledge } from "../../src/app/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { renderDocument } from "../../src/model/index.ts";
+import { editKnowledge } from "../../src/app/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../src/base/publication/index.js";
-import { beginRun } from "../../src/base/publication/index.js";
-import { setSource } from "../../src/app/index.js";
-import { digest } from "../../src/model/index.js";
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../src/base/publication/index.ts";
+import { beginRun } from "../../src/base/publication/index.ts";
+import { setSource } from "../../src/app/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 const cli = installedConcordCli();
 

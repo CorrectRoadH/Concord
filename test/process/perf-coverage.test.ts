@@ -4,14 +4,14 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
-import { loadArtifact } from '../../scripts/perf/artifact.js';
-import { loadBudgets } from '../../scripts/perf/budgets.js';
-import { commandGroups, selectScenarios } from '../../scripts/perf/selection.js';
-import { executeScenario, loadScenarios, makeContext, prepareServer, runArguments, type BenchScenario } from '../../scripts/perf/scenario.js';
-import { io, mustRun } from '../../scripts/perf/process.js';
-import { installedConcordCli } from '../support/support.js';
-import { prepareConsumer, workDirectory } from '../../scripts/perf/workspace.js';
-import { benchmarkSmoke } from '../support/benchmark-smoke.js';
+import { loadArtifact } from '../../scripts/perf/artifact.ts';
+import { loadBudgets } from '../../scripts/perf/budgets.ts';
+import { commandGroups, selectScenarios } from '../../scripts/perf/selection.ts';
+import { executeScenario, loadScenarios, makeContext, prepareServer, runArguments, type BenchScenario } from '../../scripts/perf/scenario.ts';
+import { io, mustRun } from '../../scripts/perf/process.ts';
+import { installedConcordCli } from '../support/support.ts';
+import { prepareConsumer, workDirectory } from '../../scripts/perf/workspace.ts';
+import { benchmarkSmoke } from '../support/benchmark-smoke.ts';
 const root = resolve(".");
 // @feature docs/feature/local-sdlc/README.md
 test('performance budgets and executable scenarios have exactly one consistent owner', () => Effect.runPromise(Effect.gen(function*() {

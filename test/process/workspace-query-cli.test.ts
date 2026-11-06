@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from '../../src/base/publication/index.js';
-import { installedConcordCli, pollUntil } from '../support/support.js';
-import { command, fixture, record, recordPath, rpcModule, stop } from '../support/workspace-server-fixture.js';
+import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from '../../src/base/publication/index.ts';
+import { installedConcordCli, pollUntil } from '../support/support.ts';
+import { command, fixture, record, recordPath, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
 function launch(cwd: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env, ipc = false) {
   const child = spawn(process.execPath, [installedConcordCli(), ...args], { cwd, env, stdio: ipc ? ['ignore', 'pipe', 'pipe', 'ipc'] : ['ignore', 'pipe', 'pipe'] });

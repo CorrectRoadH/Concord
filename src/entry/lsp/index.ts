@@ -1,1 +1,1 @@
-export { serveEditor } from './lsp-server.js';
+export { serveEditor } from './lsp-server.ts';

@@ -1,7 +1,7 @@
 import { constants, closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, readlinkSync } from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
-import { ConcordError, digest, objectDigest } from '../../model/index.js';
-import { packageRoot } from '../installation/index.js';
+import { ConcordError, digest, objectDigest } from '../../model/index.ts';
+import { packageRoot } from '../installation/index.ts';
 
 function inputBytes(path: string): Buffer {
   const before = lstatSync(path);

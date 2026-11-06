@@ -1,50 +1,50 @@
-import { Installation } from '../../base/installation/index.js';
+import { Installation } from '../../base/installation/index.ts';
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Context, Effect, Layer } from "effect";
-import { Publication } from "../../base/publication/index.js";
-import { PublicationValidationLive } from "../../app/index.js";
-import { Workspace } from '../../base/workspace/index.js';
-import { Sources, type SourceWatch } from '../../base/sources/index.js';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../base/cache/index.js';
-import type { ReadonlyCacheSnapshot } from '../../base/cache/index.js';
-import { CacheDerivationBatch } from '../../model/index.js';
+import { Publication } from "../../base/publication/index.ts";
+import { PublicationValidationLive } from "../../app/index.ts";
+import { Workspace } from '../../base/workspace/index.ts';
+import { Sources, type SourceWatch } from '../../base/sources/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../base/cache/index.ts';
+import type { ReadonlyCacheSnapshot } from '../../base/cache/index.ts';
+import { CacheDerivationBatch } from '../../model/index.ts';
 import type { ChildProcessSpawner } from 'effect/unstable/process';
 import { NodeSocketServer } from '@effect/platform-node';
 import { Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { RpcClient, RpcSerialization, RpcServer } from 'effect/unstable/rpc';
 import { Socket, SocketServer } from 'effect/unstable/socket';
-import { makeOwnedProcessService } from '../../app/index.js';
-import { ServerRuntime } from '../../base/server-lock/index.js';
-import { Git } from '../../base/git/index.js';
-import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.js';
+import { makeOwnedProcessService } from '../../app/index.ts';
+import { ServerRuntime } from '../../base/server-lock/index.ts';
+import { Git } from '../../base/git/index.ts';
+import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
-import { CacheSnapshotUnavailable, ConcordError, failure } from '../../model/index.js';
-import { Computation, ComputationReply, ComputeRpcs } from './computation.js';
-import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, CommandScope, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.js';
-import { makeAdmittedProtocol } from './admission.js';
-import { makeRequestAdmission } from './request-admission.js';
-import { getWorkspaceRead } from '../../app/index.js';
-import { QueryRefreshRequest, queryContext, storeQuery, scanQueryProcess } from '../../app/index.js';
-import { decodeQueryScanMessage } from '../../model/index.js';
-import { workspaceEvents, WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.js';
-import { makeWorkspaceService } from './service.js';
-import { FeedbackSessions } from './feedback-session.js';
-import { DerivationSessions } from './derivation-session.js';
-import { ServerJobs } from './jobs.js';
-import { makeHttpLeases } from './http-leases.js';
-import { startHostedViewServer, type HostedViewPorts } from '../http/index.js';
-import { FeedbackCacheWriter } from '../../base/cache/index.js';
-import { mergeLocalFeedbackObservation } from '../../app/index.js';
-import type { RemoteFeedback } from '../../model/index.js';
-import { clearWorkspaceCache, decodeViewAction, maintainCache, cacheMaintenanceNeeded } from '../../app/index.js';
-import { Snapshot } from './computation.js';
-import { assertWorkspacePublicationReady } from '../../app/index.js';
-import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.js';
+import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.ts';
+import { CacheSnapshotUnavailable, ConcordError, failure } from '../../model/index.ts';
+import { Computation, ComputationReply, ComputeRpcs } from './computation.ts';
+import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, CommandScope, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.ts';
+import { makeAdmittedProtocol } from './admission.ts';
+import { makeRequestAdmission } from './request-admission.ts';
+import { getWorkspaceRead } from '../../app/index.ts';
+import { QueryRefreshRequest, queryContext, storeQuery, scanQueryProcess } from '../../app/index.ts';
+import { decodeQueryScanMessage } from '../../model/index.ts';
+import { workspaceEvents, WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.ts';
+import { makeWorkspaceService } from './service.ts';
+import { FeedbackSessions } from './feedback-session.ts';
+import { DerivationSessions } from './derivation-session.ts';
+import { ServerJobs } from './jobs.ts';
+import { makeHttpLeases } from './http-leases.ts';
+import { startHostedViewServer, type HostedViewPorts } from '../http/index.ts';
+import { FeedbackCacheWriter } from '../../base/cache/index.ts';
+import { mergeLocalFeedbackObservation } from '../../app/index.ts';
+import type { RemoteFeedback } from '../../model/index.ts';
+import { clearWorkspaceCache, decodeViewAction, maintainCache, cacheMaintenanceNeeded } from '../../app/index.ts';
+import { Snapshot } from './computation.ts';
+import { assertWorkspacePublicationReady } from '../../app/index.ts';
+import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.ts';
 
-import { OperationReply, OperationReady } from './operation-protocol.js';
-const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: string, snapshot: Effect.Effect<import('../../base/cache/index.js').ReadonlyCacheSnapshot, unknown>, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown>) {
+import { OperationReply, OperationReady } from './operation-protocol.ts';
+const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: string, snapshot: Effect.Effect<import('../../base/cache/index.ts').ReadonlyCacheSnapshot, unknown>, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown>) {
   const installation = yield* Installation;
   const scope = yield* Effect.scope;
   const selection = yield* Semaphore.make(1);
@@ -52,7 +52,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     readonly owner: ReturnType<typeof makeOwnedProcessService>;
     readonly ready: Deferred.Deferred<void, ConcordError>;
     readonly input: Deferred.Deferred<{ write: (bytes: string | Uint8Array) => void; end: () => void }>;
-    readonly result: Deferred.Deferred<import('../../base/process/index.js').OwnedProcessResult, ConcordError>;
+    readonly result: Deferred.Deferred<import('../../base/process/index.ts').OwnedProcessResult, ConcordError>;
     header: string;
     used: boolean;
   };
@@ -66,7 +66,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
   const stopWorker = (worker: Worker) => worker.owner.requestStop('SIGTERM').pipe(Effect.andThen(Deferred.await(worker.result).pipe(Effect.ignore)), Effect.andThen(inspect(worker)));
   const start: Effect.Effect<Worker, ConcordError> = Effect.gen(function*() {
     yield* ensureClean;
-    const worker: Worker = { owner: makeOwnedProcessService(), ready: yield* Deferred.make<void, ConcordError>(), input: yield* Deferred.make<{ write: (bytes: string | Uint8Array) => void; end: () => void }>(), result: yield* Deferred.make<import('../../base/process/index.js').OwnedProcessResult, ConcordError>(), header: '', used: false };
+    const worker: Worker = { owner: makeOwnedProcessService(), ready: yield* Deferred.make<void, ConcordError>(), input: yield* Deferred.make<{ write: (bytes: string | Uint8Array) => void; end: () => void }>(), result: yield* Deferred.make<import('../../base/process/index.ts').OwnedProcessResult, ConcordError>(), header: '', used: false };
     workers.add(worker);
     let buffered = '', received = false;
     const exited = new ConcordError('OperationResultUnknown', 'Operation process ended before accepting a request');
@@ -140,7 +140,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     }).pipe(Effect.ensuring(stopWorker(worker).pipe(Effect.orDie)), Effect.ensuring(warm.pipe(Effect.orDie)));
   }) };
 });
-import { connectWorkspaceSocket, requestWorkspace, submitFeedback } from './client.js';
+import { connectWorkspaceSocket, requestWorkspace, submitFeedback } from './client.ts';
 
 export function workspaceServerFailure(cause: unknown): ConcordError {
   if (cause instanceof ConcordError) return cause;
@@ -356,7 +356,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         verify: () => run(runtime.verify.pipe(Effect.mapError(workspaceServerFailure), Effect.andThen(service.state.touch))),
         workspace: () => runAdmitted(readProjection),
         refresh: () => { Effect.runFork(service.request); },
-        read: path => runAdmitted(service.execute({ kind: 'read', path })) as Promise<import('../../model/index.js').ViewFile>,
+        read: path => runAdmitted(service.execute({ kind: 'read', path })) as Promise<import('../../model/index.ts').ViewFile>,
         git: () => runAdmitted(service.execute({ kind: 'git-status' })),
         diff: (path, area) => runAdmitted(service.execute({ kind: 'git-diff', path, area })),
         compile: input => runAdmitted(service.execute({ kind: 'p5-compile', input: Schema.decodeUnknownSync(Schema.Json)(input) })),
@@ -397,7 +397,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const feedback = new FeedbackSessions();
     const derivations = new DerivationSessions();
     const refreshing = new Set<string>();
-    const refreshQuery = (query: import('../../app/index.js').Query) => Effect.gen(function*() {
+    const refreshQuery = (query: import('../../app/index.ts').Query) => Effect.gen(function*() {
       const key = JSON.stringify(query);
       if (refreshing.has(key)) return;
       refreshing.add(key);
@@ -442,7 +442,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     yield* operations.close;
   }));
 });
-import { QueryRequest as importedQueryRequest } from '../../app/index.js';
+import { QueryRequest as importedQueryRequest } from '../../app/index.ts';
 export const serveWorkspaceFromEnvironment = Effect.fn('serveWorkspaceFromEnvironment')(function*(root: string) {
   const scope = process.env.CONCORD_SERVER_SCOPE === undefined ? undefined : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CommandScope), { onExcessProperty: 'error' })(process.env.CONCORD_SERVER_SCOPE).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid command service scope')));
   return yield* serveWorkspace(root, Effect.void, scope);

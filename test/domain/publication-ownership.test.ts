@@ -4,9 +4,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { acquireTraceLeaseSync, releaseTraceLeaseSync, recoverPublicationLeaseSync, tracePrivateDirectorySync, type FileLease } from '../../src/base/publication/index.js';
-import { LocalRepository, runApplication } from '../support/repository.js';
-import { fixture } from '../support/publication-ownership-fixture.js';
+import { acquireTraceLeaseSync, releaseTraceLeaseSync, recoverPublicationLeaseSync, tracePrivateDirectorySync, type FileLease } from '../../src/base/publication/index.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { fixture } from '../support/publication-ownership-fixture.ts';
 
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md

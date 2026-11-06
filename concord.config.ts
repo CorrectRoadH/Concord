@@ -1,4 +1,4 @@
-import { type config_public_ProjectConfig as ProjectConfig } from "./src/model/index.js";
+import { type config_public_ProjectConfig as ProjectConfig } from "./src/model/index.ts";
 
 export default {
   "sourceRoots": [

@@ -1,7 +1,7 @@
 import { Clock, Effect, Schema } from "effect";
-import { IssueProject, IssuePlanStore, prepareIssue, issueAuthorization, issueTarget, executeIssuePlan } from "../domain/issues/index.js";
-import { IssueInputError, IssuePayloadSchema, type IssuePayload, type IssueIdentity, type CreateIdentity } from "../model/index.js";
-import type { IssueCommandRequirements as Requirements, IssueCommandRunner as Runner } from "../domain/issues/index.js";
+import { IssueProject, IssuePlanStore, prepareIssue, issueAuthorization, issueTarget, executeIssuePlan } from "../domain/issues/index.ts";
+import { IssueInputError, IssuePayloadSchema, type IssuePayload, type IssueIdentity, type CreateIdentity } from "../model/index.ts";
+import type { IssueCommandRequirements as Requirements, IssueCommandRunner as Runner } from "../domain/issues/index.ts";
 export type IssueCommandRequirements = Requirements;
 export type IssueCommandRunner<R = never> = Runner<R>;
 

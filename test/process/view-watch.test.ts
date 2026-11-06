@@ -1,25 +1,25 @@
-import { readWorkspaceProjection } from '../support/operations.js';
-import { createDocument, initialize } from '../support/operations.js';
-import { Workspace } from '../../src/base/workspace/index.js';
+import { readWorkspaceProjection } from '../support/operations.ts';
+import { createDocument, initialize } from '../support/operations.ts';
+import { Workspace } from '../../src/base/workspace/index.ts';
 import { NodeServices } from '@effect/platform-node';
-import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
-import { genericPrivateDirectorySync } from '../../src/base/publication/index.js';
+import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.ts';
+import { genericPrivateDirectorySync } from '../../src/base/publication/index.ts';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 
-import { ConcordError, digest, failure } from "../../src/model/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { ConcordError, digest, failure } from "../../src/model/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import type { WorkspaceProjection } from "../../src/model/index.js";
-import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
-import { workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
+import type { WorkspaceProjection } from "../../src/model/index.ts";
+import { startViewServer, type ViewServerHandle } from '../e2e/server.ts';
+import { workspaceProjectionContext as identifyProjection } from "../../src/app/index.ts";
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 const ownerPath = 'docs/feature/projected/README.md';
 const mainSource = 'export const projectedValue = 1;\n';

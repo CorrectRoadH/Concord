@@ -1,17 +1,17 @@
-import { initialize } from '../support/operations.js';
-import { executeQuery, recoverLocalState } from '../../src/app/index.js';
-import { runApplication } from '../support/repository.js';
+import { initialize } from '../support/operations.ts';
+import { executeQuery, recoverLocalState } from '../../src/app/index.ts';
+import { runApplication } from '../support/repository.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
-import { snapshot } from "../../src/base/workspace/index.js";
-import { LocalRepository } from "../support/repository.js";
+import { snapshot } from "../../src/base/workspace/index.ts";
+import { LocalRepository } from "../support/repository.ts";
 
-import { digest } from "../../src/model/index.js";
+import { digest } from "../../src/model/index.ts";
 
 const fixture = async (body: (root: string) => unknown) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-ts-only-'));

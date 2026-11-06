@@ -4,9 +4,9 @@ import { randomUUID } from "node:crypto";
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Schema } from "effect";
-import { genericPrivateDirectorySync } from "./coordination.js";
-import { CoordinationError, acquireFileLease, assertLeasePath, errno, ownerIsAlive, readLeaseOwner, releaseFileLease, syncLeaseDirectory, type FileLease, type LeaseOwner } from "./file-lease.js";
-import { ConcordError, decode } from "../../model/index.js";
+import { genericPrivateDirectorySync } from "./coordination.ts";
+import { CoordinationError, acquireFileLease, assertLeasePath, errno, ownerIsAlive, readLeaseOwner, releaseFileLease, syncLeaseDirectory, type FileLease, type LeaseOwner } from "./file-lease.ts";
+import { ConcordError, decode } from "../../model/index.ts";
 
 const RunState = Schema.Struct({
   format: Schema.Literal('concord.run-state/v1'),

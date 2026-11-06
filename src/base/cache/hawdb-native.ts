@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { nativeArtifactRoot, sourceInstallation, verifySourceNativeArtifact } from "../installation/index.js";
+import { nativeArtifactRoot, sourceInstallation, verifySourceNativeArtifact } from "../installation/index.ts";
 import { Effect, Schema } from "effect";
-import { HAWDB_ABI, HAWDB_REVISION, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget } from "../installation/index.js";
+import { HAWDB_ABI, HAWDB_REVISION, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget } from "../installation/index.ts";
 
 export { HAWDB_ABI, HAWDB_REVISION };
 export type HawdbNamespace = 'document_parse' | 'code_parse' | 'git_baseline' | 'annotation_cache' | 'code_cache' | 'config_cache' | 'feedback_cache' | 'query_cache' | 'workspace_projection';
@@ -22,8 +22,9 @@ export interface HawdbDatabase {
 }
 export type HawdbFailureCode = 'HawdbBusy' | 'HawdbUnavailable' | 'HawdbIncompatible' | 'HawdbLimit' | 'HawdbClosed' | 'UnsafePath';
 export class HawdbFailure extends Error {
-  constructor(readonly code: HawdbFailureCode, message: string, options?: ErrorOptions) {
-    super(message, options); this.name = code;
+  readonly code: HawdbFailureCode;
+  constructor(code: HawdbFailureCode, message: string, options?: ErrorOptions) {
+    super(message, options); this.code = code; this.name = code;
   }
 }
 const EntrySchema = Schema.Struct({ key: Schema.String, payload: Schema.String });
@@ -111,7 +112,8 @@ export function validateHawdbArtifact(): void { boundary(() => { loadArtifact();
 /** A remote client verifies installation bytes without loading an engine it does not own. */
 export function verifyHawdbArtifact(): void { boundary(() => { verifiedArtifact(); }); }
 class Database implements HawdbDatabase {
-  constructor(private readonly native: NativeBridge) {}
+  private readonly native: NativeBridge;
+  constructor(native: NativeBridge) { this.native = native; }
   get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[] {
     return boundary(() => readEntries(this.native.get(decodeNamespace(namespace), [...decodeKeys(keys)])));
   }

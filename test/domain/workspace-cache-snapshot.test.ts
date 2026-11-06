@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect, Layer } from 'effect';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../src/base/cache/index.js';
-import { Workspace } from '../../src/base/workspace/index.js';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../src/base/cache/index.ts';
+import { Workspace } from '../../src/base/workspace/index.ts';
 import { NodeServices } from '@effect/platform-node';
-import { createConsumer } from '../support/consumer.js';
+import { createConsumer } from '../support/consumer.ts';
 import { rmSync } from 'node:fs';
 
 // @feature docs/feature/local-data-engine/README.md

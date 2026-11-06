@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
-import { createDocument } from '../support/operations.js';
+import { createDocument } from '../support/operations.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { type ViewServerHandle } from './server.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
+import { LocalRepository } from '../support/repository.ts';
+import { type ViewServerHandle } from './server.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
 
 async function hold(root: string): Promise<ChildProcess> {
   // A real independent process owns the portable lease until stdin closes.

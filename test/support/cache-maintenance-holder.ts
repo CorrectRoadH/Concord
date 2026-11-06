@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import { openHawdb } from "../../src/base/cache/index.js";
+import { openHawdb } from "../../src/base/cache/index.ts";
 
 Effect.runSync(Effect.sync(() => {
   const database = openHawdb(process.argv[2]!, { readOnly: false, create: false });

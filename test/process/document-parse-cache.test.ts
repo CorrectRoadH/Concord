@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { fixture } from '../support/document-cache-fixture.js';
+import { fixture } from '../support/document-cache-fixture.ts';
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('metadata stays lazy and one tree serves repeated and duplicate requests without persistent document state', () => Effect.runPromise(Effect.sync(() => {

@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
-import { initialize } from '../support/operations.js';
+import { initialize } from '../support/operations.ts';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { beginRun, finalizeRun } from '../../src/base/publication/index.js';
-import { type ViewServerHandle } from './server.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
+import { LocalRepository } from '../support/repository.ts';
+import { beginRun, finalizeRun } from '../../src/base/publication/index.ts';
+import { type ViewServerHandle } from './server.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name browser-recovery-and-incomplete-inventory

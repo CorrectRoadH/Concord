@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
-import { parseWritingPolicy, defaultWritingPolicy } from '../../src/model/index.js';
-import { writeWritingFile } from '../support/writing-files.js';
+import { parseWritingPolicy, defaultWritingPolicy } from '../../src/model/index.ts';
+import { writeWritingFile } from '../support/writing-files.ts';
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { type ViewServerHandle } from './server.js';
-import { showWriting } from '../../src/domain/writing/index.js';
-import { waitForWritingSave } from '../support/writing-save.js';
+import { LocalRepository } from '../support/repository.ts';
+import { type ViewServerHandle } from './server.ts';
+import { showWriting } from '../../src/domain/writing/index.ts';
+import { waitForWritingSave } from '../support/writing-save.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('real browser authors writing policy, keeps conflict drafts, and displays saved snapshot findings', async ({ page, workspace }) => {

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { createDocument } from '../support/operations.js';
+import { createDocument } from '../support/operations.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test } from './fixtures.js';
-import { act } from './journey.js';
+import { test } from './fixtures.ts';
+import { act } from './journey.ts';
 import { expect } from '@playwright/test';
-import { LocalRepository } from '../support/repository.js';
-import { waitForWorkspaceProjection } from '../support/support.js';
+import { LocalRepository } from '../support/repository.ts';
+import { waitForWorkspaceProjection } from '../support/support.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name dismissible-workspace-health-navigation

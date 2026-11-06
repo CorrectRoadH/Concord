@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { ModSession, markdownTarget, type ModHost } from '../../src/entry/herdr-mod/index.js';
+import { ModSession, markdownTarget, type ModHost } from '../../src/entry/herdr-mod/index.ts';
 
 const path = 'docs/feature/cart/README.md';
 const original = '# Cart\n';

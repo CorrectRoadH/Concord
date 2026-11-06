@@ -2,11 +2,11 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
-import { Query, QueryRequest } from '../../app/index.js';
-import { CacheDerivationBatch } from '../../model/index.js';
-import { Packet, QueryEnvironment, strict, WorkspaceServerError } from './protocol.js';
+import { Query, QueryRequest } from '../../app/index.ts';
+import { CacheDerivationBatch } from '../../model/index.ts';
+import { Packet, QueryEnvironment, strict, WorkspaceServerError } from './protocol.ts';
 
-export { Snapshot } from './operation-protocol.js';
+export { Snapshot } from './operation-protocol.ts';
 export const ComputationReply = strict(Schema.Struct({ value: Schema.Json, derived: Schema.Array(CacheDerivationBatch) }));
 export const Computation = Schema.Union([
   strict(Schema.Struct({ kind: Schema.Literal('scan') })),

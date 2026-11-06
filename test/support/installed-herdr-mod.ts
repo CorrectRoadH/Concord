@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { packageBin } from './installed-package.js';
+import { packageBin } from './installed-package.ts';
 
 /** Exercise the packaged CLI against private homes, replacing only the external Herdr command. */
 export function verifyInstalledHerdrMod(packageRoot: string, scratch: string): void {

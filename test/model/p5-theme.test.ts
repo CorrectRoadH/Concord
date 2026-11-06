@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { P5FrameControlSchema, P5ThemeMessageSchema, themeVariables } from '../../web/p5/theme.js';
+import { P5FrameControlSchema, P5ThemeMessageSchema, themeVariables } from '../../web/p5/theme.ts';
 
 const variables = Object.fromEntries(themeVariables.map(name => [name, name === '--concord-font' ? 'Inter, "Noto Sans SC Variable", system-ui, sans-serif' : '#174c51']));
 const decode = Schema.decodeUnknownSync(P5FrameControlSchema, { onExcessProperty: 'error' });

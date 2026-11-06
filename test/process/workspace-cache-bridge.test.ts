@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.js';
+import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('local cache derivations cross real frames, abandon disconnected input, and cannot replace historical results', { timeout: 30_000 }, async () => {

@@ -1,17 +1,17 @@
-import { packageBin } from './package-location.js';
+import { packageBin } from './package-location.ts';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { environment, loadArtifact, verifyArtifact } from './perf/artifact.js';
-import { loadBudgets, missingOwner } from './perf/budgets.js';
-import { prepareBaseline } from './perf/baseline.js';
-import { changedSelection, defaultBase, selectScenarios } from './perf/selection.js';
-import { executeScenario, loadScenarios, makeContext, prepareServer, runArguments, type BenchContext } from './perf/scenario.js';
-import { io, mustRun, PerfError } from './perf/process.js';
-import { judge, measurementPass, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.js';
-import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.js';
-import { buildForMeasurement } from './measurement-build.js';
+import { environment, loadArtifact, verifyArtifact } from './perf/artifact.ts';
+import { loadBudgets, missingOwner } from './perf/budgets.ts';
+import { prepareBaseline } from './perf/baseline.ts';
+import { changedSelection, defaultBase, selectScenarios } from './perf/selection.ts';
+import { executeScenario, loadScenarios, makeContext, prepareServer, runArguments, type BenchContext } from './perf/scenario.ts';
+import { io, mustRun, PerfError } from './perf/process.ts';
+import { judge, measurementPass, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.ts';
+import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.ts';
+import { buildForMeasurement } from './measurement-build.ts';
 
 /** Normalize flags with optional values without consuming the following selection. */
 function optionalRevisions(argv: readonly string[]): string[] {

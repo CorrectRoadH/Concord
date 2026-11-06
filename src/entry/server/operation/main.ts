@@ -3,17 +3,17 @@
 import { pathToFileURL } from 'node:url';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, Layer, Schema } from 'effect';
-import { Installation } from '../../../base/installation/index.js';
-import { Workspace } from '../../../base/workspace/index.js';
-import { Sources } from '../../../base/sources/index.js';
-import { Git } from '../../../base/git/index.js';
-import { Cache, CacheSnapshot, CacheDerivations, FeedbackCacheWriter } from '../../../base/cache/index.js';
-import { Publication } from '../../../base/publication/index.js';
-import { OwnedProcessLive } from '../../../base/process/index.js';
-import { ServerRuntime } from '../../../base/server-lock/index.js';
-import { executeViewAction, runWorkspaceTest, PublicationValidationLive } from '../../../app/index.js';
-import { ConcordError, failure } from '../../../model/index.js';
-import { OperationRequest, FRAME_LIMIT, connectWorkspaceSocket, submitFeedback } from '../index.js';
+import { Installation } from '../../../base/installation/index.ts';
+import { Workspace } from '../../../base/workspace/index.ts';
+import { Sources } from '../../../base/sources/index.ts';
+import { Git } from '../../../base/git/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, FeedbackCacheWriter } from '../../../base/cache/index.ts';
+import { Publication } from '../../../base/publication/index.ts';
+import { OwnedProcessLive } from '../../../base/process/index.ts';
+import { ServerRuntime } from '../../../base/server-lock/index.ts';
+import { executeViewAction, runWorkspaceTest, PublicationValidationLive } from '../../../app/index.ts';
+import { ConcordError, failure } from '../../../model/index.ts';
+import { OperationRequest, FRAME_LIMIT, connectWorkspaceSocket, submitFeedback } from '../index.ts';
 
 export const operationLayer = (snapshot: Parameters<typeof CacheSnapshot.layer>[0] = {}) => Layer.mergeAll(Installation.layer, ServerRuntime.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(snapshot), Publication.layer.pipe(Layer.provide(PublicationValidationLive))).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
 const feedbackWriter = Layer.effect(FeedbackCacheWriter, Effect.gen(function*() {

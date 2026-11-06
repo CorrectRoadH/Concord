@@ -2,9 +2,9 @@
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
 import { Effect, Option } from "effect";
 import { Command } from "effect/unstable/cli";
-import { recoverLocalState } from "../../app/index.js";
-import { ConcordError } from "../../model/index.js";
-import { root, emit, sync } from "./cli-base.js";
+import { recoverLocalState } from "../../app/index.ts";
+import { ConcordError } from "../../model/index.ts";
+import { root, emit, sync } from "./cli-base.ts";
 
 const recover = Command.make('recover', {}, () => Effect.gen(function*() {
   const settings = yield* root;

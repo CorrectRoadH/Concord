@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Slug, Text } from "./shared.js";
+import { Slug, Text } from "./shared.ts";
 
 
 // @concord-begin

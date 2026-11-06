@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { test } from './fixtures.js';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
-import { type ViewServerHandle } from './server.js';
-import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
+import { type ViewServerHandle } from './server.ts';
+import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
 
 function savedTransport(root: string, index: number): string | undefined {
   const connection = readProjectConfig(root).feedbackConnections?.[index];

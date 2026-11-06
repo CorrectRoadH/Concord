@@ -1,15 +1,15 @@
-import type { WorkspaceConceptCatalog } from './concept-directory.js';
+import type { WorkspaceConceptCatalog } from './concept-directory.ts';
 import { Schema } from "effect";
-import { FeedbackFilterFields } from "./feedback-filter.js";
-import { TEMPLATE_PAGES } from "./template-pages.js";
-import type { CodeDeclaration } from "./code-declaration.js";
-import type { Evidence } from "./evidence-values.js";
-import type { GitDiff, GitStatus } from "./git-values.js";
-import type { AnnotatedCase, DocumentKind, DocumentMeta, DocumentRecord, Finding, ProjectConfig, Runner } from "./shared.js";
-import { MEMORY_RELATION_KINDS, ProjectSchema } from "./shared.js";
-import type { TraceEdge } from "./trace-edge.js";
-import type { FeedbackAvailability, FeedbackItem, FeedbackTriage, RemoteFeedback } from "./feedback-schema.js";
-import { WritingPolicySchema } from "./writing-schema.js";
+import { FeedbackFilterFields } from "./feedback-filter.ts";
+import { TEMPLATE_PAGES } from "./template-pages.ts";
+import type { CodeDeclaration } from "./code-declaration.ts";
+import type { Evidence } from "./evidence-values.ts";
+import type { GitDiff, GitStatus } from "./git-values.ts";
+import type { AnnotatedCase, DocumentKind, DocumentMeta, DocumentRecord, Finding, ProjectConfig, Runner } from "./shared.ts";
+import { MEMORY_RELATION_KINDS, ProjectSchema } from "./shared.ts";
+import type { TraceEdge } from "./trace-edge.ts";
+import type { FeedbackAvailability, FeedbackItem, FeedbackTriage, RemoteFeedback } from "./feedback-schema.ts";
+import { WritingPolicySchema } from "./writing-schema.ts";
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/architecture.md

@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Duration, Effect, Fiber, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { installationResources, installationRootForBin } from '../src/base/installation/index.js';
+import { installationResources, installationRootForBin } from '../src/base/installation/index.ts';
 
 type Callback = (event: unknown, cx: HostContext) => void;
 class HostElement {
@@ -35,7 +35,8 @@ interface HostTask { cancel(): void; is_done(): boolean }
 interface HostContext { notify(): void; spawn(callback: (cx: HostContext) => unknown): HostTask; timer: { after(ms: number, callback: (cx: HostContext) => void): HostTask } }
 interface ModView { init(props: undefined, cx: HostContext): void; render(cx: HostContext): HostElement; close(cx: HostContext): void }
 class HostState {
-  constructor(private text: string) {}
+  private text: string;
+  constructor(text: string) { this.text = text; }
   value() { return this.text; } set_value(value: string) { this.text = value; } release() { return true; }
 }
 class HostFailure extends Schema.TaggedError<HostFailure>()('HostFailure', { message: Schema.String }) {}

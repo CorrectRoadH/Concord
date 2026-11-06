@@ -4,7 +4,7 @@ import { NodeServices } from '@effect/platform-node';
 import { Effect, Exit, FileSystem } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { dirname, join } from 'node:path';
-import { selectGateTests } from '../../scripts/gate-selection.js';
+import { selectGateTests } from '../../scripts/gate-selection.ts';
 
 // @feature docs/engineering/testing/cli.md#完整门禁
 test('changed gate derives old and current declarations, changed tests and shared-input selection from real Git', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

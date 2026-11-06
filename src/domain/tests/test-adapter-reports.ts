@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
 import { Effect } from 'effect';
-import { Sources, type ReportBudget as SourceReportBudget } from '../../base/sources/index.js';
-import { ConcordError, type test_adapter_config_TestAdapter as TestAdapter } from '../../model/index.js';
+import { Sources, type ReportBudget as SourceReportBudget } from '../../base/sources/index.ts';
+import { ConcordError, type test_adapter_config_TestAdapter as TestAdapter } from '../../model/index.ts';
 
 export function reportPath(path: string): string {
   if (path.includes('\\') || path.includes('\0') || path.startsWith('/') || path.split('/').some(part => part === '' || part === '.' || part === '..')) throw new ConcordError('ReportUnsafe', `Report path must stay inside its allocated invocation directory: ${path}`);

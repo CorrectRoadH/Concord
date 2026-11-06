@@ -1,21 +1,21 @@
-import { writeConceptFile, writeWritingFile } from '../support/writing-files.js';
-import { initialize } from '../support/operations.js';
-import { installedConcordCli } from '../support/support.js';
-import { EMPTY_CONCEPT_CATALOG } from "../../src/model/index.js";
+import { writeConceptFile, writeWritingFile } from '../support/writing-files.ts';
+import { initialize } from '../support/operations.ts';
+import { installedConcordCli } from '../support/support.ts';
+import { EMPTY_CONCEPT_CATALOG } from "../../src/model/index.ts";
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { digest } from "../../src/model/index.js";
-import { indexConcepts, readConceptCatalog, showConcepts } from "../../src/domain/concepts/index.js";
-import { checkWriting } from "../../src/domain/writing/index.js";
-import { showWriting, writingIndex } from "../../src/domain/writing/index.js";
+import { renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
+import { digest } from "../../src/model/index.ts";
+import { indexConcepts, readConceptCatalog, showConcepts } from "../../src/domain/concepts/index.ts";
+import { checkWriting } from "../../src/domain/writing/index.ts";
+import { showWriting, writingIndex } from "../../src/domain/writing/index.ts";
 
 const json = (value: unknown): string => typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`;
 const policy = (extra: Record<string, unknown> = {}) => ({ bannedTerms: [], ...extra });

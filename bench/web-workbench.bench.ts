@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { io } from '../scripts/perf/process.js';
+import { io } from '../scripts/perf/process.ts';
 import { Effect, Schema } from 'effect';
-import { defineBenchmarks, type BenchScenario } from '../scripts/perf/scenario.js';
-import { prepareView, WorkspaceResponse } from './fixtures/view.js';
+import { defineBenchmarks, type BenchScenario } from '../scripts/perf/scenario.ts';
+import { prepareView, WorkspaceResponse } from './fixtures/view.ts';
 const Response = Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json });
 const actionBody = (context: Parameters<typeof prepareView>[0]) => {
   const path = 'docs/feature/measured/format/page-0.md', body = readFileSync(join(context.consumer.root, path), 'utf8');

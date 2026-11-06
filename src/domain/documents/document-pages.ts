@@ -1,9 +1,9 @@
 import { Effect } from 'effect';
 import { posix } from "node:path";
-import { ConcordError, failure, digest, decode, DocumentName, inRepositorySnapshot, type DocumentKind, type MutationReceipt, type Repository } from "../../model/index.js";
-import { documentPlacementError } from "../../model/index.js";
-import { findDocument, loadDocuments, setAuthor } from "./documents.js";
-import { templateCatalog } from "./templates.js";
+import { ConcordError, failure, digest, decode, DocumentName, inRepositorySnapshot, type DocumentKind, type MutationReceipt, type Repository } from "../../model/index.ts";
+import { documentPlacementError } from "../../model/index.ts";
+import { findDocument, loadDocuments, setAuthor } from "./documents.ts";
+import { templateCatalog } from "./templates.ts";
 
 export type DocumentPage = string;
 

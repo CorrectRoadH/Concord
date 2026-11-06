@@ -1,18 +1,18 @@
-import { initialize } from '../support/operations.js';
-import { runApplication } from '../support/repository.js';
+import { initialize } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from '../support/temporary.js';
+import { tmpdir } from '../support/temporary.ts';
 import test from 'node:test';
 import { Effect, Fiber } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from "../support/repository.ts";
 
-import { collectNativeTests, readNativeObservations } from "../../src/domain/tests/index.js";
-import { makeOwnedProcessService, OwnedProcess, OwnedProcessLive, runOwnedProcess } from "../../src/base/process/index.js";
-import { inspectRunner, invalidateActiveRun } from "../../src/base/publication/index.js";
-import { readProjectConfig, writeProjectConfig } from '../support/support.js';
-import { pollUntil } from '../support/support.js';
+import { collectNativeTests, readNativeObservations } from "../../src/domain/tests/index.ts";
+import { makeOwnedProcessService, OwnedProcess, OwnedProcessLive, runOwnedProcess } from "../../src/base/process/index.ts";
+import { inspectRunner, invalidateActiveRun } from "../../src/base/publication/index.ts";
+import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { pollUntil } from '../support/support.ts';
 
 const consumer = Effect.acquireRelease(Effect.gen(function* () {
   const root = yield* Effect.sync(() => mkdtempSync(join(tmpdir(), 'concord-adapter-coordination-')));

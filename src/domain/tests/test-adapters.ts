@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Clock, Effect, Schema } from "effect";
-import { closeRepositoryCache, PersistentCache } from "../../base/cache/index.js";
-import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.js";
-import { hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.js";
-import { observation, observationSchema, type Observation } from "../../model/index.js";
-import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.js";
-import { ConcordError, canonical, decode, digest, failure, objectDigest, Text, type AnnotatedCase, type Repository } from "../../model/index.js";
-import type { LocalRepository } from "../../base/workspace/index.js";
-import { inPath, type test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.js";
-import { bindNative } from "./test-adapter-binding.js";
-import { builtinCollectParse, builtinCollectPlan, builtinReportParse, builtinSelectPlan, builtinVersionCommand } from "./test-adapter-builtins.js";
-import { ADAPTER_FORMAT, AdapterVersionsSchema, ManifestSchema, PayloadSchemas, test_adapter_protocol_PlanSchema as PlanSchema, ReportSchema, RequestSchema, protocolDecode, protocolJson, type AdapterContext, type AdapterOp, type AdapterPlan, type AdapterReport, type AdapterVersions, type Captured, type NativeManifest, type ProcessStatus } from "../../model/index.js";
-import { readReports, reportPath, type ReportBudget } from "./test-adapter-reports.js";
-import { Sources, snapshotBytes, snapshotMetadata, snapshotEnvironment } from '../../base/sources/index.js';
+import { closeRepositoryCache, PersistentCache } from "../../base/cache/index.ts";
+import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
+import { hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
+import { observation, observationSchema, type Observation } from "../../model/index.ts";
+import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.ts";
+import { ConcordError, canonical, decode, digest, failure, objectDigest, Text, type AnnotatedCase, type Repository } from "../../model/index.ts";
+import type { LocalRepository } from "../../base/workspace/index.ts";
+import { inPath, type test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.ts";
+import { bindNative } from "./test-adapter-binding.ts";
+import { builtinCollectParse, builtinCollectPlan, builtinReportParse, builtinSelectPlan, builtinVersionCommand } from "./test-adapter-builtins.ts";
+import { ADAPTER_FORMAT, AdapterVersionsSchema, ManifestSchema, PayloadSchemas, test_adapter_protocol_PlanSchema as PlanSchema, ReportSchema, RequestSchema, protocolDecode, protocolJson, type AdapterContext, type AdapterOp, type AdapterPlan, type AdapterReport, type AdapterVersions, type Captured, type NativeManifest, type ProcessStatus } from "../../model/index.ts";
+import { readReports, reportPath, type ReportBudget } from "./test-adapter-reports.ts";
+import { Sources, snapshotBytes, snapshotMetadata, snapshotEnvironment } from '../../base/sources/index.ts';
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束

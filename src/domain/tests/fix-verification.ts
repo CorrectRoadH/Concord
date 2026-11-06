@@ -1,22 +1,22 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#修复核验
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
-import { Sources, snapshotBytes } from '../../base/sources/index.js';
-import { Publication } from '../../base/publication/index.js';
-import { Installation } from "../../base/installation/index.js";
+import { Sources, snapshotBytes } from '../../base/sources/index.ts';
+import { Publication } from '../../base/publication/index.ts';
+import { Installation } from "../../base/installation/index.ts";
 import { dirname, join } from "node:path";
 
 import { Effect } from "effect";
-import { scanAnnotations } from "./annotations.js";
-import { readDocumentSelector } from "../documents/index.js";
-import { closeIssue } from "../issues/index.js";
-import { executeCommand, requireRunner, withRunner } from "./evidence.js";
-import { safeRunnerEnvironment } from "../../base/process/index.js";
-import type { CommandEvidence } from "../../model/index.js";
-import { OwnedProcess, runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.js";
-import { LocalRepository, git, parseTypeScriptConfig } from "../../base/workspace/index.js";
-import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema, type ProjectConfig, type Runner } from "../../model/index.js";
-import { commitRepository, firstParentPath, gitBlobBytes, resolveCommit } from "../../base/git/index.js";
+import { scanAnnotations } from "./annotations.ts";
+import { readDocumentSelector } from "../documents/index.ts";
+import { closeIssue } from "../issues/index.ts";
+import { executeCommand, requireRunner, withRunner } from "./evidence.ts";
+import { safeRunnerEnvironment } from "../../base/process/index.ts";
+import type { CommandEvidence } from "../../model/index.ts";
+import { OwnedProcess, runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.ts";
+import { LocalRepository, git, parseTypeScriptConfig } from "../../base/workspace/index.ts";
+import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema, type ProjectConfig, type Runner } from "../../model/index.ts";
+import { commitRepository, firstParentPath, gitBlobBytes, resolveCommit } from "../../base/git/index.ts";
 
 type Verification = typeof FixVerificationSchema.Type;
 const sync = <A>(f: () => A) => Effect.try({ try: f, catch: failure });

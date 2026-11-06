@@ -13,6 +13,9 @@
     "rootDir": "src",
     "outDir": "dist",
     "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
     "declaration": true,
     "sourceMap": true
   },

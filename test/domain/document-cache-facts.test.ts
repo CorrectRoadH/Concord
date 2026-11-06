@@ -1,18 +1,18 @@
-import { writeConceptFile, writeWritingFile } from '../support/writing-files.js';
+import { writeConceptFile, writeWritingFile } from '../support/writing-files.ts';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import {} from '../../src/domain/writing/index.js';
-import {} from '../../src/domain/concepts/index.js';
-import { digest } from '../../src/model/index.js';
-import { checkProject, knowledgeIndex } from '../../src/app/index.js';
-import { checkWriting } from '../../src/domain/writing/index.js';
-import { openHawdb, PersistentCache } from '../../src/base/cache/index.js';
-import { LocalRepository } from '../support/repository.js';
-import { writeProjectConfig, readProjectConfig } from '../support/support.js';
-import { fixture, useCasePath, engineeringPath } from '../support/document-cache-fixture.js';
+import {} from '../../src/domain/writing/index.ts';
+import {} from '../../src/domain/concepts/index.ts';
+import { digest } from '../../src/model/index.ts';
+import { checkProject, knowledgeIndex } from '../../src/app/index.ts';
+import { checkWriting } from '../../src/domain/writing/index.ts';
+import { openHawdb, PersistentCache } from '../../src/base/cache/index.ts';
+import { LocalRepository } from '../support/repository.ts';
+import { writeProjectConfig, readProjectConfig } from '../support/support.ts';
+import { fixture, useCasePath, engineeringPath } from '../support/document-cache-fixture.ts';
 
 function cli(root: string, dryRun: boolean, args = ['check']) {
   const repo = new LocalRepository(root, { access: 'read', dryRun, persistentCache: dryRun ? 'off' : 'use' });
