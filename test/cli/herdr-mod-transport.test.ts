@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createConsumer } from '../support/consumer.ts';
@@ -32,6 +32,29 @@ test('file.get and segmented input-text share the document read and digest-prote
     }
     const malformed = await invoke(['--input-text', '{']);
     assert.equal(malformed.exitCode, 1); assert.equal(JSON.parse(malformed.stderr).error, 'InvalidJson');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/herdr-mod/cli.md#渲染一页
+test('page.render is available through the strict public action and maps oversized text to a named error', async () => {
+  const root = await createConsumer();
+  const path = 'docs/architecture.md';
+  const invoke = (input: unknown) => runCli({ argv: ['--root', root, '--json', 'action', '--input-text', JSON.stringify(input)], cwd: root, env: process.env });
+  try {
+    const body = '# Architecture\n\n```mermaid\nflowchart LR\nA --> B\n```\n';
+    writeFileSync(join(root, path), body);
+    const result = await invoke({ action: 'page.render', path, theme: { background: '#fff', foreground: '#123456' } });
+    assert.equal(result.exitCode, 0, result.stderr);
+    const page = JSON.parse(result.stdout) as { path: string; blocks: { type: string; svg?: string }[] };
+    assert.equal(page.path, path); assert.ok(page.blocks.some(block => block.type === 'mermaid' && block.svg?.includes('#123456')));
+    assert.equal(readFileSync(join(root, path), 'utf8'), body);
+    const extra = await invoke({ action: 'page.render', path, theme: {}, unknown: true });
+    assert.equal(extra.exitCode, 1);
+    const unsafe = await invoke({ action: 'page.render', path: '../outside.md', theme: {} });
+    assert.equal(unsafe.exitCode, 1);
+    writeFileSync(join(root, path), '# Large\n' + 'x'.repeat(6 * 1024 * 1024));
+    const large = await invoke({ action: 'page.render', path, theme: {} });
+    assert.equal(large.exitCode, 1); assert.equal(JSON.parse(large.stderr).error, 'PageRenderTooLarge');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

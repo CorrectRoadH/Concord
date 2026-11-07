@@ -5,6 +5,8 @@ declare module 'gpui-kit' {
   export interface Task { cancel(): void; is_done(): boolean }
   export interface Context {
     notify(): void;
+    open_url(url: string): void;
+    sleep(ms?: number): Promise<void>;
     spawn(body: (cx: AsyncContext) => unknown): Task;
     timer: {
       after(ms: number, body: (cx: AsyncContext) => void): Task;
@@ -20,6 +22,7 @@ declare module 'gpui-kit' {
     size_full(): this; flex_1(): this; min_w(value: number): this; min_h(value: number): this;
     w(value: number): this; h(value: number): this; gap(value: number): this;
     max_w(value: number): this; items_center(): this; items_start(): this; justify_center(): this;
+    max_w_full(): this;
     p(value: number): this; px(value: number): this; py(value: number): this;
     bg(value: string): this; text_color(value: string): this; text_size(value: number): this;
     rounded(value: number): this; overflow_y_scroll(): this;
@@ -32,6 +35,7 @@ declare module 'gpui-kit' {
     abstract render(cx: Context): Element | string;
   }
   export function div(): Element;
+  export function image(path: string): Element;
 }
 declare module 'gpui-base' {
   import type { Context, Element } from 'gpui-kit';
@@ -56,4 +60,6 @@ declare module 'herdr' {
   export function home(): string;
   export function props(): Readonly<Record<string, unknown>>;
   export function theme(): Record<string, string>;
+  export function shared(key: string): unknown;
+  export function setShared(key: string, value: unknown): null;
 }

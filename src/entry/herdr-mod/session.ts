@@ -5,7 +5,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
 // @concord-implements docs/feature/herdr-mod/use-case/use-on-remote-machine.md
 import { Effect, Schema } from 'effect';
-import { WorkspaceWait } from '../../model/herdr-mod/index.ts';
+import { RenderedPage, WorkspaceWait } from '../../model/herdr-mod/index.ts';
 
 export interface ModHost {
   readonly exec: (command: string, args: string[], options: { cwd: string; on: string | null }) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -96,6 +96,12 @@ export class ModSession {
   }
   read(path: string) { return this.readFile(path).pipe(Effect.map(file => file?.body ?? null)); }
 
+  renderPage(path: string, theme: Readonly<Record<string, string>>) {
+    return this.command(actionArgs({ action: 'page.render', path, theme }), Schema.Unknown).pipe(
+      Effect.flatMap(value => Schema.decodeUnknownEffect(RenderedPage, { onExcessProperty: 'error' })(value).pipe(Effect.mapError(failure))),
+    );
+  }
+
   command<S extends Schema.Top & { readonly DecodingServices: never }>(args: readonly string[], schema: S, diagnostic = false, discoverRoot = false) {
     return Effect.gen({ self: this }, function*() {
       const reply = yield* this.io(() => this.host.exec('concord', ['--json', '--fresh', ...(discoverRoot ? [] : ['--root', this.root]), ...args], { cwd: this.root, on: this.machine }));
@@ -141,7 +147,7 @@ export class ModSession {
         this.documents = reply.documents;
         notify(); // The first readable Feature list need not wait for concepts or package details.
       }))),
-      selected ? this.open(selected, false, selection).pipe(Effect.tap(() => Effect.sync(() => { if (current()) notify(); }))) : Effect.void,
+      selected ? this.open(selected, false, selection, () => { if (current()) notify(); }) : Effect.void,
     ], { concurrency: 'unbounded' });
     if (!current()) return;
     this.root = resolvedDoctor.root;
@@ -164,7 +170,7 @@ export class ModSession {
     notify();
   });
 
-  open = Effect.fn('ModSession.open')(function*(this: ModSession, path: string, resetDraft = true, expectedSelection = this.selection) {
+  open = Effect.fn('ModSession.open')(function*(this: ModSession, path: string, resetDraft = true, expectedSelection = this.selection, notify: () => void = () => {}) {
     const canonical = yield* Schema.decodeUnknownEffect(Path)(path).pipe(Effect.mapError(failure));
     if (!resetDraft && expectedSelection !== this.selection) return;
     const token = resetDraft ? this.selection = {} : expectedSelection;
@@ -182,6 +188,7 @@ export class ModSession {
     this.deleted = source === null;
     if (this.draft !== undefined) this.conflict = source !== this.source;
     else { this.source = source ?? ''; this.sourceDigest = file?.digest ?? ''; this.conflict = false; }
+    notify();
     if (source !== null) {
       const links = [...source.matchAll(/\[[^\]]*\]\(([^\s)]+)(?:\s+[^)]*)?\)/gu)].flatMap(match => {
         const target = markdownTarget(canonical, match[1]!);

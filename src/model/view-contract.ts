@@ -1,5 +1,6 @@
 import type { WorkspaceConceptCatalog } from './concept-directory.ts';
 import { Schema } from "effect";
+import { PageTheme } from './herdr-mod/index.ts';
 import { FeedbackFilterFields } from "./feedback-filter.ts";
 import { TEMPLATE_PAGES } from "./template-pages.ts";
 import type { CodeDeclaration } from "./code-declaration.ts";
@@ -161,6 +162,7 @@ const DryRun = { dryRun: Schema.optional(Schema.Boolean) } as const;
 /** Strictly decoded at every CLI and HTTP action boundary. */
 export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('file.get'), path: Text }),
+  Schema.Struct({ action: Schema.Literal('page.render'), path: Text, theme: PageTheme }),
   Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), runner: Schema.optional(RunnerInputSchema), docsOnly: Schema.optional(Schema.Boolean), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('recover') }),
   Schema.Struct({

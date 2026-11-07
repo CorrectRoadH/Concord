@@ -9,7 +9,9 @@ import { View, div, type AsyncContext, type Context, type Element, type Task } f
 import { h_flex, v_flex, TextView, Editor, EditorState, Input, InputState } from 'gpui-base';
 import { exec, focused, panes, spaces, run, closeOverlay, home, props as hostProps, theme } from 'herdr';
 import { ModSession, ModFailure, ModDisconnected, failure, markdownTarget } from './session.ts';
-import { ModVersion, compareModVersions } from '../../model/herdr-mod/index.ts';
+import { ModVersion, compareModVersions, type RenderedPage } from '../../model/herdr-mod/index.ts';
+import { RenderAssets, type RenderLease } from './render-assets.ts';
+import { renderedPageElements } from './rendered-page.ts';
 declare const CONCORD_MOD_MINIMUM_VERSION: string;
 
 const color = (name: string) => theme()[name] ?? '#888888';
@@ -53,6 +55,13 @@ export default class ConcordMod extends View {
   private refreshQueued = false;
   private details = false;
   private closed = false;
+  private assets = new RenderAssets();
+  private pageLease: RenderLease | undefined;
+  private renderedPage: RenderedPage | undefined;
+  private renderTasks = new Set<Task>();
+  private renderToken = {};
+  private renderKey = '';
+  private expandedBlocks = new Set<number>();
 
   init(initialProps: Readonly<Record<string, unknown>> | undefined, cx: AsyncContext): void {
     const props = { ...hostProps(), ...initialProps };
@@ -71,6 +80,7 @@ export default class ConcordMod extends View {
     }
     this.name = InputState.new({ placeholder: 'Feature 名称' });
     this.title = InputState.new({ placeholder: '标题' });
+    this.assets.start(cx);
     this.ownPane = typeof props.pane === 'string' ? props.pane : undefined;
     this.tab = allPanes.find(item => item.pane === this.ownPane)?.tab ?? focus?.tab ?? spaces().find(item => item.active)?.tabs.find(item => item.active)?.id;
     this.retry = cx.timer.every(2000, current => {
@@ -197,10 +207,13 @@ export default class ConcordMod extends View {
     if (this.editor) this.session.draft = this.editor.value();
     if (this.refreshing) { this.refreshQueued = true; return; }
     const session = this.session;
+    const digest = session.sourceDigest;
     this.refreshing = true;
     this.run(cx, current => Effect.gen({ self: this }, function*() {
       yield* session.refresh(() => current.notify());
       this.disconnected = false; session.errorDetails = '';
+      // Images and imported sketch inputs can change while Markdown stays identical.
+      if (session.sourceDigest === digest) this.renderKey = '';
     }).pipe(Effect.ensuring(Effect.sync(() => { if (session === this.session) this.refreshing = false; }))), current => {
       this.watch(current);
       if (this.refreshQueued) { this.refreshQueued = false; this.refresh(current); }
@@ -244,6 +257,37 @@ export default class ConcordMod extends View {
     this.preview?.release(); this.preview = undefined;
     this.conceptText = undefined;
     this.run(cx, this.session.open(path));
+  }
+
+  private ensureRendered(cx: Context, available: boolean): void {
+    const session = this.session, path = session.selected;
+    const colors = theme();
+    const key = available && path && !session.deleted ? JSON.stringify([session.root, session.machine, path, session.sourceDigest, colors]) : '';
+    if (key === this.renderKey) return;
+    this.renderKey = key;
+    const token = this.renderToken = {};
+    const current = () => !this.closed && token === this.renderToken && session === this.session && path === session.selected;
+    const previous = this.pageLease;
+    this.pageLease = undefined; this.renderedPage = undefined; this.expandedBlocks.clear();
+    const task = cx.spawn(async next => {
+      try {
+        await previous?.release(next);
+        if (!path || !key || !current()) return;
+        const page = await runEffect(session.renderPage(path, colors));
+        if (!current()) return;
+        const lease = await this.assets.prepare(page, next, current);
+        if (!lease) return;
+        if (!current()) { await lease.release(next); return; }
+        this.pageLease = lease; this.renderedPage = page;
+      } catch (cause) {
+        if (!current()) return;
+        if (cause instanceof ModDisconnected) this.disconnected = true;
+        else { const error = failure(cause); session.error = error.message; session.errorDetails = error.details ?? ''; }
+      }
+      finally { this.renderTasks.delete(task); }
+      if (current()) next.notify();
+    });
+    this.renderTasks.add(task);
   }
 
   private edit(cx: Context): void {
@@ -360,6 +404,7 @@ export default class ConcordMod extends View {
     }
     const session = this.session;
     const available = this.directory === 'repository' && this.cli === 'ready' && !this.disconnected;
+    this.ensureRendered(cx, available);
     const machine = this.directory === 'not-git' ? this.target?.machine ?? null : session.machine;
     const path = this.directory === 'no-terminal' ? '' : this.directory === 'not-git' ? this.target?.cwd ?? '' : session.root || this.target?.cwd || '';
     const location = path ? this.locationLabel(path, machine) : '';
@@ -430,7 +475,11 @@ export default class ConcordMod extends View {
       ]), Editor.new(this.editor).id('document-editor').flex_1());
       else if (!session.deleted) body.push(
         this.button('edit', '编辑', cx => this.edit(cx)),
-        TextView.markdown(`concord-body-${session.selected}`, session.source).on_link_click((url, cx) => this.link(url, cx)),
+        v_flex().id(`${this.renderedPage ? 'concord-body' : 'concord-loading'}-${session.selected}`).min_w(0).gap(6).children(this.renderedPage && this.pageLease
+          ? renderedPageElements(this.renderedPage, this.pageLease.paths, this.expandedBlocks, (index, current) => {
+            if (this.expandedBlocks.has(index)) this.expandedBlocks.delete(index); else this.expandedBlocks.add(index);
+            current.notify();
+          }, (url, current) => this.link(url, current)) : [text('正在渲染页面…')]),
       );
       const tests = session.detail.tests ?? [], codes = session.detail.codeDeclarations ?? [];
       const references = [...new Set([...tests.map(item => item.contract), ...codes.flatMap(item => item.contracts)].filter(ref => ref === session.selected || ref.startsWith(`${session.selected}#`)))];
@@ -446,13 +495,17 @@ export default class ConcordMod extends View {
     ]);
   }
 
-  close(_cx: AsyncContext): void {
+  async close(cx: AsyncContext): Promise<void> {
     this.closed = true; this.targetToken = {};
     this.navigation?.cancel(); this.retry?.cancel();
+    this.renderToken = {};
     this.session.stop();
     this.pauseWatch();
     for (const task of this.tasks) task.cancel();
     this.tasks.clear();
     this.editor?.release(); this.preview?.release(); this.name?.release(); this.title?.release();
+    await this.assets.close(cx);
+    for (const task of this.renderTasks) task.cancel();
+    this.renderTasks.clear();
   }
 }

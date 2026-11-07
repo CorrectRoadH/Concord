@@ -20,6 +20,7 @@ export { setMarkdown } from './editing.ts';
 export { setSource } from './editing.ts';
 export { showConfig } from './editing.ts';
 export { compileP5 } from './p5-compiler.ts';
+export { renderPage } from './page-render.ts';
 export { checkProject } from './project-check.ts';
 export { cachedQuery } from './query-cache.ts';
 export { Query } from './query-cache.ts';

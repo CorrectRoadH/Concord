@@ -64,7 +64,7 @@ export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*
       return build({ config: false, clean: false, dts: false, sourcemap: false, logLevel: 'silent', tsconfig: join(sourceRoot, 'tsconfig.json'),
         entry: { main: join(sourceRoot, 'src/entry/herdr-mod/main.ts') }, outDir: scratch,
         format: 'esm', platform: 'neutral', target: 'es2022', minify: true,
-        deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$)/u, onlyBundle: false },
+        deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr', 'fs/promises', 'buffer', 'crypto'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$|fs\/promises$|buffer$|crypto$)/u, onlyBundle: false },
         outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
     }), handle => Effect.promise(async () => {
       for (const bundle of handle.bundles) await bundle[Symbol.asyncDispose]();

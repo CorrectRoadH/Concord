@@ -1,9 +1,8 @@
 // 跨进程保证：外部程序——真实mod经宿主exec调用CLI初始化和读取指南，并在会话重开时连接工作区。
 import assert from 'node:assert/strict';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, type ChildProcess } from 'node:child_process';
 import { plugin } from 'bun';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
@@ -15,8 +14,10 @@ import { modManifest } from '../../src/model/herdr-mod/index.ts';
 interface Task { cancel(): void; is_done(): boolean }
 interface Context {
   notify(): void;
+  open_url(url: string): void;
+  sleep(ms?: number): Promise<void>;
   spawn(body: (cx: Context) => unknown): Task;
-  timer: { after(ms: number, body: (cx: Context) => void): Task };
+  timer: { after(ms: number, body: (cx: Context) => void): Task; every(ms: number, body: (cx: Context) => void): Task };
 }
 class Element {
   key = '';
@@ -26,6 +27,7 @@ class Element {
   child(node: Element | string) { this.nodes.push(node); return this; }
   children(nodes: (Element | string)[]) { this.nodes.push(...nodes); return this; }
   size_full() { return this; } flex_1() { return this; } min_w(_n: number) { return this; } min_h(_n: number) { return this; } items_stretch() { return this; }
+  max_w(_n: number) { return this; } max_w_full() { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
   w(_n: number) { return this; } gap(_n: number) { return this; } p(_n: number) { return this; } px(_n: number) { return this; } py(_n: number) { return this; }
   bg(_color: string) { return this; } text_color(_color: string) { return this; } text_size(_n: number) { return this; } rounded(_n: number) { return this; } overflow_y_scroll() { return this; } overflow_hidden() { return this; }
   on_click(body: (event: unknown, cx: Context) => void) { this.click = body; return this; }
@@ -33,7 +35,7 @@ class Element {
   text(): string { return this.nodes.map(node => typeof node === 'string' ? node : node.text()).join('\n'); }
   find(key: string): Element | undefined { return this.key === key ? this : this.nodes.flatMap(node => typeof node === 'string' ? [] : node.find(key) ?? []).at(0); }
 }
-interface Mod { init(props: undefined, cx: Context): void; render(cx: Context): Element; close(cx: Context): void }
+interface Mod { init(props: undefined, cx: Context): void; render(cx: Context): Element; close(cx: Context): Promise<void> }
 
 // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#guide
 test('source mod initializes through the real CLI, reopens without the guide and navigates package directories', { timeout: 90_000 }, async () => {
@@ -41,10 +43,12 @@ test('source mod initializes through the real CLI, reopens without the guide and
   const hostRoot = mkdtempSync(join(tmpdir(), 'concord-herdr-guide-host-'));
   const cli = installedConcordCli(), calls: string[][] = [], markdown: { id: string; source: string }[] = [];
   const tasks = new Set<Task>(), pending = new Set<Promise<unknown>>();
-  const watchers = new Set<() => void>();
+  const children = new Set<ChildProcess>(), sharedData = new Map<string, unknown>();
   const errors: unknown[] = [];
   let view: Mod | undefined, output: Element | undefined;
   const context: Context = {
+    open_url() {},
+    sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     notify() { output = view?.render(context); },
     spawn(body) {
       let done = false, cancelled = false;
@@ -59,35 +63,43 @@ test('source mod initializes through the real CLI, reopens without the guide and
       const timer = setTimeout(() => { done = true; body(context); }, ms);
       const task = { cancel() { clearTimeout(timer); done = true; }, is_done: () => done };
       tasks.add(task); return task;
+    }, every(ms, body) {
+      let done = false;
+      const timer = setInterval(() => body(context), ms);
+      const task = { cancel() { clearInterval(timer); done = true; }, is_done: () => done };
+      tasks.add(task); return task;
     } },
   };
   const state = { new: () => ({ value: () => '', release() {} }) };
   // Substitute only the external Herdr/GPUI host; the built view, session and CLI are real.
   const host = {
-    View: class {}, div: () => new Element(), h_flex: () => new Element(), v_flex: () => new Element(),
+    View: class {}, div: () => new Element(), image: (path: string) => new Element().child(path), h_flex: () => new Element(), v_flex: () => new Element(),
     TextView: { markdown(id: string, source: string) { markdown.push({ id, source }); return new Element().id(id).child(source); } },
     InputState: state, EditorState: state, Input: { new: () => new Element() }, Editor: { new: () => new Element() },
-    focused: () => ({ cwd: root }), theme: () => ({}), pickFolder: async () => undefined,
-    panes: () => [], spaces: () => [], props: () => ({}), appHome: () => hostRoot,
+    focused: () => ({ cwd: root, pane: 'p1', tab: 'tab1' }), theme: () => ({}),
+    panes: () => [{ pane: 'p1', terminal: 't1', focused: true, tab: 'tab1', cwd: root }],
+    spaces: () => [{ id: 's1', machine: null, active: true, tabs: [{ id: 'tab1', active: true }] }],
+    props: () => ({}), appHome: () => hostRoot, home: () => '/home/host',
+    shared: (key: string) => structuredClone(sharedData.get(key)),
+    setShared: (key: string, value: unknown) => { sharedData.set(key, structuredClone(value)); return null; },
     run: () => { throw new Error('Guide workflow must not run host commands'); },
     closeOverlay: () => { throw new Error('Guide workflow must not close an overlay'); },
-    watchFolder: async () => new Promise<string[]>(resolveWatch => { watchers.add(() => resolveWatch([])); }),
-    readTextFile: async (path: string) => readFile(path, 'utf8').catch((cause: NodeJS.ErrnoException) => { if (cause.code === 'ENOENT') return null; throw cause; }),
-    writeTextFile: async () => { throw new Error('Guide workflow must not edit source text'); },
     exec: async (command: string, args: string[], options?: { cwd: string }) => {
-      assert.equal(command, 'concord'); calls.push(args);
-      if (args[0] === '--version') assert.equal(options, undefined);
+      assert.ok(command === 'concord' || command === 'git');
+      if (command === 'concord') calls.push(args);
       return await new Promise<{ code: number; stdout: string; stderr: string }>((resolveReply, reject) => {
-        execFile(process.execPath, [cli, ...args], { cwd: options?.cwd, encoding: 'utf8', timeout: 30_000 }, (error, stdout, stderr) => {
+        const child = execFile(command === 'concord' ? process.execPath : command, command === 'concord' ? [cli, ...args] : args, { cwd: options?.cwd, encoding: 'utf8', timeout: 30_000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
+          children.delete(child);
           if (error && typeof error.code !== 'number') reject(error);
           else resolveReply({ code: typeof error?.code === 'number' ? error.code : 0, stdout, stderr });
         });
+        children.add(child);
       });
     },
   };
   const global = globalThis as typeof globalThis & { __concordGuideHost?: typeof host };
   global.__concordGuideHost = host;
-  const exports: Record<string, string[]> = { 'gpui-kit': ['View', 'div'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'props', 'theme'] };
+  const exports: Record<string, string[]> = { 'gpui-kit': ['View', 'div', 'image'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'shared', 'setShared'] };
   plugin({ name: 'concord-test-herdr-host', setup(build) {
     for (const [specifier, members] of Object.entries(exports)) {
       build.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(members.map(name => [name, host[name as keyof typeof host]])) }));
@@ -97,10 +109,9 @@ test('source mod initializes through the real CLI, reopens without the guide and
     throw new Error(`Source mod did not reach the expected state: ${output?.text()}\nCalls: ${JSON.stringify(calls)}\nHost errors: ${errors.map(String).join('\n')}`, { cause });
   });
   const close = async () => {
-    view?.close(context);
+    await view?.close(context);
     for (const task of tasks) task.cancel();
-    for (const resolveWatch of watchers) resolveWatch();
-    watchers.clear();
+    for (const child of children) child.kill();
     await Promise.allSettled([...pending]);
     tasks.clear();
   };

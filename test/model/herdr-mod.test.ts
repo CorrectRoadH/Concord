@@ -67,6 +67,23 @@ test('an initialized root can publish its feature list while doctor is still run
   assert.equal(b.session.initialized, true);
 });
 
+// @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+test('refresh publishes a changed page before its slower relationship query completes', { timeout: 5000 }, async () => {
+  const b = boundary(); await Effect.runPromise(b.session.refresh()); await Effect.runPromise(b.session.open(path));
+  b.files.set(`/repo/${path}`, '# Fresh page\n');
+  const execute = b.host.exec;
+  let release!: () => void, observed!: () => void;
+  const relationship = new Promise<void>(resolve => { release = resolve; });
+  const source = new Promise<void>(resolve => { observed = resolve; });
+  b.host.exec = async (command, args, options) => {
+    if (args.includes('show')) await relationship;
+    return execute(command, args, options);
+  };
+  const refresh = Effect.runPromise(b.session.refresh(() => { if (b.session.source === '# Fresh page\n') observed(); }));
+  try { await source; assert.equal(b.session.sourceDigest, digest('# Fresh page\n')); }
+  finally { release(); await refresh; }
+});
+
 // @use-case docs/feature/herdr-mod/use-case/read-spec.md
 test('mod observes public CLI schemas, package pages and only fixed or linked Markdown', async () => {
   const b = boundary();

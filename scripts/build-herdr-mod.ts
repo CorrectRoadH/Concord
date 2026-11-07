@@ -17,7 +17,7 @@ export const buildHerdrModAssets: (output: string) => Effect.Effect<void, HerdrM
   const fs = yield* FileSystem.FileSystem;
   const version = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: ModVersion })), { onExcessProperty: 'ignore' })(yield* fs.readFileString('package.json'));
   yield* packJavaScript({ define: { CONCORD_MOD_MINIMUM_VERSION: JSON.stringify(version.version) }, entry: { main: 'src/entry/herdr-mod/main.ts' }, outDir: output, format: 'esm', platform: 'neutral', target: 'es2022', minify: true, sourcemap: false,
-    deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$)/u, onlyBundle: false },
+    deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr', 'fs/promises', 'buffer', 'crypto'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$|fs\/promises$|buffer$|crypto$)/u, onlyBundle: false },
     outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
   yield* fs.copyFile('src/entry/herdr-mod/preview.png', join(output, 'preview.png'));
   yield* fs.writeFileString(join(output, 'NOTICE.txt'), `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);

@@ -4,7 +4,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Effect, Schema } from 'effect';
 import { CodeMirrorEditor, useCodeBlockEditorContext, type CodeBlockEditorProps } from '@mdxeditor/editor';
-import { P5BundleSchema, P5EventSchema, parseP5Options, type P5Bundle } from "../../src/model/p5/index.ts";
+import { P5BundleSchema, P5EventSchema, p5Sandbox, parseP5Options, type P5Bundle } from "../../src/model/p5/index.ts";
 import { Button } from './ui/button.tsx';
 import { Input } from './ui/input.tsx';
 import { useTheme } from '../theme.tsx';
@@ -99,7 +99,7 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
     <span role="status" className={bundle && !error ? 'sr-only' : undefined}>{status}</span>
     {error && <Button type="button" variant="outline" size="sm" onClick={run} disabled={loading}>重试</Button>}
     {error && <pre role="alert" className="p5-error">{error}</pre>}
-    {bundle && <iframe key={frameId} ref={frame} title="p5 图解" src="/p5-frame" sandbox="allow-scripts allow-downloads" allow="camera 'none'; microphone 'none'; geolocation 'none'" referrerPolicy="no-referrer" style={{ height }} />}
+    {bundle && <iframe key={frameId} ref={frame} title="p5 图解" src="/p5-frame" sandbox={p5Sandbox} allow="camera 'none'; microphone 'none'; geolocation 'none'" referrerPolicy="no-referrer" style={{ height }} />}
   </div>;
 }
 

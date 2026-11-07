@@ -1,8 +1,10 @@
 /// <reference path="../../src/entry/herdr-mod/host.d.ts" />
 import assert from 'node:assert/strict';
 import { plugin } from 'bun';
+import { mock } from 'bun:test';
 import test from 'node:test';
 import { digest } from '../../src/model/index.ts';
+import type { RenderedPage } from '../../src/model/herdr-mod/index.ts';
 import type { AsyncContext, Context, Task } from 'gpui-kit';
 
 // Only the GPUI/Herdr host boundary is simulated. The source View and Effect
@@ -22,6 +24,7 @@ class Element {
   children(children: readonly (Element | string)[]) { children.forEach(child => this.child(child)); return this; }
   size_full() { return this; } flex_1() { return this; } min_w(_v: number) { return this; } min_h(_v: number) { return this; }
   max_w(_v: number) { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
+  max_w_full() { return this; }
   w(_v: number) { return this; } h(_v: number) { return this; } gap(_v: number) { return this; }
   p(_v: number) { return this; } px(_v: number) { return this; } py(_v: number) { return this; }
   bg(_v: string) { return this; } text_color(_v: string) { return this; } text_size(_v: number) { return this; }
@@ -63,6 +66,13 @@ class Boundary {
   commandError: { code: number; stdout: string; stderr: string } | undefined;
   commands: { name: string; args?: Record<string, unknown> }[] = [];
   closedOverlays: string[] = [];
+  urls: string[] = [];
+  rendered: RenderedPage['blocks'] | undefined;
+  colors: Record<string, string> = {};
+  resourceFiles = new Map<string, Uint8Array>();
+  imagePaths: string[] = [];
+  beforeUnlink: (() => Promise<void>) | undefined;
+  renderGate: ReturnType<typeof pending<void>> | undefined;
   installedVersion: string | undefined = 'dev';
   props: Record<string, unknown> = {};
   files = new Map([[`/repo/${page}`, '# Cart\n'], ['/repo/docs/taste.md', '# Taste\n']]);
@@ -75,13 +85,15 @@ class Boundary {
   picker = pending<string | null>();
   closed = false;
   output = new Element();
-  view: { render(cx: Context): unknown; close(cx: AsyncContext): void } | undefined;
+  view: { render(cx: Context): unknown; close(cx: AsyncContext): void | Promise<void> } | undefined;
   task(): HostTask {
     const task = { done: false, cancelled: false, cancel() { this.cancelled = true; }, is_done() { return this.done || this.cancelled; } };
     this.tasks.push(task); return task;
   }
   context(owner?: HostTask): AsyncContext {
     return {
+      open_url: url => { this.urls.push(url); },
+      sleep: () => new Promise(resolve => setImmediate(resolve)),
       notify: () => { assert.equal(this.closed || owner?.cancelled === true, false, 'fresh live context'); this.draw(); },
       spawn: body => {
         const task = this.task();
@@ -131,6 +143,10 @@ class Boundary {
       const absolute = `${options?.cwd}/${input.path}`, source = this.files.get(absolute);
       const error = (name: string) => ({ code: 1, stdout: '', stderr: JSON.stringify({ error: name, message: name }) });
       if (input.action === 'file.get') return source === undefined ? error('FileNotFound') : { code: 0, stdout: JSON.stringify({ path: input.path, body: source, digest: digest(source) }), stderr: '' };
+      if (input.action === 'page.render') {
+        const reply = { code: 0, stdout: JSON.stringify({ path: input.path, blocks: this.rendered ?? [{ type: 'markdown', text: source ?? '' }] }), stderr: '' };
+        await this.renderGate?.promise; return reply;
+      }
       assert.equal(input.action, 'document.set');
       if (source === undefined || digest(source) !== input.expectedDigest) return error('FileChangedSinceRead');
       this.files.set(absolute, input.body);
@@ -155,11 +171,13 @@ class Boundary {
     }
     assert.fail(`Host state did not settle: ${this.output.text()}`);
   }
-  close() { this.view!.close(this.context()); this.closed = true; }
+  async close() { await this.view!.close(this.context()); this.closed = true; }
 }
 let host: Boundary;
+const sharedData = new Map<string, unknown>();
 const external = {
   View: class {}, div: () => new Element(), h_flex: () => new Element(), v_flex: () => new Element(),
+  image: (path: string) => { assert.ok(host.resourceFiles.has(`/herdr/${path}`), 'write finishes before native image loading'); host.imagePaths.push(path); return new Element().child(`IMAGE ${path}`); },
   TextView: { markdown: (id: string, source: string) => new Element().id(id).child(source) },
   InputState: { new: (options?: { value?: string }) => host.state(options?.value) },
   EditorState: { new: (options?: { value?: string }) => host.state(options?.value) },
@@ -173,7 +191,9 @@ const external = {
   appHome: () => '/herdr',
   home: () => '/home/local',
   props: () => host.props,
-  theme: () => ({}),
+  theme: () => host.colors,
+  shared: (key: string) => structuredClone(sharedData.get(key)),
+  setShared: (key: string, value: unknown) => { sharedData.set(key, structuredClone(value)); return null; },
 };
 const global = globalThis as typeof globalThis & { __concordHostSync?: typeof external };
 
@@ -181,10 +201,16 @@ const global = globalThis as typeof globalThis & { __concordHostSync?: typeof ex
 test('source mod obeys native host invalidation and retained-state boundaries', async t => {
   global.__concordHostSync = external;
   const names: Record<string, string[]> = {
-    'gpui-kit': ['View', 'div'],
+    'gpui-kit': ['View', 'div', 'image'],
     'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'],
-    herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'home', 'props', 'theme'],
+    herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'shared', 'setShared'],
   };
+  mock.module('fs/promises', () => ({
+      mkdir: async () => undefined,
+      readdir: async (path: string) => [...host.resourceFiles.keys()].filter(file => file.startsWith(`${path}/`)).map(file => file.slice(path.length + 1)),
+      writeFile: async (path: string, bytes: Uint8Array) => { host.resourceFiles.set(path, bytes.slice()); },
+      unlink: async (path: string) => { const current = host; await current.beforeUnlink?.(); current.resourceFiles.delete(path); },
+  }));
   plugin({ name: 'concord-test-herdr-host', setup(build) {
     for (const [specifier, members] of Object.entries(names)) {
       build.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(members.map(name => [name, external[name as keyof typeof external]])) }));
@@ -198,6 +224,69 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       await host.until(() => host.watches.length === 1);
       return host;
     };
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md
+    await t.test('native blocks load completed files, expose Mermaid source and open an offline p5 file, then react to theme changes', async () => {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>', html = '<!doctype html><title>p5</title>';
+      const b = await start(boundary => { boundary.rendered = [
+        { type: 'markdown', text: '# Rich page' },
+        { type: 'image', source: 'plot.svg', alt: 'Plot', mediaType: 'image/svg+xml', data: Buffer.from(svg).toString('base64'), digest: digest(svg) },
+        { type: 'mermaid', source: 'flowchart LR\nA --> B', svg, digest: digest(svg) },
+        { type: 'p5', source: 'p.describe("Sketch")', description: 'Sketch', html },
+        { type: 'image', source: 'gone.png', alt: 'Missing plot', error: '图片不存在' },
+      ]; });
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        assert.equal(b.resourceFiles.size, 2, 'identical image bytes share one file');
+        assert.match(b.output.text(), /Missing plot · gone.png · 图片不存在/u);
+        assert.equal(b.output.find(`concord-block-${page}-2-source`), undefined);
+        b.click(`concord-block-${page}-2-toggle`); assert.match(b.output.text(), /flowchart LR/u);
+        b.click(`concord-block-${page}-3-play`); assert.match(b.urls[0]!, /^file:\/\/\/herdr\/data\/concord\/render\/[a-f0-9]{64}\.html$/u);
+        const renders = () => b.calls.filter(call => call[0] === 'action' && call.some(arg => arg.includes('page.render'))).length;
+        const beforeRefresh = renders();
+        b.rendered = [{ type: 'markdown', text: 'Changed dependency with unchanged Markdown' }];
+        b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'dependency-change' }), stderr: '' });
+        await b.until(() => renders() > beforeRefresh && b.output.text().includes('Changed dependency with unchanged Markdown'));
+        assert.equal(b.resourceFiles.size, 0, 'refresh releases assets removed from the rendered page');
+        b.rendered = [
+          { type: 'image', source: 'plot.svg', alt: 'Plot', mediaType: 'image/svg+xml', data: Buffer.from(svg).toString('base64'), digest: digest(svg) },
+          { type: 'p5', source: 'p.describe("Sketch")', description: 'Sketch', html },
+        ];
+        const before = renders(); b.colors = { foreground: '#123456' }; b.draw();
+        await b.until(() => renders() > before && b.output.find(`concord-body-${page}`) !== undefined);
+        assert.equal(b.resourceFiles.size, 2);
+        await b.close(); assert.equal(b.resourceFiles.size, 0);
+      } finally { if (!b.closed) await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md
+    await t.test('an identical file acquired during final release survives, and only the last instance removes it', async () => {
+      const b = await start();
+      const { RenderAssets } = await import('../../src/entry/herdr-mod/render-assets.ts');
+      const a = new RenderAssets(), other = new RenderAssets(); a.start(b.context()); other.start(b.context());
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>', pageData = { path: page, blocks: [{ type: 'mermaid' as const, source: 'flowchart LR', svg, digest: digest(svg) }] };
+      try {
+        const first = await a.prepare(pageData, b.context(), () => true); assert.ok(first);
+        const second = await other.prepare(pageData, b.context(), () => true); assert.ok(second);
+        await first.release(b.context()); assert.equal(b.resourceFiles.size, 1);
+        const entered = pending<void>(), unblock = pending<void>();
+        b.beforeUnlink = async () => { entered.resolve(); await unblock.promise; };
+        const releasing = other.close(b.context()); await entered.promise;
+        let ready = false;
+        const replacement = a.prepare(pageData, b.context(), () => true).then(value => { ready = true; return value; });
+        await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(ready, false);
+        b.beforeUnlink = undefined; unblock.resolve(); await releasing;
+        const acquired = await replacement; assert.ok(acquired); assert.equal(b.resourceFiles.size, 1);
+        await acquired.release(b.context()); assert.equal(b.resourceFiles.size, 0);
+      } finally { b.beforeUnlink = undefined; await a.close(b.context()); await other.close(b.context()); await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    await t.test('a rendered page arriving after close creates no assets or notifications', async () => {
+      const b = await start(); const gate = pending<void>(); b.renderGate = gate;
+      b.click(`page-${page}`);
+      await b.until(() => b.calls.some(call => call.some(arg => arg.includes('page.render'))));
+      await b.close(); gate.resolve();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(b.resourceFiles.size, 0); assert.deepEqual(b.errors, []);
+    });
     await t.test('other existing docs without taste offer initialization without guarded queries or categories', async () => {
       const b = await start(boundary => {
         boundary.files.delete('/repo/docs/taste.md');
@@ -208,7 +297,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.equal(b.output.find('concord-tree'), undefined);
         assert.equal(b.output.find('new-feature'), undefined);
         assert.deepEqual(b.calls.filter(call => !['action', 'workspace'].includes(call[0]!)), [['doctor']]);
-      } finally { b.close(); }
+      } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('workspace timeouts keep waiting, accepted changes refresh, and background tabs stop waiting', async () => {
@@ -228,7 +317,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.equal(b.watches.length, 3);
         const background = listed(); b.focusedTab = 't1'; b.draw();
         await b.until(() => listed() > background && b.watches.length === 4);
-      } finally { b.close(); }
+      } finally { await b.close(); }
     });
     await t.test('unavailable service falls back every two seconds and closes retained resources', async () => {
       const b = await start();
@@ -236,7 +325,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       await b.until(() => b.timers.some(timer => !timer.repeat && timer.ms === 2000));
       const before = b.calls.length; b.fire(2000);
       await b.until(() => b.calls.length > before && b.watches.length === 2);
-      b.close();
+      await b.close();
       assert.ok(b.states.every(state => state.released));
       assert.ok(b.tasks.every(task => task.is_done()));
       const after = b.calls.length; b.fire(2000);
@@ -247,7 +336,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       const b = await start();
       b.click(`page-${page}`);
       await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
-      const markdown = b.output.find(`concord-body-${page}`)!;
+      const markdown = b.output.find(`concord-block-${page}-0`)!;
       assert.ok(markdown.link); markdown.link('https://example.com/outside.md', b.context());
       b.click('edit'); b.draw();
       const editor = b.output.find('document-editor')!.state!;
@@ -255,7 +344,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       b.click('discard');
       await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
       assert.equal(editor.released, true);
-      b.close();
+      await b.close();
       const before = b.calls.length;
       b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'late' }), stderr: '' });
       await new Promise<void>(resolve => setImmediate(resolve));
@@ -270,13 +359,13 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       assert.equal(host.output.find('concord-tree'), undefined);
       assert.equal(host.output.find('new-feature'), undefined);
       assert.equal(host.output.find('choose-folder'), undefined);
-      assert.equal(host.calls.length, 0); host.close();
+      assert.equal(host.calls.length, 0); await host.close();
     });
     await t.test('live pane cwd supplies missing focused cwd', async () => {
       const b = await start(boundary => { boundary.cwd = null; });
-      assert.match(b.output.text(), /Cart/u); b.close();
+      assert.match(b.output.text(), /Cart/u); await b.close();
     });
-    await t.test('explicit overlay opens a right pane once or focuses its existing copy', () => {
+    await t.test('explicit overlay opens a right pane once or focuses its existing copy', async () => {
       for (const existing of [false, true]) {
       host = new Boundary();
         if (existing) host.paneList.push({ pane: 'p2', terminal: null, mod: 'concord', cwd: null, focused: false, tab: 't1' });
@@ -286,7 +375,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           { name: 'pane.split', args: { pane: 'p1', direction: 'right', mod: 'concord', props: {} } },
         ]);
         assert.deepEqual(host.closedOverlays, ['mod-concord']);
-        assert.equal(host.calls.length, 0); host.close();
+        assert.equal(host.calls.length, 0); await host.close();
       }
     });
     await t.test('missing CLI gates repository actions and can be detected after installation', async () => {
@@ -296,7 +385,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       assert.equal(host.output.find('concord-tree'), undefined); assert.equal(host.calls.length, 0);
       host.installedVersion = 'dev'; host.click('recheck-cli');
       await host.until(() => host.watches.length === 1);
-      assert.ok(host.output.find('concord-tree')); host.close();
+      assert.ok(host.output.find('concord-tree')); await host.close();
     });
     // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
     await t.test('remote queries and source reads use the space machine', async () => {
@@ -309,7 +398,10 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       assert.equal(host.output.find('choose-folder'), undefined); assert.equal(host.output.find('refresh'), undefined);
       assert.ok(host.requests.every(request => request.options?.on === 'vps'));
       assert.ok(host.output.find('edit'));
-      host.close();
+      host.reachable = false; host.colors = { foreground: '#123456' }; host.draw();
+      await host.until(() => host.output.text().includes('连不上 vps'));
+      assert.doesNotMatch(host.output.text(), /private diagnostic/u);
+      await host.close();
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
     await t.test('live cwd follows the most recent terminal in its own tab, retaining same-root state', async () => {
@@ -335,7 +427,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         b.paneList[1]!.cwd = '/repo'; b.draw();
         await b.until(() => b.output.find(`page-${page}`) !== undefined);
         assert.match(b.output.text(), /\/repo/u, 'mod focus preserves the most recently focused terminal');
-      } finally { b.close(); }
+      } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
     await t.test('saving or discarding a draft releases a pending repository switch', async () => {
@@ -356,7 +448,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           assert.equal(editor.released, true);
           assert.equal(b.files.get(`/repo/${page}`), action === 'save' ? '# Keep this draft\n' : '# Cart\n');
           assert.match(b.output.text(), /\/other/u);
-        } finally { b.close(); }
+        } finally { await b.close(); }
       }
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
@@ -373,7 +465,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.equal(b.output.find('concord-tree'), undefined);
         b.paneList[0]!.cwd = '/repo'; b.draw();
         await b.until(() => b.output.find(`page-${page}`) !== undefined);
-      } finally { b.close(); }
+      } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
     await t.test('remote installation states name the machine and reconnect automatically', async () => {
@@ -389,7 +481,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         host.installedVersion = 'dev'; host.click('recheck-cli');
         await host.until(() => host.output.find(`page-${page}`) !== undefined);
         assert.ok(host.requests.every(request => request.options?.on === 'vps'));
-      } finally { host.close(); }
+      } finally { await host.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
     await t.test('named command messages and folded raw diagnostics use status pages', async () => {
@@ -402,7 +494,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           assert.ok(host.output.find('concord-status')); assert.equal(host.output.find('concord-tree'), undefined);
           assert.doesNotMatch(host.output.text(), /raw private process output/u);
           if (!named) { host.click('error-details'); assert.match(host.output.text(), /raw private process output/u); }
-        } finally { host.close(); }
+        } finally { await host.close(); }
       }
     });
   } finally { plugin.clearAll(); delete global.__concordHostSync; }

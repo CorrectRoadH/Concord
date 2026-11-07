@@ -1,3 +1,4 @@
+import { p5ContentPolicy, p5FrameDocument, p5Sandbox } from '../../model/p5/index.ts';
 import type { ApplicationRuntime } from '../../app/index.ts';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
@@ -298,12 +299,11 @@ function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoo
   const stat = lstatSync(target, { throwIfNoEntry: false });
   if (sourceRuntime === undefined && (!stat?.isFile() || stat.isSymbolicLink() || stat.size > STATIC_LIMIT)) throw new ConcordError('P5RuntimeMissing', 'The packaged p5 runtime is unavailable');
   securityHeaders(response);
-  response.setHeader('Content-Security-Policy', "sandbox allow-scripts allow-downloads; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; style-src 'unsafe-inline' blob: data:; img-src data: blob:; media-src data: blob:; font-src data: blob:; connect-src data: blob:; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+  response.setHeader('Content-Security-Policy', `sandbox ${p5Sandbox}; ${p5ContentPolicy}; frame-ancestors 'self'`);
   response.setHeader('X-Frame-Options', 'SAMEORIGIN');
   response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()');
   response.setHeader('Content-Type', 'text/html; charset=utf-8');
-  const runtime = (sourceRuntime ?? readFileSync(target, 'utf8')).replace(/<\/script/giu, '<\\/script');
-  sendCompressible(request, response, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:white;color:#171717}body{margin:8px;font-family:system-ui;min-height:84px}canvas{display:block;max-width:100%;height:auto}</style></head><body><script>${runtime}</script></body></html>`);
+  sendCompressible(request, response, p5FrameDocument(sourceRuntime ?? readFileSync(target, 'utf8')));
 }
 
 // @concord-code

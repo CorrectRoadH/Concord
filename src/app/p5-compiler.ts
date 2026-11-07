@@ -26,19 +26,28 @@ const loaders: Readonly<Record<string, Loader>> = {
 };
 const hooks = ['setup', 'draw', 'mouseMoved', 'mouseDragged', 'mousePressed', 'mouseReleased', 'mouseClicked', 'doubleClicked', 'mouseWheel', 'keyPressed', 'keyReleased', 'keyTyped', 'touchStarted', 'touchMoved', 'touchEnded', 'windowResized', 'deviceMoved', 'deviceTurned', 'deviceShaken'];
 
-function sketchSource(source: string, mode: 'instance' | 'global', inline: boolean): Promise<string> {
+function sketchSource(source: string, mode: 'instance' | 'global', inline: boolean): Promise<{ source: string; description: string }> {
   return withTypeScriptSource('sketch.ts', source, ast => {
+  let description = '';
+  const describe = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'describe' && node.expression.expression.getText(ast) === 'p') {
+      const value = node.arguments[0];
+      if (value && (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))) description ||= value.text;
+    }
+    node.forEachChild(describe);
+  };
+  describe(ast);
   if (mode === 'global') {
     const declared = hooks.filter(name => ast.statements.some(statement =>
       ts.isFunctionDeclaration(statement) && statement.name?.text === name ||
       ts.isVariableStatement(statement) && statement.declarationList.declarations.some(d => ts.isIdentifier(d.name) && d.name.text === name)));
-    return `${source}\nObject.assign(window, {${declared.join(',')}});\nexport {};`;
+    return { source: `${source}\nObject.assign(window, {${declared.join(',')}});\nexport {};`, description };
   }
-  if (!inline || ast.statements.some(statement => ts.isExportAssignment(statement) || 'modifierFlags' in statement && typeof statement.modifierFlags === 'number' && (statement.modifierFlags & ts.ModifierFlags.Default) !== 0)) return source;
+  if (!inline || ast.statements.some(statement => ts.isExportAssignment(statement) || 'modifierFlags' in statement && typeof statement.modifierFlags === 'number' && (statement.modifierFlags & ts.ModifierFlags.Default) !== 0)) return { source, description };
   const imports = ast.statements.filter(ts.isImportDeclaration);
   let body = source;
   for (const statement of [...imports].reverse()) body = body.slice(0, statement.pos) + '\n'.repeat(source.slice(statement.pos, statement.end).split('\n').length - 1) + body.slice(statement.end);
-  return `${imports.map(statement => statement.getText(ast)).join('\n')}\nexport default function(p: import('p5').default) {\n${body}\n}`;
+  return { source: `${imports.map(statement => statement.getText(ast)).join('\n')}\nexport default function(p: import('p5').default) {\n${body}\n}`, description };
   });
 }
 
@@ -113,7 +122,7 @@ async function checkTypes(declarations: ReadonlyMap<string, string>, sources: Ma
   });
 }
 
-export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, input: unknown) {
+export const compileP5WithDescription = Effect.fn('view.compileP5WithDescription')(function*(root: string, input: unknown, describe: (description: string) => void = () => {}) {
   yield* Effect.try({ try: requireBuiltAssets, catch: failure });
   const installation = yield* Installation;
   const request = yield* Effect.try({ try: () => decode(P5RequestSchema, input, 'p5 request'), catch: failure });
@@ -157,7 +166,8 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
   const mode = options.mode ?? 'instance';
   const entry = yield* Effect.try({ try: () => options.src ? resolveImport(options.src, document.path) : posix.join(posix.dirname(document.path), '__inline_p5__.ts'), catch: failure });
   if (!/\.(ts|js|mjs)$/u.test(entry)) return yield* Effect.fail(new ConcordError('P5EntryInvalid', 'Sketch entry must be TypeScript or JavaScript'));
-  const source = yield* Effect.tryPromise({ try: () => sketchSource(options.src ? read(entry)!.toString('utf8') : request.code, mode, !options.src), catch: failure }).pipe(Effect.uninterruptible);
+  const sketch = yield* Effect.tryPromise({ try: () => sketchSource(options.src ? read(entry)!.toString('utf8') : request.code, mode, !options.src), catch: failure }).pipe(Effect.uninterruptible);
+  describe(sketch.description);
   const bundled = new Map<string, string>();
   for (const name of repo.config.p5?.libraries ?? []) if (Object.hasOwn(P5_LIBRARIES, name)) {
     const library = P5_LIBRARIES[name as keyof typeof P5_LIBRARIES];
@@ -181,7 +191,7 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
     });
   }, catch: failure });
   const cssImport = yield* Effect.try({ try: () => options.css ? './' + posix.relative(posix.dirname(entry), resolveImport(options.css, document.path)) : undefined, catch: failure });
-  const entrySource = `${cssImport ? `import ${JSON.stringify(cssImport)};\n` : ''}${source}`;
+  const entrySource = `${cssImport ? `import ${JSON.stringify(cssImport)};\n` : ''}${sketch.source}`;
   const output = yield* Effect.tryPromise({ try: () => build({
     entryPoints: [entry], bundle: true, write: false, outdir: '/concord-p5-output', format: 'iife', globalName: 'ConcordSketch', platform: 'browser', target: 'es2022', logLevel: 'silent',
     plugins: [{ name: 'concord-sketch', setup(builder) {
@@ -215,5 +225,9 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
   const javascript = output.outputFiles.find(file => file.path.endsWith('.js'))?.text ?? '';
   const css = output.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '';
   if (Buffer.byteLength(javascript) + Buffer.byteLength(css) + libraries.reduce((size, library) => size + Buffer.byteLength(library.source), 0) > 16 * 1024 * 1024) return yield* Effect.fail(new ConcordError('P5BudgetExceeded', 'Compiled sketch exceeds 16 MiB'));
-  return { javascript, css, mode, libraries, files: [...observed].filter(([, value]) => value !== undefined).map(([path]) => path) } satisfies P5Bundle;
+  return { bundle: { javascript, css, mode, libraries, files: [...observed].filter(([, value]) => value !== undefined).map(([path]) => path) } satisfies P5Bundle, description: sketch.description };
 }, Effect.scoped);
+
+export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, input: unknown) {
+  return (yield* compileP5WithDescription(root, input)).bundle;
+});
