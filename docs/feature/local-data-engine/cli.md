@@ -23,6 +23,24 @@
 
 `concord cache clear` 成功时输出 `status: cleared` 与 `path`。
 
+## 等待下一份结果
+
+```sh
+concord --json workspace wait --after <sourceDigest> [--timeout <秒>]
+```
+
+命令自动启动或复用工作区服务，在服务接受一份 `sourceDigest` 与 `--after` 不同的结果时返回；省略 `--after` 或当前结果已经不同时立即返回。超时（默认 25 秒，上限 120 秒）返回 `changed: false`。它给不能保持 socket 订阅的调用方（例如经 Herdr 在远程机器上运行的 Concord mod）一个长等待，语义与[订阅](architecture.md#刷新与推送)相同：只是信号，调用方收到后再读结果。
+
+```json
+{"operation":"workspace-wait","changed":true,"sourceDigest":"sha256:..."}
+```
+
+| 情形 | 结果 |
+| --- | --- |
+| 服务无法启动，例如原生产物缺失 | 返回服务的具名错误（如 `HawdbUnavailable`），退出 1 |
+| 刷新失败 | 照常等待；最近一次失败见 `workspace projection` 的 `lastError` |
+| 服务在等待期间停止 | 返回 `WorkspaceServerUnavailable`，调用方重新运行即可启动新服务 |
+
 ## 历史投影
 
 `trace gaps`、`trace show` 与 `review` 默认读取最近完成的投影，`--json` 输出中的 `projection` 描述它：

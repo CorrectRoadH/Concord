@@ -31,5 +31,7 @@ mod 只通过公开 CLI 取数据和执行操作，不读取 Concord 的私有�
 | 术语 | `concord --json concepts index` |
 | 品味与依据位置 | `concord --json taste` |
 | 检查 | `concord --json check` |
+| 保存一页文档 | `concord --json action --input-text <JSON>`，执行 `document.set` |
+| 等待下一份结果 | `concord --json workspace wait --after <sourceDigest>` |
 
 这些命令的输出见各自 Feature 的 cli 页，mod 不另定义字段。

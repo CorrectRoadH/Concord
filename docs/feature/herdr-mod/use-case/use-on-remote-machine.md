@@ -13,23 +13,19 @@
 
 1. 在这个终端旁打开 Concord mod。 {#open}
 
-   mod 在 `vps` 上检测 `concord` 并运行查询，顶栏显示位置 `vps:~/code/shop`。文档树、正文、测试与实现与在 `vps` 上运行 `concord show` 的结果一致。
+   mod 在 `vps` 上检测 `concord` 并运行查询，顶栏显示仓库地址 `vps:~/code/shop`。文档树、正文、测试与实现与在 `vps` 上运行 `concord show` 的结果一致。
 
 2. agent 在 `vps` 上改了一页文档。 {#follow}
 
-   mod 在 3 秒内刷新，当前打开的文档与滚动位置保持不变。
+   mod 在 2 秒内刷新，当前打开的文档与滚动位置保持不变。
 
-3. 打开那页文档。 {#read-only}
+3. 编辑这页文档并保存。 {#edit}
 
-   正文照常显示，没有“编辑”；按钮的位置显示一行说明：
-
-   ```text
-   Herdr 还不能把文件写到 vps，请在 vps 的终端里修改。
-   ```
+   与本机相同：mod 把草稿写回 `vps` 上的文件，再在 `vps` 上运行检查，显示 `check: ok` 或问题列表。
 
 ## 结果
 
-远程仓库可以在 mod 里阅读、初始化、新建 Feature 和检查；修改文档仍在那台机器的终端里完成。
+远程仓库在 mod 里的阅读、编辑、检查与自动刷新都与本机相同，只是命令在 `vps` 上运行。
 
 | 情形 | 结果 |
 | --- | --- |
@@ -37,8 +33,9 @@
 | `vps` 上的 Concord 低于 mod 要求的版本 | 显示 `vps` 上的版本、要求的版本与升级命令 |
 | 连不上 `vps` | 显示“连不上 vps”与“Herdr 恢复连接后自动重试”；恢复后自动继续，不需要重新打开 |
 | 初始化、新建 Feature、检查 | 与本机相同，命令在 `vps` 上运行 |
+| 保存前 `vps` 上的文件已被 agent 改过 | 与本机相同，按[保存冲突](../../../concepts.md#save-conflict)处理，保留草稿 |
 | 终端在 `vps` 上 `cd` 到另一个仓库 | mod 跟着切换，与本机相同 |
 
 ## Spec 来源
 
-[在 Herdr 里使用 Concord](../README.md)；远程读取与刷新的实现见[实现](../architecture.md#数据)。
+[在 Herdr 里使用 Concord](../README.md)；读写与刷新的实现见[实现](../architecture.md#数据)。
