@@ -25,6 +25,7 @@ type XmlNode = ReturnType<typeof parser.parse>['topNode'];
 const Count = Schema.NumberFromString.pipe(Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)));
 const Root = Schema.Struct({ name: Schema.String, tests: Count, assertions: Count, failures: Count, skipped: Count,
   time: Schema.NumberFromString.pipe(Schema.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))) });
+const Property = Schema.Struct({ name: Schema.String, value: Schema.String });
 
 /** Project the official XML tree; the XML grammar and error recovery belong to Lezer. */
 export function readBunCases(text: string, file: string, cwd: string) {
@@ -68,7 +69,15 @@ export function readBunCases(text: string, file: string, cwd: string) {
       if (name === 'testsuite' && (attrs.file === undefined || resolve(cwd, attrs.file) !== file)) {
         throw new BunTestReportInvalid({ message: `Unexpected JUnit file in ${file}` });
       }
-      for (const child of node.getChildren('Element')) visit(child);
+      for (const child of node.getChildren('Element')) {
+        if (name === 'testsuite' && tag(child) === 'properties') {
+          if (Object.keys(attributes(child)).length !== 0) throw new BunTestReportInvalid({ message: 'Invalid JUnit properties' });
+          for (const property of child.getChildren('Element')) {
+            if (tag(property) !== 'property' || property.getChildren('Element').length !== 0) throw new BunTestReportInvalid({ message: 'Invalid JUnit property' });
+            Schema.decodeUnknownSync(Property, { onExcessProperty: 'error' })(attributes(property));
+          }
+        } else visit(child);
+      }
       return;
     }
     if (name !== 'testcase' || attrs.name === undefined || attrs.file === undefined || resolve(cwd, attrs.file) !== file) {

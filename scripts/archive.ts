@@ -81,7 +81,7 @@ const dependencyLicenses = Effect.fn('archive.licenses')(function*(root: string,
 /** Exercise the embedded application after relocation/signing, before freezing bytes. */
 export const verifyCompiledPayload = Effect.fn('archive.compiledPayload')(function*(root: string) {
   const fs = yield* FileSystem.FileSystem;
-  const project = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-payload-' });
+  const project = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-payload-' }).pipe(Effect.flatMap(fs.realPath));
   yield* run('git', ['init', '-q', project]);
   const cli = join(root, 'bin/concord');
   const argv = ['--root', project, '--json', '--server=command'];

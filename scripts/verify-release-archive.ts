@@ -57,7 +57,7 @@ export const verifyReleaseArchive = Effect.fn('release.verifyArchive')(function*
   const sums = yield* io('Decode release SHA256SUMS', () => decodeReleaseChecksums(checksumText));
   const digest = createHash('sha256').update(yield* fs.readFile(archive)).digest('hex');
   if (sums.get(basename(archive)) !== digest) return yield* new ReleaseArchiveInvalid({ message: 'Candidate archive checksum differs' });
-  const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-archive-verify-' });
+  const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-archive-verify-' }).pipe(Effect.flatMap(fs.realPath));
   const options = { cwd: scratch, outputDir: scratch, timeoutMs: 120_000 };
   const run = (args: readonly string[]) => mustRun(args, options);
   const listing = (yield* run(['tar', '-tzf', archive])).stdout.trim().split('\n');

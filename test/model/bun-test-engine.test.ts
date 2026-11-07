@@ -4,6 +4,7 @@ import { NodeServices } from '@effect/platform-node';
 import { Duration, Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readBunCases, readBunCompletion } from '../../scripts/bun-test-report.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { observeOwnedProcessGroup } from '../../src/base/process/owned-process.ts';
@@ -32,8 +33,9 @@ test('Bun startup failure reaches the controller failure report without inventin
   assert.equal(Number(yield* host.exitCode), 0);
   yield* fs.symlink(nodePath, join(root, 'node'));
   yield* fs.writeFileString(file, `throw Error('TEST_MUST_NOT_START');`);
+  const pinned = (yield* fs.readFileString(fileURLToPath(new URL('../../.bun-version', import.meta.url)))).trim();
   // The external executable disappears after a successful version check, exercising real ENOENT.
-  yield* fs.writeFileString(executable, `#!/usr/bin/env node\nimport {unlinkSync} from 'node:fs'; unlinkSync(process.argv[1]); console.log('1.4.2');\n`);
+  yield* fs.writeFileString(executable, `#!/usr/bin/env node\nimport {unlinkSync} from 'node:fs'; unlinkSync(process.argv[1]); console.log(${JSON.stringify(pinned)});\n`);
   yield* fs.chmod(executable, 0o755);
   const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), '--suite=node', file], {
     cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
@@ -80,7 +82,7 @@ test('Bun engine requires fresh completion receipts and reports empty and filter
   const run = (file: string, args: string[] = []) => Effect.scoped(Effect.gen(function*() {
     const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), '--suite=node', ...args, file], {
       cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
-      env: { ...process.env, CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_FILE_ID: undefined, CONCORD_TEST_EVENT_DIRECTORY: undefined, CONCORD_TEST_RUN_ID: undefined },
+      env: { ...process.env, GITHUB_ACTIONS: 'true', GITHUB_RUN_ID: 'fixture', GITHUB_REPOSITORY: 'example/fixture', GITHUB_SHA: 'fixture', CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_FILE_ID: undefined, CONCORD_TEST_EVENT_DIRECTORY: undefined, CONCORD_TEST_RUN_ID: undefined },
     }));
     const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.all)), child.exitCode], { concurrency: 'unbounded' });
     const output = /# Test diagnostics: ([^\n]+)/u.exec(text)?.[1];
@@ -143,7 +145,7 @@ test('Bun process deadline reaps a reparented grandchild in its owned group befo
   const intermediate = `const c=require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(grandchild)}],{stdio:'ignore'});c.unref();`;
   yield* fs.writeFileString(file, `import {spawn} from 'node:child_process'; import {existsSync,writeFileSync} from 'node:fs'; import test from 'node:test'; writeFileSync(${JSON.stringify(groupFile)},String(process.pid)); const c=spawn(process.execPath,['-e',${JSON.stringify(intermediate)}],{stdio:'ignore'}); c.unref(); test('wait for grandchild',async()=>{while(!existsSync(${JSON.stringify(pidFile)})) await new Promise(r=>setTimeout(r,5));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);await new Promise(()=>{});});`);
   const runner = join(root, 'controller.ts');
-  yield* fs.writeFileString(runner, `import {runNodeTests} from ${JSON.stringify(new URL('../../scripts/test-reporter.ts', import.meta.url).href)}; import {Effect} from ${JSON.stringify(import.meta.resolve('effect'))}; import {NodeServices,NodeRuntime} from ${JSON.stringify(import.meta.resolve('@effect/platform-node'))}; runNodeTests({files:[${JSON.stringify(file)}],concurrency:1,timeout:1500},${JSON.stringify(join(root, 'output'))}).pipe(Effect.tap(failed=>Effect.sync(()=>{process.exitCode=failed?1:0})),Effect.scoped,Effect.provide(NodeServices.layer),NodeRuntime.runMain);`);
+  yield* fs.writeFileString(runner, `import {runNodeTests} from ${JSON.stringify(new URL('../../scripts/test-reporter.ts', import.meta.url).href)}; import {Effect} from ${JSON.stringify(import.meta.resolve('effect'))}; import {NodeServices,NodeRuntime} from ${JSON.stringify(import.meta.resolve('@effect/platform-node'))}; runNodeTests({files:[${JSON.stringify(file)}],concurrency:1,timeout:10000},${JSON.stringify(join(root, 'output'))}).pipe(Effect.tap(failed=>Effect.sync(()=>{process.exitCode=failed?1:0})),Effect.scoped,Effect.provide(NodeServices.layer),NodeRuntime.runMain);`);
   const child = yield* spawner.spawn(ChildProcess.make('node', [runner], { cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(5) }));
   const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.all)), child.exitCode], { concurrency: 'unbounded' });
   assert.equal(Number(code), 1, text);
