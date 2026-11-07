@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#机器可读-schema
+// @concord-implements docs/feature/local-sdlc/use-case/run-tests-with-own-runner.md#schema
 import { Schema } from 'effect';
 import { ConcordError, ProjectSchema, Text, DocumentSchema, AnnotatedCaseSchema, IssueRelationSchema, MemoryRelationSchema } from './shared.ts';
 import { WorkspaceProjectionSnapshotSchema } from './workspace-projection.ts';
