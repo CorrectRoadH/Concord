@@ -32,7 +32,23 @@ mod 只通过公开 CLI 取数据和执行操作，不读取 Concord 的私有�
 | 品味与依据位置 | `concord --json taste` |
 | 检查 | `concord --json check` |
 | 读取一页正文与摘要 | `concord --json action --input-text <JSON>`，执行 `file.get` |
+| 渲染一页给 mod 显示 | `concord --json action --input-text <JSON>`，执行 `page.render`，见[渲染一页](#渲染一页) |
 | 保存一页文档 | `concord --json action --input-text <JSON>`，执行 `document.set` |
 | 等待下一份结果 | `concord --json workspace wait --after <sourceDigest>` |
 
-这些命令的输出见各自 Feature 的 cli 页，mod 不另定义字段。
+除 `page.render` 外，这些命令的输出见各自 Feature 的 cli 页，mod 不另定义字段。
+
+## 渲染一页
+
+`page.render {path, theme}` 是只读的 action：在仓库所在的机器上读一页 Markdown，按出现顺序返回 mod 能直接显示的块。它属于本 Feature，因为只有没有网页引擎的界面需要它；Web 工作台在浏览器里自己渲染。
+
+`theme` 是 mod 当前的 Herdr 主题颜色（`background`、`foreground`、`muted`、`border`、`accent`、`surface` 等颜色名到颜色值）。Concord 按 Web 工作台的[主题变量](../web-workbench/format.md#主题变量)把它们映射成 Mermaid 与 p5 使用的变量。
+
+| 块 | 字段 | 内容 |
+| --- | --- | --- |
+| `markdown` | `text` | 两个特殊块之间的 Markdown 原文 |
+| `image` | `source`、`alt`，以及 `mediaType`、`data`（base64）、`digest` 或 `error` | 仓库内的 PNG、JPEG、GIF、WebP 与 SVG，每张不超过 2 MiB；外链、缺失、越出仓库或超限时只有 `error` |
+| `mermaid` | `source`，以及 `svg`、`digest` 或 `error`（带行号） | 用 pele 渲染；SVG 里的 CSS 变量已替换成具体颜色，因为 Herdr 的图片加载器不计算 CSS 变量 |
+| `p5` | `source`、`description`，以及 `html` 或 `error` | `description` 取自源码里的 `p.describe` 字面量；`html` 是独立页面，用与 Web 工作台相同的编译、输入检查与[运行环境](../web-workbench/format.md#运行环境)运行这一个图解，带主题变量，不联网 |
+
+整个结果不超过 6 MiB，留在 Herdr `exec` 的 8 MiB 输出上限内；超出时后面的图片改为 `error`，文字块不受影响。页面路径的规则与 `file.get` 相同。

@@ -18,9 +18,9 @@ Concord mod 是可独立分发、也随归档提供的一组 JavaScript 文件�
 - 顶栏左边是“Concord”和次要色的仓库地址：本机显示以 `~` 缩写的路径，远程显示 `<机器>:<路径>`。右边只有已初始化时的“新建 Feature”。
 - 左栏是文档树，按 Feature、品味、术语、Issue、Memory、其它文档分组；右侧是正文。Feature、Engineering 与 Roadmap 的文档包页面取自 `concord --json show <包>` 的 `pages`，按 `path` 组织成树，`kind` 只用于显示，未知取值按普通页面显示。
 - “其它文档”只包括项目的固定入口中存在的那些：`docs/README.md`、`docs/architecture.md`、`docs/document-model.md`、`docs/taste.md`、`docs/concepts.md` 与 `docs/writing.md`，以及从已列出页面的正文链接可以到达的 Markdown。mod 不扫描任意 Markdown。
-- 正文用 `TextView.markdown` 渲染；编辑用 `EditorState` 与 `Editor`。
+- 正文来自 `page.render`（见[渲染一页](cli.md#渲染一页)）：`markdown` 块用 `TextView.markdown`，`image` 与 `mermaid` 块把字节写到 `<appHome>/data/concord/render/<digest>.<扩展名>` 再用 `image()` 显示，因为 `image()` 只读 Herdr 配置目录下的文件。目录只保留当前打开的页面用到的文件，换页与关闭 mod 时删除其它文件。主题变化时重新渲染当前页。编辑用 `EditorState` 与 `Editor`，编辑的仍是 `file.get` 读到的原文。
 - Use Case 正文下方列出守护它的测试与实现它的代码，按步骤分组；点击跳到对应文件位置。
-- p5 代码块显示 `p.describe` 的文字说明与源码，以及“在浏览器中播放”按钮：mod 让 Concord 把这一个图解导出为本地 HTML 文件，再用系统浏览器打开。
+- `p5` 块显示文字说明与源码，以及“在浏览器中播放”：mod 把块里的 `html` 写到同一目录，用 `open_url` 以 `file://` 交给系统浏览器。
 
 ### 状态页
 
