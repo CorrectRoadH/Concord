@@ -17,6 +17,7 @@ import { installedConcordCli, pollUntil } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { initialize } from '../support/operations.ts';
 import { LocalRepository } from '../support/repository.ts';
+import { retainConsumer } from '../support/consumer.ts';
 
 // @feature docs/engineering/testing/architecture.md#浏览器与诊断
 test('failed final browser fixture releases retain existing roots in the outer cleanup receipt', async () => {
@@ -197,6 +198,7 @@ test('server stop refuses success while the recorded service is still exiting af
     }
   `);
   let firstStop: Promise<{ status: number | null; stdout: string; stderr: string }> | undefined;
+  let servicePid: number | undefined;
   try {
     const child = spawn(process.execPath, [installedConcordCli(), '--root', root, '--json', 'server', 'start'], {
       env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(preload).href}` }, stdio: 'pipe',
@@ -207,6 +209,7 @@ test('server stop refuses success while the recorded service is still exiting af
     const started = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
     assert.equal(started, 0, output);
     const owner = record(root);
+    servicePid = owner.pid;
     const original = JSON.parse(readFileSync(recordPath(root), 'utf8'));
     firstStop = command(root, ['server', 'stop']);
     await pollUntil(async () => existsSync(marker) ? true : undefined, { description: 'real service reached the exit barrier', timeoutMs: 8000 });
@@ -220,6 +223,20 @@ test('server stop refuses success while the recorded service is still exiting af
   } finally {
     writeFileSync(release, 'release');
     await firstStop;
+    const exitingPid = servicePid;
+    if (exitingPid !== undefined) await pollUntil(async () => {
+      try {
+        process.kill(exitingPid, 0);
+        if (process.platform === 'linux') {
+          const stat = readFileSync(`/proc/${exitingPid}/stat`, 'utf8');
+          if (/^[ZX] /u.test(stat.slice(stat.lastIndexOf(')') + 2))) return true;
+        }
+        return undefined;
+      } catch (cause) {
+        if (['ESRCH', 'ENOENT'].includes((cause as NodeJS.ErrnoException).code ?? '')) return true;
+        throw cause;
+      }
+    }, { description: 'exit-barrier service actually exits before fixture removal', timeoutMs: 8000 }).catch(cause => { retainConsumer(root); throw cause; });
     rmSync(recordPath(root), { force: true });
     await stop(root);
     rmSync(root, { recursive: true, force: true });
