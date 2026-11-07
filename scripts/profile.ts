@@ -35,9 +35,9 @@ export const copyProfilePackage = Effect.fn('perf.copyProfilePackage')(function*
   });
 });
 
-export function summarizeProfileEvidence(evidence: ReadonlyMap<string, string>, _completedPreparationCounters: ReadonlySet<string> = new Set()) {
+export function summarizeProfileEvidence(evidence: ReadonlyMap<string, string>, completedPreparationCounters: ReadonlySet<string> = new Set()) {
   const files = [...evidence.keys()];
-  const counters = files.filter(name => /^counter-\d+\.json$/u.test(name)).map(name =>
+  const counters = files.filter(name => /^counter-\d+\.json$/u.test(name) && !completedPreparationCounters.has(name)).map(name =>
     Schema.decodeUnknownSync(Schema.fromJsonString(CounterRecord), { onExcessProperty: 'error' })(evidence.get(name)!));
   const profiles = files.filter(name => name.endsWith('.cpuprofile'));
   if (profiles.length === 0 || counters.length === 0) throw new Error('Missing profile evidence');
@@ -112,6 +112,7 @@ const main = Effect.gen(function*() {
   ], { cwd: repository, outputDir: runs, timeoutMs: 120_000 });
   yield* io('Report profile compilation', () => process.stderr.write(compiled.stdout + compiled.stderr));
   const candidate = yield* loadArtifact('candidate', repository, profileEntry);
+  let completedPreparationCounters: ReadonlySet<string> = new Set();
   // Stop owned services before collecting profiles: Bun writes them on exit.
   const { consumer, run } = yield* Effect.gen(function*() {
   const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
@@ -124,6 +125,7 @@ const main = Effect.gen(function*() {
     if (scenario) {
       if (scenario.prepare) yield* scenario.prepare(context);
       if (values.warm) yield* executeScenario(scenario, context);
+      completedPreparationCounters = new Set((yield* fs.readDirectory(sampling)).filter(name => /^counter-\d+\.json$/u.test(name)));
       const result = yield* executeScenario(scenario, context);
       yield* settleConsumerRefreshes(consumer);
       return result;
@@ -135,6 +137,7 @@ const main = Effect.gen(function*() {
       if (warm.exitCode !== 0 && pending._tag !== 'Success' && !/(?:^|\n)error: QueryPending(?:\n|$)/u.test(output)) return yield* new PerfError({ message: `Warm command failed: ${output}` });
       yield* settleConsumerRefreshes(consumer);
     }
+    completedPreparationCounters = new Set((yield* fs.readDirectory(sampling)).filter(name => /^counter-\d+\.json$/u.test(name)));
     const result = yield* timedRun(command, { cwd: consumer.root, outputDir: runs, env });
     yield* settleConsumerRefreshes(consumer);
     return result;
@@ -144,7 +147,7 @@ const main = Effect.gen(function*() {
   const files = yield* fs.readDirectory(sampling);
   const evidence = new Map<string, string>();
   for (const name of files.filter(name => /^counter-\d+\.json$/u.test(name) || name.endsWith('.cpuprofile'))) evidence.set(name, yield* fs.readFileString(join(sampling, name)));
-  const processes = yield* io(`Decode CPU profiles and counters; command exited ${run.exitCode}: ${run.stderr}`, () => summarizeProfileEvidence(evidence));
+  const processes = yield* io(`Decode CPU profiles and counters; command exited ${run.exitCode}: ${run.stderr}`, () => summarizeProfileEvidence(evidence, completedPreparationCounters));
   const record = {
     format: 'concord.profile/v2', ...(scenario ? { scenario: scenario.id } : {}), path, measuredAt: new Date().toISOString(), environment: environment(), consumer, artifact: candidate,
     command: ['concord', ...(scenario && 'scan' in scenario.run ? ['--json', '--fresh', '--dry-run', ...scenario.run.scan] : args)], wallMs: run.ms, exitCode: run.exitCode, stderr: run.stderr, stdout: run.stdout, output: out,
