@@ -20,6 +20,7 @@ export default {
       "{file}"
     ],
     "sourceFiles": [
+      ".bun-version",
       ".node-version",
       "package.json",
       "pnpm-lock.yaml",
@@ -46,6 +47,7 @@ export default {
       "scripts/build-identity.ts",
       "scripts/build-native.ts",
       "scripts/build-output.ts",
+      "scripts/bun-test-report.ts",
       "scripts/distribution.ts",
       "scripts/gate-admission-history.ts",
       "scripts/gate-build-cache.ts",

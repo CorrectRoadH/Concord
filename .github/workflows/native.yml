@@ -35,6 +35,9 @@ jobs:
         with:
           node-version-file: '.node-version'
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: ./.github/actions/setup-native
         with:

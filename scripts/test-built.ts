@@ -86,14 +86,13 @@ const main = Effect.scoped(Effect.gen(function* () {
   const browserFiles = packageOnly ? [] : files.filter(file => file.endsWith('.e2e.ts'));
   if (values['node-worker']) {
     const output = process.env.CONCORD_NODE_OUTPUT;
-    if (output === undefined) return yield* new TestArgumentsInvalid({ detail: 'Node worker requires CONCORD_NODE_OUTPUT' });
+    if (output === undefined) return yield* new TestArgumentsInvalid({ detail: 'Bun test worker requires CONCORD_NODE_OUTPUT' });
     // The parent holds packaging admission until this runner and its tree exit.
     const failed = yield* runNodeTests({
       files: nodeFiles.map(file => resolve(file)),
-      isolation: 'process', concurrency, shard,
+      concurrency,
       testNamePatterns: values['test-name-pattern'],
       timeout: Duration.toMillis(Duration.minutes(5)),
-      execArgv: ['--conditions=concord-source', '--import', new URL('../test/support/source-runtime.ts', import.meta.url).href],
     }, output);
     yield* Effect.sync(() => { process.exitCode = failed ? 1 : 0; });
     return;
@@ -120,12 +119,12 @@ const main = Effect.scoped(Effect.gen(function* () {
     CONCORD_NODE_OUTPUT: output,
     CONCORD_E2E_OUTPUT: join(output, 'e2e'), E2E_TELEMETRY_DISABLED: '1',
     CONCORD_E2E_AGENT: values.suite === 'agent' ? '1' : '0' };
-  yield* Effect.sync(() => console.error(`# Source tests prepared in ${(performance.now() - started).toFixed(0)}ms; Node concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}\n# Machine load: ${loadavg().map(value => value.toFixed(2)).join(', ')}; CPUs=${availableParallelism()}`));
+  yield* Effect.sync(() => console.error(`# Source tests prepared in ${(performance.now() - started).toFixed(0)}ms; Bun concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}\n# Machine load: ${loadavg().map(value => value.toFixed(2)).join(', ')}; CPUs=${availableParallelism()}`));
   const phases: { name: string; measurement: Measurement }[] = [];
   const suite = Effect.fn('test.suite')(function*(name: string, executable: string, args: string[], suiteEnv: NodeJS.ProcessEnv = env) {
     const suiteStarted = performance.now();
     const code = yield* Effect.scoped(Effect.gen(function*() {
-      const observation = name === 'Packaging Node' ? yield* observeTestProcessTree('packaging-runner', gateMemoryBudgets.packaging, ['--node-worker']) : undefined;
+      const observation = name === 'Packaging Bun' ? yield* observeTestProcessTree('packaging-runner', gateMemoryBudgets.packaging, ['--node-worker']) : undefined;
       const browserObservation = name === 'Browser' ? yield* observeBrowserProcessTrees(join(output, 'e2e'), gateMemoryBudgets.browser) : undefined;
       const child = yield* spawner.spawn(ChildProcess.make(executable, args, {
         env: suiteEnv, detached: process.platform !== 'win32', forceKillAfter: Duration.seconds(5),
@@ -150,7 +149,7 @@ const main = Effect.scoped(Effect.gen(function* () {
       return code;
     })).pipe(Effect.catch(cause => Effect.sync(() => { console.error(`# Test suite failed: ${String(cause)}`); return 1; })));
     const elapsed = performance.now() - suiteStarted;
-    phases.push({ name, measurement: timingMeasurement(name === 'Packaging Node' ? 'packaging-wallclock' : 'suite-wallclock', [{ duration_ms: elapsed, success: Number(code) === 0 }], 1) });
+    phases.push({ name, measurement: timingMeasurement(name === 'Packaging Bun' ? 'packaging-wallclock' : 'suite-wallclock', [{ duration_ms: elapsed, success: Number(code) === 0 }], 1) });
     yield* Effect.sync(() => console.error(`# ${name} tests: ${(elapsed / 1000).toFixed(3)}s; exit=${code}`));
     return Number(code) !== 0;
   }, Effect.catch(cause => Effect.sync(() => { console.error(`# Test suite failed: ${String(cause)}`); return true; })));
@@ -159,7 +158,7 @@ const main = Effect.scoped(Effect.gen(function* () {
   const packageFiles = selectedNode.filter(file => isPackagingTest(file));
   const sourceFiles = selectedNode.filter(file => !isPackagingTest(file));
   const required = packageFiles.length > 0 ? gateMemoryBudgets.packaging : 0;
-  if (capacity < required) return yield* new GateResourcesInvalid({ detail: `Selected Node test file needs ${required} bytes; admission pool has ${capacity}` });
+  if (capacity < required) return yield* new GateResourcesInvalid({ detail: `Selected Bun test file needs ${required} bytes; admission pool has ${capacity}` });
   const split = packageFiles.length > 0 && sourceFiles.length > 0;
   const sourceOutput = split ? join(output, 'node-source') : output;
   const packageOutput = split ? join(output, 'node-package') : output;
@@ -182,16 +181,15 @@ const main = Effect.scoped(Effect.gen(function* () {
       else process.env.CONCORD_TEST_PACKAGE_ROOT = packageRoot;
       delete process.env.CONCORD_NODE_OUTPUT;
     });
-    const failed = yield* runNodeTests({ files: files.map(file => resolve(file)), isolation: 'process', concurrency,
+    const failed = yield* runNodeTests({ files: files.map(file => resolve(file)), concurrency,
       testNamePatterns: values['test-name-pattern'], timeout: Duration.toMillis(Duration.minutes(5)),
-      execArgv: ['--conditions=concord-source', '--import', new URL('../test/support/source-runtime.ts', import.meta.url).href],
-    }, destination, { admission, bytes, history: name === 'Source Node' });
+    }, destination, { admission, bytes, history: name === 'Source Bun' });
     const elapsed = performance.now() - suiteStarted;
-    phases.push({ name, measurement: timingMeasurement(name === 'Packaging Node' ? 'packaging-wallclock' : 'suite-wallclock', [{ duration_ms: elapsed, success: !failed }], 1) });
+    phases.push({ name, measurement: timingMeasurement(name === 'Packaging Bun' ? 'packaging-wallclock' : 'suite-wallclock', [{ duration_ms: elapsed, success: !failed }], 1) });
     yield* Effect.sync(() => console.error(`# ${name} tests: ${(elapsed / 1000).toFixed(3)}s; exit=${failed ? 1 : 0}`));
     return failed;
   });
-  const sourceTests = nodeSuite('Source Node', sourceFiles, sourceOutput, gateMemoryBudgets.node);
+  const sourceTests = nodeSuite('Source Bun', sourceFiles, sourceOutput, gateMemoryBudgets.node);
   const packageTests = packageFiles.length > 0 ? Effect.gen(function*() {
     if (capacity < gateMemoryBudgets.packaging) return yield* new GateResourcesInvalid({ detail: `Packaging needs ${gateMemoryBudgets.packaging} bytes; admission pool has ${capacity}` });
     const prepared = packagePreparation !== undefined ? yield* waitForPackagePreparation(packagePreparation)
@@ -203,7 +201,7 @@ const main = Effect.scoped(Effect.gen(function* () {
     yield* fs.makeDirectory(packageOutput, { recursive: true });
     const packageEnv = { ...env, CONCORD_NODE_OUTPUT: packageOutput,
       CONCORD_TEST_PACKAGE_ROOT: prepared?.packageRoot ?? prebuiltPackageRoot };
-    return yield* suite('Packaging Node', process.execPath,
+    return yield* suite('Packaging Bun', process.execPath,
       [...process.execArgv, fileURLToPath(import.meta.url), '--node-worker', '--suite=node',
         ...(values['test-name-pattern'] === undefined ? [] : [`--test-name-pattern=${values['test-name-pattern']}`]), ...packageFiles], packageEnv)
       .pipe(withGateAdmission(admission, gateMemoryBudgets.packaging, 'packaging'));
@@ -245,9 +243,9 @@ const main = Effect.scoped(Effect.gen(function* () {
     node: summarizeFileTimings(selectedNode, nodeTimings, 'node-file-elapsed-sum', !failures[0]),
     browser: summarizeFileTimings(selectedBrowser, browserTimings, 'browser-attempt-sum', !failures[1] && reportedBrowser !== null),
     browserLifecycle: summarizeBrowserLifecycle(lifecycle, requestedBrowser.length > 0, !failures[1]),
-    phases: ['Source Node', 'Packaging Node', 'Browser'].map(name => ({ name,
-      ...(phases.find(phase => phase.name === name)?.measurement ?? timingMeasurement(name === 'Packaging Node' ? 'packaging-wallclock' : 'suite-wallclock', [],
-        (name === 'Source Node' ? sourceFiles : name === 'Packaging Node' ? packageFiles : selectedBrowser).length > 0 ? 1 : 0)) })),
+    phases: ['Source Bun', 'Packaging Bun', 'Browser'].map(name => ({ name,
+      ...(phases.find(phase => phase.name === name)?.measurement ?? timingMeasurement(name === 'Packaging Bun' ? 'packaging-wallclock' : 'suite-wallclock', [],
+        (name === 'Source Bun' ? sourceFiles : name === 'Packaging Bun' ? packageFiles : selectedBrowser).length > 0 ? 1 : 0)) })),
     wallclock: timingMeasurement('test-runner-wallclock', [{ duration_ms: performance.now() - started, success: !failures.some(Boolean) }], 1),
   };
   yield* writeTimingReport(output, 'test-timings.json', report);

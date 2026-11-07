@@ -47,6 +47,9 @@ jobs:
         with:
           node-version-file: '.node-version'
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: ./.github/actions/setup-native
         with:
@@ -56,7 +59,7 @@ jobs:
         run: |
           export XDG_CACHE_HOME="$RUNNER_TEMP/hawdb-hooks-cache"
           node scripts/build-native.ts --test-hooks
-          node --test test/process/hawdb-native.test.ts
+          bun test --no-env-file --config=/dev/null --timeout=300000 ./test/process/hawdb-native.test.ts
       - name: Build the pinned host engine
         run: node scripts/build-native.ts --output native-artifacts --require-portable
       - name: Sign Darwin native addon and official ripgrep
@@ -88,6 +91,9 @@ jobs:
         with:
           node-version-file: '.node-version'
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Record the checked out tag commit
         id: identity
@@ -139,6 +145,9 @@ jobs:
         with:
           node-version-file: '.node-version'
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: actions/download-artifact@v4
         with:

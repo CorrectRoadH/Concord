@@ -4,9 +4,19 @@
 
 ## Runner 适配
 
-`pnpm gate` 的测试阶段统一调度 Node 测试与浏览器测试，全部运行当前 worktree 的源码。子进程以[从源码运行](../build/architecture.md#从源码运行)的方式启动，Web 页面来自共享的 Web 产物，原生产物来自共享缓存。只有打包测试使用归档。
+`pnpm gate` 的测试阶段统一调度 Bun 源码测试与浏览器测试，全部运行当前 worktree 的源码。子进程以[从源码运行](../build/architecture.md#从源码运行)的方式启动，Web 页面来自共享的 Web 产物，原生产物来自共享缓存。只有打包测试使用归档。门禁控制器与浏览器工具可以由 Node 托管，被测 Concord 代码与源码测试由固定版本的 Bun 执行。
 
-Node 测试期由 Node 自带的类型擦除加载 TypeScript（[从源码运行](../build/architecture.md#从源码运行)）。同步测试体使用 `Effect.sync`，Node adapter 回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
+Bun 直接加载 TypeScript 测试源码，并兼容 `node:test` 声明。同步测试体使用 `Effect.sync`，测试回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
+
+### Bun 测试引擎
+
+现有 gate 负责文件发现、changed 选择、文件分片与 Effect 内存准入；每个获准文件由一个独立的官方 `bun test` 进程执行，不复用测试进程。官方引擎负责用例执行、名称过滤、超时与报告，不实现替代测试引擎（[用现成的能力，不重写](../../taste.md#t-10)）。
+
+- 每个文件使用新的临时 timings 路径，传入 `--timings <文件> --update-timings`，以官方 JUnit 记录用例结果。名称筛选传 `--test-name-pattern`；零匹配允许成功，报告执行数为零，不能把过滤跳过算成执行。动态 `t.test` 子测试的失败归其父测试，计数遵循 Bun 官方报告，不能声称逐个子测试独立计数。
+- 成功要求正常退出 0、没有信号终止，并且本次 timings 含所选文件的完整记录；主动 `process.exit(0)` 缺少完成记录也失败。旧报告不能复用。空文件可以没有 JUnit，但须有本次文件完成记录，执行数为零。导入失败、断言失败、超时、报告损坏或非预期文件均失败。
+- 单文件有 5 分钟的进程期限；终止后等待整个自有进程组退出再归还准入。测试自带的更短超时继续交给官方引擎，取消不能返回成功。
+- 预加载使用真实文件路径，事件上下文通过显式环境传递，不依赖文件 URL query。启动关闭 cwd dotenv 和 bunfig 自动加载。每个文件记录真实 PID 与进程出生身份，观测不到的计数记为未知；不依赖 Bun 没有实现的 Node diagnostics channel，也不填造零值。
+- gate 保持现有路径、changed、名称与分片选项、完整静态检查、单文件日志、层耗时、内存准入及失败聚合。报告必须区分执行、跳过和未知计数。
 
 ### 修复核验冻结的文件
 
@@ -16,7 +26,7 @@ Node 测试期由 Node 自带的类型擦除加载 TypeScript（[从源码运行
 2. 从入口沿两类边求传递闭包：相对导入（含 `import type` 与字面 `import()`），以及以字面路径加载模块的位置，例如作为 `--import` 或子进程入口的 `new URL('../x.ts', import.meta.url)`。
 3. 结果去掉 `src/` 下的文件、测试文件本身、依赖包与 `concord.config.ts`；入口脚本本身计入。runner 配置由修复核验单独冻结。
 4. 无法静态枚举的加载目标使推导失败，不静默跳过。
-5. `.node-version`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 决定运行时与依赖，但不在导入图中，固定列入。
+5. `.bun-version`、`.node-version`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 决定产品运行时、工具宿主与依赖，但不在导入图中，固定列入。
 
 清单留在 `concord.config.ts`。`test/model/runner-source-files.test.ts` 从导入图推导期望集合并与清单比较，缺项或多出的项都失败。owner 测试直接写出声明，不通过包装函数隐藏。
 
@@ -39,7 +49,7 @@ Node 测试期由 Node 自带的类型擦除加载 TypeScript（[从源码运行
 
 ## 进程内 CLI
 
-CLI 层的测试在测试进程里运行和真实 CLI 相同的命令程序，不为每次调用另起一个 Node 进程。这要求一次调用的全部输入都是显式给出的：argv、cwd、完整的环境变量与 stdin，输出与退出码也只属于这次调用。
+CLI 层的测试在测试进程里运行和真实 CLI 相同的命令程序，不为每次调用另起一个进程。这要求一次调用的全部输入都是显式给出的：argv、cwd、完整的环境变量与 stdin，输出与退出码也只属于这次调用。
 
 为此有三条规则：
 

@@ -27,6 +27,9 @@ jobs:
         with:
           node-version-file: '.node-version'
           cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: actions/setup-go@v6
         with:
@@ -46,7 +49,7 @@ jobs:
           export XDG_CACHE_HOME="$RUNNER_TEMP/hawdb-hooks-cache"
           export CONCORD_NATIVE_TEST_HOOKS=1
           node scripts/build-native.ts --test-hooks
-          node --test test/process/hawdb-native.test.ts
+          bun test --no-env-file --config=/dev/null --timeout=300000 ./test/process/hawdb-native.test.ts
       - run: sudo apt-get update && sudo apt-get install -y ripgrep patchelf binutils
       - run: pnpm exec vp exec playwright install --with-deps chromium
       - run: pnpm exec vp run build:native

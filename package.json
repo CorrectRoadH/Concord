@@ -15,14 +15,11 @@
     "templates",
     "skills"
   ],
-  "engines": {
-    "node": ">=24.15.0"
-  },
   "packageManager": "pnpm@11.18.0",
   "scripts": {
     "build": "vp build",
     "gate": "node scripts/gate.ts",
-    "concord": "node src/entry/cli/entry.ts",
+    "concord": "bun --no-env-file --config=/dev/null src/entry/cli/entry.ts",
     "bench": "node scripts/bench.ts",
     "bench:profile": "node scripts/profile.ts",
     "test:e2e:agent": "node scripts/test-built.ts --suite=agent",
@@ -52,6 +49,7 @@
     "@fontsource-variable/noto-sans-sc": "5.3.1",
     "@jridgewell/sourcemap-codec": "1.6.0",
     "@lezer/highlight": "1.2.5",
+    "@lezer/xml": "1.0.6",
     "@mdxeditor/editor": "4.5.0",
     "@playwright/test": "1.65.0",
     "@stylexjs/stylex": "0.19.1",

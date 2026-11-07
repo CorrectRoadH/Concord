@@ -40,7 +40,7 @@ export default defineConfig(async ({ command }) => {
     'gate:tests': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.test.json --noEmit', cache: false },
     'gate:scripts': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.scripts.json --noEmit', cache: false },
     'gate:web': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.web.json --noEmit', cache: false },
-    'gate:selfhost': { command: 'node src/entry/cli/entry.ts --json --dry-run check', cache: false },
+    'gate:selfhost': { command: 'bun --no-env-file --config=/dev/null src/entry/cli/entry.ts --json --dry-run check', cache: false },
     'test:source': { command: 'node scripts/test-built.ts', cache: false },
   } },
   root: 'web',

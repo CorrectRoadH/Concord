@@ -23,7 +23,7 @@ const runnerTest = (name: string, body: (root: string) => Effect.Effect<void, un
 
 const run = Effect.fn('test.runner.integration')(function*(args: string[], env: Record<string, string | undefined> = {}, cwd?: string, onOutput?: (chunk: string) => void) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/test-built.ts'), ...args], {
+  const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), ...args], {
     env: { ...process.env, CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_COMPILE_CACHE: undefined, ...env },
     cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
   }));
@@ -33,7 +33,7 @@ const run = Effect.fn('test.runner.integration')(function*(args: string[], env: 
   return { text, code: Number(code), output };
 });
 
-const Counts = Schema.Struct({ tests: Schema.Number, failed: Schema.Number, cancelled: Schema.Number });
+const Counts = Schema.Struct({ tests: Schema.Number, failed: Schema.Number, cancelled: Schema.Number, skipped: Schema.Number });
 const Timing = Schema.Struct({ scope: Schema.String, counts: Counts });
 
 // @feature docs/engineering/testing/cli.md#并发
@@ -46,6 +46,7 @@ runnerTest('fixed overhead counts shared controllers and excludes only admitted 
   for (const [name, size] of [['shared-controller', 32], ['owned-memory', 64]] as const) {
     const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['-e', `const bytes=Buffer.alloc(${size}*1024*1024, 1); process.stdout.write('ready'); setInterval(()=>{bytes[0]++;},1000);`, name], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
     yield* Stream.runHead(Stream.decodeText(child.stdout));
+    if (name === 'owned-memory') yield* admitted.register(Number(child.pid));
     children.push(child);
   }
   // The admitted observer's final scan and normal-exit barrier are exercised too.
@@ -97,12 +98,12 @@ runnerTest('real cold and warm file runs use the previous PSS peak while keeping
     const broken = yield* run(['--suite=node', file], env, root);
     assert.equal(broken.code, 1, broken.text);
     assert.match(broken.text, /GateAdmissionHistoryInvalid/u);
-    assert.doesNotMatch(broken.text, /ok 1 - sampled file/u);
+    assert.doesNotMatch(broken.text, /\(pass\) sampled file/u);
   }
 }));
 
 // @feature docs/engineering/testing/README.md#检查入口
-runnerTest('all Node layers run source without a package and preserve the shared compile cache', root => Effect.gen(function*() {
+runnerTest('all Bun layers run source without a package and preserve the shared compile cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const source = join(root, 'test/model/source.test.ts'), cli = join(root, 'test/cli/source.test.ts');
   const child = join(root, 'typed-child.ts');
@@ -114,7 +115,7 @@ runnerTest('all Node layers run source without a package and preserve the shared
 test('source uses native type erasure', () => {
   assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, undefined);
   assert.equal(process.env.CONCORD_TEST_PACKAGE_BUILD_STATUS, undefined);
-  assert.ok(process.execArgv.includes('--conditions=concord-source'));
+  assert.equal(process.versions.bun, '1.4.2');
   assert.ok(process.execArgv.every(arg => !arg.includes('tsx')));
   const child = spawnSync(process.execPath, [${JSON.stringify(child)}], { encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
@@ -128,8 +129,8 @@ test('source uses native type erasure', () => {
   const env = { NODE_OPTIONS: '', XDG_CACHE_HOME: cacheHome, CONCORD_TEST_PACKAGE_ROOT: join(root, 'absent-package'), CONCORD_TEST_PACKAGE_BUILD_STATUS: join(root, 'absent-receipt') };
   const result = yield* run(['--suite=node', source, cli], env, root);
   assert.equal(result.code, 0, result.text);
-  assert.match(result.text, /# Source Node tests:/u);
-  assert.doesNotMatch(result.text, /# Installed Node tests:/u);
+  assert.match(result.text, /# Source Bun tests:/u);
+  assert.doesNotMatch(result.text, /# Installed Bun tests:/u);
   const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
   assert.deepEqual(timings.map(timing => timing.file).sort(), [source, cli].sort());
   assert.equal(yield* fs.exists(compileCache), true);
@@ -186,7 +187,7 @@ test('packaging receives ready archive only', () => { assert.equal(process.env.C
   yield* fs.writeFileString(sourceRelease, 'release');
   const result = yield* Fiber.join(running);
   assert.equal(result.code, 0, result.text);
-  assert.match(result.text, /# Packaging Node tests:/u);
+  assert.match(result.text, /# Packaging Bun tests:/u);
   assert.equal(yield* fs.exists(packageDone), true);
   const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String, cases: Schema.Number }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
   assert.deepEqual(timings.map(row => row.file).sort(), [source, packaging].sort());
@@ -219,7 +220,7 @@ setInterval(() => {}, 1000);
       yield* fs.remove(cache, { recursive: true, force: true });
     }
   }).pipe(Effect.orDie));
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/gate.ts'), 'test/model/test-reporter.test.ts'], {
+  const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/gate.ts'), 'test/model/test-reporter.test.ts'], {
     env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined, XDG_CACHE_HOME: join(root, 'shared-cache'), CONCORD_GATE_QUEUE_DIRECTORY: join(root, 'gate-queue'), PATH: `${root}:${process.env.PATH}` },
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
   }));
@@ -275,17 +276,17 @@ runnerTest('official file diagnostics sort durations and count isolated file pro
   assert.equal(summaries.find(summary => summary.scope === 'run')?.fileProcessStarts, 2);
 }));
 
-runnerTest('official TAP retains circular failure diagnostics and reaches its run summary', root => Effect.gen(function*() {
+runnerTest('official Bun JUnit retains circular failure diagnostics and reaches its run summary', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const file = join(root, 'circular.test.ts');
   yield* fs.writeFileString(file, `import ${JSON.stringify(pathToFileURL(resolve('test/fixtures/reporter-circular-error.ts')).href)};\n`);
   const result = yield* run(['--suite=node', file]);
   assert.equal(result.code, 1, result.text);
   assert.doesNotMatch(result.text, /Converting circular structure|uncaughtException/u);
-  assert.match(result.text, /not ok 1 - intentional circular error fixture/u);
+  assert.match(result.text, /\(fail\) intentional circular error fixture/u);
   const timings = (yield* fs.readFileString(join(result.output, 'node-timings.jsonl'))).trim().split('\n').map(line => Schema.decodeUnknownSync(Schema.fromJsonString(Timing))(line));
   const summary = timings.find(timing => timing.scope === 'run');
-  assert.deepEqual(summary?.counts, { tests: 1, failed: 1, cancelled: 0 });
+  assert.deepEqual(summary?.counts, { tests: 1, failed: 1, cancelled: 0, skipped: 0 });
   const diagnostic = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ name: Schema.String, error: Schema.String })))((yield* fs.readFileString(join(result.output, 'node-failures.jsonl'))).trim().split('\n')[0]);
   assert.match(diagnostic.error, /intentional circular reporter failure/u);
   assert.ok((yield* fs.readDirectory(join(result.output, 'node'))).some(name => name.startsWith('circular.test.ts-')));
@@ -302,14 +303,10 @@ runnerTest('name-filtered files count executed cases instead of successful file 
     const result = yield* run(['--suite=node', '--test-name-pattern=^selected case$', ...files], {}, root);
     assert.equal(result.code, 0, result.text);
     const expected = files.length - 1;
-    const tapCounts = [...result.text.matchAll(/^# tests (\d+)$/gmu)].map(match => Number(match[1]));
-    const tapPasses = [...result.text.matchAll(/^# pass (\d+)$/gmu)].map(match => Number(match[1]));
-    assert.equal(tapCounts.reduce((sum, count) => sum + count, 0), expected, result.text);
-    assert.equal(tapPasses.reduce((sum, count) => sum + count, 0), expected, result.text);
     assert.doesNotMatch(result.text, /ok \d+ - .*excluded\.test\.ts/u);
     const timings = (yield* fs.readFileString(join(result.output, 'node-timings.jsonl'))).trim().split('\n')
       .map(line => Schema.decodeUnknownSync(Schema.fromJsonString(Timing))(line));
-    assert.deepEqual(timings.find(timing => timing.scope === 'run')?.counts, { tests: expected, failed: 0, cancelled: 0 });
+    assert.deepEqual(timings.find(timing => timing.scope === 'run')?.counts, { tests: expected, failed: 0, cancelled: 0, skipped: 1 });
     const cases = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ cases: Schema.Number }))))(
       yield* fs.readFileString(join(result.output, 'file-timings.json')),
     );
@@ -322,7 +319,7 @@ runnerTest('official name filtering and shard union select each requested source
   const files: string[] = [];
   for (const name of ['alpha', 'beta', 'gamma']) {
     const file = join(root, `${name}.test.ts`);
-    yield* fs.writeFileString(file, `import test from 'node:test';\nimport assert from 'node:assert/strict';\ntest('selected ${name}', () => { assert.ok(process.execArgv.some(arg => arg.includes('concord-source'))); assert.ok(process.execArgv.some(arg => arg.includes('source-runtime'))); });\ntest('excluded ${name}', () => assert.fail('name filter was lost'));\n`);
+    yield* fs.writeFileString(file, `import test from 'node:test';\nimport assert from 'node:assert/strict';\ntest('selected ${name}', () => { assert.equal(process.versions.bun, '1.4.2'); assert.equal(process.env.CONCORD_TEST_FILE_ID, ${JSON.stringify(file)}); });\ntest('excluded ${name}', () => assert.fail('name filter was lost'));\n`);
     files.push(file);
   }
   const observed: string[] = [];
@@ -357,13 +354,13 @@ test('timeout fixture', { timeout: 100 }, async t => {
   const result = yield* run(['--suite=node'], {}, root);
   assert.equal(result.code, 1, result.text);
   assert.match(result.text, /test timed out after 100ms/u);
-  assert.match(result.text, /ok \d+ - discovered source fixture/u);
+  assert.match(result.text, /\(pass\) discovered source fixture/u);
   assert.doesNotMatch(result.text, /not a test file/u);
   const pid = Schema.decodeUnknownSync(Schema.NumberFromString)(yield* fs.readFileString(pidFile));
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
 }));
 
-runnerTest('Node and browser failures leave the other suite running and retain official browser arguments', root => Effect.gen(function*() {
+runnerTest('Bun and browser failures leave the other suite running and retain official browser arguments', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.writeFileString(join(root, 'package.json'), JSON.stringify({ private: true }));
   const browser = join(root, 'route.e2e.ts'), node = join(root, 'route.test.ts');
@@ -386,7 +383,7 @@ runnerTest('Node and browser failures leave the other suite running and retain o
   const browserFailed = yield* run([node, browser], { ...env, BROWSER_EXIT: '1' });
   assert.equal(browserFailed.code, 1, browserFailed.text);
   assert.equal(yield* fs.readFileString(nodeDone), 'done');
-  assert.match(browserFailed.text, /ok 1 - selected/u);
+  assert.match(browserFailed.text, /\(pass\) selected/u);
 }));
 
 runnerTest('cancelling the source runner reaps test processes and descendants that ignore SIGTERM', root => Effect.gen(function*() {
@@ -394,7 +391,7 @@ runnerTest('cancelling the source runner reaps test processes and descendants th
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const file = join(root, 'cancel.test.ts'), pids = join(root, 'pids.json');
   yield* fs.writeFileString(file, `import { spawn } from 'node:child_process';\nimport { writeFileSync } from 'node:fs';\nimport test from 'node:test';\nprocess.on('SIGTERM', () => {});\nconst child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{}); process.stdout.write("READY"); setInterval(()=>{},1000)'], {stdio:['ignore','pipe','ignore']});\nchild.stdout.once('data', () => { writeFileSync(${JSON.stringify(pids)}, JSON.stringify([process.ppid, process.pid, child.pid])); console.log('FIXTURE_READY'); });\ntest('hang until cancelled', () => new Promise(()=>{setInterval(()=>{},1000)}));\n`);
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['scripts/test-built.ts', '--suite=node', file], {
+  const child = yield* spawner.spawn(ChildProcess.make('node', ['scripts/test-built.ts', '--suite=node', file], {
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
     env: { ...process.env, CONCORD_TEST_COMPILE_CACHE: undefined, CONCORD_TEST_TIMINGS: undefined },
   }));
@@ -473,8 +470,9 @@ test(${JSON.stringify(name)}, async () => {
 runnerTest('file admission waits for normal process exit after the official summary', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const file = join(root, 'normal-exit.test.ts'), saved = join(root, 'normal-exit');
-  yield* fs.writeFileString(file, `import test from 'node:test'; import {writeFileSync} from 'node:fs';
-process.once('beforeExit', () => { setImmediate(() => writeFileSync(${JSON.stringify(saved)}, 'normally drained')); });
+  yield* fs.writeFileString(file, `import test from 'node:test'; import {spawn} from 'node:child_process';
+const child = spawn('node', ['-e', ${JSON.stringify(`setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(saved)}, 'normally drained'), 200);`)}], {stdio:'ignore'});
+child.unref();
 test('official summary precedes final process drain', () => {});\n`);
   const result = yield* run(['--suite=node', file], {}, root);
   assert.equal(result.code, 0, result.text);

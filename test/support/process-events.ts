@@ -9,19 +9,23 @@ import { classifyConcordProcess, processEventEnvironment, processEventsHealthy, 
 
 let installed = false;
 
-/** Installed by --import before tests take named references to child_process exports. */
+/** Installed by the source preload; runtimes with incomplete hooks report unknown coverage. */
 export function installProcessEvents(context?: { readonly directory: string; readonly run: string }): void {
   if (context !== undefined) {
     process.env.CONCORD_TEST_EVENT_DIRECTORY = context.directory;
     process.env.CONCORD_TEST_RUN_ID = context.run;
-    // Each isolated Node file process supplies its own real entry, never its parent's file ID.
-    if (/\.(?:test|e2e)\.ts$/u.test(process.argv[1] ?? '') || process.env.CONCORD_TEST_FILE_ID === undefined) process.env.CONCORD_TEST_FILE_ID = resolve(process.argv[1] ?? 'unknown');
+    // Each isolated file process supplies its own real entry, never its parent's file ID.
+    if (process.env.CONCORD_TEST_FILE_ID === undefined) process.env.CONCORD_TEST_FILE_ID = resolve(process.argv[1] ?? 'unknown');
   }
   if (!process.env.CONCORD_TEST_EVENT_DIRECTORY || !process.env.CONCORD_TEST_RUN_ID || !process.env.CONCORD_TEST_FILE_ID) return;
   if (installed) return;
   installed = true;
   const releaseObserver = observeProcessEvents();
   const ownerEnvironment = Object.freeze({ ...process.env });
+  // Bun cannot synchronize patched builtin defaults to their named ESM exports.
+  // Product-owned events remain observable, but direct named calls are not complete.
+  const completeHooks = process.versions.bun === undefined;
+  if (!completeHooks) recordProcessEvent({ kind: 'unknown' }, ownerEnvironment);
   let depth = 0;
   const StartedFailure = Schema.Struct({ pid: Schema.Int.check(Schema.isGreaterThan(0)) });
   // Node 26 diagnostics_channel observes async spawn only; sync exports need explicit hooks.
@@ -58,7 +62,10 @@ export function installProcessEvents(context?: { readonly directory: string; rea
     Object.defineProperty(childProcess, name, { value: wrapped, configurable: true, writable: true });
   }
   syncBuiltinESMExports();
-  const root = process.env.CONCORD_TEST_EVENT_SCOPE === 'browser-worker' || /\.(?:test|e2e)\.ts$/u.test(process.argv[1] ?? '');
+  const root = process.env.CONCORD_TEST_EVENT_SCOPE === 'browser-worker'
+    || process.env.CONCORD_TEST_FILE_ID === resolve(process.argv[1] ?? '')
+    || process.env.CONCORD_TEST_BUN_FILE_ROOT === '1';
+  delete process.env.CONCORD_TEST_BUN_FILE_ROOT;
   recordProcessEvent({ kind: root ? 'coverage-start' : 'process-start' }, ownerEnvironment);
-  process.once('exit', () => { try { Effect.runSync(Effect.sync(() => recordProcessEvent({ kind: root ? 'coverage-end' : 'process-end', healthy: processEventsHealthy() }, ownerEnvironment))); } finally { releaseObserver(); } });
+  process.once('exit', () => { try { Effect.runSync(Effect.sync(() => recordProcessEvent({ kind: root ? 'coverage-end' : 'process-end', healthy: completeHooks && processEventsHealthy() }, ownerEnvironment))); } finally { releaseObserver(); } });
 }

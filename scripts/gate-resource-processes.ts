@@ -5,6 +5,7 @@ import { channel } from 'node:diagnostics_channel';
 import type { ChildProcess } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { observeOwnedProcessGroup } from '../src/base/process/owned-process.ts';
 
 export class GateProcessCleanupFailed extends Schema.TaggedError<GateProcessCleanupFailed>()('GateProcessCleanupFailed', {
   file: Schema.String, pids: Schema.Array(Schema.Number), message: Schema.String,
@@ -42,9 +43,22 @@ const sample = (pid: number): ProcessSample | undefined => {
   }
 };
 
+/** Group membership survives a short-lived parent's reparenting of its descendants. */
+const groupMembers = (group: number): number[] => readdirSync('/proc').filter(name => /^\d+$/u.test(name)).flatMap(name => {
+  try {
+    const stat = readFileSync(`/proc/${name}/stat`, 'utf8');
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return Number(fields[2]) === group ? [Number(name)] : [];
+  } catch (cause) {
+    if (cause instanceof Error && 'code' in cause && ['ENOENT', 'ESRCH'].includes(String(cause.code))) return [];
+    throw cause;
+  }
+});
+
 /** PSS apportions shared resident pages; 100ms sampling may miss short peaks. */
 export const observeTestProcessTree = (file: string, budgetBytes: number, rootArguments: readonly string[] = [file], includeSupervisor = false, additionalRoots: () => readonly number[] = () => []) => {
   const known = new Map<number, string>();
+  const groups = new Set<number>();
   let peakBytes = 0;
   let samples = 0;
   let roots = includeSupervisor && process.platform === 'linux' ? 1 : 0;
@@ -64,12 +78,20 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
       living.push(current);
       for (const child of childrenOf(pid)) visit(child);
     };
+    for (const group of groups) for (const pid of groupMembers(group)) visit(pid);
     for (const pid of known.keys()) visit(pid);
     samples++;
     peakBytes = Math.max(peakBytes, living.reduce((sum, row) => sum + row.bytes, includeSupervisor ? sample(process.pid)?.bytes ?? 0 : 0));
     return living;
   };
   const events = channel('child_process');
+  const register = (pid: number, processGroup = false) => Effect.sync(() => {
+    if (processGroup) groups.add(pid);
+    if (process.platform !== 'linux') return;
+    if (known.has(pid)) return;
+    const current = sample(pid);
+    if (current) { known.set(pid, current.birth); roots++; scan(); }
+  });
   const observe = (message: unknown) => {
     // Node's documented channel publishes the ChildProcess before spawn completes.
     const child = (message as { process: ChildProcess }).process;
@@ -84,28 +106,46 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
     yield* Effect.acquireRelease(Effect.sync(() => { events.subscribe(observe); }), () => Effect.sync(() => { events.unsubscribe(observe); }));
     if (process.platform === 'linux') yield* Effect.gen(function*() { for (;;) { yield* Effect.sync(scan); yield* Effect.sleep('100 millis'); } }).pipe(Effect.forkScoped);
     return {
+      // Explicitly owned handles do not depend on a runtime's diagnostics channel.
+      register,
       finish: Effect.gen(function*() {
-        if (process.platform !== 'linux') return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, exceeded: null, samples: 0, processes: [] };
-        let living = yield* Effect.sync(scan);
-        // The final TestsStream event can precede child exit and descriptor close.
+        // Memory availability and owned POSIX group cleanup are independent.
+        // kill(-pgid, 0) also confirms groups on platforms without /proc.
+        const pendingGroups = () => [...groups].filter(group => {
+          const state = observeOwnedProcessGroup(group);
+          return state !== 'gone' && state !== 'zombie-only';
+        });
+        const scanLiving = () => process.platform === 'linux' ? scan() : [];
+        let living = yield* Effect.sync(scanLiving);
+        let pending = yield* Effect.sync(pendingGroups);
         // Keep admission while normal shutdown drains; only then classify a leak.
         const normalExitDeadline = performance.now() + 5_000;
-        while (living.length > 0 && performance.now() < normalExitDeadline) {
+        while ((living.length > 0 || pending.length > 0) && performance.now() < normalExitDeadline) {
           yield* Effect.sleep('10 millis');
-          living = yield* Effect.sync(scan);
+          living = yield* Effect.sync(scanLiving);
+          pending = yield* Effect.sync(pendingGroups);
         }
-        if (living.length > 0) {
-          yield* Effect.sync(() => { for (const row of living) { const current = sample(row.pid); if (current?.birth === row.birth && current.running) try { process.kill(row.pid, 'SIGKILL'); } catch {} } });
+        if (living.length > 0 || pending.length > 0) {
+          yield* Effect.sync(() => {
+            for (const group of pending) {
+              try { process.kill(-group, 'SIGKILL'); } catch (cause) {
+                if (!(cause instanceof Error && 'code' in cause && cause.code === 'ESRCH')) throw cause;
+              }
+            }
+            for (const row of living) { const current = sample(row.pid); if (current?.birth === row.birth && current.running) try { process.kill(row.pid, 'SIGKILL'); } catch {} }
+          });
           const deadline = performance.now() + 5_000;
           let remaining = living;
-          while (remaining.length > 0 && performance.now() < deadline) {
+          while ((remaining.length > 0 || pending.length > 0) && performance.now() < deadline) {
             yield* Effect.sleep('10 millis');
-            remaining = yield* Effect.sync(scan);
+            remaining = yield* Effect.sync(scanLiving);
+            pending = yield* Effect.sync(pendingGroups);
           }
           // A failed confirmation poisons admission before its permit is released.
-          if (remaining.length > 0) return yield* new GateProcessCleanupFailed({ file, pids: remaining.map(row => row.pid), message: `${file}: process exit remains unconfirmed after SIGKILL: ${remaining.map(row => row.pid).join(', ')}` });
+          if (remaining.length > 0 || pending.length > 0) return yield* new GateProcessCleanupFailed({ file, pids: [...new Set([...remaining.map(row => row.pid), ...pending])], message: `${file}: process/group exit remains unconfirmed after SIGKILL; groups=${pending.join(', ')}; pids=${remaining.map(row => row.pid).join(', ')}` });
           return yield* new GateProcessCleanupFailed({ file, pids: living.map(row => row.pid), message: `${file}: descendants survived normal runner shutdown and required SIGKILL: ${living.map(row => row.pid).join(', ')}` });
         }
+        if (process.platform !== 'linux') return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, exceeded: null, samples: 0, processes: [] };
         return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: roots > 0 ? 'observed' as const : 'unknown' as const,
           peakBytes: roots > 0 ? peakBytes : null, exceeded: roots > 0 ? peakBytes > budgetBytes : null, samples,
           processes: [...known].map(([pid, birth]) => ({ pid, birth })) };

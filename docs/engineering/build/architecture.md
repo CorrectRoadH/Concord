@@ -81,12 +81,12 @@ Concord 有两种运行模式：源码模式直接运行 worktree 中的 `.ts`�
 
 ## 脚本只写项目特有的规则
 
-`scripts/` 只承担 Vite+、Effect、Node 与测试工具没有提供的规则（[用现成的能力，不重写](../../taste.md#t-10)）。
+`scripts/` 只承担 Vite+、Effect、Bun、Node 与测试工具没有提供的规则（[用现成的能力，不重写](../../taste.md#t-10)）。
 
 | 需要 | 使用 | 脚本只负责 |
 | --- | --- | --- |
-| Node 测试的发现、文件并发、分片与 reporter | Node 官方 test runner：`--test-concurrency`、`--test-shard`、`--test-reporter` 与 `run()` | 源码 loader、每文件日志与耗时、按路径分流到浏览器测试 |
-| 浏览器测试的 worker 与分片 | e2e 工具自带的 worker、分片与 reporter | 与 Node 测试的结果汇总 |
+| 源码测试执行、用例超时与报告 | 官方 `bun test`、JUnit 与 timings | 保留 gate 选择与文件分片、每文件内存准入、完成记录校验、日志和资源回收；见[测试引擎](../testing/architecture.md#bun-测试引擎) |
+| 浏览器测试的 worker 与分片 | e2e 工具自带的 worker、分片与 reporter | 与源码测试的结果汇总 |
 | 静态检查与任务编排 | `vp run` 任务 | 一个检查失败时其余检查继续运行并汇总结果 |
 | 子进程、文件、临时目录与超时 | Effect 的 ChildProcess、FileSystem、Scope 与 Duration | 进程组回收的确认 |
 | JS 打包 | `vp pack` | native 产物的身份校验与归档组装 |
