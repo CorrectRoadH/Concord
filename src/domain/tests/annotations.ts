@@ -5,7 +5,7 @@ import { Schema } from "effect";
 import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from "../../base/cache/index.ts";
 import { inspectCacheStatus, type CacheStatus } from "../../base/cache/index.ts";
 import { PersistentCache, closeRepositoryCache } from "../../base/cache/index.ts";
-import { acquireHawdbClearGuard, hawdbIdentity } from "../../base/cache/index.ts";
+import { acquireHawdbClearGuard, hawdbIdentity, HawdbFailure } from "../../base/cache/index.ts";
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from "../../model/index.ts";
 import { caseDiscriminator, deriveTestReference } from "../../model/index.ts";
 import * as ts from 'typescript/ast';
@@ -139,6 +139,7 @@ function parseSource(input: Source): Parsed {
 type SourceMode = 'disk' | 'overlay';
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#list
+// @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md#hit
 function sources(repo: Repository, mode: SourceMode): Source[] {
   const paths = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].sort();
   const selected: Source[] = [];
@@ -196,6 +197,8 @@ function snapshot(value: CachedSnapshot, cache: AnnotationSnapshot['cache']): An
 function sourceChanged(value: CachedSnapshot, cache: AnnotationSnapshot['cache']): AnnotationSnapshot {
   return snapshot({ ...value, findings: [...value.findings, { code: 'SourceChanged', path: '.', message: 'Source files changed while annotations were scanned' }] }, cache);
 }
+const cacheFailureDetail = (cause: unknown): string => cause instanceof HawdbFailure && cause.code === 'HawdbBusy'
+  ? `${cause.code}: ${cause.message}` : cause instanceof Error ? cause.message : String(cause);
 
 export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode } = {}): AnnotationSnapshot {
   return repo.snapshot === undefined ? scanUnderSnapshot(repo, options) : repo.snapshot(() => scanUnderSnapshot(repo, options));
@@ -208,11 +211,11 @@ function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild
   if (mode === 'use') try {
     const cached = readCache(repo, key);
     if (cached) return unchanged(repo, current, sourceMode) ? snapshot(cached, { status: 'hit', hits: 1, misses: 0, path }) : sourceChanged(compile(current), { status: 'source-changed', hits: 0, misses: 1, path });
-  } catch (cause) { const value = compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cause instanceof Error ? cause.message : String(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
+  } catch (cause) { const value = compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cacheFailureDetail(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
   const value = compile(current);
   if (!unchanged(repo, current, sourceMode)) return sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path });
   try { writeCache(repo, key, value); return snapshot(value, { status: 'miss', hits: 0, misses: 1, path }); }
-  catch (cause) { return snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cause instanceof Error ? cause.message : String(cause) }); }
+  catch (cause) { return snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cacheFailureDetail(cause) }); }
 }
 // @concord-end
 
