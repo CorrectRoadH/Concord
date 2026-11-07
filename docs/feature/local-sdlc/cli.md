@@ -432,6 +432,6 @@ concord schema [<名称>] [--json]
 | `config` | `concord.config.ts` 默认导出的配置对象，编辑器可用它补全与校验 |
 | `test-adapter` | `concord.test-adapter/v1` 的全部请求与响应，见 [adapter 协议](#adapter-协议) |
 | `change-preview` | `concord view export` 产出的 `changes.json`，见 [PR 静态预览导出](../web-workbench/cli.md#pr-静态预览导出) |
-| `model` | `--json` 输出中的文档、关系与错误结构，`show`、`list`、`trace` 与 `test list` 的结果用它严格解码 |
+| `model` | 文档、关系与错误这几种公共对象。`show`、`list`、`trace` 与 `test list` 结果里的这些对象用它严格解码；结果顶层的其它字段（如 `projection`、`cache`）不在其中，使用者先取出所需对象再校验 |
 
 未知名称以 `SchemaNotFound` 退出 1，`details.available` 列出可用名称。
