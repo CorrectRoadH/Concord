@@ -7,6 +7,7 @@ import { Cause, Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
 import * as RpcClient from 'effect/rpc/RpcClient';
 import { RpcClientDefect, RpcClientError } from 'effect/rpc/RpcClientError';
 import * as RpcSerialization from 'effect/rpc/RpcSerialization';
+import { SocketError } from 'effect/socket/Socket';
 import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.ts';
 import { collectPackets, collectBytes } from './protocol.ts';
 import { ConcordError, decodeWorkspaceRead } from '../../model/index.ts';
@@ -30,7 +31,8 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
       send: (...args: Parameters<typeof transport.send>) => Effect.suspend(() => transport.send(...args)).pipe(Effect.catchCause(cause => {
         if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
         const error = Cause.squash(cause);
-        return Effect.fail(error instanceof RpcClientError ? error : new RpcClientError({ reason: new RpcClientDefect({ message: `Workspace socket write failed: ${error instanceof Error ? error.message : String(error)}`, cause: error }) }));
+        const detail = SocketError.is(error) && 'cause' in error.reason ? error.reason.cause : error;
+        return Effect.fail(error instanceof RpcClientError ? error : new RpcClientError({ reason: new RpcClientDefect({ message: `Workspace socket write failed: ${detail instanceof Error ? detail.message : String(detail)}`, cause: error }) }));
       })),
     };
   })).pipe(Layer.provide(protocol));
