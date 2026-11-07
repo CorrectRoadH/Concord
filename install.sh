@@ -81,7 +81,7 @@ if [ -e "$root/$version" ] || [ -L "$root/$version" ]; then
 else
   staging=$(mktemp -d "$root/.install.XXXXXX")
   tar -xzf "$scratch/$archive" -C "$staging" || fail 'Could not extract the release archive.'
-  [ -x "$staging/bin/concord" ] && [ -x "$staging/runtime/node" ] && [ -d "$staging/app" ] || fail 'The release archive is incomplete.'
+  [ -x "$staging/bin/concord" ] && [ -d "$staging/app" ] || fail 'The release archive is incomplete.'
   printf '%s\n' "$expected" > "$staging/.archive-sha256"
   new_version="$root/$version"
   mv "$staging" "$new_version"
