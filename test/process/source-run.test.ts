@@ -97,6 +97,6 @@ test('source commands explain missing native artifacts before starting work', ()
     assert.match(missing.stderr, /^\{/u, missing.stdout + missing.stderr);
     const error = decodeOutput(missing.stderr);
     assert.equal(error.error, 'HawdbUnavailable');
-    assert.match(error.message!, /bun run --no-install vp run build:native/u);
+    assert.match(error.message!, /bun run build:native/u);
   } finally { rmSync(fixture.scratch, { recursive: true, force: true }); }
 })));

@@ -60,7 +60,7 @@ const fixture = Effect.fn('test.cache.fixture')(function*(root: string) {
   yield* fs.writeFileString(join(checkout, 'package.json'), JSON.stringify(pkg));
   yield* fs.makeDirectory(join(checkout, 'src'), { recursive: true });
   yield* fs.writeFileString(join(checkout, 'src/input.ts'), 'export const value = 1;\n');
-  const compiler = join(root, 'external-vp.mts');
+  const compiler = join(root, 'external-build.mts');
   yield* fs.writeFileString(compiler, `import { appendFileSync, cpSync, existsSync, writeFileSync } from 'node:fs';
 appendFileSync(${JSON.stringify(join(root, 'builds'))}, 'build\\n');
 writeFileSync(process.argv[3] + '.started', 'started');

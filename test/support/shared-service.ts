@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Effect, Exit, Schema, Scope } from 'effect';
 import { connectWorkspaceSocket, type WorkspaceConnection } from '../../src/entry/server/index.ts';
 import type { WorkspaceProjection } from '../../src/model/index.ts';
-import { acquireBrowserSharedFixture, FrozenBrowserRepository, type BrowserSharedFixture } from './browser-shared-fixture.ts';
+import { acquireSharedViewFixture, FrozenViewRepository, type SharedViewFixture } from './shared-view-fixture.ts';
 import { beforeConsumerCleanup, createConsumer, retainConsumer } from './consumer.ts';
 import { fetchFresh, parseWorkspaceProjection, pollUntil, writeProjectConfig } from './support.ts';
 
@@ -19,9 +19,9 @@ export class SharedWorkspace {
   private controller: AbortController | undefined;
   private frozenSourceDigest: string | undefined;
   private stopped = false;
-  private readonly fixture: BrowserSharedFixture;
+  private readonly fixture: SharedViewFixture;
   private readonly release: () => Promise<void>;
-  constructor(fixture: BrowserSharedFixture, release: () => Promise<void>) { this.fixture = fixture; this.release = release; }
+  constructor(fixture: SharedViewFixture, release: () => Promise<void>) { this.fixture = fixture; this.release = release; }
   get closed() { return this.stopped; }
   get root() { return this.fixture.root; }
   get address() { return this.fixture.server.address; }
@@ -127,10 +127,10 @@ export const acquireSharedWorkspace = Effect.fn('test.acquireSharedWorkspace')(f
   const close = (scope: Scope.Closeable) => Scope.close(scope, Exit.void).pipe(Effect.onExit(exit =>
     Exit.isFailure(exit) && root !== undefined ? Effect.sync(() => retainConsumer(root!)) : Effect.void));
   const scope = yield* Effect.acquireRelease(Scope.make(), close);
-  const fixture = yield* acquireBrowserSharedFixture(signal, async () => {
+  const fixture = yield* acquireSharedViewFixture(signal, async () => {
     const directory = (await createConsumer());
     root = directory;
-    try { writeProjectConfig(directory, { testRoots: [] }); return await FrozenBrowserRepository.open(directory); }
+    try { writeProjectConfig(directory, { testRoots: [] }); return await FrozenViewRepository.open(directory); }
     catch (cause) { rmSync(directory, { recursive: true, force: true }); throw cause; }
   }).pipe(Scope.provide(scope));
   const workspace = new SharedWorkspace(fixture, () => Effect.runPromise(close(scope)));

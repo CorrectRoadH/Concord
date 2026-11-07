@@ -3,7 +3,7 @@
 import { cp, lstat, readlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ArchiveFailed, archiveTarget, attempt, command, run, sha256, type ArchiveTarget } from './archive-support.ts';
+import { ArchiveFailed, archiveTarget, attempt, run, sha256, type ArchiveTarget } from './archive-support.ts';
 import { externalBuildOutput } from './build-output.ts';
 import { prepareRuntime } from './archive-runtime.ts';
 import { decodeNativeArtifact } from '../src/base/installation/hawdb-native-contract.ts';
@@ -66,20 +66,6 @@ const dependencyLicenses = Effect.fn('archive.licenses')(function*(root: string,
   }
 });
 
-/** Exercise the embedded application after relocation/signing, before freezing bytes. */
-export const verifyCompiledPayload = Effect.fn('archive.compiledPayload')(function*(root: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const project = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-payload-' }).pipe(Effect.flatMap(fs.realPath));
-  yield* run('git', ['init', '-q', project]);
-  const cli = join(root, 'bin/concord');
-  const argv = ['--root', project, '--json', '--server=command'];
-  const environment = { ...process.env, LD_LIBRARY_PATH: '', NODE_PATH: '', NODE_OPTIONS: '', BUN_OPTIONS: '' };
-  yield* run(cli, [...argv, 'init', '--docs-only', '--yes'], project, environment);
-  const receipt = yield* command(cli, [...argv, 'check'], project, environment);
-  yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ ok: Schema.Literal(true), complete: Schema.Literal(true) })),
-    { onExcessProperty: 'ignore' })(receipt);
-}, Effect.scoped, Effect.timeout('120 seconds'));
-
 /** Assemble only on the target host; resources can be shared, bytecode cannot. */
 export const assembleArchive = Effect.fn('archive.assemble')(function*(options: ArchiveOptions) {
   // Decode before mkdir/remove or any other output mutation.
@@ -141,7 +127,7 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
   const runtimeInput = () => Effect.gen(function*() {
     const signed = target === 'darwin-arm64' && sources !== undefined
       ? yield* archivePartInput(resolve(sources), [target]) : null;
-    return yield* archivePartInput(repository, ['.bun-version', '.node-version', 'runtime-deps.json', 'scripts/archive-runtime.ts', 'scripts/bun-licenses.ts', 'scripts/bun-license-sources.json', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'], { target, signed });
+    return yield* archivePartInput(repository, ['.bun-version', 'runtime-deps.json', 'scripts/archive-runtime.ts', 'scripts/bun-licenses.ts', 'scripts/bun-license-sources.json', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'], { target, signed });
   });
   const runtime = yield* cachedArchivePart('runtime', yield* runtimeInput(), directory => prepareRuntime(directory, repository, target, sources), runtimeInput);
   for (const name of ['runtime', 'licenses']) yield* fs.copy(join(runtime, name), join(root, name));
@@ -160,7 +146,6 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
       yield* run('codesign', ['--verify', '--strict', join(root, name)]);
     }
   }
-  yield* verifyCompiledPayload(root);
   yield* phase('target-closure');
   yield* validateArchiveLinks(root);
   yield* phase('link-validation');

@@ -45,7 +45,7 @@ const compileWeb = Effect.fn('compileSourceWeb')(function*(root: string, tempora
   const fs = yield* FileSystem.FileSystem;
   yield* Effect.tryPromise({
     try: async () => {
-      const { build } = await import('vite-plus');
+      const { build } = await import('vite');
       await build({ configFile: join(root, 'vite.source.config.ts'), mode: 'production', logLevel: 'error', envFile: false,
         configLoader: 'native', build: { write: true, outDir: join(temporary, 'web'), emptyOutDir: true } });
       await build({ configFile: join(root, 'vite.preview.config.ts'), mode: 'production', logLevel: 'error', envFile: false,

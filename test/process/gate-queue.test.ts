@@ -80,9 +80,9 @@ test('the real gate queues full, file and title selections behind an all-slot ow
   const slot = join(root, 'slot'), bin = join(root, 'bin'), marker = join(root, 'task-entered');
   yield* fs.makeDirectory(bin);
   // Fake only the task executor/systemd boundary; selection and queue are real.
-  yield* fs.writeFileString(join(bin, 'vp'), `#!${process.execPath}\nimport {appendFileSync} from 'node:fs';\nappendFileSync(process.env.GATE_TEST_MARKER, 'entered\\n');\n`);
+  yield* fs.writeFileString(join(bin, 'bun'), `#!${process.execPath}\nimport {appendFileSync} from 'node:fs';\nappendFileSync(process.env.GATE_TEST_MARKER, 'entered\\n');\n`);
   yield* fs.writeFileString(join(bin, 'systemctl'), `#!${process.execPath}\nprocess.exitCode = 1;\n`);
-  yield* fs.chmod(join(bin, 'vp'), 0o755);
+  yield* fs.chmod(join(bin, 'bun'), 0o755);
   yield* fs.chmod(join(bin, 'systemctl'), 0o755);
   const env = { ...process.env, CONCORD_GATE_QUEUE_DIRECTORY: slot, CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3),
     PATH: `${bin}:${process.env.PATH}`, GATE_TEST_MARKER: marker, CONCORD_GATE_SCOPE: undefined };

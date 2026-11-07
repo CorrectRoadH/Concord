@@ -18,7 +18,7 @@ import { executeScenario, loadScenarios, makeContext, runArguments, cliCommand }
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.ts';
 import { buildForMeasurement } from './measurement-build.ts';
 
-const usage = 'Usage: vp run bench:profile <scenario ID> [--warm] [--out <dir>] [--keep]\n       vp run bench:profile cli [options] -- <concord arguments>';
+const usage = 'Usage: bun run bench:profile <scenario ID> [--warm] [--out <dir>] [--keep]\n       bun run bench:profile cli [options] -- <concord arguments>';
 const NonNegative = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));
 const CounterRecord = Schema.Struct({
   pid: Schema.Int, ppid: Schema.Int, argv: Schema.Array(Schema.String), exitCode: Schema.Int, wallMs: NonNegative,

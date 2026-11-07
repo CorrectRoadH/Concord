@@ -17,7 +17,7 @@
 
 ## 基线
 
-`--compare` 自动准备基线产物，位置为 `${XDG_CACHE_HOME:-~/.cache}/concord/bench/baseline/<commit>/`。准备时把基线提交克隆为该目录下独立的 Git clone，执行 `vp install --frozen-lockfile --offline`，由 Vite+ 按基线提交声明的包管理器安装，再用该提交自带的构建入口构建。原生产物按[原生绑定复用](../build/architecture.md#原生绑定复用)取得，不需要 Cargo。
+`--compare` 自动准备基线产物，位置为 `${XDG_CACHE_HOME:-~/.cache}/concord/bench/baseline/<commit>/`。准备时把基线提交克隆为该目录下独立的 Git clone，执行 `bun install --frozen-lockfile --offline`，再用 `bun run build` 调用该提交自带的构建入口。原生产物按[原生绑定复用](../build/architecture.md#原生绑定复用)取得，不需要 Cargo。
 
 这个 clone 不是开发 worktree，其中出现 `dist/` 不违反开发 worktree 没有 `dist/` 的规则。
 

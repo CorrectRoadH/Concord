@@ -9,7 +9,7 @@ import { Effect, Schema, Stream } from 'effect';
 import { installationRootForBin } from '../../src/base/installation/index.ts';
 import { installedConcordCli, pollUntil } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
-import { startViewServer } from '../e2e/server.ts';
+import { startViewServer } from '../support/view-server.ts';
 import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 import { sourceCli } from '../support/source-consumer.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';

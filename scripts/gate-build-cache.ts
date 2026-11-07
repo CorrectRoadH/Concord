@@ -68,7 +68,7 @@ export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout
   // rather than a second list of source files, includes new and untracked bytes.
   const roots = new Set(['src', 'web', 'scripts', 'docs', 'templates', 'skills', 'patches']);
   const inputs = (yield* fs.readDirectory(checkout)).filter(name => roots.has(name)
-    || name === '.bun-version' || name === '.node-version' || name === 'runtime-deps.json' || name === 'native-release.json'
+    || name === '.bun-version' || name === 'runtime-deps.json' || name === 'native-release.json'
     || /^(?:README(?:\..+)?\.md|package\.json|bun\.lock|tsconfig[^/]*\.json|vite[^/]*\.config\.ts)$/u.test(name));
   const entries = yield* buildCacheTree(checkout, path => {
     const parts = path.split('/');
@@ -271,7 +271,7 @@ export const prepareGateBuildCache = Effect.fn('gate.cache.prepare')(function*(c
       const staging = yield* fs.makeTempDirectoryScoped({ directory: cache, prefix: `.staging-${digest}-` });
       const output = join(staging, 'package');
       const code = yield* compile(output);
-      if (code !== 0) return yield* new GateBuildCacheFailed({ message: `vp build exited ${code}; package not published` });
+      if (code !== 0) return yield* new GateBuildCacheFailed({ message: `bun run build exited ${code}; package not published` });
       const entries = yield* validatePackage(output, checkout);
       if ((yield* gateBuildDigest(checkout)) !== digest) return yield* new GateBuildCacheFailed({ message: 'Build inputs changed during compilation; package not published. Run the gate again.' });
       yield* fs.writeFileString(join(output, manifestName), JSON.stringify({ format: 'concord.gate-build/v1', digest, entries }));

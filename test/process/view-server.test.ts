@@ -18,7 +18,7 @@ import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.ts";
 
 import { ViewJobManager } from "../../src/app/index.ts";
-import { startViewServer, type ViewServerHandle } from '../e2e/server.ts';
+import { startViewServer, type ViewServerHandle } from '../support/view-server.ts';
 import { parseWorkspaceProjection, pollUntil } from '../support/support.ts';
 import { type WorkspaceProjection } from "../../src/model/index.ts";
 

@@ -7,7 +7,7 @@ import test from 'node:test';
 import { digest } from '../../src/model/index.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { fetchFresh, pollUntil, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
-import { startViewServer } from '../e2e/server.ts';
+import { startViewServer } from '../support/view-server.ts';
 
 // @feature docs/feature/local-data-engine/architecture.md#进程与资源
 // @issue docs/issues/warm-reads-over-budget.md

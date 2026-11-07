@@ -8,7 +8,7 @@ import { digest } from '../../src/model/index.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { command, record, recordPath, stop } from '../support/workspace-server-fixture.ts';
 import { pollUntil, fetchFresh, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
-import { startViewServer } from '../e2e/server.ts';
+import { startViewServer } from '../support/view-server.ts';
 
 const children = (pid: number) => execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' }).split('\n').flatMap(line => {
   const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/u.exec(line);

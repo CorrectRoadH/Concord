@@ -25,8 +25,8 @@ import { LocalRepository } from "../support/repository.ts";
 
 import { type WorkspaceProjection } from "../../src/model/index.ts";
 import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.ts";
-import { type ViewServerHandle } from '../e2e/server.ts';
-import { startViewServer } from '../e2e/server.ts';
+import { type ViewServerHandle } from '../support/view-server.ts';
+import { startViewServer } from '../support/view-server.ts';
 import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 

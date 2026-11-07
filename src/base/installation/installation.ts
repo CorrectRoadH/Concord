@@ -40,7 +40,7 @@ type InstallationFiles = string[][];
 function requireNativeArtifacts(runtime: RuntimeEnvironmentSnapshot): void {
   for (const name of ['artifact.json', 'hawdb.node', 'THIRD-PARTY-NOTICES.txt']) {
     if (lstatSync(join(nativeArtifactRoot(runtime), hawdbTarget(), name), { throwIfNoEntry: false }) === undefined) {
-      throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; run bun run --no-install vp run build:native.');
+      throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; run bun run build:native.');
     }
   }
   if (sourceInstallation) verifySourceNativeArtifact(runtime);

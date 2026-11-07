@@ -3,11 +3,11 @@
 测量与 profile 都在本仓库自举：被测产物是当前 worktree 的构建，默认消费者是当前仓库某个 commit 的独立 clone。入口先构建被测归档，结果以 JSON 输出到 stdout，可用 `--out` 另存。测量方法见[性能测量](README.md#测量方法)。
 
 ```text
-vp run bench [<场景 ID | feature-id> ...] [--changed [<base>]] [--compare [<rev>]] [--quick] [--reference]
+bun run bench [<场景 ID | feature-id> ...] [--changed [<base>]] [--compare [<rev>]] [--quick] [--reference]
              [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>]
              [--samples 7] [--out <file.json>] [--keep]
-vp run bench:profile <场景 ID> [--warm] [--out <dir>] [--keep]
-vp run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <concord 参数>
+bun run bench:profile <场景 ID> [--warm] [--out <dir>] [--keep]
+bun run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <concord 参数>
 ```
 
 | 选择与模式 | 行为 |
@@ -30,21 +30,21 @@ vp run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <co
 
 ```sh
 # 本仓库 HEAD 的 clone 上测量 local-sdlc 的预算，与 merge-base 基线交错对照
-vp run bench local-sdlc --compare
+bun run bench local-sdlc --compare
 
 # 大仓库规模下的刷新扫描是否在后台刷新上限内，以及缓存读取预算
-vp run bench local-data-engine --consumer scale
+bun run bench local-data-engine --consumer scale
 
 # 复现某个外部仓库的刷新超时：先克隆成干净副本再原地测量
 git clone ~/Downloads/rpg-game /tmp/rpg-game-frozen
-vp run bench local-data-engine --consumer /tmp/rpg-game-frozen --samples 3
+bun run bench local-data-engine --consumer /tmp/rpg-game-frozen --samples 3
 
 # 定位刷新扫描耗时：CPU 热点、system 时间与 fs 调用次数
-vp run bench:profile local-data-engine/trace-gaps-refresh --consumer scale
-vp run bench:profile cli --consumer self --warm -- check
+bun run bench:profile local-data-engine/trace-gaps-refresh --consumer scale
+bun run bench:profile cli --consumer self --warm -- check
 
 # 只测本次改动影响的 Feature，交付前与基线对照
-vp run bench --changed --compare
+bun run bench --changed --compare
 ```
 
 ## 消费者

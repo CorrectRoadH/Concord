@@ -7,4 +7,3 @@ coverage/
 native-artifacts/
 .vitest/
 .test-results/
-.e2e/

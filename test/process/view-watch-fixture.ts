@@ -18,7 +18,7 @@ import { ConcordError, digest, failure } from "../../src/model/index.ts";
 import { LocalRepository } from "../support/repository.ts";
 
 import type { WorkspaceProjection } from "../../src/model/index.ts";
-import { startViewServer, type ViewServerHandle } from '../e2e/server.ts';
+import { startViewServer, type ViewServerHandle } from '../support/view-server.ts';
 import { workspaceProjectionContext as identifyProjection } from "../../src/app/index.ts";
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 

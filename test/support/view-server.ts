@@ -4,10 +4,9 @@ import { Effect, Exit, Schema, Scope } from 'effect';
 import { readServerRecord } from '../../src/base/server-lock/index.ts';
 import { genericPrivateDirectorySync } from '../../src/base/publication/index.ts';
 import { connectWorkspaceSocket, requestWorkspace, waitForServerHandshake } from '../../src/entry/server/index.ts';
-import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
-import { sourceCli, sourceCliCommand } from '../support/source-consumer.ts';
+import { stopWorkspaceServer } from './stop-workspace-server.ts';
+import { sourceCli, sourceCliCommand } from './source-consumer.ts';
 import { packageCommand } from '../../scripts/package-command.ts';
-import { BrowserAttemptTimer } from '../../scripts/gate-timings.ts';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly installedBin?: string; readonly signal?: AbortSignal; readonly cliView?: boolean }
 export interface ViewServerHandle {
@@ -31,10 +30,8 @@ export class ViewServerStartupFailed extends Error {
   }
 }
 
-/** Browser consumers start the source workspace service through its CLI. */
+/** HTTP consumers start the source workspace service through its CLI. */
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
-  const end = BrowserAttemptTimer.current?.begin('private-server-start');
-  let success = false;
   let child: ChildProcess | undefined;
   let entry: string | undefined;
   let connectionScope: Scope.Closeable | undefined;
@@ -66,7 +63,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         const record = yield* waitForServerHandshake(Effect.try(() => readServerRecord(genericPrivateDirectorySync(options.root, process.env))).pipe(
           Effect.map(value => value && ['running', 'degraded', 'blocked'].includes(value.state) ? value : undefined),
         ));
-        if (record.pid !== processHandle.pid) throw new Error('Direct browser fixture did not acquire its own workspace service');
+        if (record.pid !== processHandle.pid) throw new Error('Direct HTTP fixture did not acquire its own workspace service');
         const connection = yield* connectWorkspaceSocket(record.socket.path, record.installation, record.token);
         const lease = yield* requestWorkspace(connection, 'http', { action: 'open', host: options.host ?? '127.0.0.1', port: options.port ?? 0 }).pipe(
           Effect.flatMap(value => Schema.decodeUnknownEffect(HttpLease, { onExcessProperty: 'error' })(value)),
@@ -79,8 +76,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       const ready = { root: options.root, host: lease.host, port: lease.port, address: lease.address };
       startupOutput = `${JSON.stringify(ready)}\n`;
       let closing: Promise<void> | undefined;
-      success = true;
-      return { ...ready, process: processHandle, startupOutput, get stderr() { return diagnostics; }, close: () => closing ??= (async () => {
+        return { ...ready, process: processHandle, startupOutput, get stderr() { return diagnostics; }, close: () => closing ??= (async () => {
         try { await Effect.runPromise(Scope.close(scope, Exit.void)); }
         finally { stop(); await terminate(processHandle); }
       })().catch(cause => { closing = undefined; throw cause; }) };
@@ -104,7 +100,6 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       if (options.signal?.aborted) aborted();
     });
     let closing: Promise<void> | undefined;
-    success = true;
     return { ...ready, process: processHandle, startupOutput, get stderr() { return diagnostics; }, close: () => closing ??= (async () => {
       try {
         // Release the View client's HTTP lease and RPC transport before stopping its service.
@@ -127,7 +122,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     catch (error) { cleanupFailure = cleanupFailure ? new AggregateError([cleanupFailure, error]) : error; }
     throw new ViewServerStartupFailed(options.root, cleanupFailure === undefined,
       cleanupFailure ? new AggregateError([cause, cleanupFailure], 'View startup and cleanup failed') : cause);
-  } finally { end?.(success); }
+  }
 }
 
 async function terminate(child: ChildProcess): Promise<void> {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { startViewServer } from '../e2e/server.ts';
+import { startViewServer } from '../support/view-server.ts';
 import { fixture, send } from '../support/view-http-fixture.ts';
 
 

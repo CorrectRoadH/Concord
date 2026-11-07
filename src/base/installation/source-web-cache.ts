@@ -49,7 +49,7 @@ export const webFiles = Effect.fn('webFiles')(function*(directory: string, prefi
 export const sourceWebDigest = Effect.fn('sourceWebDigest')(function*(root: string) {
   const fs = yield* FileSystem.FileSystem;
   const inputs = new Map<string, Uint8Array>();
-  const packages = new Set(['vite-plus', 'esbuild', 'typescript', '@fontsource-variable/noto-sans-sc']);
+  const packages = new Set(['vite', 'esbuild', 'typescript', '@fontsource-variable/noto-sans-sc']);
   const queue = (yield* webFiles(join(root, 'web'))).map(path => `web/${path}`);
   queue.push('vite.source.config.ts', 'vite.preview.config.ts');
   const read = (path: string) => fs.readFile(join(root, path)).pipe(Effect.map(bytes => { inputs.set(path, bytes); return bytes; }));

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite-plus';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { unplugin as stylex } from '@stylexjs/unplugin';
 import { fileURLToPath } from 'node:url';

@@ -1,10 +1,10 @@
 # 测试实现
 
-本页声明本仓库测试的 runner 适配、架构守护、Fixture、浏览器资源与门禁的内存隔离。测试规则见[测试](README.md)。
+本页声明本仓库测试的 runner 适配、架构守护、Fixture 与门禁的内存隔离。测试规则见[测试](README.md)。
 
 ## Runner 适配
 
-`bun run gate` 的测试阶段统一调度 Bun 源码测试与浏览器测试，全部运行当前 worktree 的源码。子进程以[从源码运行](../build/architecture.md#从源码运行)的方式启动，Web 页面来自共享的 Web 产物，原生产物来自共享缓存。归档由 CI 发版工作流验收。门禁控制器与浏览器工具可以由 Node 托管，被测 Concord 代码与源码测试由固定版本的 Bun 执行。
+`bun run gate` 的测试阶段调度 Bun 源码测试，全部运行当前 worktree 的源码。子进程以[从源码运行](../build/architecture.md#从源码运行)的方式启动，Web 页面来自共享的 Web 产物，原生产物来自共享缓存。归档由 CI 发版工作流构建。门禁控制器、开发工具、被测 Concord 代码与源码测试均由固定版本的 Bun 执行。
 
 Bun 直接加载 TypeScript 测试源码，并兼容 `node:test` 声明。同步测试体使用 `Effect.sync`，测试回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
 
@@ -22,11 +22,11 @@ Bun 直接加载 TypeScript 测试源码，并兼容 `node:test` 声明。同步
 
 `runner.sourceFiles` 列出测试运行依赖、修复核验期间不得改变的全部非产品文件。清单从导入图推导：
 
-1. 入口是全部测试文件、`e2e.config.ts`，以及 runner 的 `argv` 与 `prepare` 直接执行的脚本。
+1. 入口是全部测试文件，以及 runner 的 `argv` 与 `prepare` 直接执行的脚本。
 2. 从入口沿两类边求传递闭包：相对导入（含 `import type` 与字面 `import()`），以及以字面路径加载模块的位置，例如作为 `--import` 或子进程入口的 `new URL('../x.ts', import.meta.url)`。
 3. 结果去掉 `src/` 下的文件、测试文件本身、依赖包与 `concord.config.ts`；入口脚本本身计入。runner 配置由修复核验单独冻结。
 4. 无法静态枚举的加载目标使推导失败，不静默跳过。
-5. `.bun-version`、`.node-version`、`native-release.json`、`package.json`、`bun.lock` 与 `tsconfig.test.json` 决定产品运行时、工具宿主与依赖，但不在导入图中，固定列入。
+5. `.bun-version`、`native-release.json`、`package.json`、`bun.lock` 与 `tsconfig.test.json` 决定运行时与依赖，但不在导入图中，固定列入。
 
 清单留在 `concord.config.ts`。`test/model/runner-source-files.test.ts` 从导入图推导期望集合并与清单比较，缺项或多出的项都失败。owner 测试直接写出声明，不通过包装函数隐藏。
 
@@ -40,7 +40,7 @@ GitHub Actions 的 `gate.yml` 使用现有构建与门禁入口，任务之间�
 | `gate` | 等待准备成功；十六个源码分片分别下载、校验产物，再运行对应的完整门禁 |
 | `native-hooks` | 检出与准备任务相同的 SHA 后使用准备好的故障注入产物，运行 `bun run gate test/process/hawdb-native.test.ts`；它不属于源码分片 |
 
-准备任务上传的产物只包含本目标的二进制、身份与许可证。所有任务均不为 HawDB 安装 Rust 工具链、恢复 Cargo 缓存或编译；测试 Cargo adapter 的用户项目功能仍使用真实 Cargo。源码分片按需要准备浏览器与外部 adapter。静态检查在各次门禁中完整执行，测试结果不缓存。
+准备任务上传的产物只包含本目标的二进制、身份与许可证。所有任务均不为 HawDB 安装 Rust 工具链、恢复 Cargo 缓存或编译；测试 Cargo adapter 的用户项目功能仍使用真实 Cargo。源码分片按需要准备外部 adapter。静态检查在各次门禁中完整执行，测试结果不缓存。
 
 带钩子的最终产物与生产产物分别存放，故障注入只选择测试目录。它等待准备任务给出提交 SHA，再与分片并行。任何必需任务失败或被取消，整条 CI 都不通过；一个分片失败不取消其它分片。
 
@@ -87,8 +87,6 @@ CLI 层的测试在测试进程里运行和真实 CLI 相同的命令程序，�
 2. 会改变共享状态的用例不共用：改 Git 历史或配置、留下 journal、改缓存或安装、停止或重启服务、杀进程。它们使用自己的仓库与服务。
 3. 文件结束或失败时停止服务、确认服务进程已经退出，再删除消费者；确认不了就报告失败并保留现场。
 
-浏览器 worker 的共用仓库遵守同样的规则（[浏览器与诊断](#浏览器与诊断)）。
-
 ## Fixture
 
 测试仓库由 `test/support/consumer.ts` 构造。每次测试运行先构建一个已初始化的模板消费者，每个测试复制模板得到自己的仓库，不在每个测试中重新执行 `git init` 与 `concord init`。需要不同初始状态的测试在复制后通过公开入口修改。
@@ -96,20 +94,6 @@ CLI 层的测试在测试进程里运行和真实 CLI 相同的命令程序，�
 被测对象本身就是仓库初始状态时，测试自己构造仓库，并在用例中写明原因。这类状态包括未初始化仓库、非 Git 目录、shallow clone、特定提交历史或 merge 结构。可用的 Fixture 与新增方式见[扩展 Fixture](use-case/extend-fixtures.md)。
 
 受管文件的内容只由格式的 owner 生成：Spec 与 Memory 通过领域写入入口或 `renderDocument`，品味由 `initialize` 写入的模板生成，配置通过 `renderTypeScriptConfig`，写作规则与 concepts 通过各自的写入入口。格式改变时只改格式 owner，测试不随之修改（[当前格式](../../architecture.md#当前格式)）。
-
-## 浏览器与诊断
-
-浏览器由 e2e Web engine 拥有，每个 worker 一个浏览器，每次尝试使用独立 context。精确时钟、网络边界和 DOM 检查通过 engine 的公开 `surfaceOf` 访问当前 Page；浏览器只由 engine 关闭。
-
-每个浏览器 worker 拥有一个临时 Git 仓库与它的 View 服务，worker 结束时关闭服务后删除仓库。测试开始前先等上一用例的 context、HTTP 连接与订阅关闭。再比较仓库与 fixture 的冻结提交，范围包括未跟踪与忽略的文件、index 与配置，只恢复有差异的路径；HEAD 或引用偏离冻结提交时失败并保留现场，改 Git 历史的用例使用私有仓库。
-
-然后请求刷新，等到投影绑定冻结提交的来源；无法确认时失败，不直接开始。每次都刷新，不以“没有差异”跳过：恢复与刷新合计不到 1 秒，跳过它需要服务公开收束状态，得不偿失。需要服务内存从零开始的用例使用私有服务。恢复与等待的耗时计入该用例，并在报告中单独列出。测试结束时关闭本测试的 context 并回收它的 HTTP 连接，保留页面供 runner 截图。
-
-需要独占服务状态的测试（例如服务停止与重启）自己另起仓库与服务，并在 finally 中回收。成功、断言失败与超时均须进入资源回收。
-
-系统 Chromium 适配须有启动超时、取消响应、退出等待与强制终止后备路径；启动失败也须回收临时 profile。
-
-标有 `journey` 的用例共用 fixture 与精确断言。普通门禁执行确定性操作，自然语言运行使用 `agent.act` 完成用户操作，不复制第二份场景与结果断言。写法见[写浏览器测试](use-case/write-browser-test.md#act)。
 
 ## 内存隔离
 

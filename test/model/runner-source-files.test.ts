@@ -14,7 +14,7 @@ test('runner sourceFiles equals the static closure of test and runner entrypoint
   const root = fileURLToPath(new URL('../../', import.meta.url));
   const files = new Set(globSync(['test/**/*.ts', 'scripts/**/*.ts', 'src/**/*.ts', 'web/**/*.ts', 'web/**/*.tsx', 'bench/**/*.ts', '*.ts'], { cwd: root }));
   const api = new API({ runExternalCode: false });
-  const tests = new Set([...files].filter(file => /\.(?:test|e2e)\.ts$/u.test(file)));
+  const tests = new Set([...files].filter(file => /\.test\.ts$/u.test(file)));
   const invalid: string[] = [];
   const local = (file: string, path: string): string | undefined => {
     const target = relative(root, resolve(root, dirname(file), path)).replace(/\.js$/u, '.ts');
@@ -33,7 +33,7 @@ test('runner sourceFiles equals the static closure of test and runner entrypoint
       project = ProjectSchema.make(JSON.parse(value.getText(config.sourceFile)));
     });
     assert.ok(project);
-    const pending = [...tests, 'e2e.config.ts'];
+    const pending = [...tests];
     for (const command of [project.runner!.kind === 'command' ? project.runner!.argv : [], ...project.runner!.prepare ?? []]) {
       for (const argument of command) if (files.has(argument)) pending.push(argument);
     }
@@ -81,7 +81,7 @@ test('runner sourceFiles equals the static closure of test and runner entrypoint
     assert.deepEqual(invalid, [], 'Every module load must have a statically enumerable target');
     const expected = [...new Set([
       ...[...reachable].filter(file => !tests.has(file)),
-      '.bun-version', '.node-version', 'native-release.json', 'package.json', 'bun.lock', 'tsconfig.test.json',
+      '.bun-version', 'native-release.json', 'package.json', 'bun.lock', 'tsconfig.test.json',
     ])].sort();
     const declared = [...project.runner!.sourceFiles].sort();
     assert.deepEqual(declared, expected, JSON.stringify({

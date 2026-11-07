@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Only the external download boundary is adapted: curl still reads real file:// assets.
 import { spawnSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';

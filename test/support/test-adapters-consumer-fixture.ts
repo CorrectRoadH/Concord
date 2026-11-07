@@ -35,7 +35,7 @@ export const setup = Effect.fn('adapterTest.pack')(function* (root: string, need
       // Only the external fixture imports Effect; framework consumers use package dependencies.
       fixtureDependencies.push(`effect@${dependencies.effect}`);
     }
-    prepareSourceConsumer(tool, ['vitest@4.1.11', ...fixtureDependencies]);
+    prepareSourceConsumer(tool, fixtureDependencies);
     return { cli: sourceCli(), tool };
   });
 });

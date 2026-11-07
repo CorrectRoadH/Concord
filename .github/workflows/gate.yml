@@ -20,22 +20,19 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
       - id: revision
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: '.node-version'
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version-file: '.bun-version'
       - run: bun install --frozen-lockfile --ignore-scripts
       - id: identity
-        run: node scripts/ci-native-cache.ts
+        run: bun scripts/ci-native-cache.ts
       - uses: actions/cache/restore@v6.1.0
         id: native-cache
         with:
           path: ${{ steps.identity.outputs.directory }}
           key: ${{ steps.identity.outputs.key }}
       - name: Prepare pinned production and fault-injection binaries
-        run: node scripts/prepare-native.ts --all-modes --output "$RUNNER_TEMP/gate-native"
+        run: bun scripts/prepare-native.ts --all-modes --output "$RUNNER_TEMP/gate-native"
       - uses: actions/cache/save@v6.1.0
         if: steps.native-cache.outputs.cache-hit != 'true'
         with:
@@ -60,9 +57,6 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare-native.outputs.sha }}
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: '.node-version'
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version-file: '.bun-version'
@@ -77,15 +71,14 @@ jobs:
       - name: Prepare the pinned offline pytest adapter
         run: uv run --no-project --with pytest==9.2.0 pytest --version
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - run: bun run --no-install vp exec playwright install --with-deps chromium
       - uses: actions/download-artifact@v8.0.2
         with:
           name: gate-native
           path: ${{ runner.temp }}/gate-native
       - name: Validate and install both native modes
         run: |
-          node scripts/prepare-native.ts --prebuilt "$RUNNER_TEMP/gate-native"
-          node scripts/prepare-native.ts --test-hooks --prebuilt "$RUNNER_TEMP/gate-native/test-hooks"
+          bun scripts/prepare-native.ts --prebuilt "$RUNNER_TEMP/gate-native"
+          bun scripts/prepare-native.ts --test-hooks --prebuilt "$RUNNER_TEMP/gate-native/test-hooks"
       - name: Run the complete gate for this shard
         run: bun run gate --test-shard=${{ matrix.shard }}
       - name: Preserve test failure diagnostics
@@ -108,9 +101,6 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare-native.outputs.sha }}
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: '.node-version'
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version-file: '.bun-version'
@@ -122,8 +112,8 @@ jobs:
           path: ${{ runner.temp }}/gate-native
       - name: Install both binaries for fault-injection verification
         run: |
-          node scripts/prepare-native.ts --prebuilt "$RUNNER_TEMP/gate-native"
-          node scripts/prepare-native.ts --test-hooks --prebuilt "$RUNNER_TEMP/gate-native/test-hooks"
+          bun scripts/prepare-native.ts --prebuilt "$RUNNER_TEMP/gate-native"
+          bun scripts/prepare-native.ts --test-hooks --prebuilt "$RUNNER_TEMP/gate-native/test-hooks"
       - name: Verify native transaction failure and crash recovery
         run: bun run gate test/process/hawdb-native.test.ts
       - name: Preserve fault-injection diagnostics

@@ -28,16 +28,12 @@ test('Bun startup failure reaches the controller failure report without inventin
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-bun-spawn-failure-' });
   const executable = join(root, 'bun'), file = join(root, 'unstarted.test.ts');
-  const host = yield* spawner.spawn(ChildProcess.make('node', ['-p', 'process.execPath'], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
-  const nodePath = (yield* Stream.mkString(Stream.decodeText(host.stdout))).trim();
-  assert.equal(Number(yield* host.exitCode), 0);
-  yield* fs.symlink(nodePath, join(root, 'node'));
   yield* fs.writeFileString(file, `throw Error('TEST_MUST_NOT_START');`);
   const pinned = (yield* fs.readFileString(fileURLToPath(new URL('../../.bun-version', import.meta.url)))).trim();
   // The external executable disappears after a successful version check, exercising real ENOENT.
-  yield* fs.writeFileString(executable, `#!/usr/bin/env node\nimport {unlinkSync} from 'node:fs'; unlinkSync(process.argv[1]); console.log(${JSON.stringify(pinned)});\n`);
+  yield* fs.writeFileString(executable, `#!${process.execPath}\nimport {unlinkSync} from 'node:fs'; unlinkSync(process.argv[1]); console.log(${JSON.stringify(pinned)});\n`);
   yield* fs.chmod(executable, 0o755);
-  const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), '--suite=node', file], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', resolve('scripts/test-built.ts'), file], {
     cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
     env: { ...process.env, PATH: root, CONCORD_TEST_TIMINGS: undefined },
   }));
@@ -79,7 +75,7 @@ test('Bun engine requires fresh completion receipts and reports empty and filter
   yield* fs.writeFileString(files[1]!, 'export {};');
   yield* fs.writeFileString(files[2]!, `throw Error('IMPORT_FAILURE');`);
   const run = (selected: readonly string[], args: string[] = []) => Effect.scoped(Effect.gen(function*() {
-    const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), '--suite=node', ...args, ...selected], {
+    const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', resolve('scripts/test-built.ts'), ...args, ...selected], {
       cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
       env: { ...process.env, GITHUB_ACTIONS: 'true', GITHUB_RUN_ID: 'fixture', GITHUB_REPOSITORY: 'example/fixture', GITHUB_SHA: 'fixture', CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_FILE_ID: undefined, CONCORD_TEST_EVENT_DIRECTORY: undefined, CONCORD_TEST_RUN_ID: undefined },
     }));
@@ -122,7 +118,7 @@ test('Bun engine ignores cwd dotenv and bunfig and preserves nested failure owne
   yield* fs.writeFileString(join(root, '.env'), 'CONCORD_BUN_DOTENV_MUST_NOT_LOAD=wrong\n');
   yield* fs.writeFileString(join(root, 'bunfig.toml'), '[test]\npreload=["./missing-preload.ts"]\n');
   yield* fs.writeFileString(file, `import test from 'node:test'; import assert from 'node:assert/strict'; test('parent',async t=>{assert.equal(process.env.CONCORD_BUN_DOTENV_MUST_NOT_LOAD,undefined); await t.test('child',()=>assert.fail('NESTED_FAILURE'));});`);
-  const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), '--suite=node', file], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', resolve('scripts/test-built.ts'), file], {
     cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: { ...process.env, CONCORD_BUN_DOTENV_MUST_NOT_LOAD: undefined, CONCORD_TEST_TIMINGS: undefined },
   }));
   const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.all)), child.exitCode], { concurrency: 'unbounded' });
@@ -147,7 +143,7 @@ test('Bun process deadline reaps a reparented grandchild in its owned group befo
   yield* fs.writeFileString(file, `import {spawn} from 'node:child_process'; import {existsSync,writeFileSync} from 'node:fs'; import test from 'node:test'; writeFileSync(${JSON.stringify(groupFile)},String(process.pid)); const c=spawn(process.execPath,['-e',${JSON.stringify(intermediate)}],{stdio:'ignore'}); c.unref(); test('wait for grandchild',async()=>{while(!existsSync(${JSON.stringify(pidFile)})) await new Promise(r=>setTimeout(r,5));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);await new Promise(()=>{});});`);
   const runner = join(root, 'controller.ts');
   yield* fs.writeFileString(runner, `import {runNodeTests} from ${JSON.stringify(new URL('../../scripts/test-reporter.ts', import.meta.url).href)}; import {Effect} from ${JSON.stringify(import.meta.resolve('effect'))}; import {NodeServices,NodeRuntime} from ${JSON.stringify(import.meta.resolve('@effect/platform-node'))}; runNodeTests({files:[${JSON.stringify(file)}],concurrency:1,timeout:10000},${JSON.stringify(join(root, 'output'))}).pipe(Effect.tap(failed=>Effect.sync(()=>{process.exitCode=failed?1:0})),Effect.scoped,Effect.provide(NodeServices.layer),NodeRuntime.runMain);`);
-  const child = yield* spawner.spawn(ChildProcess.make('node', [runner], { cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(5) }));
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', runner], { cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(5) }));
   const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.all)), child.exitCode], { concurrency: 'unbounded' });
   assert.equal(Number(code), 1, text);
   const pid = Number(yield* fs.readFileString(pidFile));

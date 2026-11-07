@@ -13,7 +13,7 @@ import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.ts";
 
 import { pollUntil, waitForWorkspaceNotModified, fetchFresh } from '../support/support.ts';
-import { startViewServer } from '../e2e/server.ts';
+import { startViewServer } from '../support/view-server.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('poll deadline aborts an in-flight HTTP request and preserves unexpected HTTP diagnostics', () => Effect.runPromise(Effect.tryPromise(async () => {

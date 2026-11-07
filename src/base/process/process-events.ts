@@ -10,7 +10,7 @@ export const ProcessRole = Schema.Literals(['cli', 'worker', 'service', 'compute
 export type ProcessRole = typeof ProcessRole.Type;
 export const ProcessEvent = Schema.Struct({
   id: Schema.String, run: Schema.String, file: Schema.String,
-  scope: Schema.optional(Schema.Literals(['test-file', 'browser-worker'])), workerID: Schema.optional(Schema.String),
+  scope: Schema.optional(Schema.Literal('test-file')),
   pid: Schema.Int, ppid: Schema.Int, childPid: Schema.optional(Schema.Int),
   kind: Schema.Literals(['attempt', 'spawn', 'service-ready', 'service-reuse', 'coverage-start', 'coverage-end', 'process-start', 'process-end', 'unknown']),
   role: Schema.optional(ProcessRole), instance: Schema.optional(Schema.String),
@@ -29,12 +29,12 @@ export function recordProcessEvent(event: Pick<ProcessEvent, 'kind'> & Partial<P
   const directory = env.CONCORD_TEST_EVENT_DIRECTORY, run = env.CONCORD_TEST_RUN_ID, file = env.CONCORD_TEST_FILE_ID;
   if (!directory || !run || !file) return;
   Effect.runSync(Effect.try({ try: () => {
-    const value = Schema.decodeUnknownSync(ProcessEvent, { onExcessProperty: 'error' })({ ...event, id: event.id ?? randomUUID(), run, file, scope: env.CONCORD_TEST_EVENT_SCOPE ?? 'test-file', ...(env.CONCORD_TEST_WORKER_ID === undefined ? {} : { workerID: env.CONCORD_TEST_WORKER_ID }), pid: process.pid, ppid: process.ppid });
+    const value = Schema.decodeUnknownSync(ProcessEvent, { onExcessProperty: 'error' })({ ...event, id: event.id ?? randomUUID(), run, file, scope: env.CONCORD_TEST_EVENT_SCOPE ?? 'test-file', pid: process.pid, ppid: process.ppid });
     if (capped) { healthy = false; return; }
     let line = `${JSON.stringify(value)}\n`;
     if (Buffer.byteLength(line) > 16 * 1024 || writtenBytes + Buffer.byteLength(line) > PROCESS_EVENT_FILE_LIMIT - 16 * 1024) {
       healthy = false; capped = true;
-      line = `${JSON.stringify({ id: randomUUID(), run, file, pid: process.pid, ppid: process.ppid, scope: value.scope, ...(value.workerID === undefined ? {} : { workerID: value.workerID }), kind: 'unknown', healthy: false })}\n`;
+      line = `${JSON.stringify({ id: randomUUID(), run, file, pid: process.pid, ppid: process.ppid, scope: value.scope, kind: 'unknown', healthy: false })}\n`;
     }
     writerId ??= randomUUID();
     mkdirSync(directory, { recursive: true });

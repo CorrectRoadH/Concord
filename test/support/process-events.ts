@@ -62,8 +62,7 @@ export function installProcessEvents(context?: { readonly directory: string; rea
     Object.defineProperty(childProcess, name, { value: wrapped, configurable: true, writable: true });
   }
   syncBuiltinESMExports();
-  const root = process.env.CONCORD_TEST_EVENT_SCOPE === 'browser-worker'
-    || process.env.CONCORD_TEST_FILE_ID === resolve(process.argv[1] ?? '')
+  const root = process.env.CONCORD_TEST_FILE_ID === resolve(process.argv[1] ?? '')
     || process.env.CONCORD_TEST_BUN_FILE_ROOT === '1';
   delete process.env.CONCORD_TEST_BUN_FILE_ROOT;
   recordProcessEvent({ kind: root ? 'coverage-start' : 'process-start' }, ownerEnvironment);

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import test, { mock } from 'node:test';
 import { Cause, Deferred, Effect, Schema, Stream, type Exit } from 'effect';
 import { requestWorkspace } from '../../src/entry/server/index.ts';
-import { ViewServerStartupFailed } from '../e2e/server.ts';
+import { ViewServerStartupFailed } from '../support/view-server.ts';
 import { acquireSharedWorkspace, closeSharedWorkspace, sharedWorkspace, type SharedWorkspace } from '../support/shared-service.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { fetchFresh, parseWorkspaceProjection } from '../support/support.ts';

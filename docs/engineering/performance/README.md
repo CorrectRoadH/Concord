@@ -36,8 +36,8 @@ Concord 是 agent 高频调用的本地工具，性能是交付约束（[快到�
 
 | 时机 | 命令 | 要求 |
 | --- | --- | --- |
-| 开发中 | `vp run bench --changed --quick` | 可随时运行，查看受影响场景的 p50 与预算的距离 |
-| 交付前 | `vp run bench --changed --compare` | 改动选中任一场景时必须运行；全部判定通过才可交付 |
+| 开发中 | `bun run bench --changed --quick` | 可随时运行，查看受影响场景的 p50 与预算的距离 |
+| 交付前 | `bun run bench --changed --compare` | 改动选中任一场景时必须运行；全部判定通过才可交付 |
 | 新增 Feature 的高频操作或新命令组 | 同一改动中增加预算行与场景 | 覆盖规则在 `bun run gate` 中强制 |
 | 有意改变预算 | 修改 Feature `performance.md` 中的阈值，说明理由 | 附 `--compare` 记录，结论写入 Memory |
 

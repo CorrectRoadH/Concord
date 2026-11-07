@@ -52,7 +52,7 @@ macOS 27 在允许安装范围内，但不声明已完成其 CI 实测。不支�
 
 ## 验收
 
-各渠道的安装输入是同一份归档字节，安装后 `concord --version` 相同。发版前的候选验证在 Ubuntu 24.04 与 Apple Silicon macOS 15 上解压同一份候选归档，在只有系统基础命令与 Git 的 `PATH` 中运行，步骤见[从标签发版](use-case/release-from-tag.md#verify)。
+各渠道的安装输入是同一份归档字节，安装后 `concord --version` 相同。发版要求 Ubuntu 24.04 与 Apple Silicon macOS 15 的目标构建、归档汇总及同一标签 commit 的完整检查成功，步骤见[从标签发版](use-case/release-from-tag.md#package)。
 
 ## 依据的品味
 

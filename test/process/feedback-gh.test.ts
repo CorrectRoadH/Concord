@@ -74,7 +74,7 @@ const { setConfig, showConfig } = await import('../../src/app/index.ts');
 const { ConcordError } = await import('../../src/model/index.ts');
 const { checkGhConnection, fetchGhFeedback } = await import("../../src/domain/feedback/feedback-gh.ts");
 const { syncFeedback } = await import("../../src/domain/feedback/feedback.ts");
-const { startViewServer } = await import('../e2e/server.ts');
+const { startViewServer } = await import('../support/view-server.ts');
 const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
 
 async function configure(): Promise<void> {

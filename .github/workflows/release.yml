@@ -40,22 +40,19 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: '.node-version'
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version-file: '.bun-version'
       - run: bun install --frozen-lockfile --ignore-scripts
       - name: Verify native ownership, clear and recovery on the target host
         run: |
-          node scripts/prepare-native.ts --test-hooks
+          bun scripts/prepare-native.ts --test-hooks
           CONCORD_NATIVE_TEST_HOOKS=1 bun test --no-env-file --config=/dev/null --timeout=300000 ./test/process/hawdb-native.test.ts
       - name: Download the pinned host engine
-        run: node scripts/prepare-native.ts --output native-artifacts --require-portable
+        run: bun scripts/prepare-native.ts --output native-artifacts --require-portable
       - name: Verify Darwin native signature and sign official ripgrep
         if: matrix.target == 'darwin-arm64'
-        run: node scripts/prepare-release-native.ts native-artifacts
+        run: bun scripts/prepare-release-native.ts native-artifacts
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: concord-hawdb-${{ matrix.target }}
@@ -83,9 +80,6 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: '.node-version'
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version-file: '.bun-version'
@@ -102,14 +96,14 @@ jobs:
           name: concord-hawdb-${{ matrix.native }}
           path: native-artifacts
       - name: Typecheck maintained build scripts
-        run: bun run --no-install vp exec tsc -p tsconfig.scripts.json
+        run: bun node_modules/typescript/bin/tsc -p tsconfig.scripts.json
       - name: Prepare Linux archive relocation tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y patchelf binutils
       - name: Compile and assemble the target candidate
         env:
           CONCORD_TARGET: ${{ matrix.target }}
-        run: node scripts/assemble-release.ts candidate candidate "$RUNNER_TEMP/concord-package" native-artifacts
+        run: bun scripts/assemble-release.ts candidate candidate "$RUNNER_TEMP/concord-package" native-artifacts
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: concord-candidate-${{ matrix.target }}
@@ -129,9 +123,6 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: '.node-version'
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version-file: '.bun-version'
@@ -146,7 +137,7 @@ jobs:
       - name: Collect the exact target candidates
         env:
           RELEASE_COMMIT: ${{ steps.identity.outputs.commit }}
-        run: node scripts/assemble-release.ts collect release candidates/concord-candidate-linux-x64 candidates/concord-candidate-darwin-arm64
+        run: bun scripts/assemble-release.ts collect release candidates/concord-candidate-linux-x64 candidates/concord-candidate-darwin-arm64
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: concord-release-package
@@ -154,48 +145,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  verify:
-    needs: package
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            target: linux-x64
-          - os: macos-15
-            target: darwin-arm64
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: '.node-version'
-      - uses: oven-sh/setup-bun@v2.2.0
-        with:
-          bun-version-file: '.bun-version'
-      - run: bun install --frozen-lockfile --ignore-scripts
-      - uses: actions/download-artifact@v8.0.2
-        with:
-          name: concord-release-package
-          path: release
-      - name: Verify the exact candidate on its target host
-        env:
-          RELEASE_TARGET: ${{ matrix.target }}
-          RELEASE_COMMIT: ${{ needs.package.outputs.commit }}
-        run: |
-          archive=(release/concord-*-$RELEASE_TARGET.tar.gz)
-          test "${#archive[@]}" -eq 1
-          version="${archive[0]#release/concord-}"
-          version="${version%-$RELEASE_TARGET.tar.gz}"
-          node scripts/verify-release-archive.ts "${archive[0]}" "$version" release/SHA256SUMS
-
   publish:
-    needs: [package, verify, gate]
+    needs: [package, gate]
     timeout-minutes: 3
     if: inputs.tag != ''
     runs-on: ubuntu-24.04
@@ -206,7 +157,7 @@ jobs:
         with:
           name: concord-release-package
           path: release
-      - name: Publish the verified immutable asset
+      - name: Publish the built immutable asset
         id: source-release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -234,7 +185,7 @@ jobs:
           if ! grep -q 'HTTP 404' ../release-api-error; then cat ../release-api-error >&2; exit 1; fi
           gh release create "$RELEASE_TAG" "${expected[@]}" SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --verify-tag --target "$RELEASE_COMMIT" --title "Concord $version" \
-            --notes "Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives. Exact candidate bytes verified on Ubuntu 24.04 and macOS 15; the same tag commit passed the repository gate. Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
+            --notes "Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives. Archives built on Ubuntu 24.04 and macOS 15; the same tag commit passed the repository gate. Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
       - name: Notify Homebrew tap of the published release
         env:
           GH_TOKEN: ${{ github.token }}

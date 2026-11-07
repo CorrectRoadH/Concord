@@ -30,24 +30,16 @@ export function summarizeProcessEvents(files: readonly string[], events: readonl
     return { file, status: complete ? 'complete' : 'unknown', counts: complete ? counts : null, observed: counts, services: complete ? services : null, observedServices: services };
   };
   const values = [...unique.values()];
-  const reports = selected.map(file => ({ ...summarize(file, values.filter(event => event.scope !== 'browser-worker' && resolve(event.file) === file)), layer: classifyTestLayer(file) ?? 'unknown' }));
-  const fixtureGroups = new Map<string, ProcessEvent[]>();
-  for (const event of values.filter(event => event.scope === 'browser-worker')) {
-    const key = JSON.stringify([event.file, event.workerID ?? null]);
-    const group = fixtureGroups.get(key) ?? [];
-    group.push(event); fixtureGroups.set(key, group);
-  }
-  const fixtures = [...fixtureGroups.values()].map(events => ({ ...summarize(events[0]!.file, events), scope: 'browser-worker' as const, workerID: events[0]!.workerID ?? null, layer: 'e2e' as const }));
-  return { run: run ?? null, status: [...reports, ...fixtures].every(file => file.status === 'complete') && !invalid && !conflicting && run !== undefined ? 'complete' : 'unknown', invalidEvents: invalid, conflictingEvents: conflicting,
-    files: reports, fixtures,
+  const reports = selected.map(file => ({ ...summarize(file, values.filter(event => resolve(event.file) === file)), layer: classifyTestLayer(file) ?? 'unknown' }));
+  return { run: run ?? null, status: reports.every(file => file.status === 'complete') && !invalid && !conflicting && run !== undefined ? 'complete' : 'unknown', invalidEvents: invalid, conflictingEvents: conflicting,
+    files: reports,
     layers: testLayers.map(layer => {
       const selectedFiles = reports.filter(file => file.layer === layer);
-      const fixtureWorkers = fixtures.filter(fixture => fixture.layer === layer);
-      const group = [...selectedFiles, ...fixtureWorkers];
+      const group = selectedFiles;
       const complete = group.length > 0 && group.every(file => file.status === 'complete');
       const observed = Object.fromEntries(roles.map(role => [role, group.reduce((sum, file) => sum + (file.observed[role] ?? 0), 0)]));
       const observedServices = { attempts: group.reduce((sum, file) => sum + file.observedServices.attempts, 0), ready: group.reduce((sum, file) => sum + file.observedServices.ready, 0), reusedConnections: group.reduce((sum, file) => sum + file.observedServices.reusedConnections, 0) };
-      return { layer, files: selectedFiles.length, fixtureWorkers: fixtureWorkers.length, status: complete ? 'complete' : 'unknown', counts: complete ? observed : null, observed, services: complete ? observedServices : null, observedServices };
+      return { layer, files: selectedFiles.length, status: complete ? 'complete' : 'unknown', counts: complete ? observed : null, observed, services: complete ? observedServices : null, observedServices };
     }),
   };
 }

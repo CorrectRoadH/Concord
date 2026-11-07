@@ -3,7 +3,7 @@
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { summarizeFileTimings, type FileTiming } from './gate-timings.ts';
 
-export const testLayers = ['model', 'domain', 'cli', 'process', 'e2e'] as const;
+export const testLayers = ['model', 'domain', 'cli', 'process'] as const;
 export type TestLayer = typeof testLayers[number];
 export interface TestFileTiming { readonly file: string; readonly duration_ms: number; readonly cases?: number }
 export interface TestLayerReport {
@@ -12,14 +12,14 @@ export interface TestLayerReport {
   readonly timedFiles: number;
   readonly cases: number;
   readonly countedFiles: number;
-  /** Observed Node file elapsed or browser attempt sum; concurrent work may overlap. */
+  /** Observed Bun file elapsed sum; concurrent work may overlap. */
   readonly duration_ms: number;
 }
 
 /** Root-level tests are pure architecture checks; nested directories own their boundary. */
 export function classifyTestLayer(file: string, root = process.cwd()): TestLayer | undefined {
   const path = (isAbsolute(file) ? relative(root, file) : file).split(sep).join('/');
-  if (!/^test\/(?:[^/]+\/)*[^/]+\.(?:test|e2e)\.ts$/u.test(path)) return undefined;
+  if (!/^test\/(?:[^/]+\/)*[^/]+\.test\.ts$/u.test(path)) return undefined;
   const parts = path.split('/');
   if (parts.length === 2) return path.endsWith('.test.ts') ? 'model' : undefined;
   return testLayers.find(layer => parts[1] === layer);
@@ -59,7 +59,7 @@ export function auditTestLayers(files: readonly string[], root = process.cwd()):
 export function summarizeMeasuredTestLayers(files: readonly string[], timings: readonly FileTiming[], root = process.cwd()) {
   return summarizeTestLayers(files, timings, root).map(row => {
     const measurement = summarizeFileTimings(files.filter(file => classifyTestLayer(file, root) === row.layer), timings,
-      row.layer === 'e2e' ? 'browser-attempt-sum' : 'node-file-elapsed-sum', true, root);
+      'node-file-elapsed-sum', true, root);
     return { ...row, metric: measurement.metric, state: measurement.state, complete_duration_ms: measurement.duration_ms };
   });
 }

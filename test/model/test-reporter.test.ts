@@ -22,7 +22,7 @@ const runnerTest = (name: string, body: (root: string) => Effect.Effect<void, un
 
 const run = Effect.fn('test.runner.integration')(function*(args: string[], env: Record<string, string | undefined> = {}, cwd?: string, onOutput?: (chunk: string) => void) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), ...args], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', resolve('scripts/test-built.ts'), ...args], {
     env: { ...process.env, CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_COMPILE_CACHE: undefined, ...env },
     cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
   }));
@@ -43,7 +43,7 @@ runnerTest('fixed overhead counts shared controllers and excludes only admitted 
   const admitted = yield* observeTestProcessTree('owned-memory', 2 * GiB, ['owned-memory']);
   const children = [];
   for (const [name, size] of [['shared-controller', 32], ['owned-memory', 64]] as const) {
-    const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['-e', `const bytes=Buffer.alloc(${size}*1024*1024, 1); process.stdout.write('ready'); setInterval(()=>{bytes[0]++;},1000);`, name], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
+    const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', '-e', `const bytes=Buffer.alloc(${size}*1024*1024, 1); process.stdout.write('ready'); setInterval(()=>{bytes[0]++;},1000);`, name], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
     yield* Stream.runHead(Stream.decodeText(child.stdout));
     if (name === 'owned-memory') yield* admitted.register(Number(child.pid));
     children.push(child);
@@ -71,11 +71,10 @@ runnerTest('real cold and warm file runs use the previous PSS peak while keeping
   yield* fs.writeFileString(file, `import test from 'node:test'; test('sampled file', () => {});\n`);
   const env = { XDG_CACHE_HOME: cache, CONCORD_GATE_MEMORY_MAX: String(7 * GiB) };
   const Peak = Schema.Struct({ file: Schema.String, budgetBytes: Schema.Number, admittedBytes: Schema.Number, peakBytes: Schema.NullOr(Schema.Number), state: Schema.String });
-  const cold = yield* run(['--suite=node', file], env, root);
+  const cold = yield* run([file], env, root);
   assert.equal(cold.code, 0, cold.text);
   const timingReport = yield* readTestTimingReport(cold.output);
   assert.ok(timingReport, 'the persisted admission budgets must decode into the gate report');
-  assert.equal(timingReport.admission?.budgets.browser, 2.5 * GiB);
   const coldPeak = Schema.decodeUnknownSync(Schema.fromJsonString(Peak))((yield* fs.readFileString(join(cold.output, 'process-tree-peaks.jsonl'))).trim());
   assert.equal(coldPeak.admittedBytes, 2 * GiB);
   assert.equal(coldPeak.budgetBytes, 2 * GiB);
@@ -86,7 +85,7 @@ runnerTest('real cold and warm file runs use the previous PSS peak while keeping
     assert.equal(stored.file, file);
     assert.equal(stored.peakBytes, coldPeak.peakBytes);
   }
-  const warm = yield* run(['--suite=node', file], env, root);
+  const warm = yield* run([file], env, root);
   assert.equal(warm.code, 0, warm.text);
   const warmPeak = Schema.decodeUnknownSync(Schema.fromJsonString(Peak))((yield* fs.readFileString(join(warm.output, 'process-tree-peaks.jsonl'))).trim());
   assert.equal(warmPeak.budgetBytes, 2 * GiB);
@@ -94,7 +93,7 @@ runnerTest('real cold and warm file runs use the previous PSS peak while keeping
   console.error(`# History admission: cold=${coldPeak.admittedBytes}; coldPeakPss=${coldPeak.peakBytes}; warm=${warmPeak.admittedBytes}; warmPeakPss=${warmPeak.peakBytes}; reportingBudget=${warmPeak.budgetBytes}`);
   if (process.platform === 'linux') {
     yield* fs.writeFileString(record, '{broken');
-    const broken = yield* run(['--suite=node', file], env, root);
+    const broken = yield* run([file], env, root);
     assert.equal(broken.code, 1, broken.text);
     assert.match(broken.text, /GateAdmissionHistoryInvalid/u);
     assert.doesNotMatch(broken.text, /\(pass\) sampled file/u);
@@ -125,7 +124,7 @@ test('source uses native type erasure', () => {
   assert.equal(result.cache, undefined);
 });\n`);
   const env = { NODE_OPTIONS: '', XDG_CACHE_HOME: cacheHome };
-  const result = yield* run(['--suite=node', source, cli], env, root);
+  const result = yield* run([source, cli], env, root);
   assert.equal(result.code, 0, result.text);
   assert.match(result.text, /# Source Bun tests:/u);
   assert.doesNotMatch(result.text, /# Installed Bun tests:/u);
@@ -134,7 +133,7 @@ test('source uses native type erasure', () => {
   assert.equal(yield* fs.exists(compileCache), false);
   const sentinel = join(cacheHome, 'retained');
   yield* fs.writeFileString(sentinel, 'unrelated cache survives runner lifetime');
-  const again = yield* run(['--suite=node', source, cli], env, root);
+  const again = yield* run([source, cli], env, root);
   assert.equal(again.code, 0, again.text);
   assert.equal(yield* fs.readFileString(sentinel), 'unrelated cache survives runner lifetime');
   assert.equal(yield* fs.exists(compileCache), false);
@@ -145,8 +144,8 @@ runnerTest('cancelling gate reaps static task groups and fixture scratch without
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.optional(Schema.String), cgroup: Schema.String, packageRoot: Schema.optional(Schema.String), fixtureRoot: Schema.optional(Schema.String), task: Schema.String }));
-  const fakeVp = join(root, 'vp.ts');
-  yield* fs.writeFileString(fakeVp, `#!/usr/bin/env node
+  const fakeTask = join(root, 'task.ts');
+  yield* fs.writeFileString(fakeTask, `#!${process.execPath}
 import { writeFileSync, readFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
 const task = process.argv.find(value => /^(?:gate:|test:)/.test(value)) ?? 'build';
@@ -154,8 +153,8 @@ writeFileSync(${JSON.stringify(root)} + '/' + task + '.json', JSON.stringify({ta
 console.log('TASK_READY');
 setInterval(() => {}, 1000);
 `);
-  yield* fs.chmod(fakeVp, 0o755);
-  yield* fs.symlink(fakeVp, join(root, 'vp'));
+  yield* fs.chmod(fakeTask, 0o755);
+  yield* fs.symlink(fakeTask, join(root, 'bun'));
   // Keep a failed cleanup regression from leaking the deliberately stubborn boundary.
   yield* Effect.addFinalizer(() => Effect.gen(function*() {
     for (const file of (yield* fs.readDirectory(root)).filter(file => file.endsWith('.json'))) {
@@ -163,7 +162,7 @@ setInterval(() => {}, 1000);
       yield* Effect.sync(() => { try { process.kill(-pid, 'SIGKILL'); } catch {} });
     }
   }).pipe(Effect.orDie));
-  const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/gate.ts'), 'test/model/test-reporter.test.ts'], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', resolve('scripts/gate.ts'), 'test/model/test-reporter.test.ts'], {
     env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined, XDG_CACHE_HOME: join(root, 'shared-cache'), CONCORD_GATE_QUEUE_DIRECTORY: join(root, 'gate-queue'), PATH: `${root}:${process.env.PATH}` },
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
   }));
@@ -206,7 +205,7 @@ runnerTest('official file diagnostics sort durations and count isolated file pro
   // A case may legally have the same title as its file wrapper.
   yield* fs.writeFileString(first, `import test from 'node:test'; test(${JSON.stringify(first)}, () => {});\n`);
   yield* fs.writeFileString(second, `import { describe, test } from 'node:test'; describe('suite', () => { test('first nested', () => {}); test('second nested', () => {}); });\n`);
-  const result = yield* run(['--suite=node', first, second], { CONCORD_TEST_CONCURRENCY: '1' }, root);
+  const result = yield* run([first, second], { CONCORD_TEST_CONCURRENCY: '1' }, root);
   assert.equal(result.code, 0, result.text);
   const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String, duration_ms: Schema.Number }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
   assert.deepEqual(timings.map(timing => timing.file).sort(), [first, second].sort());
@@ -223,7 +222,7 @@ runnerTest('official Bun JUnit retains circular failure diagnostics and reaches 
   const fs = yield* FileSystem.FileSystem;
   const file = join(root, 'circular.test.ts');
   yield* fs.writeFileString(file, `import ${JSON.stringify(pathToFileURL(resolve('test/fixtures/reporter-circular-error.ts')).href)};\n`);
-  const result = yield* run(['--suite=node', file]);
+  const result = yield* run([file]);
   assert.equal(result.code, 1, result.text);
   assert.doesNotMatch(result.text, /Converting circular structure|uncaughtException/u);
   assert.match(result.text, /\(fail\) intentional circular error fixture/u);
@@ -243,7 +242,7 @@ runnerTest('name-filtered files count executed cases instead of successful file 
   yield* fs.writeFileString(excluded, `import { describe, test } from 'node:test'; describe('excluded suite', () => { test('excluded case', () => { throw new Error('unselected body ran'); }); });\n`);
   yield* fs.writeFileString(selected, `import test from 'node:test'; test('selected case', () => {});\n`);
   for (const files of [[excluded], [excluded, selected]]) {
-    const result = yield* run(['--suite=node', '--test-name-pattern=^selected case$', ...files], {}, root);
+    const result = yield* run(['--test-name-pattern=^selected case$', ...files], {}, root);
     assert.equal(result.code, 0, result.text);
     const expected = files.length - 1;
     assert.doesNotMatch(result.text, /ok \d+ - .*excluded\.test\.ts/u);
@@ -268,7 +267,7 @@ runnerTest('official name filtering and shard union select each requested source
   }
   const observed: string[] = [];
   for (const shard of ['1/2', '2/2']) {
-    const result = yield* run(['--suite=node', '--test-name-pattern=selected', `--test-shard=${shard}`, ...files]);
+    const result = yield* run(['--test-name-pattern=selected', `--test-shard=${shard}`, ...files]);
     assert.equal(result.code, 0, result.text);
     const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
     observed.push(...timings.map(timing => timing.file));
@@ -295,7 +294,7 @@ test('timeout fixture', { timeout: 100 }, async t => {
 `);
   yield* fs.writeFileString(join(directory, 'pass.test.ts'), `import test from 'node:test'; test('discovered source fixture', () => {});\n`);
   yield* fs.writeFileString(join(directory, 'excluded.ts'), `throw new Error('not a test file');\n`);
-  const result = yield* run(['--suite=node'], {}, root);
+  const result = yield* run([], {}, root);
   assert.equal(result.code, 1, result.text);
   assert.match(result.text, /test timed out after 100ms/u);
   assert.match(result.text, /\(pass\) discovered source fixture/u);
@@ -304,37 +303,12 @@ test('timeout fixture', { timeout: 100 }, async t => {
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
 }));
 
-runnerTest('Bun and browser failures leave the other suite running and retain official browser arguments', root => Effect.gen(function*() {
-  const fs = yield* FileSystem.FileSystem;
-  yield* fs.writeFileString(join(root, 'package.json'), JSON.stringify({ private: true }));
-  const browser = join(root, 'route.e2e.ts'), node = join(root, 'route.test.ts');
-  const browserArgs = join(root, 'browser-args.json'), nodeDone = join(root, 'node-done');
-  yield* fs.writeFileString(browser, 'export {};\n');
-  const fakeVp = join(root, 'vp.ts');
-  yield* fs.writeFileString(fakeVp, `#!/usr/bin/env node\nimport { writeFileSync } from 'node:fs';\nsetTimeout(() => { writeFileSync(${JSON.stringify(browserArgs)}, JSON.stringify(process.argv.slice(2))); console.log('BROWSER_EXECUTED'); process.exitCode = Number(process.env.BROWSER_EXIT); }, 150);\n`);
-  yield* fs.chmod(fakeVp, 0o755);
-  yield* fs.symlink(fakeVp, join(root, 'vp'));
-  const env = { PATH: `${root}:${process.env.PATH}`, CONCORD_GATE_MEMORY_MAX: String(7 * GiB), CONCORD_E2E_WORKERS: '2' };
-  yield* fs.writeFileString(node, `import test from 'node:test';\ntest('selected', () => { throw new Error('NODE_EXPECTED_FAILURE'); });\n`);
-  const nodeFailed = yield* run(['--test-name-pattern=selected', '--test-shard=1/1', node, browser], { ...env, BROWSER_EXIT: '0' });
-  assert.equal(nodeFailed.code, 1, nodeFailed.text);
-  assert.match(nodeFailed.text, /NODE_EXPECTED_FAILURE/u);
-  assert.match(nodeFailed.text, /BROWSER_EXECUTED/u);
-  const args = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(yield* fs.readFileString(browserArgs));
-  assert.deepEqual(args, ['exec', 'e2e', 'run', '--config', 'e2e.config.ts', '--no-cache', '--workers', '2', '--grep', 'selected', '--shard', '1/1', browser]);
-  yield* fs.writeFileString(node, `import test from 'node:test';\nimport { writeFileSync } from 'node:fs';\ntest('selected', async () => { await new Promise(resolve => setTimeout(resolve, 250)); writeFileSync(${JSON.stringify(nodeDone)}, 'done'); });\n`);
-  const browserFailed = yield* run([node, browser], { ...env, BROWSER_EXIT: '1' });
-  assert.equal(browserFailed.code, 1, browserFailed.text);
-  assert.equal(yield* fs.readFileString(nodeDone), 'done');
-  assert.match(browserFailed.text, /\(pass\) selected/u);
-}));
-
 runnerTest('cancelling the source runner reaps test processes and descendants that ignore SIGTERM', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const file = join(root, 'cancel.test.ts'), pids = join(root, 'pids.json');
   yield* fs.writeFileString(file, `import { spawn } from 'node:child_process';\nimport { writeFileSync } from 'node:fs';\nimport test from 'node:test';\nprocess.on('SIGTERM', () => {});\nconst child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{}); process.stdout.write("READY"); setInterval(()=>{},1000)'], {stdio:['ignore','pipe','ignore']});\nchild.stdout.once('data', () => { writeFileSync(${JSON.stringify(pids)}, JSON.stringify([process.ppid, process.pid, child.pid])); console.log('FIXTURE_READY'); });\ntest('hang until cancelled', () => new Promise(()=>{setInterval(()=>{},1000)}));\n`);
-  const child = yield* spawner.spawn(ChildProcess.make('node', ['scripts/test-built.ts', '--suite=node', file], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', 'scripts/test-built.ts', file], {
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
     env: { ...process.env, CONCORD_TEST_COMPILE_CACHE: undefined, CONCORD_TEST_TIMINGS: undefined },
   }));
@@ -378,7 +352,7 @@ test(${JSON.stringify(name)}, async () => {
 });\n`);
   }
   let output = '';
-  const running = yield* run(['--suite=node', ...files], { CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3), CONCORD_TEST_CONCURRENCY: '8', XDG_CACHE_HOME: join(root, 'cold-cache') }, root, chunk => { output += chunk; }).pipe(Effect.forkScoped);
+  const running = yield* run([...files], { CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3), CONCORD_TEST_CONCURRENCY: '8', XDG_CACHE_HOME: join(root, 'cold-cache') }, root, chunk => { output += chunk; }).pipe(Effect.forkScoped);
   const waitForActive = (count: number, excluded: readonly string[] = []) => Effect.gen(function*() {
     for (;;) {
       const names = (yield* fs.exists(active)) ? (yield* fs.readDirectory(active)).filter(name => !name.endsWith('.release') && !excluded.includes(name)) : [];
@@ -414,10 +388,10 @@ runnerTest('file admission waits for normal process exit after the official summ
   const fs = yield* FileSystem.FileSystem;
   const file = join(root, 'normal-exit.test.ts'), saved = join(root, 'normal-exit');
   yield* fs.writeFileString(file, `import test from 'node:test'; import {spawn} from 'node:child_process';
-const child = spawn('node', ['-e', ${JSON.stringify(`setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(saved)}, 'normally drained'), 200);`)}], {stdio:'ignore'});
+const child = spawn(process.execPath, ['-e', ${JSON.stringify(`setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(saved)}, 'normally drained'), 200);`)}], {stdio:'ignore'});
 child.unref();
 test('official summary precedes final process drain', () => {});\n`);
-  const result = yield* run(['--suite=node', file], {}, root);
+  const result = yield* run([file], {}, root);
   assert.equal(result.code, 0, result.text);
   assert.equal(yield* fs.readFileString(saved), 'normally drained');
   assert.doesNotMatch(result.text, /GateProcessCleanupFailed/u);

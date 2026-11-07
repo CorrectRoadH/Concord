@@ -40,7 +40,7 @@ const typecheck = Effect.fn('build.typecheck')(function*() {
 const finish = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   yield* Effect.tryPromise(async () => {
-    const { build } = await import('vite-plus');
+    const { build } = await import('vite');
     await build({ configFile: 'vite.preview.config.ts', build: { outDir: dist('preview') } });
   });
   yield* packJavaScript({ entry: { 'p5-runtime': 'web/p5/runtime.ts' }, outDir: dist('web'), format: 'iife', platform: 'browser', target: 'es2022', minify: true,
@@ -73,7 +73,7 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
   const destination = yield* externalBuildOutput(output);
   yield* typecheck();
   const tooling = ['scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts', 'scripts/pack-javascript.ts',
-    'scripts/build-herdr-mod.ts', 'scripts/herdr-mod-catalog.ts', 'scripts/build-identity.ts', 'scripts/build-output.ts', 'bun.lock', 'patches', 'package.json', 'tsconfig.json', 'tsconfig.web.json', 'node_modules/typescript/package.json', 'node_modules/esbuild/package.json', 'node_modules/vite-plus/package.json'];
+    'scripts/build-herdr-mod.ts', 'scripts/herdr-mod-catalog.ts', 'scripts/build-identity.ts', 'scripts/build-output.ts', 'bun.lock', 'patches', 'package.json', 'tsconfig.json', 'tsconfig.web.json', 'node_modules/typescript/package.json', 'node_modules/esbuild/package.json', 'node_modules/vite/package.json'];
   const resourcePaths = ['docs', 'skills', 'templates', ...(yield* fs.readDirectory(repository)).filter(name => /^README(?:\..+)?\.md$/u.test(name))];
   const resourceInput = () => archivePartInput(repository, [...resourcePaths, 'scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts']);
   const resourceDigest = yield* resourceInput();
@@ -89,7 +89,7 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
     outputRoot = directory;
     yield* fs.makeDirectory(dist(), { recursive: true });
     yield* Effect.tryPromise(async () => {
-      const { build } = await import('vite-plus');
+      const { build } = await import('vite');
       await build({ configFile: 'vite.source.config.ts', build: { outDir: dist('web'), write: true, minify: true, license: true, emptyOutDir: true } });
     });
     yield* finish;

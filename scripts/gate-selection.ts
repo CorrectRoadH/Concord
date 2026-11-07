@@ -37,7 +37,7 @@ export function gateSelectionArguments(argv: readonly string[]) {
     const value = argv[index]!;
     if (value !== '--changed') { normalized.push(value); continue; }
     const next = argv[index + 1];
-    const revision = next !== undefined && !next.startsWith('-') && !/\.(?:test|e2e)\.ts$/u.test(next) ? argv[++index]! : '';
+    const revision = next !== undefined && !next.startsWith('-') && !/\.test\.ts$/u.test(next) ? argv[++index]! : '';
     normalized.push(`--changed=${revision}`);
   }
   const parsed = parseArgs({ args: normalized, allowPositionals: true, tokens: true, options: {
@@ -55,7 +55,7 @@ export function gateSelectionArguments(argv: readonly string[]) {
 /** Only an unfiltered selection covering every current file owns the full-gate slot. */
 export function isFullGateSelection(selected: { readonly files: readonly string[]; readonly allFiles: readonly string[]; readonly args: readonly string[] }): boolean {
   return selected.files.length === selected.allFiles.length && !selected.args.some(arg =>
-    ['--test-name-pattern', '--test-shard', '--suite'].some(flag => arg === flag || arg.startsWith(`${flag}=`)));
+    ['--test-name-pattern', '--test-shard'].some(flag => arg === flag || arg.startsWith(`${flag}=`)));
 }
 
 const allTestsDependency = (file: string): boolean => file.startsWith('test/support/') || file.startsWith('scripts/')
@@ -67,7 +67,7 @@ export const selectGateTests = Effect.fn('gate.selectTests')(function*(argv: rea
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const parsed = yield* Effect.try({ try: () => gateSelectionArguments(argv), catch: cause => new GateSelectionInvalid({ detail: String(cause) }) });
   const absoluteRoot = resolve(root);
-  const allFiles = [...new Set((yield* fs.glob('test/**/*.{test,e2e}.ts', { root: absoluteRoot })).map(file => relative(absoluteRoot, resolve(absoluteRoot, file))))].sort();
+  const allFiles = [...new Set((yield* fs.glob('test/**/*.test.ts', { root: absoluteRoot })).map(file => relative(absoluteRoot, resolve(absoluteRoot, file))))].sort();
   const requested = parsed.positionals.map(file => relative(absoluteRoot, resolve(absoluteRoot, file)));
   for (const file of requested) if (!allFiles.includes(file)) return yield* new GateSelectionInvalid({ detail: `Not a current test file: ${file}` });
   const git = Effect.fn('gate.selection.git')(function*(args: readonly string[]) {

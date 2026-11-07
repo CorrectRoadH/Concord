@@ -183,38 +183,3 @@ export const observeFixedGateMemory = (budgetBytes: number) => Effect.gen(functi
       peakBytes: complete ? observedPeakBytes : null, observedPeakBytes, exceeded: complete ? observedPeakBytes > budgetBytes : null, samples: frames.length };
   }) };
 });
-
-/** Chromium is leased by the runner, a sibling of its worker. Join both roots
- * using their published worker identity rather than charging every browser to
- * each worker. Receipts are atomic; missing startup receipts remain unknown. */
-export const observeBrowserProcessTrees = Effect.fn('gate.observeBrowserProcessTrees')(function*(output: string, budgetBytes: number) {
-  const Receipt = Schema.Struct({ workerID: Schema.NullOr(Schema.String), pid: Schema.Number, phase: Schema.optional(Schema.String), worker: Schema.optional(Schema.Number) });
-  const roots = new Map<string, Set<number>>();
-  const observations = new Map<string, Effect.Success<ReturnType<typeof observeTestProcessTree>>>();
-  const discover = Effect.gen(function*() {
-    for (const directory of ['lifecycle-timings', 'browser-processes']) {
-      let files: string[];
-      try { files = readdirSync(join(output, directory)); }
-      catch (cause) {
-        if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') continue;
-        throw cause;
-      }
-      for (const file of files.filter(file => file.endsWith('.json'))) {
-        const row = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt), { onExcessProperty: 'ignore' })(readFileSync(join(output, directory, file), 'utf8'));
-        if (row.workerID === null) continue;
-        if (directory === 'lifecycle-timings' && row.phase !== 'worker-start') continue;
-        const pids = roots.get(row.workerID) ?? new Set<number>();
-        pids.add(directory === 'lifecycle-timings' ? row.worker ?? row.pid : row.pid);
-        roots.set(row.workerID, pids);
-        const identity = row.workerID;
-        if (!observations.has(identity)) observations.set(identity,
-          yield* observeTestProcessTree(identity, budgetBytes, [], false, () => [...roots.get(identity)!]));
-      }
-    }
-  });
-  yield* Effect.gen(function*() { for (;;) { yield* discover; yield* Effect.sleep('100 millis'); } }).pipe(Effect.forkScoped);
-  return { finish: Effect.gen(function*() {
-    yield* discover;
-    return yield* Effect.forEach([...observations.values()], observation => observation.finish);
-  }) };
-});

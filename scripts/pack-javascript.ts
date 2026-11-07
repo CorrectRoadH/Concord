@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
-import { build, type InlineConfig, type Rolldown } from 'vite-plus/pack';
-import { minify } from 'vite/rolldown/utils';
+import { build, type InlineConfig, type Rolldown } from 'tsdown';
+import { minify } from 'rolldown/utils';
 
 class JavaScriptPackFailed extends Schema.TaggedError<JavaScriptPackFailed>()('JavaScriptPackFailed', {
   message: Schema.String,

@@ -60,7 +60,7 @@ export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*
   if (!(typeof CONCORD_COMPILED !== 'undefined' && CONCORD_COMPILED) && sourceRoot !== undefined) {
     const scratch = yield* fs.makeTempDirectoryScoped({ directory: appHome, prefix: '.concord-mod-build-' });
     yield* Effect.acquireRelease(Effect.tryPromise(async () => {
-      const { build } = await import('vite-plus/pack');
+      const { build } = await import('tsdown');
       return build({ config: false, clean: false, dts: false, sourcemap: false, logLevel: 'silent', tsconfig: join(sourceRoot, 'tsconfig.json'),
         entry: { main: join(sourceRoot, 'src/entry/herdr-mod/main.ts') }, outDir: scratch,
         format: 'esm', platform: 'neutral', target: 'es2022', minify: true,

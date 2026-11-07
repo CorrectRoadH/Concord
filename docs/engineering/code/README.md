@@ -4,7 +4,7 @@
 
 ## 由门禁检查的规则
 
-`bun run gate` 的静态检查运行 Vite+ 自带的 Oxlint，以下规则违反即失败：
+`bun run gate` 的静态检查运行项目固定版本的 Oxlint，以下规则违反即失败：
 
 | 规则 | 要求 | Oxlint 规则 |
 | --- | --- | --- |
@@ -28,7 +28,7 @@
 | 函数与变量 | lowerCamelCase；谓词以 `is`、`has`、`can` 开头 | `decodeFeedbackDocument`、`hasConfirmedOwnedGroupCleanup` |
 | 常量 | lowerCamelCase；协议常量与固定上限用 UPPER_SNAKE_CASE | `OUTPUT_LIMIT` |
 | 具名错误 | PascalCase，写出失败的情形，不强制 `Error` 后缀；对外暴露时类名就是错误码 | `HerdrModPathOccupied` |
-| 测试文件 | `<主题>.test.ts`、`<主题>.e2e.ts`；超出耗时上限拆分时依次加 `-2`、`-3` | `editor-lsp-2.test.ts` |
+| 测试文件 | `<主题>.test.ts`；超出耗时上限拆分时依次加 `-2`、`-3` | `editor-lsp-2.test.ts` |
 
 Schema 与类型同名，是因为同一个领域概念只需要一个名字（[一个词一个意思](../../taste.md#t-2)）；`Schema` 后缀与同名写法在代码中各占一半，按这条统一。
 

@@ -20,7 +20,7 @@ import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from "
 import { LocalRepository } from "../support/repository.ts";
 import { openHawdb } from '../../src/base/cache/index.ts';
 
-import { startViewServer } from '../e2e/server.ts';
+import { startViewServer } from '../support/view-server.ts';
 import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);

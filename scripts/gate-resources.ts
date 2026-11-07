@@ -9,9 +9,8 @@ import { join, resolve } from 'node:path';
 
 export const GiB = 1024 ** 3;
 // Category reservations and observed process-tree peaks use proportional memory.
-export const gateMemoryBudgets = { fixed: 2 * GiB, browser: 2.5 * GiB, node: 2 * GiB } as const;
+export const gateMemoryBudgets = { fixed: 2 * GiB, node: 2 * GiB } as const;
 export const gateAdmissionBytes = (memoryMaxBytes: number): number => Math.max(0, memoryMaxBytes - gateMemoryBudgets.fixed);
-export const gateAdmittedBrowserWorkers = (memoryMaxBytes: number, upperLimit: number): number => Math.min(upperLimit, Math.floor(gateAdmissionBytes(memoryMaxBytes) / gateMemoryBudgets.browser));
 export interface AdmissionTiming { readonly category: string; readonly bytes: number; readonly wait_ms: number; readonly run_ms: number }
 export const makeGateAdmission = (capacity: number) => Effect.map(Semaphore.make(capacity), pool => ({ pool, capacity, failed: false, timings: [] as AdmissionTiming[] }));
 export type GateAdmission = Effect.Success<ReturnType<typeof makeGateAdmission>>;
@@ -48,11 +47,9 @@ export const gateConcurrency = (memoryMaxBytes: number, cpus = availableParallel
     catch (cause) { throw new GateResourcesInvalid({ detail: `${name}: ${String(cause)}` }); }
   };
   const explicitNode = read('CONCORD_TEST_CONCURRENCY');
-  const explicitBrowser = read('CONCORD_E2E_WORKERS');
   const cpuLimit = Math.max(1, Math.min(8, Math.floor(cpus / 2)));
   const node = explicitNode ?? cpuLimit;
-  const browser = explicitBrowser ?? Math.max(1, Math.min(4, node, Math.floor(gateAdmissionBytes(memoryMaxBytes) * 0.6 / gateMemoryBudgets.browser)));
-  return { node, browser, availableNodeMemoryBytes: Math.max(0, gateAdmissionBytes(memoryMaxBytes) - browser * gateMemoryBudgets.browser) };
+  return { node, availableNodeMemoryBytes: gateAdmissionBytes(memoryMaxBytes) };
 };
 
 export const currentGateMemoryMax = (): number => {
@@ -76,7 +73,6 @@ const MemoryReport = Schema.Struct({
   slice: Schema.NullOr(Schema.String),
   memoryPeakCgroup: Schema.NullOr(Schema.String),
   nodeConcurrency: Schema.Number,
-  browserWorkers: Schema.Number,
   exitCode: Schema.NullOr(Schema.Number),
   wallclockMs: Schema.NullOr(Schema.Number),
   observedWallclockMs: Schema.Number,
@@ -137,7 +133,7 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
     const base: MemoryReport = {
       memoryIsolation: 'systemd-scope', reason: null, memoryMaxBytes, memorySwapMaxBytes: 0,
       memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: directory, unit: inheritedUnit,
-      nodeConcurrency: concurrency.node, browserWorkers: concurrency.browser, exitCode: null,
+      nodeConcurrency: concurrency.node, exitCode: null,
       wallclockMs: null, observedWallclockMs: 0, queueWaitMs: Number(process.env.CONCORD_GATE_QUEUE_WAIT_MS ?? 0),
       slice: process.env.CONCORD_GATE_SLICE ?? null, memoryPeakCgroup: process.env.CONCORD_GATE_SLICE_CGROUP ?? null,
     };
@@ -164,7 +160,7 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
     memoryIsolation: unavailable === null ? 'systemd-scope' : 'unavailable', reason: unavailable,
     memoryMaxBytes, memorySwapMaxBytes: unavailable === null ? 0 : null,
     memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: null, unit: unavailable === null ? unit : null,
-    nodeConcurrency: concurrency.node, browserWorkers: concurrency.browser, exitCode: null,
+    nodeConcurrency: concurrency.node, exitCode: null,
     wallclockMs: null, observedWallclockMs: 0, queueWaitMs: Number(process.env.CONCORD_GATE_QUEUE_WAIT_MS ?? 0),
     slice: null, memoryPeakCgroup: null,
   };

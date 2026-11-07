@@ -24,11 +24,11 @@ test('changed gate matches package ownership and Use Case boundaries without anc
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
 test('only a complete unfiltered gate selection enters the full-gate queue', () => {
-  const allFiles = ['a.test.ts', 'b.e2e.ts'];
+  const allFiles = ['a.test.ts', 'b.test.ts'];
   assert.equal(isFullGateSelection({ files: allFiles, allFiles, args: [] }), true);
   assert.equal(isFullGateSelection({ files: ['a.test.ts'], allFiles, args: [] }), false);
   assert.equal(isFullGateSelection({ files: [], allFiles, args: [] }), false);
-  for (const args of [['--test-name-pattern=selected'], ['--test-name-pattern', 'selected'], ['--test-shard=1/16'], ['--suite', 'node']]) {
+  for (const args of [['--test-name-pattern=selected'], ['--test-name-pattern', 'selected'], ['--test-shard=1/16'], ['--test-shard', '1/16']]) {
     assert.equal(isFullGateSelection({ files: allFiles, allFiles, args }), false, args.join(' '));
   }
 });

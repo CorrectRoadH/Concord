@@ -7,11 +7,10 @@ import { join, resolve } from 'node:path';
 import { availableParallelism, loadavg } from 'node:os';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { observeBrowserProcessTrees } from './gate-resource-processes.ts';
 import { runNodeTests } from './test-reporter.ts';
-import { currentGateMemoryMax, gateConcurrency, gateAdmissionBytes, gateAdmittedBrowserWorkers, gateMemoryBudgets, GateResourcesInvalid, makeGateAdmission, withGateAdmission } from './gate-resources.ts';
+import { currentGateMemoryMax, gateConcurrency, gateAdmissionBytes, gateMemoryBudgets, makeGateAdmission } from './gate-resources.ts';
 import { auditTestLayers, summarizeMeasuredTestLayers } from './test-layers.ts';
-import { readBrowserLifecycle, readBrowserSelection, readFileTimings, summarizeBrowserLifecycle, summarizeFileTimings, timingMeasurement, writeTimingReport, type Measurement } from './gate-timings.ts';
+import { readFileTimings, summarizeFileTimings, timingMeasurement, writeTimingReport, type Measurement } from './gate-timings.ts';
 import { writeProcessEventReport } from './process-events.ts';
 
 const Concurrency = Schema.NumberFromString.pipe(Schema.check(Schema.isInt(), Schema.isGreaterThan(0)));
@@ -20,7 +19,7 @@ class TestArgumentsInvalid extends Schema.TaggedError<TestArgumentsInvalid>()('T
 }) {}
 const main = Effect.scoped(Effect.gen(function* () {
   // Keep one detached ownership boundary around every admitted engine and
-  // browser. Cancelling its supervisor reclaims stubborn test descendants too.
+  // its descendants. Cancelling its supervisor reclaims stubborn test descendants too.
   if (process.env.CONCORD_TEST_ADMISSION_WORKER !== '1') {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
@@ -41,9 +40,8 @@ const main = Effect.scoped(Effect.gen(function* () {
   const allFiles = process.env.CONCORD_GATE_ALL_TEST_FILES;
   yield* Effect.sync(() => { delete process.env.CONCORD_GATE_TEST_OUTPUT; delete process.env.CONCORD_GATE_TEST_FILES; delete process.env.CONCORD_GATE_ALL_TEST_FILES; });
   const fs = yield* FileSystem.FileSystem;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const memoryMaxBytes = currentGateMemoryMax();
-  const { node: concurrency, browser: browserUpperLimit } = yield* Effect.try({
+  const { node: concurrency } = yield* Effect.try({
     try: () => gateConcurrency(memoryMaxBytes),
     catch: cause => new TestArgumentsInvalid({ detail: String(cause) }),
   });
@@ -51,12 +49,9 @@ const main = Effect.scoped(Effect.gen(function* () {
     try: () => parseArgs({ args: process.argv.slice(2), allowPositionals: true, options: {
       'test-name-pattern': { type: 'string' },
       'test-shard': { type: 'string' },
-      suite: { type: 'string', default: 'all' },
     } }),
     catch: cause => new TestArgumentsInvalid({ detail: String(cause) }),
   });
-  if (!['all', 'node', 'e2e', 'agent'].includes(values.suite)) return yield* new TestArgumentsInvalid({ detail: `Unknown suite: ${values.suite}` });
-  const browserOnly = values.suite === 'e2e' || values.suite === 'agent';
   const shard = yield* Effect.try({ try: () => {
     if (values['test-shard'] === undefined) return undefined;
     const raw = Schema.decodeUnknownSync(Schema.String.check(Schema.isPattern(/^[1-9]\d*\/[1-9]\d*$/u)))(values['test-shard']);
@@ -65,26 +60,19 @@ const main = Effect.scoped(Effect.gen(function* () {
     return { index, total };
   }, catch: cause => new TestArgumentsInvalid({ detail: `--test-shard: ${String(cause)}` }) });
   for (const file of positionals) {
-    if ((!file.endsWith('.test.ts') && !file.endsWith('.e2e.ts')) || !(yield* fs.exists(file))) {
+    if (!file.endsWith('.test.ts') || !(yield* fs.exists(file))) {
       return yield* new TestArgumentsInvalid({ detail: `Not a test file: ${file}` });
-    }
-    if ((values.suite === 'node' && file.endsWith('.e2e.ts')) || (browserOnly && file.endsWith('.test.ts'))) {
-      return yield* new TestArgumentsInvalid({ detail: `File does not belong to ${values.suite}: ${file}` });
     }
   }
   const files = selectedFiles === undefined
-    ? positionals.length > 0 ? positionals : [...yield* fs.glob('test/**/*.test.ts'), ...yield* fs.glob('test/**/*.e2e.ts')]
+    ? positionals.length > 0 ? positionals : yield* fs.glob('test/**/*.test.ts')
     : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(selectedFiles);
   const nodeFiles = files.filter(file => file.endsWith('.test.ts'));
-  const browserFiles = files.filter(file => file.endsWith('.e2e.ts'));
   if (allFiles !== undefined) {
     const inventory = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(allFiles);
     yield* Effect.try({ try: () => auditTestLayers(inventory), catch: cause => cause });
   }
-  const browserConcurrency = gateAdmittedBrowserWorkers(memoryMaxBytes, browserUpperLimit);
-  const browserSelected = values.suite !== 'node' && browserFiles.length > 0;
   const capacity = gateAdmissionBytes(memoryMaxBytes);
-  if (browserSelected && browserConcurrency < 1) return yield* new GateResourcesInvalid({ detail: `Browser worker needs ${gateMemoryBudgets.browser} bytes; admission pool has ${capacity}` });
   const admission = yield* makeGateAdmission(capacity);
   const started = performance.now();
   yield* fs.makeDirectory('.test-results', { recursive: true });
@@ -94,39 +82,10 @@ const main = Effect.scoped(Effect.gen(function* () {
     NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --conditions=concord-source`.trim(),
     // A nested runner is a new parent, not an official isolated test child.
     NODE_TEST_CONTEXT: undefined,
-    CONCORD_NODE_OUTPUT: output,
-    CONCORD_E2E_OUTPUT: join(output, 'e2e'), E2E_TELEMETRY_DISABLED: '1',
-    CONCORD_E2E_AGENT: values.suite === 'agent' ? '1' : '0' };
-  yield* Effect.sync(() => console.error(`# Source tests prepared in ${(performance.now() - started).toFixed(0)}ms; Bun concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}\n# Machine load: ${loadavg().map(value => value.toFixed(2)).join(', ')}; CPUs=${availableParallelism()}`));
+    CONCORD_NODE_OUTPUT: output };
+  yield* Effect.sync(() => console.error(`# Source tests prepared in ${(performance.now() - started).toFixed(0)}ms; Bun concurrency=${concurrency}\n# Test diagnostics: ${output}\n# Machine load: ${loadavg().map(value => value.toFixed(2)).join(', ')}; CPUs=${availableParallelism()}`));
   const phases: { name: string; measurement: Measurement }[] = [];
-  const suite = Effect.fn('test.suite')(function*(name: string, executable: string, args: string[], suiteEnv: NodeJS.ProcessEnv = env) {
-    const suiteStarted = performance.now();
-    const code = yield* Effect.scoped(Effect.gen(function*() {
-      const browserObservation = name === 'Browser' ? yield* observeBrowserProcessTrees(join(output, 'e2e'), gateMemoryBudgets.browser) : undefined;
-      const child = yield* spawner.spawn(ChildProcess.make(executable, args, {
-        env: suiteEnv, detached: process.platform !== 'win32', forceKillAfter: Duration.seconds(5),
-        stdin: 'ignore', stdout: 'inherit', stderr: 'inherit',
-      }));
-      // The suite parent may exit before a descendant that ignores SIGTERM.
-      // Close the entire group after awaiting its parent, including that tail.
-      yield* Effect.addFinalizer(() => child.kill({ forceKillAfter: Duration.seconds(5) }).pipe(
-        Effect.ensuring(child.kill({ killSignal: 'SIGKILL' }).pipe(Effect.ignore)),
-        Effect.ignore,
-      ));
-      const code = yield* child.exitCode;
-      if (browserObservation !== undefined) {
-        const memory = yield* browserObservation.finish.pipe(Effect.onExit(exit => Effect.sync(() => { if (exit._tag === 'Failure') admission.failed = true; })));
-        yield* fs.writeFileString(join(output, 'browser-process-trees.json'), `${JSON.stringify(memory)}\n`);
-        for (const worker of memory) if (worker.exceeded) yield* Effect.sync(() => console.error(`# Browser worker exceeds PSS budget: ${worker.file}; peak=${worker.peakBytes}; budget=${worker.budgetBytes}`));
-      }
-      return code;
-    })).pipe(Effect.catch(cause => Effect.sync(() => { console.error(`# Test suite failed: ${String(cause)}`); return 1; })));
-    const elapsed = performance.now() - suiteStarted;
-    phases.push({ name, measurement: timingMeasurement('suite-wallclock', [{ duration_ms: elapsed, success: Number(code) === 0 }], 1) });
-    yield* Effect.sync(() => console.error(`# ${name} tests: ${(elapsed / 1000).toFixed(3)}s; exit=${code}`));
-    return Number(code) !== 0;
-  }, Effect.catch(cause => Effect.sync(() => { console.error(`# Test suite failed: ${String(cause)}`); return true; })));
-  const selectedNode = browserOnly ? [] : nodeFiles.filter((_, index) => shard === undefined || index % shard.total === shard.index - 1);
+  const selectedNode = nodeFiles.filter((_, index) => shard === undefined || index % shard.total === shard.index - 1);
   const nodeSuite = Effect.fn('test.admittedNodeSuite')(function*(files: string[]) {
     if (files.length === 0) return false;
     const suiteStarted = performance.now();
@@ -144,47 +103,27 @@ const main = Effect.scoped(Effect.gen(function* () {
     yield* Effect.sync(() => console.error(`# Source Bun tests: ${(elapsed / 1000).toFixed(3)}s; exit=${failed ? 1 : 0}`));
     return failed;
   });
-  const nodeTests = nodeSuite(selectedNode);
-  const browserTests = values.suite !== 'node' && browserFiles.length > 0
-    ? suite('Browser', 'vp', ['exec', 'e2e', 'run', '--config', values.suite === 'agent' ? 'e2e.agent.config.ts' : 'e2e.config.ts', '--no-cache', '--workers', String(browserConcurrency),
-      ...(values.suite === 'agent' ? ['--tag', 'journey'] : []),
-      ...(values['test-name-pattern'] === undefined ? [] : ['--grep', values['test-name-pattern']]),
-      ...(values['test-shard'] === undefined ? [] : ['--shard', values['test-shard']]), ...browserFiles])
-      .pipe(withGateAdmission(admission, browserConcurrency * gateMemoryBudgets.browser, 'browser'))
-    : Effect.succeed(false);
-  const failures = yield* Effect.all([nodeTests, browserTests], { concurrency: 'unbounded' });
+  const failed = yield* nodeSuite(selectedNode);
   const nodeTimings = yield* readFileTimings(join(output, 'file-timings.json'));
   yield* fs.writeFileString(join(output, 'file-timings.json'), `${JSON.stringify(nodeTimings.map(row => ({ ...row, metric: 'node-file-elapsed-sum' })).sort((left, right) => right.duration_ms - left.duration_ms), null, 2)}\n`);
-  const browserTiming = join(output, 'e2e', 'file-timings.json');
-  const browserTimings = yield* readFileTimings(browserTiming);
-  const timings = [...nodeTimings, ...browserTimings];
-  const requestedBrowser = values.suite === 'node' ? [] : browserFiles;
-  const reportedBrowser = yield* readBrowserSelection(join(output, 'e2e'));
-  // Browser shards select cases, so only the official report knows their file set.
-  const selectedBrowser = requestedBrowser.length === 0 ? [] : reportedBrowser?.length === 0 && failures[1] ? requestedBrowser : reportedBrowser ?? requestedBrowser;
-  const layers = summarizeMeasuredTestLayers([...selectedNode, ...selectedBrowser], timings);
+  const layers = summarizeMeasuredTestLayers(selectedNode, nodeTimings);
   yield* fs.writeFileString(join(output, 'layer-timings.json'), `${JSON.stringify(layers, null, 2)}\n`);
   yield* Effect.sync(() => {
     for (const row of layers) console.error(`# Gate layer ${row.layer}: files=${row.files}; timedFiles=${row.timedFiles}; cases=${row.cases}; countedFiles=${row.countedFiles}; observed=${(row.duration_ms / 1000).toFixed(3)}s; metric=${row.metric}; state=${row.state}`);
   });
-  const lifecycle = yield* readBrowserLifecycle(join(output, 'e2e'));
   const report = {
-    selection: { files, nodeFiles: selectedNode, browserFiles: selectedBrowser, requestedBrowserFiles: requestedBrowser, suite: values.suite,
+    selection: { files, nodeFiles: selectedNode,
       namePattern: values['test-name-pattern'] ?? null, shard: values['test-shard'] ?? null },
-    concurrency: { node: concurrency, browser: browserConcurrency },
+    concurrency: { node: concurrency },
     admission: { timings: admission.timings, capacityBytes: capacity, budgets: gateMemoryBudgets, nodeConcurrencyIsUpperLimit: true,
-      browserReservation: 'all-workers-until-suite-exit', processTreeReports: [join(output, 'process-tree-peaks.jsonl')] },
-    node: summarizeFileTimings(selectedNode, nodeTimings, 'node-file-elapsed-sum', !failures[0]),
-    browser: summarizeFileTimings(selectedBrowser, browserTimings, 'browser-attempt-sum', !failures[1] && reportedBrowser !== null),
-    browserLifecycle: summarizeBrowserLifecycle(lifecycle, requestedBrowser.length > 0, !failures[1]),
-    phases: ['Source Bun', 'Browser'].map(name => ({ name,
-      ...(phases.find(phase => phase.name === name)?.measurement ?? timingMeasurement('suite-wallclock', [],
-        (name === 'Source Bun' ? selectedNode : selectedBrowser).length > 0 ? 1 : 0)) })),
-    wallclock: timingMeasurement('test-runner-wallclock', [{ duration_ms: performance.now() - started, success: !failures.some(Boolean) }], 1),
+      processTreeReports: [join(output, 'process-tree-peaks.jsonl')] },
+    node: summarizeFileTimings(selectedNode, nodeTimings, 'node-file-elapsed-sum', !failed),
+    phases: [{ name: 'Source Bun', ...(phases[0]?.measurement ?? timingMeasurement('suite-wallclock', [], 0)) }],
+    wallclock: timingMeasurement('test-runner-wallclock', [{ duration_ms: performance.now() - started, success: !failed }], 1),
   };
   yield* writeTimingReport(output, 'test-timings.json', report);
-  yield* writeProcessEventReport(output, [...selectedNode, ...selectedBrowser]);
-  yield* Effect.sync(() => { process.exitCode = failures.some(Boolean) ? 1 : 0; });
+  yield* writeProcessEventReport(output, selectedNode);
+  yield* Effect.sync(() => { process.exitCode = failed ? 1 : 0; });
 }));
 
 main.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);

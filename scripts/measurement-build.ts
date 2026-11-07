@@ -6,7 +6,7 @@ import { prepareGateBuildCache } from './gate-build-cache.ts';
 export const buildForMeasurement = Effect.fn('perf.buildForMeasurement')(function*(root: string, outputDir: string) {
   const cached = yield* prepareGateBuildCache(root);
   const result = yield* cached.build(output => Effect.gen(function*() {
-    const built = yield* mustRun(['vp', 'build', '--outDir', output], { cwd: root, outputDir });
+    const built = yield* mustRun(['bun', 'run', 'build', '--outDir', output], { cwd: root, outputDir });
     yield* io('Report candidate build', () => process.stderr.write(built.stdout + built.stderr));
     return 0;
   }));

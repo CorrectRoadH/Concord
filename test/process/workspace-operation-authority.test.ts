@@ -7,7 +7,7 @@ import { Schema } from 'effect';
 import { digest } from '../../src/model/index.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { fetchFresh, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
-import { startViewServer } from '../e2e/server.ts';
+import { startViewServer } from '../support/view-server.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('HTTP operations verify the held server lock before handing a write to the idle process', { timeout: 15_000 }, async () => {

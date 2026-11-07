@@ -39,22 +39,9 @@
 
    Ubuntu 24.04 x64 与 macOS 15 arm64 各自从同一标签派生版本，完成类型检查、资源准备与 Bun 编译、字节码和最终签名，组装本目标候选。汇总任务验证身份与摘要，复制原字节并生成最终 SHA256SUMS，不重新编译。
 
-5. 在 `ubuntu-24.04` 与 `macos-15` arm64 的 CI 机器上各验证本目标的候选归档。 {#verify}
+5. 全部通过后创建源码 GitHub Release。 {#publish}
 
-   验证任务下载第 4 步产出的同一份候选归档与摘要，不重新构建，校验摘要后解压，在只含系统基础命令与 Git 的 `PATH`（没有 `node`、`bun`、`pnpm`、`rg`）中运行：
-
-   | 核对 | 通过条件 |
-   | --- | --- |
-   | 启动 | `bin/concord --version` 输出标签版本，`bin/concord --help` 以零退出 |
-   | 原生绑定 | 归档内的 HawDB 绑定通过身份校验并被实际加载 |
-   | 项目闭环 | 在临时 Git 仓库中 `concord init` 与 `concord check` 成功，退出后没有残留的服务进程 |
-   | Web 资源 | 归档内的 Web 资源存在 |
-   | Linux 依赖 | 所有 ELF 只依赖 glibc 与 `runtime/lib/` 中的库，非 glibc 依赖的 RPATH 指向归档内，纯 glibc 可执行文件保留原字节并实跑；GLIBC 符号版本不高于 2.39 |
-   | macOS 签名 | 全部 Mach-O 通过 `codesign --verify`；`bin/concord` 在目标宿主最终签名，HawDB 与 ripgrep 保留部件签名；用 `curl` 下载并解压的文件没有 `com.apple.quarantine` |
-
-6. 全部通过后创建源码 GitHub Release。 {#publish}
-
-   第 4 步的完整检查和两个目标的验证全部通过后，Release 附带两个归档、`SHA256SUMS` 与[安装脚本](install-with-script.md) `install.sh`，字节与验证过的候选相同。任何一项失败都不发版。
+   第 4 步的完整检查和两个目标的构建全部通过后，Release 附带两个归档、`SHA256SUMS` 与[安装脚本](install-with-script.md) `install.sh`，字节与构建产出的候选相同。任何一项失败都不发版。
 
    ```sh
    gh release view v0.9.0 --repo CorrectRoadH/Concord --json assets --jq '.assets[].name'
@@ -69,7 +56,7 @@
    install.sh
    ```
 
-7. 公开 tap 自动同步 Homebrew 与 Nix 渠道。 {#channels}
+6. 公开 tap 自动同步 Homebrew 与 Nix 渠道。 {#channels}
 
    tap 发现这次发版，核验版本、标签、资产与哈希，用同一归档生成 Formula 与 Linux Nix 候选。候选通过 Homebrew 与 Nix 安装运行检查后，tap 提交、打 recipe 标签并创建渠道完成记录。macOS 的 Homebrew 检查同样核对全部 Mach-O 的 `codesign --verify`、与归档相同的原始摘要和没有 `com.apple.quarantine`。确认渠道已完成：
 
@@ -77,7 +64,7 @@
    gh release view v0.9.0 --repo CorrectRoadH/homebrew-tap
    ```
 
-8. 用户安装并确认版本。 {#install}
+7. 用户安装并确认版本。 {#install}
 
    ```sh
    brew install CorrectRoadH/tap/concord
@@ -100,7 +87,7 @@ Concord mod 的仓库分发目录按[独立交付](../../../engineering/build/us
 
 | 情形 | 结果 |
 | --- | --- |
-| 矩阵、身份、摘要、候选验证或运行时清理失败 | 可见，停止所在的发版阶段，不创建源码 Release |
+| 构建、完整检查、身份或摘要失败 | 可见，停止所在的发版阶段，不创建源码 Release |
 | Formula 或 Nix 候选失败 | 可见，停止渠道更新；源码 Release 保持不变 |
 | 缺少通知凭据或通知重试耗尽 | 通知步骤非零退出，保留已上传的不可变资产；源码 Release 存在不表示渠道完成 |
 | 重跑失败的发版任务 | 复用相同资产，识别已有的渠道完成记录 |

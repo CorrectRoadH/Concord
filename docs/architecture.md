@@ -215,7 +215,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 ## 验收
 
-发版归档携带内嵌 Bun 运行时的单个编译可执行文件与 ripgrep，不依赖 `workspace:*` 或外部仓库路径。解压后在没有系统 Node.js 或 Bun 的 `PATH` 中运行 `bin/concord`，见[归档验收](engineering/testing/README.md#归档验收)。
+发版归档携带内嵌 Bun 运行时的单个编译可执行文件与 ripgrep，不依赖 `workspace:*` 或外部仓库路径。解压后使用内嵌运行时执行 `bin/concord`，构建入口见[归档构建](engineering/testing/README.md#归档构建)。
 
 真实闭环：init → 写 Feature 与 Use Case → 写 Issue → 提交带 `@issue` 的失败回归测试并配置 runner → 提交修复 → `issue close --fixed` → trace 与 review。
 

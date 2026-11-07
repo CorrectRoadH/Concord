@@ -26,7 +26,7 @@ test('two consumer services', async () => {
   writeFileSync(${JSON.stringify(receipt)}, JSON.stringify(pids));
 });
 `);
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/test-built.ts'), '--suite=node', file], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', resolve('scripts/test-built.ts'), file], {
     env: { ...process.env, CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_COMPILE_CACHE: undefined }, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
   }));
   const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.all)), child.exitCode], { concurrency: 'unbounded' });

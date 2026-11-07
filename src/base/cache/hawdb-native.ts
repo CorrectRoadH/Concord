@@ -49,7 +49,7 @@ function asFailure(error: unknown): HawdbFailure {
   const message = error instanceof Error ? error.message : String(error);
   const prefix = message.slice(0, message.indexOf(':')) as HawdbFailureCode;
   const code = failureCodes.has(prefix) ? prefix : 'HawdbUnavailable';
-  return new HawdbFailure(code, code === 'HawdbUnavailable' ? `${message}; run bun run --no-install vp run build:native to prepare native artifacts.` : message, { cause: error });
+  return new HawdbFailure(code, code === 'HawdbUnavailable' ? `${message}; run bun run build:native to prepare native artifacts.` : message, { cause: error });
 }
 function boundary<T>(operation: () => T): T {
   try { return Effect.runSync(Effect.sync(operation)); }

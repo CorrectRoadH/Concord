@@ -5,5 +5,5 @@
     "types": ["node", "bun"],
     "noEmit": true
   },
-  "include": ["scripts/**/*.ts", "bench/**/*.ts", "vite*.config.ts", "e2e*.config.ts"]
+  "include": ["scripts/**/*.ts", "bench/**/*.ts", "vite*.config.ts"]
 }

@@ -1,23 +1,21 @@
 // @concord-file
-// @concord-implements docs/engineering/testing/architecture.md#浏览器与诊断
+// @concord-implements docs/engineering/testing/architecture.md#共享服务
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { inspect } from 'node:util';
-import { Effect, Exit, Scope } from 'effect';
-import { startViewServer, ViewServerStartupFailed, type ViewServerHandle, type ViewServerOptions } from '../e2e/server.ts';
+import { Effect } from 'effect';
+import { startViewServer, ViewServerStartupFailed, type ViewServerHandle, type ViewServerOptions } from '../support/view-server.ts';
 import { sourceCli } from './source-consumer.ts';
 import { initialize } from './operations.ts';
 import { LocalRepository } from './repository.ts';
 import { fetchFresh, parseWorkspaceProjection, pollUntil } from './support.ts';
 import { tmpdir } from './temporary.ts';
 import { stopWorkspaceServer } from './stop-workspace-server.ts';
-import { recordBrowserTiming, type BrowserAttemptTimer } from '../../scripts/gate-timings.ts';
 import { retainConsumer } from './consumer.ts';
 
 /** Files are recovered from an immutable Git tree; .git and live handles stay owned by the worker. */
-export class FrozenBrowserRepository {
+export class FrozenViewRepository {
   readonly root: string;
   readonly commit: string;
   private readonly files = new Map<string, { readonly bytes: Buffer; readonly mode: number }>();
@@ -31,15 +29,15 @@ export class FrozenBrowserRepository {
   private preserve = false;
   get retained(): boolean { return this.preserve; }
 
-  static async open(root?: string): Promise<FrozenBrowserRepository> {
-    const directory = root ?? mkdtempSync(join(tmpdir(), 'concord-browser-worker-'));
+  static async open(root?: string): Promise<FrozenViewRepository> {
+    const directory = root ?? mkdtempSync(join(tmpdir(), 'concord-view-worker-'));
     try {
       if (root === undefined) {
         execFileSync('git', ['init', '-q', directory]);
         const repo = await LocalRepository.open(directory, { initialize: true });
         try { await initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
       }
-      return new FrozenBrowserRepository(directory);
+      return new FrozenViewRepository(directory);
     } catch (cause) { rmSync(directory, { recursive: true, force: true }); throw cause; }
   }
 
@@ -58,7 +56,7 @@ export class FrozenBrowserRepository {
       };
       captureTree(this.root);
       this.git(['add', '--all']);
-      this.git(['-c', 'user.name=Concord fixture', '-c', 'user.email=fixture@localhost', 'commit', '-qm', 'Browser fixture']);
+      this.git(['-c', 'user.name=Concord fixture', '-c', 'user.email=fixture@localhost', 'commit', '-qm', 'View fixture']);
       this.commit = this.git(['rev-parse', 'HEAD']).toString().trim();
       this.head = readFileSync(join(this.root, '.git/HEAD'));
       this.refs = this.git(['for-each-ref', '--format=%(refname) %(objectname)']);
@@ -96,7 +94,7 @@ export class FrozenBrowserRepository {
       }
     } catch (cause) {
       this.preserve = true;
-      throw new Error(`Browser test changed its frozen HEAD or refs; retained root: ${this.root}`, { cause });
+      throw new Error(`View test changed its frozen HEAD or refs; retained root: ${this.root}`, { cause });
     }
     const directories = this.directories;
     const removeExtra = (directory: string, prefix = '') => {
@@ -142,7 +140,7 @@ export class FrozenBrowserRepository {
       }
     }
     if (!this.git(['ls-files', '--stage', '-v', '-z']).equals(this.indexEntries)) {
-      if (existsSync(join(this.root, '.git/index.lock'))) throw new Error('Browser fixture index is still owned by another operation');
+      if (existsSync(join(this.root, '.git/index.lock'))) throw new Error('View fixture index is still owned by another operation');
       this.replace(join(this.root, '.git/index'), this.index, 0o644);
     }
   }
@@ -159,13 +157,12 @@ export class FrozenBrowserRepository {
   close(): void { if (!this.preserve) rmSync(this.root, { recursive: true, force: true }); }
 }
 
-export class BrowserSharedFixture {
+export class SharedViewFixture {
   readonly root: string;
   private readonly privateRoots = new Set<string>();
   private readonly privateStartupFailures = new Map<string, unknown>();
   private readonly privateServers = new Set<ViewServerHandle>();
   signal: AbortSignal | undefined;
-  timer: BrowserAttemptTimer | undefined;
   private frozenSourceDigest: string | undefined;
   private previousAttempt: Promise<void> = Promise.resolve();
 
@@ -175,21 +172,20 @@ export class BrowserSharedFixture {
     const closing = (async () => {
       try { await closeContext(); }
       finally {
-        if (this.timer) await this.timer.measure('private-cleanup', async () => (await this.closePrivate()));
-        else await this.closePrivate();
+        await this.closePrivate();
       }
     })();
     this.previousAttempt = Promise.allSettled([previous, closing]).then(outcomes => {
       const failures = outcomes.flatMap(outcome => outcome.status === 'rejected' ? [outcome.reason] : []);
       if (failures.length === 1) throw failures[0];
-      if (failures.length > 1) throw new AggregateError(failures, 'Browser attempt closure is unconfirmed');
+      if (failures.length > 1) throw new AggregateError(failures, 'View attempt closure is unconfirmed');
     });
     return this.previousAttempt;
   }
 
-  readonly repository: FrozenBrowserRepository;
+  readonly repository: FrozenViewRepository;
   readonly server: ViewServerHandle;
-  constructor(repository: FrozenBrowserRepository, server: ViewServerHandle) {
+  constructor(repository: FrozenViewRepository, server: ViewServerHandle) {
     this.repository = repository;
     this.server = server;
     this.root = repository.root;
@@ -197,7 +193,7 @@ export class BrowserSharedFixture {
 
   /** Only cases that need exclusive service state acquire a private consumer. */
   privateRoot(): string {
-    const root = mkdtempSync(join(tmpdir(), 'concord-browser-exclusive-'));
+    const root = mkdtempSync(join(tmpdir(), 'concord-view-exclusive-'));
     this.privateRoots.add(root);
     return root;
   }
@@ -232,55 +228,44 @@ export class BrowserSharedFixture {
     if (finalRelease && failures.length) {
       for (const root of this.privateRoots) if (existsSync(root)) retainConsumer(root);
     }
-    if (failures.length) throw new AggregateError(failures, `Private browser fixture cleanup failed; retained roots: ${[...this.privateRoots].join(', ')}`);
+    if (failures.length) throw new AggregateError(failures, `Private view fixture cleanup failed; retained roots: ${[...this.privateRoots].join(', ')}`);
   }
 
   /** Refresh after per-case setup; all requests own their HTTP connection. */
   async ready(signal = this.signal, phase: 'setup-refresh' | 'restore-refresh' = 'setup-refresh', expectedSourceDigest?: string): Promise<ViewServerHandle> {
-    const end = this.timer?.begin(phase);
-    let success = false;
-    try {
-      const requestedAt = Date.now();
+    const requestedAt = Date.now();
+    signal?.throwIfAborted();
+    const requestSignal = () => signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
+    const response = await fetchFresh(new URL('/api/workspace', this.server.address), {
+      method: 'POST', signal: requestSignal(), headers: { 'content-type': 'application/json', origin: new URL(this.server.address).origin }, body: '{}',
+    });
+    if (response.status !== 202) throw new Error(`Workspace refresh rejected: ${response.status} ${await response.text()}`);
+    await pollUntil(async () => {
       signal?.throwIfAborted();
-      const requestSignal = () => signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
-      const response = await fetchFresh(new URL('/api/workspace', this.server.address), {
-        method: 'POST', signal: requestSignal(), headers: { 'content-type': 'application/json', origin: new URL(this.server.address).origin }, body: '{}',
-      });
-      if (response.status !== 202) throw new Error(`Workspace refresh rejected: ${response.status} ${await response.text()}`);
-      await pollUntil(async () => {
-        signal?.throwIfAborted();
-        const result = await fetchFresh(new URL('/api/workspace', this.server.address), { signal: requestSignal() });
-        if (result.status !== 200) return undefined;
-        const value = parseWorkspaceProjection(await result.text());
-        return value && Date.parse(value.projection.builtFrom) >= requestedAt && value.projection.changedPaths.length === 0 &&
-          value.projection.status === 'ready' && (phase !== 'restore-refresh' || value.projection.complete && value.snapshot.complete) &&
-          (expectedSourceDigest === undefined || value.projection.sourceDigest === expectedSourceDigest) ? value : undefined;
-      }, { description: 'worker workspace refresh after fixture setup', timeoutMs: 65_000 });
-      success = true;
-      return this.server;
-    } finally { end?.(success); }
+      const result = await fetchFresh(new URL('/api/workspace', this.server.address), { signal: requestSignal() });
+      if (result.status !== 200) return undefined;
+      const value = parseWorkspaceProjection(await result.text());
+      return value && Date.parse(value.projection.builtFrom) >= requestedAt && value.projection.changedPaths.length === 0 &&
+        value.projection.status === 'ready' && (phase !== 'restore-refresh' || value.projection.complete && value.snapshot.complete) &&
+        (expectedSourceDigest === undefined || value.projection.sourceDigest === expectedSourceDigest) ? value : undefined;
+    }, { description: 'worker workspace refresh after fixture setup', timeoutMs: 65_000 });
+    return this.server;
   }
 
   async restore(signal?: AbortSignal): Promise<void> {
     await this.previousAttempt;
-    if (this.timer) this.timer.sync('frozen-files', () => this.repository.restore());
-    else this.repository.restore();
+    this.repository.restore();
     await this.ready(signal, 'restore-refresh', this.frozenSourceDigest);
-    const end = this.timer?.begin('frozen-verification');
-    let success = false;
-    try {
-      const response = await fetchFresh(new URL('/api/workspace', this.server.address), { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000) });
-      const value = parseWorkspaceProjection(await response.text());
-      if (!value) throw new Error('Restored fixture has no workspace projection');
-      this.frozenSourceDigest ??= value.projection.sourceDigest;
-      if (value.projection.sourceDigest !== this.frozenSourceDigest) throw new Error('Workspace did not refresh to the frozen fixture');
-      success = true;
-    } finally { end?.(success); }
+    const response = await fetchFresh(new URL('/api/workspace', this.server.address), { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000) });
+    const value = parseWorkspaceProjection(await response.text());
+    if (!value) throw new Error('Restored fixture has no workspace projection');
+    this.frozenSourceDigest ??= value.projection.sourceDigest;
+    if (value.projection.sourceDigest !== this.frozenSourceDigest) throw new Error('Workspace did not refresh to the frozen fixture');
   }
 }
 
 /** Scope order releases the service before deleting the worktree, including partial startup. */
-export const acquireBrowserSharedFixture = Effect.fn('acquireBrowserSharedFixture')(function*(signal?: AbortSignal, createRepository: () => Promise<FrozenBrowserRepository> = () => FrozenBrowserRepository.open()) {
+export const acquireSharedViewFixture = Effect.fn('acquireSharedViewFixture')(function*(signal?: AbortSignal, createRepository: () => Promise<FrozenViewRepository> = () => FrozenViewRepository.open()) {
   let serviceStopped = true;
   const repository = yield* Effect.acquireRelease(
     Effect.tryPromise(() => createRepository()),
@@ -305,51 +290,7 @@ export const acquireBrowserSharedFixture = Effect.fn('acquireBrowserSharedFixtur
     server => Effect.tryPromise(async () => { await server.close(); serviceStopped = true; }).pipe(Effect.orDie),
   );
   serviceStopped = false;
-  const fixture = new BrowserSharedFixture(repository, server);
+  const fixture = new SharedViewFixture(repository, server);
   yield* Effect.tryPromise(() => fixture.restore(signal));
   return fixture;
 });
-
-let current: { readonly scope: Scope.Closeable; readonly fixture: BrowserSharedFixture } | undefined;
-
-class BrowserWorkerStartupFailed extends Error {
-  constructor(cause: unknown) {
-    super(`Browser worker startup failed: ${inspect(cause, { depth: 8 })}`, { cause });
-    this.name = 'BrowserWorkerStartupFailed';
-  }
-}
-
-export async function openBrowserWorker(signal?: AbortSignal, workerID?: string): Promise<void> {
-  return recordBrowserTiming('fixture-start', async () => {
-    const scope = Effect.runSync(Scope.make());
-    try {
-      const fixture = await Effect.runPromise(acquireBrowserSharedFixture(signal).pipe(Scope.provide(scope)));
-      current = { scope, fixture };
-    } catch (cause) {
-      try { await Effect.runPromise(Scope.close(scope, Exit.void)); }
-      catch (cleanup) { throw new BrowserWorkerStartupFailed(new AggregateError([cause, cleanup], 'Browser worker startup and cleanup failed')); }
-      throw new BrowserWorkerStartupFailed(cause);
-    }
-  }, workerID);
-}
-
-export function browserWorkerFixture(): BrowserSharedFixture {
-  if (!current) throw new Error('Browser worker fixture requested outside engine lifecycle');
-  return current.fixture;
-}
-
-export async function closeBrowserAttempt(closeContext: () => Promise<void>): Promise<void> {
-  if (current) await current.fixture.finishAttempt(closeContext);
-  else await closeContext();
-}
-
-export async function closeBrowserWorker(workerID?: string): Promise<void> {
-  return recordBrowserTiming('fixture-stop', async () => {
-    const owned = current;
-    current = undefined;
-    if (owned) {
-      try { await owned.fixture.closePrivate(true); }
-      finally { await Effect.runPromise(Scope.close(owned.scope, Exit.void)); }
-    }
-  }, workerID);
-}

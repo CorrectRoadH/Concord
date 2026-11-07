@@ -147,7 +147,7 @@ test('real builder failure leaves no publication and deletion, corruption and a 
     write('package.json', '{"type":"module","dependencies":{}}');
     for (const path of ['bun.lock', 'src/base/installation/source-web-inputs.ts', 'src/base/installation/source-web-cache.ts', 'src/base/installation/source-web-builder.ts']) write(path, '');
     for (const [config, web] of [['vite.source.config.ts', 'web'], ['vite.preview.config.ts', 'web/preview']]) {
-      write(config!, `import { defineConfig } from 'vite-plus'; export default defineConfig({root:new URL('./${web}/',import.meta.url).pathname,envDir:false,build:{minify:false}});`);
+      write(config!, `import { defineConfig } from 'vite'; export default defineConfig({root:new URL('./${web}/',import.meta.url).pathname,envDir:false,build:{minify:false}});`);
       write(`${web}/index.html`, '<!doctype html><html><body><script type="module" src="./main.ts"></script></body></html>');
       write(`${web}/main.ts`, 'document.body.textContent = "ready";');
     }

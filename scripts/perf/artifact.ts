@@ -47,7 +47,7 @@ export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Arti
   const fs = yield* FileSystem.FileSystem;
   const dir = yield* fs.realPath(resolve(path));
   const entry = installedEntry ?? (yield* packageBin(dir));
-  if (!(yield* fs.exists(entry))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
+  if (!(yield* fs.exists(entry))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run bun run build there first` });
   const git = (...args: string[]) => mustRun(['git', '-C', dir, ...args], { cwd: dir, outputDir: dir }).pipe(Effect.map(result => result.stdout.trim()));
   const source = entry.endsWith('.ts');
   const distribution = join(installationRootForBin(entry), 'dist');

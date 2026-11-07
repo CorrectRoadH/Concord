@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { inspect } from 'node:util';
 import { test } from 'node:test';
 import { Effect, Exit, Scope } from 'effect';
-import { acquireBrowserSharedFixture, browserWorkerFixture, closeBrowserWorker, openBrowserWorker } from '../support/browser-shared-fixture.ts';
+import { acquireSharedViewFixture } from '../support/shared-view-fixture.ts';
 import { fetchFresh, parseWorkspaceProjection } from '../support/support.ts';
 import { command, fixture, record, recordPath, stop } from '../support/workspace-server-fixture.ts';
 import { rmSync } from 'node:fs';
@@ -19,15 +19,15 @@ import { initialize } from '../support/operations.ts';
 import { LocalRepository } from '../support/repository.ts';
 import { retainConsumer } from '../support/consumer.ts';
 
-// @feature docs/engineering/testing/architecture.md#浏览器与诊断
-test('failed final browser fixture releases retain existing roots in the outer cleanup receipt', async () => {
-  const diagnostic = mkdtempSync(join(tmpdir(), 'concord-browser-retention-test-'));
+// @feature docs/engineering/testing/architecture.md#共享服务
+test('failed final view fixture releases retain existing roots in the outer cleanup receipt', async () => {
+  const diagnostic = mkdtempSync(join(tmpdir(), 'concord-view-retention-test-'));
   const receipt = join(diagnostic, 'retained.txt');
   const previousReceipt = process.env.CONCORD_TEST_RETAIN_FILE;
   process.env.CONCORD_TEST_RETAIN_FILE = receipt;
   try {
     const scope = Effect.runSync(Scope.make());
-    const shared = await Effect.runPromise(acquireBrowserSharedFixture().pipe(Scope.provide(scope)));
+    const shared = await Effect.runPromise(acquireSharedViewFixture().pipe(Scope.provide(scope)));
     const closeShared = shared.server.close.bind(shared.server);
     shared.server.close = async () => { throw new Error('unconfirmed shared service close'); };
     try {
@@ -39,28 +39,8 @@ test('failed final browser fixture releases retain existing roots in the outer c
       shared.repository.close();
     }
 
-    await openBrowserWorker();
-    const worker = browserWorkerFixture();
-    const root = worker.privateRoot();
-    execFileSync('git', ['init', '-q', root]);
-    const repository = (await LocalRepository.open(root, { initialize: true }));
-    try { (await initialize(repository, false, { testRoots: [] })); } finally { repository.close(); }
-    const server = await worker.privateServer({ root });
-    const closePrivate = server.close.bind(server);
-    server.close = async () => { throw new Error('unconfirmed private service close'); };
-    try {
-      await assert.rejects((worker.closePrivate()));
-      assert.equal(readFileSync(receipt, 'utf8').split('\n').includes(root), false, 'retryable intermediate cleanup must not register a receipt');
-      await assert.rejects((closeBrowserWorker()));
-      assert.equal(existsSync(root), true, 'failed final private release preserves the worktree');
-      assert.ok(readFileSync(receipt, 'utf8').split('\n').includes(root), 'outer cleanup must receive the retained private root');
-      assert.equal(existsSync(worker.root), false, 'private cleanup failure still releases the shared service and root');
-    } finally {
-      server.close = closePrivate;
-      await worker.closePrivate();
-    }
+
   } finally {
-    await closeBrowserWorker();
     if (previousReceipt === undefined) delete process.env.CONCORD_TEST_RETAIN_FILE;
     else process.env.CONCORD_TEST_RETAIN_FILE = previousReceipt;
     rmSync(diagnostic, { recursive: true, force: true });
@@ -68,14 +48,14 @@ test('failed final browser fixture releases retain existing roots in the outer c
 });
 
 for (const mode of ['success', 'assertion-failure', 'timeout'] as const) {
-  // @feature docs/engineering/testing/architecture.md#浏览器与诊断
-  test(`shared browser service restores its frozen fixture and releases process and worktree after ${mode}`, () => Effect.runPromise(Effect.gen(function*() {
+  // @feature docs/engineering/testing/architecture.md#共享服务
+  test(`shared view service restores its frozen fixture and releases process and worktree after ${mode}`, () => Effect.runPromise(Effect.gen(function*() {
     let root: string | undefined;
     let pid: number | undefined;
     let service: Awaited<ReturnType<typeof record>> | undefined;
     let reachedOutcome = false;
     const exit = yield* Effect.exit(Effect.scoped(Effect.gen(function*() {
-      const fixture = yield* acquireBrowserSharedFixture();
+      const fixture = yield* acquireSharedViewFixture();
       root = fixture.root;
       pid = fixture.server.process.pid;
       service = record(fixture.root);
@@ -123,9 +103,9 @@ for (const mode of ['success', 'assertion-failure', 'timeout'] as const) {
   })));
 }
 
-// @feature docs/engineering/testing/architecture.md#浏览器与诊断
-test('another browser case waits for context and connection closure, and clean restores still publish a fresh frozen-source projection', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-  const fixture = yield* acquireBrowserSharedFixture();
+// @feature docs/engineering/testing/architecture.md#共享服务
+test('another view case waits for context and connection closure, and clean restores still publish a fresh frozen-source projection', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const fixture = yield* acquireSharedViewFixture();
   yield* Effect.tryPromise(async () => {
     const url = new URL('/api/workspace', fixture.server.address);
     const initial = parseWorkspaceProjection(await (await fetchFresh(url)).text())!;

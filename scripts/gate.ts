@@ -17,7 +17,7 @@ const task = Effect.fn('gate.task')(function* (name: string, args: readonly stri
   const started = performance.now();
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const observation = name === 'test:source' ? undefined : yield* observeTestProcessTree(name, gateMemoryBudgets.fixed);
-  const code = yield* spawner.exitCode(ChildProcess.make('vp', ['run', name, ...args], {
+  const code = yield* spawner.exitCode(ChildProcess.make('bun', ['--no-env-file', '--config=/dev/null', 'run', name, ...args], {
     env: { ...env, CONCORD_GATE_TEST_OUTPUT: name === 'test:source' ? process.env.CONCORD_GATE_REPORT : undefined },
     stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', forceKillAfter: Duration.seconds(5),
   })).pipe(Effect.catch(cause => Effect.sync(() => { console.error(String(cause)); return 1; })));
@@ -28,7 +28,7 @@ const task = Effect.fn('gate.task')(function* (name: string, args: readonly stri
 const main = (selected: Effect.Success<ReturnType<typeof selectGateTests>>) => Effect.gen(function*() {
   const started = performance.now();
   const fs = yield* FileSystem.FileSystem;
-  if (yield* fs.exists(join(checkoutRoot, 'dist'))) return yield* new DistInCheckout({ message: 'Delete dist/ from the checkout before running bun run gate. Tests run source; build packages with vp build --outDir <external-directory>.' });
+  if (yield* fs.exists(join(checkoutRoot, 'dist'))) return yield* new DistInCheckout({ message: 'Delete dist/ from the checkout before running bun run gate. Tests run source; build packages with bun run build --outDir <external-directory>.' });
   // Keep fixture fsync traffic off the checkout disk. tmpfs pages are charged
   // to this gate's memory scope, and the same scope owns their removal.
   const fixtureDirectory = yield* (process.platform === 'linux' && (yield* fs.exists('/dev/shm'))
@@ -57,7 +57,7 @@ const main = (selected: Effect.Success<ReturnType<typeof selectGateTests>>) => E
     TMPDIR: fixtureDirectory, TMP: fixtureDirectory, TEMP: fixtureDirectory,
     CONCORD_GATE_TEST_FILES: JSON.stringify(selected.files), CONCORD_GATE_ALL_TEST_FILES: JSON.stringify(selected.allFiles) };
   const names = ['gate:source', 'gate:tests', 'gate:scripts', 'gate:web', 'gate:lint', 'gate:selfhost', 'test:source'];
-  // Vite+ dependencies stop on failure; acceptance must finish every sibling.
+  // Acceptance finishes every sibling even when one check fails.
   yield* Effect.sync(() => console.error(`# Gate fixture directory: ${fixtureDirectory}; lifetime=gate; included in memory scope`));
   const [statics, testsTask] = yield* Effect.all([
     Effect.all(names.filter(name => name !== 'test:source').map(name => task(name)), { concurrency: 2 }),
@@ -70,11 +70,6 @@ const main = (selected: Effect.Success<ReturnType<typeof selectGateTests>>) => E
     for (const line of (yield* fs.readFileString(join(output, file))).split('\n').filter(Boolean)) {
       admitted.push(...(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ownership))(line)).processes);
     }
-  }
-  const browserMemoryPath = join(output, 'browser-process-trees.json');
-  if (yield* fs.exists(browserMemoryPath)) {
-    const rows = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(ownership)))(yield* fs.readFileString(browserMemoryPath));
-    for (const row of rows) admitted.push(...row.processes);
   }
   const fixedMemory = yield* fixedObservation.finish(admitted, testsTask.code === 0);
   const codes = tasks.map(task => task.code);

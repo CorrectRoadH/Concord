@@ -4,7 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { startViewServer, type ViewServerHandle } from '../e2e/server.ts';
+import { startViewServer, type ViewServerHandle } from '../support/view-server.ts';
 import { installedConcordCli, pollUntil } from '../support/support.ts';
 import { fixture, send, parsed } from '../support/view-http-fixture.ts';
 

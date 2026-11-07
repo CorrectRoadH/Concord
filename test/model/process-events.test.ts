@@ -55,22 +55,6 @@ test('event boundary rejects unknown fields, invalid roles and malformed process
   assert.throws(() => decode({ ...event('one', 'spawn'), pid: '123' }));
 });
 
-// @feature docs/engineering/testing/README.md#成本与稳定
-test('browser worker fixtures keep their real owner and contribute to e2e without inventing a case file', () => {
-  const fixtureFile = 'test/e2e/engine.ts';
-  const events = [...coverage, event('service', 'spawn', { role: 'service' })].map(event => ({ ...event, file: fixtureFile, scope: 'browser-worker' as const, workerID: 'run/web/1' }));
-  const report = summarizeProcessEvents(['test/e2e/page.e2e.ts'], events, 'run');
-  assert.equal(report.fixtures.length, 1);
-  assert.equal(report.fixtures[0]?.file, fixtureFile);
-  assert.equal(report.fixtures[0]?.workerID, 'run/web/1');
-  assert.equal(report.fixtures[0]?.counts?.service, 1);
-  assert.equal(report.files[0]?.counts, null);
-  assert.equal(report.layers.find(layer => layer.layer === 'e2e')?.observed.service, 1);
-  assert.equal(report.layers.find(layer => layer.layer === 'e2e')?.files, 1);
-  assert.equal(report.layers.find(layer => layer.layer === 'e2e')?.fixtureWorkers, 1);
-  assert.equal(report.status, 'unknown');
-});
-
 const recordedEvents = (fs: FileSystem.FileSystem, directory: string) => Effect.gen(function*() {
   const entries = yield* fs.readDirectory(directory);
   const records: ProcessEvent[] = [];

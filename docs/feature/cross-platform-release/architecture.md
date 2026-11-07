@@ -8,7 +8,7 @@
 
 ## 数据流
 
-标签工作流从校验后的标签派生版本。原生任务在各自目标系统上下载并校验固定发行的 HawDB 二进制；各目标宿主按同一 commit 构建 Bun 可执行文件并组装候选归档，核验版本、原生产物身份与摘要。验证任务在目标系统上运行同一份候选，全部通过后创建源码 Release。
+标签工作流从校验后的标签派生版本。原生任务在各自目标系统上下载并校验固定发行的 HawDB 二进制；各目标宿主按同一 commit 构建 Bun 可执行文件并组装候选归档，核验版本、原生产物身份与摘要。两个目标构建与同一标签 commit 的完整检查通过后创建源码 Release。
 
 tap 定期或经通知发现新的公开发版，核验标签、归档与资产身份，生成 Formula 与 Nix 候选。候选分别完成安装和运行检查后才提交并打 recipe 标签，创建同版本渠道完成记录。日常发现、验证与更新不依赖 LLM。
 
@@ -17,7 +17,7 @@ tap 定期或经通知发现新的公开发版，核验标签、归档与资产�
 - 普通运行时不探测文件系统名称，不调用外部锁或磁盘工具；支持的协调限于同一主机与 PID 命名空间。
 - Darwin 保留路径段的精确拼写，别名不能产生第二个 owner 身份。
 - 只有 ESRCH 证明所拥有的 POSIX 进程组已结束。清理不确定时不能产生 green 证据。
-- 发版与渠道同步共享精确的候选归档和 SHA-256；发版的字节就是验证过的候选。自动化成功不表示已完成渠道安装后的验收。
+- 发版与渠道同步共享精确的候选归档和 SHA-256；发版的字节就是构建产出的候选。自动化成功不表示已完成渠道安装后的验收。
 - 版本不回退，已有身份不能被不同字节覆盖。
 - 应用使用 `bin/concord` 内嵌的 Bun 运行时与归档内 ripgrep，不读取 `PATH` 中的 `node`、`bun` 或 `rg`；Linux 上的动态库解析不依赖 `LD_LIBRARY_PATH`。
 
@@ -51,11 +51,11 @@ tap 定期或经通知发现新的公开发版，核验标签、归档与资产�
 
 Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`libc`、`libm`、`libdl`、`libpthread`、`librt` 与解释器 `/lib64/ld-linux-x86-64.so.2`）和 `runtime/lib/` 中的库。只有依赖 glibc 之外随包库的动态 ELF 才设置指向 `runtime/lib/` 的 `$ORIGIN` 相对 RPATH；`runtime/lib/` 中依赖其它随包库的文件同样处理。仅依赖 glibc 自身库且没有逃逸路径的 ELF 保持原字节，不为它新增 RPATH；静态 ELF 不设置。可执行入口不设置 `LD_LIBRARY_PATH`。
 
-组装后检查归档内全部 ELF：解释器、`DT_NEEDED` 全部可在 glibc 或 `runtime/lib/` 中解析、引用的 GLIBC 符号版本不高于 2.39、RPATH 不指向归档之外。任一不满足即组装失败。候选验证在 Ubuntu 24.04 上实际运行，见[从标签发版](use-case/release-from-tag.md#verify)。
+组装后检查归档内全部 ELF：解释器、`DT_NEEDED` 全部可在 glibc 或 `runtime/lib/` 中解析、引用的 GLIBC 符号版本不高于 2.39、RPATH 不指向归档之外。任一不满足即组装失败。目标构建在 Ubuntu 24.04 上完成，见[从标签发版](use-case/release-from-tag.md#package)。
 
 ### macOS 签名
 
-`bin/concord` 在 macOS 目标任务完成编译与所有字节变换后 ad-hoc 签名，保留 Bun 所需 entitlements。HawDB `.node` 与 `runtime/rg` 同样在 macOS 签名；随后才生成归档与摘要，验证与安装不改写签名字节。验证阶段对全部 Mach-O 运行 `codesign --verify`。安装脚本用 `curl` 下载，不产生 `com.apple.quarantine`；Concord 不做公证，不支持浏览器下载的安装。
+`bin/concord` 在 macOS 目标任务完成编译与所有字节变换后 ad-hoc 签名，保留 Bun 所需 entitlements。HawDB `.node` 与 `runtime/rg` 同样在 macOS 签名；随后才生成归档与摘要，发布与安装不改写签名字节。组装阶段核验可执行文件、原生绑定与 ripgrep 的签名。安装脚本用 `curl` 下载，不产生 `com.apple.quarantine`；Concord 不做公证，不支持浏览器下载的安装。
 
 ### 版本与身份
 
@@ -110,7 +110,7 @@ Linux 与 macOS 原生任务分别在 Ubuntu 24.04 与 Apple Silicon macOS 15 �
 
 各目标宿主在原生任务之后构建应用，使用本目标经核验的原生产物组装候选归档并核验版本与摘要，把候选作为不可变产物上传。汇总任务收集两个目标的候选并生成摘要清单，不重编译或改写候选。
 
-验证任务依赖打包任务，分别在 `ubuntu-24.04` 与 `macos-15` arm64 的 CI 机器上下载本目标的候选与摘要，校验后解压运行，不重新构建，核对项见[从标签发版](use-case/release-from-tag.md#verify)。验证的 `PATH` 只含系统基础命令与 Git，不提供 `node`、`bun`、`pnpm` 或 `rg`。发版任务同时依赖两个验证任务与同一标签 commit 的完整检查。
+发版任务依赖打包汇总与同一标签 commit 的完整检查，发布汇总任务提供的原始归档字节，见[从标签发版](use-case/release-from-tag.md#publish)。构建命令的非零退出直接阻止发版；没有额外解压运行归档的验证任务。
 
 CI 按[检查入口](../../engineering/testing/README.md#检查入口)分片运行完整套件；性能比较按[性能测量](../../engineering/performance/README.md)单独执行。手动可移植检查必须断言真实的 HawDB 缓存未命中后命中，只回源不算通过。
 
