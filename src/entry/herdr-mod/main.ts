@@ -38,7 +38,7 @@ export default class ConcordMod extends View {
   private minimumVersion = Schema.decodeUnknownSync(ModVersion)(typeof CONCORD_MOD_MINIMUM_VERSION === 'undefined' ? 'dev' : CONCORD_MOD_MINIMUM_VERSION);
   private newerCli = false;
   private tab: string | undefined;
-  private terminal: string | undefined;
+  private terminals = new Map<string, string>();
   private ownPane: string | undefined;
   private observedTarget = '';
   private navigation: Task | undefined;
@@ -119,10 +119,17 @@ export default class ConcordMod extends View {
   private followTerminal(cx: Context): void {
     if (this.closed) return;
     const all = panes();
-    const tab = all.find(item => item.pane === this.ownPane)?.tab ?? this.tab;
+    const tab = this.ownPane === undefined ? focused()?.tab : all.find(item => item.pane === this.ownPane)?.tab ?? this.tab;
+    const foreground = tab !== undefined && focused()?.tab === tab;
+    const resumed = foreground && !this.foreground;
+    if (tab !== this.tab || foreground !== this.foreground) this.pauseWatch();
+    if (tab !== this.tab) { this.tab = tab; this.observedTarget = ''; }
+    this.foreground = foreground;
+    for (const previous of this.terminals.keys()) if (!all.some(item => item.tab === previous)) this.terminals.delete(previous);
     const terminals = all.filter(item => item.tab === tab && item.terminal !== null && !item.mod);
-    const pane = terminals.find(item => item.focused) ?? terminals.find(item => item.pane === this.terminal) ?? terminals[0];
-    this.terminal = pane?.pane;
+    const previous = tab === undefined ? undefined : this.terminals.get(tab);
+    const pane = terminals.find(item => item.focused) ?? terminals.find(item => item.pane === previous) ?? terminals[0];
+    if (tab !== undefined && pane) this.terminals.set(tab, pane.pane);
     const space = spaces().find(item => item.tabs.some(item => item.id === tab));
     if (!pane?.cwd || !space) {
       this.directory = 'no-terminal'; this.target = undefined; this.pendingSwitch = undefined;
@@ -132,7 +139,10 @@ export default class ConcordMod extends View {
     }
     const target = { cwd: pane.cwd, machine: space.machine };
     const key = JSON.stringify(target);
-    if (key === this.observedTarget) return;
+    if (key === this.observedTarget) {
+      if (resumed && this.cli === 'ready' && this.directory === 'repository' && !this.disconnected) this.refresh(cx);
+      return;
+    }
     this.target = target; this.observedTarget = key;
     this.navigation?.cancel();
     const token = this.targetToken = {};
@@ -397,11 +407,6 @@ export default class ConcordMod extends View {
   }
   render(cx: Context): Element {
     this.followTerminal(cx);
-    const foreground = focused()?.tab === this.tab;
-    if (foreground !== this.foreground) {
-      this.foreground = foreground; this.pauseWatch();
-      if (foreground && this.cli === 'ready' && this.directory === 'repository' && !this.disconnected) this.refresh(cx);
-    }
     const session = this.session;
     const available = this.directory === 'repository' && this.cli === 'ready' && !this.disconnected;
     this.ensureRendered(cx, available);
@@ -468,7 +473,7 @@ export default class ConcordMod extends View {
         const draft = this.editor?.value(); session.draft = undefined;
         await runEffect(session.open(session.selected!, false)); session.draft = draft;
       }))));
-      if (this.pendingSwitch) body.push(text(`终端已切到 ${this.pendingSwitch.cwd}，保存或放弃修改后切换`));
+      if (this.pendingSwitch) body.push(text(`终端已切到 ${this.locationLabel(this.pendingSwitch.cwd, this.pendingSwitch.machine)}，保存或放弃修改后切换`));
       if (this.editor) body.push(h_flex().gap(6).children([
         this.button('save', '保存并检查', cx => this.save(cx)),
         this.button('discard', '放弃修改', cx => { this.open(session.selected!, cx); this.resumeSwitch(cx); }),
