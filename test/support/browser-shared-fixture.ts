@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import { inspect } from 'node:util';
 import { Effect, Exit, Scope } from 'effect';
 import { startViewServer, ViewServerStartupFailed, type ViewServerHandle, type ViewServerOptions } from '../e2e/server.ts';
 import { sourceCli } from './source-consumer.ts';
@@ -304,6 +305,13 @@ export const acquireBrowserSharedFixture = Effect.fn('acquireBrowserSharedFixtur
 
 let current: { readonly scope: Scope.Closeable; readonly fixture: BrowserSharedFixture } | undefined;
 
+class BrowserWorkerStartupFailed extends Error {
+  constructor(cause: unknown) {
+    super(`Browser worker startup failed: ${inspect(cause, { depth: 8 })}`, { cause });
+    this.name = 'BrowserWorkerStartupFailed';
+  }
+}
+
 export async function openBrowserWorker(signal?: AbortSignal, workerID?: string): Promise<void> {
   return recordBrowserTiming('fixture-start', async () => {
     const scope = Effect.runSync(Scope.make());
@@ -312,8 +320,8 @@ export async function openBrowserWorker(signal?: AbortSignal, workerID?: string)
       current = { scope, fixture };
     } catch (cause) {
       try { await Effect.runPromise(Scope.close(scope, Exit.void)); }
-      catch (cleanup) { throw new AggregateError([cause, cleanup], 'Browser worker startup and cleanup failed'); }
-      throw cause;
+      catch (cleanup) { throw new BrowserWorkerStartupFailed(new AggregateError([cause, cleanup], 'Browser worker startup and cleanup failed')); }
+      throw new BrowserWorkerStartupFailed(cause);
     }
   }, workerID);
 }
