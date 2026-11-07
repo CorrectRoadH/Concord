@@ -36,8 +36,7 @@ import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, CommandScop
 import { makeAdmittedProtocol } from './admission.ts';
 import { makeRequestAdmission } from './request-admission.ts';
 import { getWorkspaceRead } from '../../app/index.ts';
-import { QueryRefreshRequest, queryContext, storeQuery, scanQueryProcess } from '../../app/index.ts';
-import { decodeQueryScanMessage } from '../../model/index.ts';
+import { QueryRefreshRequest, refreshQuery as refreshDiagnosticQuery } from '../../app/index.ts';
 import { workspaceEvents, WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.ts';
 import { makeWorkspaceService } from './service.ts';
 import { FeedbackSessions } from './feedback-session.ts';
@@ -170,7 +169,6 @@ const compute = Effect.fn('workspace.compute')(function*(root: string, operation
   switch (operation.kind) {
     case 'cache-rebuild': return yield* computeCacheRebuild(root);
     case 'query': return yield* executeQuery(root, operation.request, operation.cache);
-    case 'query-scan': return yield* scanQueryProcess(root, JSON.stringify(operation.query));
     case 'scan': {
       const builtFrom = new Date(yield* Clock.currentTimeMillis).toISOString();
       const { snapshot, drift, sourceDigest } = yield* observeWorkspaceProjection(root);
@@ -205,7 +203,7 @@ export const runComputeMain = (root: string | undefined): void => {
       if (request.snapshotId !== snapshotId) return yield* Effect.fail(new ConcordError('WorkspaceServerProtocol', 'Snapshot is incomplete'));
       if (root === undefined) return yield* Effect.fail(new ConcordError('InvalidInput', 'Missing compute root'));
       const derived = CacheDerivations.make();
-      const requestRuntime = parseCache.bind(operation.kind === 'query' || operation.kind === 'query-scan' ? makeRuntimeEnvironment(operation.cwd, operation.environment) : execution, root);
+      const requestRuntime = parseCache.bind(operation.kind === 'query' ? makeRuntimeEnvironment(operation.cwd, operation.environment) : execution, root);
       const requestContext = yield* Layer.build(computationLayer).pipe(Effect.provideService(RuntimeEnvironment, requestRuntime), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(requestRuntime.env))));
       const context = Context.add(requestContext, RuntimeEnvironment, requestRuntime);
       const value = yield* compute(root, operation).pipe(Effect.provide(CacheSnapshot.layer(operation.kind === 'query' && operation.cache === 'off' ? {} : snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(requestRuntime.env))));
@@ -439,17 +437,22 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const feedback = new FeedbackSessions();
     const derivations = new DerivationSessions();
     const refreshing = new Set<string>();
-    const refreshQuery = (query: AppTypes.Query, requestRuntime: RuntimeEnvironmentSnapshot) => Effect.gen(function*() {
+    const refreshQuery: (query: AppTypes.Query, requestRuntime: RuntimeEnvironmentSnapshot) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner> = (query, requestRuntime) => Effect.gen(function*() {
       const key = objectDigest({ query, cwd: requestRuntime.cwd, environment: requestRuntime.env });
       if (refreshing.has(key)) return;
       refreshing.add(key);
-      yield* Effect.forkIn(Effect.gen(function*() {
-        const ctx = yield* queryContext(root, query).pipe(Effect.provide(Workspace.layer), Effect.provideService(RuntimeEnvironment, requestRuntime));
-        const message = yield* service.execute({ kind: 'query-scan', query, cwd: requestRuntime.cwd, environment: Object.fromEntries(Object.entries(requestRuntime.env).filter((entry): entry is [string, string] => entry[1] !== undefined)) });
-        yield* runtime.verify;
-        const decoded = decodeQueryScanMessage(message);
-        yield* owned(storeQuery(ctx, decoded.ok ? { kind: 'candidate', message: decoded } : { kind: 'failure', error: { failedAt: new Date().toISOString(), scannedAt: decoded.scannedAt, code: decoded.code, message: decoded.message } }));
-      }).pipe(Effect.provideService(RuntimeEnvironment, requestRuntime), Effect.ensuring(Effect.sync(() => { refreshing.delete(key); })), Effect.ignore), serverScope);
+      let requeue = false;
+      // A scan owns a subprocess, not the foreground computation permit. Track
+      // its lifetime so clear waits for publication and shutdown reaps it.
+      const scan = service.operate(owned(refreshDiagnosticQuery(root, query, Date.now(), 120_000, runtime.verify.pipe(Effect.mapError(failure))))).pipe(
+        Effect.provide(Workspace.layer), Effect.provideService(RuntimeEnvironment, requestRuntime),
+        Effect.provideService(QueryRefreshRequest, { request: () => Effect.sync(() => { requeue = true; }) }),
+        Effect.scoped,
+      );
+      yield* Effect.forkIn(scan.pipe(Effect.ensuring(Effect.gen(function*() {
+        refreshing.delete(key);
+        if (requeue) yield* refreshQuery(query, requestRuntime);
+      })), Effect.ignore), serverScope);
     });
     const handlers = WorkspaceRpcs.toLayer({
       hello: request => authorizeScope(request.scope).pipe(Effect.andThen(SubscriptionRef.get(service.state.value)), Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, sourceDigest: value.sourceDigest }))),

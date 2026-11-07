@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
-import { Query, QueryRequest } from '../../app/index.ts';
+import { QueryRequest } from '../../app/index.ts';
 import { CacheDerivationBatch } from '../../model/index.ts';
 import { CallerCwd, Packet, QueryEnvironment, strict, WorkspaceServerError } from './protocol.ts';
 
@@ -11,7 +11,6 @@ export const ComputationReply = strict(Schema.Struct({ value: Schema.Json, deriv
 export const Computation = Schema.Union([
   strict(Schema.Struct({ kind: Schema.Literal('scan') })),
   strict(Schema.Struct({ kind: Schema.Literal('cache-rebuild') })),
-  strict(Schema.Struct({ kind: Schema.Literal('query-scan'), query: Query, cwd: CallerCwd, environment: QueryEnvironment })),
   strict(Schema.Struct({ kind: Schema.Literal('query'), request: QueryRequest, cwd: CallerCwd, environment: QueryEnvironment, cache: Schema.optional(Schema.Literals(['use', 'off'])) })),
   strict(Schema.Struct({ kind: Schema.Literal('read'), path: Schema.String })),
   strict(Schema.Struct({ kind: Schema.Literal('read-bytes'), path: Schema.String })),

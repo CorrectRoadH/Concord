@@ -6,7 +6,7 @@ import type { Query} from "./query-cache.ts";
 import { queryContext, queryRequestSatisfied, readQuery, type QueryUpdate } from "./query-cache.ts";
 import { makeOwnedProcessService, hasConfirmedOwnedGroupCleanup, type OwnedProcessResult } from "../base/process/index.ts";
 import { decodeQueryScanMessage, type QueryScanMessage } from "../model/index.ts";
-import { failure } from "../model/index.ts";
+import { type ConcordError, failure } from "../model/index.ts";
 import { workerEntryArgv } from "../base/installation/index.ts";
 import { requestNewIdentity } from "./query-refresh-store.ts";
 import { persist } from "./query-refresh-store.ts";
@@ -40,7 +40,7 @@ export function classifyQueryRefresh(before: string, after: string, result: Owne
 
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/performance.md#刷新上限
-export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | undefined, query: Query, requestedAt: number, limitMs = 120_000) {
+export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | undefined, query: Query, requestedAt: number, limitMs = 120_000, beforePublish: Effect.Effect<void, ConcordError> = Effect.void) {
   const started = Date.now(), deadline = started + limitMs;
   const context = yield* queryContext(input, query);
   const directory = join(context.privateDir, 'query-refresh');
@@ -76,6 +76,7 @@ export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | 
   const update = Result.isSuccess(outcome) ? classifyQueryRefresh(context.key, after.key, outcome.success, scannedAt, Date.now() - started, limitMs)
     : after.key !== context.key ? { kind: 'identity-changed' as const } : { kind: 'failure' as const, error: { failedAt: new Date().toISOString(), scannedAt, code: 'QueryRefreshFailed', message: outcome.failure.message.slice(0, 4096) } };
   if (update.kind === 'identity-changed') { yield* requestNewIdentity(after); return; }
+  yield* beforePublish;
   yield* persist(context, update);
 });
 // @concord-end

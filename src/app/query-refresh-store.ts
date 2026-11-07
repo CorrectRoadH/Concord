@@ -1,8 +1,8 @@
 import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { launchDetachedWorker } from '../base/process/index.ts';
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { HawdbFailure } from "../base/cache/index.ts";
-import { queryContext, storeQuery, type QueryContext, type QueryUpdate } from "./query-cache.ts";
+import { QueryRefreshRequest, queryContext, storeQuery, type QueryContext, type QueryUpdate } from "./query-cache.ts";
 import { failure } from "../model/index.ts";
 import { workerEntryArgv } from "../base/installation/index.ts";
 
@@ -10,6 +10,8 @@ import { workerEntryArgv } from "../base/installation/index.ts";
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export const requestNewIdentity = Effect.fn('requestNewQueryIdentity')(function*(context: QueryContext) {
+  const requester = yield* Effect.serviceOption(QueryRefreshRequest);
+  if (Option.isSome(requester)) return yield* requester.value.request(context);
   yield* launchDetachedWorker('query-refresh-worker', [context.root, JSON.stringify(context.query), String(Date.now())], (yield* RuntimeEnvironment).cwd);
 });
 // @concord-end
