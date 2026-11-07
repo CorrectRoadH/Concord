@@ -264,6 +264,7 @@ export class LocalRepository implements Repository {
   config: ResolvedProjectConfig;
   configSnapshot: ConfigSnapshot;
   private traceLease: TraceLease | undefined;
+  private borrowedPublicationLease = false;
   private readonly coordinationDirectory: string;
   private readonly noWrite: boolean;
   private snapshotDepth = 0;
@@ -550,6 +551,29 @@ export class LocalRepository implements Repository {
       throw cause;
     }
   }
+  /** Borrow an already owned lease without acquiring or releasing it. */
+  bindPublicationLease(lease: TraceLease): { readonly verify: () => void; readonly release: () => void } {
+    if (this.snapshotDepth === 0 || this.traceLease !== undefined || lease.mode !== 'exclusive'
+      || lease.owner.root !== this.root || lease.path !== join(this.coordinationDirectory, PUBLICATION_LEASE)
+      || readLeaseOwner(lease.path, 'source-publication')?.token !== lease.owner.token) {
+      throw new ConcordError('RepositoryBusy', 'Source view requires the current workspace publication lease');
+    }
+    this.traceLease = lease;
+    this.borrowedPublicationLease = true;
+    return {
+      verify: () => {
+        if (this.traceLease !== lease || readLeaseOwner(lease.path, 'source-publication')?.token !== lease.owner.token) {
+          throw new ConcordError('RepositoryBusy', 'Source publication lease is no longer owned');
+        }
+      },
+      release: () => {
+        if (this.traceLease === lease) {
+          this.traceLease = undefined;
+          this.borrowedPublicationLease = false;
+        }
+      },
+    };
+  }
   // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   beginSnapshot(reclaimDead = true): void {
@@ -577,7 +601,9 @@ export class LocalRepository implements Repository {
           if (this.traceLease !== undefined) {
             const lease = this.traceLease;
             this.traceLease = undefined;
-            releaseTraceLeaseSync(lease, 'snapshot-close');
+            const borrowed = this.borrowedPublicationLease;
+            this.borrowedPublicationLease = false;
+            if (!borrowed) releaseTraceLeaseSync(lease, 'snapshot-close');
           }
         }
       }

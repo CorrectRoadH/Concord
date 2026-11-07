@@ -4,6 +4,7 @@ import { failure, ConcordError } from '../../model/index.ts';
 import { inspectPendingJournals, waitForPublication } from '../publication/index.ts';
 import { readRepositoryBytesSync, readRepositoryFileSync, WorkspaceContext, LocalRepository, type WorkspaceMetadata } from '../workspace/index.ts';
 import { SourceSnapshot } from './source-snapshot.ts';
+import { SourcePublication } from './publication-view.ts';
 import { withOperationCache } from '../cache/operation-cache.ts';
 import { NodeSourceWatch } from './source-watch.ts';
 import { readReportFiles } from './report-files.ts';
@@ -18,9 +19,11 @@ export interface SourceInspection {
   readonly identity: string;
 }
 
+class PublicationViewLease extends Context.Service<PublicationViewLease, object>()('concord/base/sources/PublicationViewLease') {}
+
 export interface SnapshotOperation {
-  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
-  <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
+  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot | SourcePublication>>;
+  <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, Exclude<R, SourceSnapshot | SourcePublication | WorkspaceContext>>;
 }
 export interface SourceDrift {
   readonly files: string[];
@@ -28,8 +31,8 @@ export interface SourceDrift {
   readonly publicationChanged: boolean;
 }
 export interface ProjectionOperation {
-  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
-  <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
+  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot | SourcePublication>>;
+  <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, Exclude<R, SourceSnapshot | SourcePublication | WorkspaceContext>>;
 }
 
 export interface SourcesService {
@@ -65,21 +68,27 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
     interface Session {
       readonly repo: LocalRepository;
       readonly inspections: Map<string, SourceInspection | undefined>;
+      sealed: boolean;
+      leaseToken: object | undefined;
+      verifyLease: (() => void) | undefined;
     }
     const active = new WeakMap<SourceSnapshot['Service'], Session>();
+    const assertReadable = (session: Session | undefined): Session => {
+      if (session === undefined) throw new ConcordError('OperationFailed', 'Source snapshot is no longer active');
+      if (session.sealed) throw new ConcordError('OperationFailed', 'Committed source snapshot is sealed; open a fresh workspace context');
+      return session;
+    };
     const observed = Effect.fn('Sources.observed')(function*<A>(read: (repo: LocalRepository) => A) {
       const identity = yield* SourceSnapshot;
       return yield* Effect.try({ try: () => {
-        const session = active.get(identity);
-        if (session === undefined) throw new ConcordError('OperationFailed', 'Source snapshot is no longer active');
+        const session = assertReadable(active.get(identity));
         return read(session.repo);
       }, catch: failure });
     });
     const inspect = Effect.fn('Sources.inspect')(function*(path: string) {
       const identity = yield* SourceSnapshot;
       return yield* Effect.try({ try: () => {
-        const session = active.get(identity);
-        if (session === undefined) throw new ConcordError('OperationFailed', 'Source snapshot is no longer active');
+        const session = assertReadable(active.get(identity));
         const inspected = session.repo.inspect(path);
         const value = inspected === undefined ? undefined : Object.freeze({ ...inspected });
         if (!session.inspections.has(path)) session.inspections.set(path, value);
@@ -87,6 +96,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
       }, catch: failure });
     });
     const verify = (session: Session) => Effect.try({ try: () => {
+      if (session.sealed) return;
       session.repo.verifySnapshot();
       for (const [path, before] of session.inspections) {
         const current = session.repo.inspect(path);
@@ -99,8 +109,37 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
       if (parent._tag === 'Some' && active.get(parent.value)?.repo === repo) return yield* operation.pipe(Effect.provideContext(Context.make(SourceSnapshot, parent.value).pipe(Context.add(WorkspaceContext, parent.value.workspace))));
       for (;;) {
         const identity = SourceSnapshot.of({ workspace });
-        const session: Session = { repo, inspections: new Map() };
-        const run = withOperationCache(workspace, runtime, operation).pipe(Effect.provideContext(Context.make(SourceSnapshot, identity).pipe(Context.add(WorkspaceContext, identity.workspace))));
+        const session: Session = { repo, inspections: new Map(), sealed: false, leaseToken: undefined, verifyLease: undefined };
+        const requireLease = Effect.gen(function*() {
+          const token = yield* Effect.serviceOption(PublicationViewLease);
+          const current = yield* Effect.serviceOption(SourceSnapshot);
+          yield* Effect.try({ try: () => {
+            assertReadable(active.get(identity));
+            if (current._tag === 'None' || current.value !== identity || token._tag === 'None' || token.value !== session.leaseToken) throw new ConcordError('RepositoryBusy', 'Source publication view requires an owned publication lease');
+            session.verifyLease!();
+          }, catch: failure });
+        });
+        const publication = SourcePublication.of({
+          withLease: (lease, operation) => Effect.acquireUseRelease(
+            Effect.gen(function*() {
+              const current = yield* Effect.serviceOption(SourceSnapshot);
+              return yield* Effect.try({ try: () => {
+                assertReadable(active.get(identity));
+                if (current._tag === 'None' || current.value !== identity || projection || session.leaseToken !== undefined) throw new ConcordError('RepositoryBusy', 'Source publication requires an independent current view');
+                const binding = repo.bindPublicationLease(lease);
+                const token = {};
+                session.leaseToken = token;
+                session.verifyLease = binding.verify;
+                return { release: binding.release, token };
+              }, catch: failure });
+            }),
+            ({ token }) => requireLease.pipe(Effect.andThen(verify(session)), Effect.andThen(operation), Effect.provideService(PublicationViewLease, token)),
+            ({ release }) => Effect.sync(() => { session.leaseToken = undefined; session.verifyLease = undefined; release(); }),
+          ),
+          verify: requireLease.pipe(Effect.andThen(verify(session))),
+          seal: requireLease.pipe(Effect.andThen(Effect.sync(() => { session.sealed = true; session.inspections.clear(); }))),
+        });
+        const run = withOperationCache(workspace, runtime, operation).pipe(Effect.provideContext(Context.make(SourceSnapshot, identity).pipe(Context.add(WorkspaceContext, identity.workspace), Context.add(SourcePublication, publication))));
         const result = yield* Effect.result(Effect.acquireUseRelease(
           projection
             ? Effect.try({ try: () => repo.beginProjection(), catch: failure })
@@ -123,8 +162,8 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         yield* Effect.sleep('50 millis');
       }
     });
-    function snapshot<A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
-    function snapshot<A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
+    function snapshot<A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot | SourcePublication>>;
+    function snapshot<A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, Exclude<R, SourceSnapshot | SourcePublication | WorkspaceContext>>;
     function snapshot<A, E, R>(input: LocalRepository | Effect.Effect<A, E, R>, operation?: Effect.Effect<A, E, R>) {
       return capture(input, operation);
     }
@@ -154,8 +193,8 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         );
       });
     }
-    function observeProjection<A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
-    function observeProjection<A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
+    function observeProjection<A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot | SourcePublication>>;
+    function observeProjection<A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, Exclude<R, SourceSnapshot | SourcePublication | WorkspaceContext>>;
     function observeProjection<A, E, R>(input: LocalRepository | Effect.Effect<A, E, R>, operation?: Effect.Effect<A, E, R>) {
       let drift: SourceDrift = { files: [], directories: [], publicationChanged: false };
       const collect = (session: Session) => Effect.try({ try: () => {
