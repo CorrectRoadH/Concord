@@ -15,7 +15,6 @@ import { Schema } from 'effect';
 const Report = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Json), cache: Schema.Struct({ status: Schema.String, detail: Schema.optionalKey(Schema.String) }) });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#hit
-// @issue docs/issues/hawdb-busy-cli-read.md
 test('a CLI current-source check falls back while another process holds the persistent database', () => {
   const root = createConsumer();
   const runtime = makeRuntimeEnvironment(root, process.env);
