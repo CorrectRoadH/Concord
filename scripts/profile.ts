@@ -11,7 +11,7 @@ import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { loadBudgets } from './perf/budgets.ts';
 import { environment, loadArtifact } from './perf/artifact.ts';
-import { combineProfiles, CpuProfile, hotSpots } from './perf/cpu-profile.ts';
+import { combineProfiles, CpuProfile, hotSpots, profileRuntimeArgument } from './perf/cpu-profile.ts';
 import { io, mustRun, PerfError, timedRun } from './perf/process.ts';
 import { executeScenario, loadScenarios, makeContext, runArguments, cliCommand } from './perf/scenario.ts';
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.ts';
@@ -65,7 +65,7 @@ const main = Effect.gen(function*() {
   const receipts = yield* compiledStartupReceipts(repository);
   const compiled = yield* mustRun(['bun', ...compilationArguments(target, profileEntry),
     '--define', `CONCORD_STARTUP_RECEIPTS=${JSON.stringify(receipts)}`,
-    `--compile-exec-argv=--cpu-prof --cpu-prof-dir=${JSON.stringify(out)} --preload=${JSON.stringify(counter)}`,
+    profileRuntimeArgument(out, counter),
   ], { cwd: repository, outputDir: runs, timeoutMs: 120_000 });
   yield* io('Report profile compilation', () => process.stderr.write(compiled.stdout + compiled.stderr));
   const candidate = yield* loadArtifact('candidate', repository, profileEntry);

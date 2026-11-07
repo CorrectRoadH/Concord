@@ -73,6 +73,7 @@ export default {
       "scripts/perf/baseline.ts",
       "scripts/perf/budgets.ts",
       "scripts/perf/consumer.ts",
+      "scripts/perf/cpu-profile.ts",
       "scripts/perf/process.ts",
       "scripts/perf/scenario.ts",
       "scripts/perf/selection.ts",
