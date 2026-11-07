@@ -292,6 +292,32 @@ runnerTest('official TAP retains circular failure diagnostics and reaches its ru
   assert.equal(yield* fs.exists(join(result.output, 'node-compile-cache')), false);
 }));
 
+// @feature docs/engineering/testing/README.md#检查入口
+// @issue docs/issues/zero-case-run-counted-as-test.md
+runnerTest('name-filtered files count executed cases instead of successful file wrappers', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const excluded = join(root, 'excluded.test.ts'), selected = join(root, 'selected.test.ts');
+  yield* fs.writeFileString(excluded, `import { describe, test } from 'node:test'; describe('excluded suite', () => { test('excluded case', () => { throw new Error('unselected body ran'); }); });\n`);
+  yield* fs.writeFileString(selected, `import test from 'node:test'; test('selected case', () => {});\n`);
+  for (const files of [[excluded], [excluded, selected]]) {
+    const result = yield* run(['--suite=node', '--test-name-pattern=^selected case$', ...files], {}, root);
+    assert.equal(result.code, 0, result.text);
+    const expected = files.length - 1;
+    const tapCounts = [...result.text.matchAll(/^# tests (\d+)$/gmu)].map(match => Number(match[1]));
+    const tapPasses = [...result.text.matchAll(/^# pass (\d+)$/gmu)].map(match => Number(match[1]));
+    assert.equal(tapCounts.reduce((sum, count) => sum + count, 0), expected, result.text);
+    assert.equal(tapPasses.reduce((sum, count) => sum + count, 0), expected, result.text);
+    assert.doesNotMatch(result.text, /ok \d+ - .*excluded\.test\.ts/u);
+    const timings = (yield* fs.readFileString(join(result.output, 'node-timings.jsonl'))).trim().split('\n')
+      .map(line => Schema.decodeUnknownSync(Schema.fromJsonString(Timing))(line));
+    assert.deepEqual(timings.find(timing => timing.scope === 'run')?.counts, { tests: expected, failed: 0, cancelled: 0 });
+    const cases = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ cases: Schema.Number }))))(
+      yield* fs.readFileString(join(result.output, 'file-timings.json')),
+    );
+    assert.equal(cases.reduce((sum, file) => sum + file.cases, 0), expected);
+  }
+}));
+
 runnerTest('official name filtering and shard union select each requested source test exactly once', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const files: string[] = [];
