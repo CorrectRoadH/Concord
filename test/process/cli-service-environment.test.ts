@@ -1,4 +1,4 @@
-// 跨进程保证：运行环境——同一长期 compute 为普通 query、historical 刷新和 outbound LSP 保留每次调用的完整环境与 caller cwd。
+// 跨进程保证：运行环境——长期 compute、独立历史扫描与 outbound LSP 保留每次调用的完整环境与 caller cwd。
 // 跨进程保证：原生模块与句柄——相对 XDG 从 caller cwd 选择真实 native artifact，A→B→A 不复用另一调用的选择。
 import assert from 'node:assert/strict';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, watch, writeFileSync } from 'node:fs';
@@ -13,7 +13,7 @@ import { connectWorkspaceSocket, subscribeWorkspace } from '../../src/entry/serv
 import { runCli, type CliResult } from '../support/cli.ts';
 import { createConsumer, retainConsumer } from '../support/consumer.ts';
 import { consumer as lspConsumer } from '../support/lsp-analysis-source-fixture.ts';
-import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
+import { pollUntil, readProjectConfig, writeProjectConfig } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 const Audit = Schema.Struct({
@@ -58,7 +58,7 @@ else process.exitCode = result.status ?? 1;
   writeFileSync(loader, `import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 const append = fs.appendFileSync;
-const record = (binary: string, operation: string) => append(${JSON.stringify(audit)}, JSON.stringify({ kind: 'native', pid: process.pid, ppid: process.ppid, cwd: process.cwd(), entry: process.argv[1], binary, operation }) + '\\n');
+const record = (binary: string, operation: string) => append(${JSON.stringify(audit)}, JSON.stringify({ kind: 'native', pid: process.pid, ppid: process.ppid, cwd: process.cwd(), entry: process.argv[1], args: process.argv.slice(2), binary, operation }) + '\\n');
 fs.statSync = new Proxy(fs.statSync, { apply(target, receiver, args) {
   const result = Reflect.apply(target, receiver, args);
   if (String(args[0]).endsWith('/hawdb.node')) record(String(args[0]), 'stat');
@@ -123,7 +123,7 @@ async function ready(root: string, signal: AbortSignal): Promise<void> {
 }
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
-test('one live compute preserves A→B→A caller environments and cwd for ordinary queries and historical scans', async t => {
+test('live queries and independent historical scans preserve A→B→A caller environments and cwd', async t => {
   const root = createConsumer(), fixture = auditFixture();
   const startup = { ...fixture.base, HOME: join(fixture.directory, 'service-home'), CONCORD_CALLER_VALUE: 'service-owner', XDG_CACHE_HOME: fixture.callers[0]!.cache };
   try {
@@ -139,10 +139,10 @@ test('one live compute preserves A→B→A caller environments and cwd for ordin
       succeeded(result);
       if (first === undefined) first = result; else assert.deepEqual(result, first);
       const rows = fixture.records().slice(offset);
-      const native = rows.filter(row => row.kind === 'native' && row.entry?.endsWith('/compute-worker.ts'));
+      const native = rows.filter(row => row.kind === 'native' && row.entry?.endsWith('/compute-worker.ts') && row.args?.at(-1) === 'foreground');
       assert.ok(native.some(row => row.binary?.startsWith(`${caller.native}/`)), `${caller.name}: compute checks the native artifact under the caller-relative cache`);
       computePid ??= native[0]!.pid;
-      assert.ok(native.every(row => row.pid === computePid), 'queries reuse the same actual compute process');
+      assert.ok(native.every(row => row.pid === computePid), `queries reuse the same actual compute process: expected ${computePid}, observed ${JSON.stringify(native)}`);
       const git = rows.filter(row => row.kind === 'git' && row.ppid === computePid);
       assert.ok(git.length > 0, 'the compute really invokes Git while opening the repository');
       for (const row of git) {
@@ -152,9 +152,14 @@ test('one live compute preserves A→B→A caller environments and cwd for ordin
       }
     }
     for (const caller of fixture.callers) assert.ok(fixture.records().some(row => row.kind === 'native' && row.operation === 'load' && row.pid === computePid && row.binary?.startsWith(`${caller.native}/`)), `${caller.name}: the live compute actually loads the selected binary`);
-    for (const index of [0, 1, 0]) {
-      const caller = fixture.callers[index]!, offset = fixture.records().length;
-      const result = await runCli({ argv: ['--root', root, '--json', 'trace', 'gaps'], cwd: caller.cwd, env: fixture.environment(index), signal: t.signal });
+    for (const [sequence, index] of [0, 1, 0].entries()) {
+      const caller = fixture.callers[index]!;
+      // Clear drains accepted refreshes and removes prior projections, so this
+      // caller must execute a scan rather than reuse a newer queued result.
+      succeeded(await runCli({ argv: ['--root', root, '--json', 'cache', 'clear'], cwd: caller.cwd, env: fixture.environment(index), signal: t.signal }));
+      const offset = fixture.records().length;
+      const value = `${caller.name}:${sequence}`;
+      const result = await runCli({ argv: ['--root', root, '--json', 'trace', 'gaps'], cwd: caller.cwd, env: { ...fixture.environment(index), CONCORD_CALLER_VALUE: value }, signal: t.signal });
       if (result.exitCode === 0) {
         const value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ projection: Schema.Struct({ refresh: Schema.Literal('requested') }) })), { onExcessProperty: 'ignore' })(result.stdout);
         assert.equal(value.projection.refresh, 'requested');
@@ -162,16 +167,30 @@ test('one live compute preserves A→B→A caller environments and cwd for ordin
         assert.equal(result.exitCode, 1); assert.equal(result.stdout, '');
         assert.equal(decodeError(result.stderr).error, 'QueryPending', result.stderr);
       }
-      // Historical hydration alone never opens LocalRepository: this real Git call proves query-scan began.
-      await fixture.wait(rows => rows.slice(offset).some(row => row.kind === 'git' && row.ppid === computePid && row.args?.includes('--show-toplevel')), t.signal);
-      // The serial compute request is a product barrier behind the real historical scan.
-      succeeded(await runCli({ argv: ['--root', root, '--json', 'config', 'show'], cwd: caller.cwd, env: fixture.environment(index), signal: t.signal }));
+      // Historical hydration never opens LocalRepository. Audit the independent
+      // scanner rather than treating a foreground query as its completion fence.
+      const scannerPids = (rows: readonly Audit[]) => new Set(rows.filter(row => row.kind === 'native' && row.entry?.endsWith('/query-scan-worker.ts') && row.binary?.startsWith(`${caller.native}/`)).map(row => row.pid));
+      // The previous request may still have a follow-up refresh. A distinct
+      // caller value correlates this scan without mistaking that work for it.
+      await fixture.wait(records => {
+        const rows = records.slice(offset), pids = scannerPids(rows);
+        return rows.some(row => row.kind === 'git' && row.value === value && pids.has(row.ppid) && row.args?.includes('--show-toplevel'));
+      }, t.signal);
+      const started = fixture.records().slice(offset), pids = scannerPids(started);
+      const scanPid = started.find(row => row.kind === 'git' && row.value === value && pids.has(row.ppid) && row.args?.includes('--show-toplevel'))!.ppid;
+      assert.notEqual(scanPid, computePid, 'historical refresh does not occupy the foreground process');
+      await pollUntil(async () => {
+        try { process.kill(scanPid, 0); return undefined; } catch (cause) {
+          if ((cause as NodeJS.ErrnoException).code === 'ESRCH') return true;
+          throw cause;
+        }
+      }, { description: 'the audited historical scan exits before checking its complete environment observations' });
       const rows = fixture.records().slice(offset);
-      const git = rows.filter(row => row.kind === 'git' && row.ppid === computePid);
+      const git = rows.filter(row => row.kind === 'git' && row.ppid === scanPid);
       assert.ok(git.length > 0);
-      for (const row of git) { assert.equal(row.value, caller.name); assert.equal(row.home, null); assert.equal(row.xdg, 'cache'); }
-      const barrier = rows.reduce((last, row, index) => row.kind === 'git' && row.ppid === computePid && row.args?.includes('--show-toplevel') ? index : last, -1);
-      assert.ok(rows.slice(0, barrier).some(row => row.kind === 'native' && row.pid === computePid && row.binary?.startsWith(`${caller.native}/`)), 'the historical scan itself selects the caller-relative native artifact before the barrier');
+      for (const row of git) { assert.equal(row.value, value); assert.equal(row.home, null); assert.equal(row.xdg, 'cache'); }
+      assert.ok(git.some(row => row.args?.includes('--show-toplevel')), 'the independent scan really opens the repository');
+      assert.ok(rows.some(row => row.kind === 'native' && row.pid === scanPid && row.binary?.startsWith(`${caller.native}/`)), 'the historical scan itself selects the caller-relative native artifact');
     }
   } finally {
     try { await stop(root, fixture.callers[0]!.cwd, startup); }
