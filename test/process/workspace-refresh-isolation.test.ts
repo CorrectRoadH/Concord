@@ -11,7 +11,7 @@ import { startViewServer } from '../e2e/server.ts';
 
 // @feature docs/feature/local-data-engine/architecture.md#进程与资源
 // @issue docs/issues/warm-reads-over-budget.md
-test('file and action finish before a blocked workspace refresh is released', { timeout: 40_000 }, async () => {
+for (const boundary of ['scan', 'source digest'] as const) test(`file and action finish before a blocked workspace refresh ${boundary} is released`, { timeout: 40_000 }, async () => {
   const root = createConsumer();
   writeProjectConfig(root, { sourceRoots: ['src'] });
   mkdirSync(join(root, 'src'), { recursive: true });
@@ -19,13 +19,15 @@ test('file and action finish before a blocked workspace refresh is released', { 
   writeFileSync(join(root, path), before);
   writeFileSync(join(root, 'src/refresh-gate.ts'), 'export const background = true;\n');
   const hold = join(root, '.git/hold-scan'), reached = join(root, '.git/scan-reached'), hook = join(root, '.git/scan-gate.ts');
-  // Only the scanner's filesystem boundary is held; RPC, actions and source
+  // Only the refresh filesystem boundary is held; RPC, actions and source
   // publication use their production implementations.
   writeFileSync(hook, `import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-const original = fs.openSync;
-fs.openSync = function(path, ...args) {
-  if (String(path).endsWith('/src/refresh-gate.ts') && fs.existsSync(${JSON.stringify(hold)})) {
+const name = ${JSON.stringify(boundary)} === 'scan' ? 'openSync' : 'lstatSync';
+const original = fs[name];
+fs[name] = function(path, ...args) {
+  const refresh = ${JSON.stringify(boundary)} === 'scan' || new Error().stack?.includes('/app/workspace-source.ts');
+  if (refresh && String(path).endsWith('/src/refresh-gate.ts') && fs.existsSync(${JSON.stringify(hold)})) {
     fs.writeFileSync(${JSON.stringify(reached)}, String(process.pid));
     while (fs.existsSync(${JSON.stringify(hold)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
   }
