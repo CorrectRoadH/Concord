@@ -6,6 +6,7 @@ import { expect } from '@playwright/test';
 import { test } from './fixtures.ts';
 import { startViewServer, type ViewServerHandle } from './server.ts';
 import { tmpdir } from '../support/temporary.ts';
+import { parseWorkspaceProjection } from '../support/support.ts';
 
 for (const withCode of [false, true]) {
   // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#web
@@ -26,10 +27,18 @@ for (const withCode of [false, true]) {
       await expect(page.getByRole('button', { name: '搜索工作区' })).toHaveCount(0);
       assert.equal(existsSync(join(root, 'docs/taste.md')), false);
       assert.equal(existsSync(join(root, 'AGENTS.md')), false);
-      const initialized = page.waitForResponse(response => new URL(response.url()).pathname === '/api/action' && response.request().method() === 'POST');
+      const initialized = page.waitForResponse(response => new URL(response.url()).pathname === '/api/action' && response.request().method() === 'POST' && response.request().postDataJSON().action === 'init');
+      // The init receipt precedes publication of the initialized workspace.
+      const projected = page.waitForResponse(async response => {
+        if (new URL(response.url()).pathname !== '/api/workspace' || response.request().method() !== 'GET' || response.status() !== 200) return false;
+        const projection = parseWorkspaceProjection(await response.text());
+        return projection?.snapshot.root === root && projection.snapshot.pages.some(page => page.path === 'docs/README.md');
+      });
       await page.getByRole('button', { name: '初始化 Concord', exact: true }).click();
       const response = await initialized;
       assert.equal(response.status(), 200, await response.text());
+      assert.equal(await response.finished(), null);
+      assert.equal(await (await projected).finished(), null);
       await expect(page).toHaveURL(/\/docs(?:\?|$)/u);
       await expect(page.getByRole('link', { name: '文档', exact: true })).toBeVisible();
       await expect(page.getByRole('heading', { name: '这个仓库还没有初始化 Concord' })).toHaveCount(0);

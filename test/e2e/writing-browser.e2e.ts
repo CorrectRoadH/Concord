@@ -131,7 +131,9 @@ test('real browser displays invalid policy bytes and requires an explicit repair
   await expect(page.getByRole('button', { name: '修复规则' })).toBeVisible();
   assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), obsolete);
   writeFileSync(join(root, 'docs/writing.md'), '{ broken policy');
+  const invalidReloaded = browserActionReceipt(page, 'writing.show', input => input.path === 'docs/writing.md');
   await page.getByRole('button', { name: '重新载入' }).click();
+  await invalidReloaded;
   await expect(page.getByText('{ broken policy')).toBeVisible();
   await expect(page.getByText(/原文摘要：/)).toBeVisible();
   await page.getByRole('button', { name: '修复规则' }).click();
@@ -199,13 +201,23 @@ test('post-save derived refresh cannot adopt an unseen writer digest as the draf
     }
     await route.continue();
   });
+  const refreshed = browserActionReceipt(page, 'writing.show', input => input.path === 'docs/writing.md');
   await page.getByLabel('替换建议 1').fill('Saved locally');
   await page.getByRole('button', { name: '保存规则' }).click();
   await externalWrite;
+  await refreshed;
   await expect(page.locator('.form-error')).toContainText('保存后来源又被外部修改');
   await expect(page.getByLabel('替换建议 1')).toHaveValue('Saved locally');
   await page.getByLabel('替换建议 1').fill('Second local');
+  const rejectedSave = page.waitForResponse(response => {
+    if (response.request().method() !== 'POST' || new URL(response.url()).pathname !== '/api/action') return false;
+    const input = response.request().postDataJSON() as { action?: string; path?: string; body?: string };
+    return input.action === 'document.set' && input.path === 'docs/writing.md' && !!input.body?.includes('Second local');
+  });
   await page.getByRole('button', { name: '保存规则' }).click();
+  const rejected = await rejectedSave;
+  assert.equal(rejected.status(), 409, await rejected.text());
+  assert.equal(await rejected.finished(), null);
   await expect(page.locator('.form-error')).toContainText('docs/writing.md changed');
   assert.equal(parseWritingPolicy(readFileSync(join(root, 'docs/writing.md'), 'utf8')).bannedTerms[0]?.use, 'External');
 
