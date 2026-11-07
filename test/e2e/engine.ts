@@ -5,7 +5,7 @@ import { web } from '@e2e-dev/web';
 import { defineEngine, type EngineHandle } from 'e2e/engine';
 import { browserWorkerFixture, closeBrowserAttempt, closeBrowserWorker, openBrowserWorker } from '../support/browser-shared-fixture.ts';
 import { localBrowser } from './local-browser.ts';
-import { recordBrowserTiming } from '../../scripts/gate-timings.ts';
+import { BrowserAttemptTimer, recordBrowserTiming } from '../../scripts/gate-timings.ts';
 import { installProcessEvents } from '../support/process-events.ts';
 import { processEventsHealthy, recordProcessEvent } from '../../src/base/process/index.ts';
 
@@ -20,6 +20,8 @@ export const webEngine: EngineHandle = web({
 
 const { capabilities: _capabilities, ...delegate } = webEngine;
 let workerID: string | undefined;
+let attemptTimer: BrowserAttemptTimer | undefined;
+let endExecution: ((success: boolean) => void) | undefined;
 
 /** Extend the official worker lifecycle; the Web engine keeps browser/context ownership. */
 export const engine: EngineHandle = defineEngine({
@@ -41,13 +43,29 @@ export const engine: EngineHandle = defineEngine({
     }, workerID);
   },
   async startAttempt(context) {
+    const timer = new BrowserAttemptTimer(context.attemptId, context.artifactsDir, workerID);
+    attemptTimer = timer;
+    BrowserAttemptTimer.current = timer;
+    await timer.persist();
+    browserWorkerFixture().timer = timer;
     browserWorkerFixture().signal = context.signal;
     await browserWorkerFixture().restore(context.signal);
-    await webEngine.startAttempt?.(context);
+    await timer.measure('engine-start', async () => { await webEngine.startAttempt?.(context); });
+    endExecution = timer.begin('case-execution');
   },
   async endAttempt(context) {
-    try { await webEngine.endAttempt?.(context); }
-    finally { await closeBrowserAttempt(); }
+    const timer = attemptTimer;
+    endExecution?.(!context.signal.aborted);
+    endExecution = undefined;
+    try {
+      const stop = async () => { await webEngine.endAttempt?.(context); };
+      await closeBrowserAttempt(() => timer ? timer.measure('engine-stop', stop) : stop());
+    } finally {
+      await timer?.persist(true);
+      if (timer) browserWorkerFixture().timer = undefined;
+      BrowserAttemptTimer.current = undefined;
+      attemptTimer = undefined;
+    }
   },
   async dispose(context) {
     let cleanupComplete = false;

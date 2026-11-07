@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem } from 'effect';
 import { summarizeBrowserAttempts } from '../../scripts/browser-test-report.ts';
-import { readBrowserLifecycle, readBrowserSelection, readFileTimings, recordBrowserTiming, summarizeBrowserLifecycle, summarizeFileTimings, timingMeasurement, writeTimingReport, type LifecycleTiming } from '../../scripts/gate-timings.ts';
+import { BrowserAttemptTimer, readBrowserLifecycle, readBrowserSelection, readFileTimings, recordBrowserTiming, summarizeBrowserCosts, summarizeBrowserLifecycle, summarizeFileTimings, timingMeasurement, writeBrowserCostReport, writeTimingReport, type BrowserAttemptCost, type LifecycleTiming } from '../../scripts/gate-timings.ts';
 import { summarizeMeasuredTestLayers } from '../../scripts/test-layers.ts';
 
 // @feature docs/engineering/testing/README.md#成本与稳定
@@ -150,4 +150,71 @@ test('timing readers strictly decode reports and preserve missing or invalid tel
   assert.deepEqual(yield* readFileTimings(path), []);
   yield* writeTimingReport(output, 'file-timings.json', [{ file: 'test/model/a.test.ts', duration_ms: 9, success: true, unexpected: true }]);
   assert.deepEqual(yield* readFileTimings(path), []);
+}).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));
+
+// @feature docs/engineering/testing/README.md#成本与稳定
+test('browser costs join exact attempt identities and never turn missing or failed stages into zero', () => Effect.runPromise(Effect.sync(() => {
+  const result = { testId: 'real-test', titlePath: ['real title'], file: 'test/e2e/real.e2e.ts', kind: 'test', selected: true, status: 'passed', attempts: [{ id: 'actual-attempt', durationMs: 100, status: 'passed' }] };
+  const receipt: BrowserAttemptCost = { attemptId: 'actual-attempt', artifactsDir: '/artifacts', pid: 123, workerID: 'worker', state: 'finished', spans: [
+    { phase: 'frozen-files', started_ms: 0, ended_ms: 8, success: true },
+    { phase: 'case-execution', started_ms: 10, ended_ms: 90, success: true },
+    { phase: 'setup-refresh', started_ms: 20, ended_ms: 30, success: true },
+    { phase: 'setup-refresh', started_ms: 40, ended_ms: 55, success: true },
+  ] };
+  const [row] = summarizeBrowserCosts([result], [receipt]);
+  assert.equal(row!.testId, result.testId);
+  assert.deepEqual(row!.titlePath, result.titlePath);
+  assert.equal(row!.file, result.file);
+  assert.equal(row!.phases.find(phase => phase.phase === 'frozen-files')!.duration_ms, 8);
+  assert.equal(row!.phases.find(phase => phase.phase === 'setup-refresh')!.duration_ms, 25);
+  assert.equal(row!.phases.find(phase => phase.phase === 'case-execution')!.duration_ms, 80);
+  assert.equal(row!.executionExclusive.duration_ms, 55);
+  assert.equal(row!.phases.find(phase => phase.phase === 'private-server-start')!.state, 'not-selected');
+  assert.equal(row!.phases.find(phase => phase.phase === 'restore-refresh')!.state, 'unknown');
+  for (const receipts of [[], [{ ...receipt, attemptId: 'different-attempt' }], [receipt, receipt], [{ ...receipt, state: 'started' as const }]]) {
+    assert.ok(summarizeBrowserCosts([result], receipts)[0]!.phases.every(phase => phase.state === 'unknown'));
+  }
+  const failed = { ...result, attempts: [{ ...result.attempts[0]!, status: 'failed' }] };
+  const failedRow = summarizeBrowserCosts([failed], [receipt])[0]!;
+  assert.equal(failedRow.attempt.state, 'unknown');
+  assert.equal(failedRow.phases[0]!.observed_duration_ms, 8);
+  assert.ok(failedRow.phases.every(phase => phase.state === 'unknown'));
+  assert.equal(summarizeBrowserCosts([{ ...result, attempts: [] }], [receipt])[0]!.attemptId, null);
+})));
+
+// @feature docs/engineering/testing/README.md#成本与稳定
+test('browser cost receipts retain original failures and generate case reports from official IDs', () => Effect.runPromise(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const output = yield* fs.makeTempDirectoryScoped();
+  const previous = process.env.CONCORD_E2E_OUTPUT;
+  try {
+    process.env.CONCORD_E2E_OUTPUT = output;
+    const timer = new BrowserAttemptTimer('attempt-1', '/artifacts', 'worker');
+    yield* Effect.promise(() => timer.persist());
+    const failure = new Error('original operation failure');
+    yield* Effect.promise(() => assert.rejects(timer.measure('restore-refresh', () => Promise.reject(failure)), cause => cause === failure));
+    assert.throws(() => timer.sync('frozen-files', () => { throw failure; }), cause => cause === failure);
+    yield* Effect.promise(() => timer.persist(true));
+    yield* writeTimingReport(output, 'report.json', { schemaVersion: 'report-1', run: { results: [{
+      testId: 'test-1', titlePath: ['actual title'], file: 'actual.e2e.ts', kind: 'test', selected: true, status: 'failed',
+      attempts: [{ id: 'attempt-1', durationMs: 20, status: 'failed', steps: [] }],
+    }] } });
+    yield* writeBrowserCostReport(output);
+    const report = yield* fs.readFileString(join(output, 'browser-costs.json'));
+    assert.match(report, /"testId": "test-1"/u);
+    assert.match(report, /"titlePath": \[\s*"actual title"/u);
+    assert.match(report, /"attemptId": "attempt-1"/u);
+    assert.ok(timer.receipt.spans.every(span => span.ended_ms !== null && !span.success));
+    yield* fs.remove(join(output, 'report.json'));
+    yield* writeBrowserCostReport(output);
+    assert.match(yield* fs.readFileString(join(output, 'browser-costs.json')), /"state": "unknown"/u);
+    const blocked = join(output, 'ordinary-file');
+    yield* fs.writeFileString(blocked, 'not a directory');
+    process.env.CONCORD_E2E_OUTPUT = blocked;
+    yield* Effect.promise(() => timer.persist());
+    yield* Effect.promise(() => assert.rejects(timer.measure('engine-start', () => Promise.reject(failure)), cause => cause === failure));
+  } finally {
+    if (previous === undefined) delete process.env.CONCORD_E2E_OUTPUT;
+    else process.env.CONCORD_E2E_OUTPUT = previous;
+  }
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));

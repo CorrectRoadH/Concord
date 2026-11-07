@@ -4,6 +4,7 @@ import { Schema } from 'effect';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { sourceCli } from '../support/source-consumer.ts';
 import { packageCommand } from '../../scripts/package-command.ts';
+import { BrowserAttemptTimer } from '../../scripts/gate-timings.ts';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly installedBin?: string; readonly signal?: AbortSignal }
 export interface ViewServerHandle {
@@ -28,6 +29,8 @@ export class ViewServerStartupFailed extends Error {
 
 /** Browser consumers start the source workspace service through its CLI. */
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
+  const end = BrowserAttemptTimer.current?.begin('private-server-start');
+  let success = false;
   let child: ChildProcess | undefined;
   let entry: string | undefined;
   try {
@@ -64,6 +67,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       if (options.signal?.aborted) aborted();
     });
     let closing: Promise<void> | undefined;
+    success = true;
     return { ...ready, process: processHandle, startupOutput, get stderr() { return diagnostics; }, close: () => closing ??= (async () => {
       try {
         // Release the View client's HTTP lease and RPC transport before stopping its service.
@@ -84,7 +88,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     catch (error) { cleanupFailure = cleanupFailure ? new AggregateError([cleanupFailure, error]) : error; }
     throw new ViewServerStartupFailed(options.root, cleanupFailure === undefined,
       cleanupFailure ? new AggregateError([cause, cleanupFailure], 'View startup and cleanup failed') : cause);
-  }
+  } finally { end?.(success); }
 }
 
 async function terminate(child: ChildProcess): Promise<void> {
