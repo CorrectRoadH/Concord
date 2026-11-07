@@ -13,6 +13,9 @@ import { runCli } from '../support/cli.ts';
 // @issue docs/issues/live-journal-read-recovery.md
 test('a current read waits for a live journal publisher and observes its completed publication', { timeout: 20_000 }, async () => {
   const root = createConsumer();
+  const document = join(root, 'docs/feature/live/README.md');
+  fs.mkdirSync(join(root, 'docs/feature/live'), { recursive: true });
+  fs.writeFileSync(document, '# Before publication\n');
   const journal = join(root, '.git/concord/journal.json');
   const writer = spawn(process.execPath, ['--conditions=concord-source', '--input-type=module', '-e', `
     import fs from 'node:fs';
@@ -31,7 +34,7 @@ test('a current read waits for a live journal publisher and observes its complet
       }
     };
     syncBuiltinESMExports();
-    try { repo.publish('live-read', [{ path: 'docs/architecture.md', before: repo.read('docs/architecture.md'), after: '# Published architecture\\n' }]); }
+    try { repo.publish('live-read', [{ path: 'docs/feature/live/README.md', before: repo.read('docs/feature/live/README.md'), after: '# Published architecture\\n' }]); }
     finally { repo.close(); }
   `, root], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
   const exited = once(writer, 'exit');
@@ -55,7 +58,7 @@ test('a current read waits for a live journal publisher and observes its complet
     }) as typeof fs.lstatSync });
     syncBuiltinESMExports();
     let settled = false;
-    reading = runCli({ cwd: root, argv: ['--root', root, '--json', '--dry-run', 'show', 'docs/architecture.md'], env: process.env });
+    reading = runCli({ cwd: root, argv: ['--root', root, '--json', '--dry-run', 'list', 'feature'], env: process.env });
     void reading.then(() => { settled = true; }, () => { settled = true; });
     await journalObserved;
     await new Promise<void>(accept => setImmediate(accept));
@@ -67,7 +70,7 @@ test('a current read waits for a live journal publisher and observes its complet
     const reply = await reading;
     assert.equal(reply.exitCode, 0, reply.stderr);
     assert.match(reply.stdout, /Published architecture/);
-    assert.equal(fs.readFileSync(join(root, 'docs/architecture.md'), 'utf8'), '# Published architecture\n');
+    assert.equal(fs.readFileSync(document, 'utf8'), '# Published architecture\n');
   } finally {
     Object.assign(fs, { lstatSync: original });
     syncBuiltinESMExports();
