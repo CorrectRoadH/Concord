@@ -11,7 +11,7 @@ on:
 jobs:
   prepare-native:
     timeout-minutes: 15
-    runs-on: instabox-medium
+    runs-on: ubuntu-24.04
     outputs:
       sha: ${{ steps.revision.outputs.sha }}
     steps:
@@ -56,7 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         shard: ['1/16', '2/16', '3/16', '4/16', '5/16', '6/16', '7/16', '8/16', '9/16', '10/16', '11/16', '12/16', '13/16', '14/16', '15/16', '16/16', package]
-    runs-on: instabox-medium
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -107,7 +107,7 @@ jobs:
   native-hooks:
     needs: prepare-native
     timeout-minutes: 15
-    runs-on: instabox-medium
+    runs-on: ubuntu-24.04
     env:
       CONCORD_NATIVE_TEST_HOOKS: '1'
     steps:

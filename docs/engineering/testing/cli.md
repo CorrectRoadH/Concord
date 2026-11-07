@@ -28,7 +28,7 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 
 本机门禁按名额排队：定向门禁占 1 个名额，选中全部测试的门禁占全部名额（[负载](README.md#共享资源与同步)）。退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Bun 源码测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
 
-本地交付运行 `pnpm gate --changed`。推送到 master 后，CI 在 Instabox 的 `instabox-medium` 机器（4 vCPU、8 GiB）上运行：十六个分片各运行 `pnpm gate --test-shard=<序号>/16`，打包任务运行 `pnpm gate --test-shard=package`，并集是完整集合；每个任务一台新机器，代码只经 Git 推送到达，结果只经 CI 返回。失败由引入它的人立即修复。
+本地交付运行 `pnpm gate --changed`。推送到 master 后，CI 的原生产物准备、测试分片与故障注入任务均在 GitHub Actions 托管的 `ubuntu-24.04` runner 上运行：十六个分片各运行 `pnpm gate --test-shard=<序号>/16`，打包任务运行 `pnpm gate --test-shard=package`，并集是完整集合；每个任务一台新机器，代码只经 Git 推送到达，结果只经 CI 返回。失败由引入它的人立即修复。
 
 CI 先统一下载固定版本的生产与测试原生产物，分片只校验并使用。故障注入由独立任务选择预编译的测试产物，再运行 `pnpm gate test/process/hawdb-native.test.ts`。全部任务必须通过；任务依赖与产物传递见[CI 任务](architecture.md#ci-任务)。
 
