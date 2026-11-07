@@ -5,8 +5,8 @@ import { gateAdmittedBrowserWorkers, gateAdmissionBytes, gateConcurrency, gateMe
 
 // @feature docs/engineering/testing/cli.md#并发
 test('gate defaults converge on CPU and memory budgets, reserving browser memory first', () => Effect.runPromise(Effect.sync(() => {
-  assert.equal(gateMemoryMax(31 * GiB), 15 * GiB);
-  assert.equal(gateMemoryMax(31.9 * GiB), 15 * GiB);
+  assert.equal(gateMemoryMax(31 * GiB, {}), 15 * GiB);
+  assert.equal(gateMemoryMax(31.9 * GiB, {}), 15 * GiB);
   for (const [memory, cpu, node, browser] of [[15, 16, 8, 3], [8, 16, 8, 1], [4, 16, 8, 1], [64, 32, 8, 4], [15, 2, 1, 1], [1, 1, 1, 1]]) {
     const result = gateConcurrency(memory! * GiB, cpu!, {});
     assert.deepEqual([result.node, result.browser], [node, browser], `memory=${memory}, CPU=${cpu}`);
@@ -19,6 +19,15 @@ test('gate defaults converge on CPU and memory budgets, reserving browser memory
       assert.throws(() => gateConcurrency(15 * GiB, 16, { [name]: value }), { _tag: 'GateResourcesInvalid' }, `${name}=${value}`);
     }
   }
+})));
+
+// @feature docs/engineering/testing/README.md#共享资源与同步
+test('dedicated GitHub CI reserves one GiB while development keeps the half-memory cap', () => Effect.runPromise(Effect.sync(() => {
+  assert.equal(gateMemoryMax(8 * GiB, { GITHUB_ACTIONS: 'true' }), 7 * GiB);
+  assert.equal(gateMemoryMax(8 * GiB - 256 * 1024 ** 2, { GITHUB_ACTIONS: 'true' }), 7 * GiB - 256 * 1024 ** 2);
+  assert.equal(gateAdmissionBytes(gateMemoryMax(8 * GiB, { GITHUB_ACTIONS: 'true' })), 5 * GiB);
+  for (const env of [{}, { CI: 'true' }, { GITHUB_ACTIONS: 'false' }]) assert.equal(gateMemoryMax(8 * GiB, env), 4 * GiB);
+  assert.equal(gateMemoryMax(GiB, { GITHUB_ACTIONS: 'true' }), 1);
 })));
 
 // @feature docs/engineering/testing/cli.md#并发

@@ -34,8 +34,9 @@ export class GateResourcesInvalid extends Schema.TaggedError<GateResourcesInvali
   detail: Schema.String,
 }) {}
 
-/** Round the half-physical budget down to whole GiB, including on the 31 GiB host. */
-export const gateMemoryMax = (physicalBytes = totalmem()): number => Math.max(1, Math.floor(physicalBytes / GiB / 2)) * GiB;
+/** GitHub runners are dedicated to the gate; development hosts share memory. */
+export const gateMemoryMax = (physicalBytes = totalmem(), env: NodeJS.ProcessEnv = process.env): number =>
+  env.GITHUB_ACTIONS === 'true' ? Math.max(1, physicalBytes - GiB) : Math.max(1, Math.floor(physicalBytes / GiB / 2)) * GiB;
 
 export const gateConcurrency = (memoryMaxBytes: number, cpus = availableParallelism(), env: NodeJS.ProcessEnv = process.env) => {
   const read = (name: string): number | undefined => {
