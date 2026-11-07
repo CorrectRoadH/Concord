@@ -125,6 +125,6 @@ const main = (selected: Effect.Success<ReturnType<typeof selectGateTests>>) => E
 const entry = Effect.gen(function*() {
   const selected = yield* selectGateTests(process.argv.slice(2), checkoutRoot);
   const guarded = withGateResources(main(selected));
-  return yield* (process.env.CONCORD_GATE_SCOPE || !isFullGateSelection(selected) ? guarded : withGateQueue(guarded));
+  return yield* (process.env.CONCORD_GATE_SCOPE ? guarded : withGateQueue(guarded, undefined, { demand: isFullGateSelection(selected) ? 'all' : 1 }));
 });
 entry.pipe(Effect.scoped, Effect.provide(NodeServices.layer), NodeRuntime.runMain);
