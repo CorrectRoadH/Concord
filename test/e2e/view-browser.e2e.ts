@@ -6,6 +6,7 @@ import { parseWorkspaceProjection, readProjectConfig, waitForWorkspaceProjection
 import { createDocument } from '../support/operations.ts';
 import { test } from './fixtures.ts';
 import { LocalRepository } from '../support/repository.ts';
+import { browserActionReceipt } from '../support/browser-save.ts';
 import { type ViewServerHandle } from './server.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -152,8 +153,16 @@ test('browser opens and refreshes a deep link without credentials and retries in
       await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'WorkspaceProjectionUnavailable', message: 'Cache handle is busy', details: { reason: 'HawdbBusy' } }) });
     } else await route.continue();
   });
+  const renamed = browserActionReceipt(page, 'document.set', input => input.path === 'docs/feature/web/README.md' && String(input.body).includes('Direct access renamed'));
+  const renameRefresh = page.waitForResponse(response => response.request().method() === 'POST' &&
+    new URL(response.url()).pathname === '/api/workspace');
+  await expect(page.getByLabel('文档标题', { exact: true })).toHaveValue('Direct access fixture');
   await page.getByLabel('文档标题', { exact: true }).fill('Direct access renamed');
   await page.getByRole('tab', { name: 'Use Cases', exact: true }).click();
+  await renamed;
+  const refreshReceipt = await renameRefresh;
+  assert.equal(refreshReceipt.status(), 202, await refreshReceipt.text());
+  assert.equal(await refreshReceipt.finished(), null);
   await expect(page.getByRole('heading', { name: '工作区投影不可用', exact: true })).toBeVisible({ timeout: 20000 });
   const requestedRefreshes = refreshRequests;
   holdWorkspace = false;

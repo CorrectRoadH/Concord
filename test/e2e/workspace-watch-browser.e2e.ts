@@ -73,13 +73,22 @@ test('cached workspace polls every four seconds with independent Git cadence and
   const now = new Date();
   await page.clock.install({ time: new Date(now.getTime() - 1000) });
   await page.addInitScript(() => {
-    const target = window as typeof window & { pollReads: { path: string; at: number }[] };
+    const target = window as typeof window & { pollReads: { path: string; at: number; completed: boolean }[] };
     target.pollReads = [];
     const fetch = window.fetch.bind(window);
-    window.fetch = (input, init) => {
+    window.fetch = async (input, init) => {
       const path = typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
-      if (['/api/workspace', '/api/git', '/api/jobs'].includes(path)) target.pollReads.push({ path, at: Date.now() });
-      return fetch(input, init);
+      if (!['/api/workspace', '/api/git', '/api/jobs'].includes(path)) return fetch(input, init);
+      const read = { path, at: Date.now(), completed: false };
+      target.pollReads.push(read);
+      const response = await fetch(input, init);
+      if (response.status === 304) read.completed = true;
+      const json = response.json.bind(response);
+      response.json = async () => {
+        try { return await json(); }
+        finally { read.completed = true; }
+      };
+      return response;
     };
   });
   let workspaceReads = 0, gitReads = 0, jobsReads = 0, activeReads = 0, maximumReads = 0;
@@ -100,7 +109,11 @@ test('cached workspace polls every four seconds with independent Git cadence and
   await page.route('**/api/jobs', route => { jobsReads += 1; return route.fulfill({ json: { ok: true, value: [] } }); });
   await page.goto(`${origin}/features/watch`);
   await expect(page.getByRole('heading', { name: 'Watch fixture', exact: true })).toBeVisible();
-  await page.waitForLoadState('networkidle');
+  const receivedReads = () => page.waitForFunction(() => {
+    const reads = (window as typeof window & { pollReads: { path: string; completed: boolean }[] }).pollReads;
+    return ['/api/workspace', '/api/git', '/api/jobs'].every(path => reads.some(read => read.path === path)) && reads.every(read => read.completed);
+  });
+  await receivedReads();
   // Let lazy route rendering and initial API retries settle before freezing time.
   await page.clock.pauseAt(new Date());
   assert.deepEqual([workspaceReads, gitReads, jobsReads], [1, 1, 1]);
@@ -111,7 +124,7 @@ test('cached workspace polls every four seconds with independent Git cadence and
     const responses = paths.map(path => page.waitForResponse(response => new URL(response.url()).pathname === path));
     await page.clock.runFor(milliseconds);
     await Promise.all(responses.map(async response => { await (await response).finished(); }));
-    await page.waitForLoadState('networkidle');
+    await receivedReads();
   };
   for (let cycle = 1; cycle <= 16; cycle += 1) {
     await tick(4000, { jobs: true, git: cycle % 8 === 0 });
@@ -145,8 +158,10 @@ test('cached workspace polls every four seconds with independent Git cadence and
   await page.clock.runFor(8000);
   assert.deepEqual([workspaceReads, gitReads, jobsReads], before, 'a slow read holds the next polling cycle');
   hold = false;
+  const resumedJobs = page.waitForResponse(response => new URL(response.url()).pathname === '/api/jobs');
   release?.();
-  await page.waitForLoadState('networkidle');
+  assert.equal(await (await resumedJobs).finished(), null);
+  await receivedReads();
   await tick(4000, { jobs: true });
   assert.equal(maximumReads, 1);
 })));

@@ -255,9 +255,25 @@ test('real browser creates a local Markdown catalog, diagnoses structure and sav
   await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
   await page.setViewportSize({ width: 1440, height: 950 });
+  const initialReads = Promise.all([
+    browserActionReceipt(page, 'writing.show', input => input.path === 'docs/writing.md'),
+    browserActionReceipt(page, 'concepts.show', input => input.path === 'docs/concepts.md'),
+    browserActionReceipt(page, 'concepts.index'),
+    browserActionReceipt(page, 'writing.index'),
+  ]);
   await page.goto(`http://127.0.0.1:${server.port}/terms`);
+  await initialReads;
+  const scopeReads = Promise.all([
+    ...['docs/writing.md', 'docs/feature/writing.md', `${scope}/writing.md`].map(path =>
+      browserActionReceipt(page, 'writing.show', input => input.path === path)),
+    browserActionReceipt(page, 'concepts.show', input => input.path === `${scope}/concepts.md`),
+    browserActionReceipt(page, 'concepts.index'),
+    browserActionReceipt(page, 'writing.index'),
+  ]);
   await page.getByLabel('新生效范围').fill(scope);
   await page.getByRole('button', { name: '打开范围' }).click();
+  // Scope discovery reads must finish before this test publishes a new owner.
+  await scopeReads;
   await page.getByRole('button', { name: '创建本目录术语表' }).click();
   const source = page.getByRole('textbox', { name: '源码原文' });
   const markdown = '# Local terms\n\n## 本地 {#local}\n\nLocal definition\n\n旧写法：`Legacy`\n\n### Explanation\n\nUse `Legacy` only in code.\n';

@@ -8,6 +8,7 @@ import { test } from './fixtures.ts';
 import { type ViewServerHandle } from './server.ts';
 import { waitForWorkspaceProjection } from '../support/support.ts';
 import { waitForWritingSave } from '../support/writing-save.ts';
+import { browserActionReceipt } from '../support/browser-save.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('writing save wait keeps reload behind the successful HTTP receipt', ({ page, workspace }) => Effect.runPromise(Effect.tryPromise(async () => {
@@ -46,7 +47,9 @@ test('writing save wait keeps reload behind the successful HTTP receipt', ({ pag
     release?.();
     await waiting;
     await expect(page.getByText('有未保存更改', { exact: true })).toHaveCount(0);
+    const reloadedPolicy = browserActionReceipt(page, 'writing.show', input => input.path === 'docs/writing.md');
     await page.reload();
+    await reloadedPolicy;
     await expect(input).toHaveValue(replacement);
   } finally {
     release?.();

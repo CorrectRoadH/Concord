@@ -47,8 +47,7 @@ test('polling reads the workspace cache with jobs and serializes slow reads', as
   try {
 
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
-    await page.clock.install({ time: 0 });
-    await page.clock.pauseAt(1000);
+    await page.clock.install({ time: new Date(Date.now() - 1000) });
     await page.route('**/api/events', route => route.abort());
     let requests = 0, jobs = 0;
     page.on('request', request => { if (request.url().endsWith('/api/jobs')) jobs += 1; });
@@ -63,6 +62,8 @@ test('polling reads the workspace cache with jobs and serializes slow reads', as
     assert.equal(requests, 1, 'mounting the workspace does not fetch it again');
     // Let the initial Git/jobs responses settle before advancing the polling timer.
     await expect(page.locator('[data-sidebar="menu-badge"]').first()).toBeVisible();
+    // Freeze after the lazy route has committed, so its scheduler can finish.
+    await page.clock.pauseAt(new Date());
     for (let cycle = 2; cycle <= 8; cycle += 1) {
       const response = page.waitForResponse(result => result.url().endsWith('/api/jobs'));
       await page.clock.runFor(4000);
