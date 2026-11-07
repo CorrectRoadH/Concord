@@ -8,7 +8,7 @@ import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { acquireRecoverablePublicationLease, CoordinationError, ownerIsAlive, readLeaseOwner, releaseFileLease, type FileLease } from '../src/base/publication/file-lease.ts';
 import { decodeNativeArtifact, HAWDB_ABI, HAWDB_REVISION } from '../src/base/installation/hawdb-native-contract.ts';
-import { nativeSourceFiles } from '../src/base/installation/native-artifact.ts';
+import { readNativeRelease } from '../src/base/installation/native-release.ts';
 import { archiveTarget } from './archive-support.ts';
 import { BuildIdentity } from './build-identity.ts';
 
@@ -57,11 +57,8 @@ export const buildCacheTree = Effect.fn('gate.cache.tree')(function*(root: strin
 });
 
 const nativeInputCache = Effect.fn('gate.cache.nativeInput')(function*(checkout: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const sources: string[] = [];
-  for (const path of nativeSourceFiles) sources.push(`${path}\0${sha(yield* fs.readFile(join(checkout, path)))}\n`);
-  const input = `${sha(sources.join(''))}-${sha(yield* fs.readFile(join(checkout, 'native/hawdb/Cargo.lock')))}`;
-  return join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'native', input);
+  const release = yield* Effect.try({ try: () => readNativeRelease(checkout), catch: fail });
+  return join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'native', release.tag);
 });
 
 export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout: string, includeNative = true) {
@@ -69,14 +66,13 @@ export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout
   const fs = yield* FileSystem.FileSystem;
   // The build owns these trees (including its copied resources). File discovery,
   // rather than a second list of source files, includes new and untracked bytes.
-  const roots = new Set(['src', 'web', 'scripts', 'native', 'docs', 'templates', 'skills']);
+  const roots = new Set(['src', 'web', 'scripts', 'docs', 'templates', 'skills']);
   const inputs = (yield* fs.readDirectory(checkout)).filter(name => roots.has(name)
-    || name === '.node-version' || name === 'runtime-deps.json'
+    || name === '.node-version' || name === 'runtime-deps.json' || name === 'native-release.json'
     || /^(?:README(?:\..+)?\.md|package\.json|pnpm[^/]*\.yaml|tsconfig[^/]*\.json|vite[^/]*\.config\.ts)$/u.test(name));
   const entries = yield* buildCacheTree(checkout, path => {
     const parts = path.split('/');
-    return !inputs.includes(parts[0]!) || parts.includes('node_modules') || parts.includes('.git')
-      || path === 'native/hawdb/target' || path.startsWith('native/hawdb/target/');
+    return !inputs.includes(parts[0]!) || parts.includes('node_modules') || parts.includes('.git');
   }, true);
   if (!includeNative) return sha(JSON.stringify({ entries, node: process.version }));
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -160,10 +156,9 @@ const validatePackage = Effect.fn('gate.cache.validatePackage')(function*(archiv
   const native = join(root, 'dist/native', expectedNativeTarget);
   const metadata = yield* fs.readFileString(join(native, 'artifact.json'));
   const artifact = yield* Effect.try({ try: () => decodeNativeArtifact(JSON.parse(metadata)), catch: fail });
-  const sources: string[] = [];
-  for (const path of nativeSourceFiles) sources.push(`${path}\0${sha(yield* fs.readFile(join(checkout, path)))}\n`);
-  if (artifact.target !== expectedNativeTarget || artifact.testHooks || process.env.CONCORD_REQUIRE_PORTABLE_NATIVE === '1' && !artifact.portable || artifact.sourceDigest !== sha(sources.join(''))
-    || artifact.cargoLockDigest !== sha(yield* fs.readFile(join(checkout, 'native/hawdb/Cargo.lock')))
+  const release = yield* Effect.try({ try: () => readNativeRelease(checkout), catch: fail });
+  if (artifact.target !== expectedNativeTarget || artifact.testHooks || process.env.CONCORD_REQUIRE_PORTABLE_NATIVE === '1' && !artifact.portable || artifact.sourceDigest !== release.sourceDigest
+    || artifact.cargoLockDigest !== release.cargoLockDigest
     || artifact.binarySha256 !== sha(yield* fs.readFile(join(native, 'hawdb.node')))
     || artifact.noticesSha256 !== sha(yield* fs.readFile(join(native, 'THIRD-PARTY-NOTICES.txt')))) {
     return yield* new GateBuildCacheFailed({ message: 'Native package identity differs from build inputs' });
@@ -237,7 +232,7 @@ export const prepareGateBuildCache = Effect.fn('gate.cache.prepare')(function*(c
     const native = join(yield* nativeInputCache(checkout), target === 'linux-x64' ? 'linux-x64-glibc' : target);
     if (!(yield* fs.exists(native))) {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const code = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['scripts/build-native.ts', '--reuse'], { cwd: checkout, stdout: 'inherit', stderr: 'inherit' }));
+      const code = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['scripts/prepare-native.ts', '--all-modes'], { cwd: checkout, stdout: 'inherit', stderr: 'inherit' }));
       if (Number(code) !== 0) return yield* new GateBuildCacheFailed({ message: `Native preparation exited ${code}` });
     }
   }

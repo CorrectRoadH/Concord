@@ -1,0 +1,46 @@
+{
+  "format": "concord.native-release/v1",
+  "repository": "CorrectRoadH/hawdb",
+  "version": "0.28.0",
+  "tag": "hawdb-0.28.0",
+  "producerCommit": "3115cb14cce3f9cfea4fbbd8a172b6fa87c593b8",
+  "engineVersion": "0.28.0",
+  "revision": "d47dd9b2b6a51c57a8a621367f5ff6d5d958b3e6",
+  "abi": "concord-hawdb-1",
+  "sourceDigest": "01b9e4e47ad409671ee0d602f9cb7e10869715070795e9349b813c66ba02edf0",
+  "cargoLockDigest": "e345439c7b067e8a598ec7f1d722b4d91ac7072f33bc51d2ad752e104edf565c",
+  "assets": [
+    {
+      "target": "linux-x64-glibc",
+      "testHooks": false,
+      "name": "hawdb-linux-x64-glibc.tar.gz",
+      "archiveSha256": "c2c1647bf80e03b5f5c5a8d13e09329fd9f0396ca664fdae483c60f3760dd051",
+      "binarySha256": "ee1feff3801e93bebc13e28303f598426e59c979cb39b78acfdbf9d1cccf5a1a",
+      "noticesSha256": "f80fc7494bd7b4a77727122bfc5349af9c1a77b49dbea1641faa6c1eb69e3898"
+    },
+    {
+      "target": "linux-x64-glibc",
+      "testHooks": true,
+      "name": "hawdb-linux-x64-glibc-test-hooks.tar.gz",
+      "archiveSha256": "d7eb290c3e0ae8482e5a1502d55293858562aad0da633f929b38851ffa60970c",
+      "binarySha256": "47de00656fdfeb067a5e2d52e44fb73082b4cbe422b6b5f0bb6e3f38479ec630",
+      "noticesSha256": "f80fc7494bd7b4a77727122bfc5349af9c1a77b49dbea1641faa6c1eb69e3898"
+    },
+    {
+      "target": "darwin-arm64",
+      "testHooks": false,
+      "name": "hawdb-darwin-arm64.tar.gz",
+      "archiveSha256": "ab31c6a9f87e62ac6d5d522ce5d8473024a856f263ad4b1ffd20025f47ec578b",
+      "binarySha256": "a72a77135cab107ab6e354c51cb487475350a8c2881c4e3a9756c8ef7c568482",
+      "noticesSha256": "f80fc7494bd7b4a77727122bfc5349af9c1a77b49dbea1641faa6c1eb69e3898"
+    },
+    {
+      "target": "darwin-arm64",
+      "testHooks": true,
+      "name": "hawdb-darwin-arm64-test-hooks.tar.gz",
+      "archiveSha256": "651a23e1ceb38fd14eb4d5dbe4ff93856ce27953ef490bfd1645ba74e6f17fd6",
+      "binarySha256": "61ed718656a0ba6c17dee8f5a9195db49f318d8aea09ac6033faeed0b2ac0c9b",
+      "noticesSha256": "f80fc7494bd7b4a77727122bfc5349af9c1a77b49dbea1641faa6c1eb69e3898"
+    }
+  ]
+}

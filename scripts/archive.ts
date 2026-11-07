@@ -130,13 +130,13 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
   yield* fs.remove(native, { recursive: true, force: true });
   const sources = options.nativeArtifacts ?? process.env.CONCORD_NATIVE_ARTIFACTS;
   const prepared = join(staging, 'native');
-  yield* run(process.execPath, ['scripts/build-native.ts', '--output', prepared, '--reuse', ...(sources ? ['--prebuilt', sources] : [])], repository);
+  yield* run(process.execPath, ['scripts/prepare-native.ts', '--target', nativeTarget(target), '--output', prepared, ...(sources ? ['--prebuilt', sources] : [])], repository);
   const folder = join(prepared, nativeTarget(target));
   if (!(yield* fs.exists(folder))) return yield* new ArchiveFailed({ message: `Missing prebuilt native target ${target}; cross compilation is not implicit` });
   const metadata = yield* fs.readFileString(join(folder, 'artifact.json'));
   const artifact = yield* Effect.try({ try: () => decodeNativeArtifact(JSON.parse(metadata)), catch: cause => cause });
   if (!artifact.portable || artifact.testHooks) return yield* new ArchiveFailed({ message: `Native artifact is not portable: ${target}; provide the Ubuntu 24.04/macOS native job artifact` });
-  // The build-native entry verifies source/lock/license identity before copying.
+  // The prepare-native entry verifies source/lock/license identity before copying.
   yield* fs.makeDirectory(native, { recursive: true });
   yield* fs.copy(folder, join(native, nativeTarget(target)));
   yield* phase('native');

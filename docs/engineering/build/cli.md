@@ -35,6 +35,7 @@
 | `DistInCheckout` | 门禁开始时 worktree 中存在 `dist/`；删除它后重试 |
 | `HerdrModBuildFailed` | `pnpm build:herdr` 的版本、构建或分发文件校验失败；错误消息包含原因，校验完成前不替换现有 `concord/` |
 | `UnsupportedTarget` | `CONCORD_TARGET` 不是 `linux-x64` 或 `darwin-arm64`，或省略它时本机不是这两者之一 |
+| `NativePreparationFailed` | 固定版本的二进制缺失、下载或校验失败，或者离线且缓存不可用；不调用编译器 |
 | `HawdbUnavailable` | 源码运行找不到经身份校验的原生绑定；提示运行 `pnpm exec vp run build:native` |
 
 `UnsupportedTarget` 不写输出目录，以非零退出，消息列出支持的目标。

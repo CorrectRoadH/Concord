@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { gateBuildDigest } from '../../scripts/gate-build-cache.ts';
 import { nativeSourceFiles } from '../../src/base/installation/native-artifact.ts';
+import { readNativeRelease } from '../../src/base/installation/native-release.ts';
 import { HAWDB_ABI, HAWDB_REVISION, hawdbTarget } from '../../src/base/installation/hawdb-native-contract.ts';
 import { tmpdir } from '../support/temporary.ts';
 
@@ -32,12 +33,10 @@ const fixture = Effect.fn('test.cache.fixture')(function*(root: string) {
   }
   yield* fs.writeFileString(join(seedRoot, 'concord-1.0.0-linux-x64.tar.gz.sha256'), hash('compiled archive fixture') + '  concord-1.0.0-linux-x64.tar.gz\n');
   yield* fs.makeDirectory(checkout);
-  const sources: string[] = [];
-  for (const path of [...nativeSourceFiles, 'native/hawdb/Cargo.lock']) {
+  for (const path of nativeSourceFiles) {
     const bytes = yield* fs.readFile(resolve(path));
     yield* fs.makeDirectory(resolve(checkout, path, '..'), { recursive: true });
     yield* fs.writeFile(join(checkout, path), bytes);
-    if (nativeSourceFiles.includes(path as typeof nativeSourceFiles[number])) sources.push(`${path}\0${hash(bytes)}\n`);
   }
   const pkg = { name: 'gate-cache-fixture', version: '1.0.0', type: 'module', bin: { concord: 'dist/entry/cli/entry.js' }, dependencies: {} };
   yield* fs.writeFileString(join(seed, 'package.json'), JSON.stringify(pkg));
@@ -57,8 +56,8 @@ const fixture = Effect.fn('test.cache.fixture')(function*(root: string) {
   yield* fs.writeFileString(join(native, 'hawdb.node'), binary);
   yield* fs.writeFileString(join(native, 'THIRD-PARTY-NOTICES.txt'), notices);
   yield* fs.writeFileString(join(native, 'artifact.json'), JSON.stringify({ target: hawdbTarget(), abi: HAWDB_ABI, revision: HAWDB_REVISION,
-    sourceDigest: hash(sources.join('')), cargoLockDigest: hash(yield* fs.readFile(join(checkout, 'native/hawdb/Cargo.lock'))),
-    binarySha256: hash(binary), noticesSha256: hash(notices), portable: false }));
+    sourceDigest: readNativeRelease(checkout).sourceDigest, cargoLockDigest: readNativeRelease(checkout).cargoLockDigest,
+    binarySha256: hash(binary), noticesSha256: hash(notices), portable: false, testHooks: false }));
   yield* fs.writeFileString(join(checkout, 'package.json'), JSON.stringify(pkg));
   yield* fs.makeDirectory(join(checkout, 'src'), { recursive: true });
   yield* fs.writeFileString(join(checkout, 'src/input.ts'), 'export const value = 1;\n');

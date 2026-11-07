@@ -207,22 +207,12 @@ test('channel notification fails visibly without credentials and resumes from an
 });
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('digest-native publication is manual and both release workflows compile native sources', () => Effect.runPromise(Effect.gen(function*() {
+test('Concord releases consume pinned native binaries without Rust or a native publisher', () => Effect.runPromise(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const native = yield* Schema.decodeUnknownEffect(Schema.Struct({
-    on: Schema.Record(Schema.String, Schema.Unknown), jobs: Schema.Struct({ native: Job, publish: Job }),
-  }))(parse(yield* fs.readFileString('.github/workflows/native.yml')));
-  assert.deepEqual(Object.keys(native.on), ['workflow_dispatch']);
-  assert.equal(native.jobs.native.strategy?.matrix.include?.length, 2);
-  assert.ok(native.jobs.native.steps.some(step => step.run === 'node scripts/build-native.ts --output native-artifacts --require-portable'));
-  assert.ok(native.jobs.native.steps.every(step => !step.run?.includes('--reuse')));
-  assert.equal(native.jobs.publish.needs, 'native');
-  const publication = native.jobs.publish.steps.map(step => step.run ?? '').join('\n');
-  assert.match(publication, /native-\$\{digest:0:16\}/u);
-  assert.match(publication, /gh release create/u);
-  assert.match(publication, /--prerelease --latest=false/u);
-  assert.doesNotMatch(publication, /--clobber|gh release delete/u);
+  assert.equal(yield* fs.exists('.github/workflows/native.yml'), false);
+  assert.equal(yield* fs.exists('native/hawdb/Cargo.toml'), false);
+  assert.equal(yield* fs.exists('.github/actions/setup-native/action.yml'), false);
   const release = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job }) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
-  assert.ok(release.jobs.native.steps.some(step => step.run === 'node scripts/build-native.ts --output native-artifacts --require-portable'));
-  assert.ok(release.jobs.native.steps.every(step => !step.run?.includes('--reuse')));
+  assert.ok(release.jobs.native.steps.some(step => step.run === 'node scripts/prepare-native.ts --output native-artifacts --require-portable'));
+  assert.doesNotMatch(release.jobs.native.steps.map(step => `${step.uses ?? ''} ${step.run ?? ''}`).join('\n'), /cargo|rustup|setup-native|build-native/u);
 }).pipe(Effect.provide(NodeServices.layer))));

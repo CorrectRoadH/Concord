@@ -21,6 +21,7 @@ export default {
     ],
     "sourceFiles": [
       ".bun-version",
+      "native-release.json",
       ".node-version",
       "package.json",
       "pnpm-lock.yaml",
@@ -45,7 +46,8 @@ export default {
       "scripts/bench.ts",
       "scripts/browser-test-report.ts",
       "scripts/build-identity.ts",
-      "scripts/build-native.ts",
+      "scripts/prepare-native.ts",
+      "scripts/ci-native-cache.ts",
       "scripts/build-output.ts",
       "scripts/bun-test-report.ts",
       "scripts/distribution.ts",

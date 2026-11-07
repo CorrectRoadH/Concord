@@ -35,19 +35,8 @@ jobs:
         with:
           path: ${{ steps.identity.outputs.directory }}
           key: ${{ steps.identity.outputs.key }}
-      - name: Validate and export cached production artifact
-        id: validated
-        continue-on-error: true
-        env:
-          NATIVE_CACHE: ${{ steps.identity.outputs.directory }}
-        run: node scripts/build-native.ts --prebuilt "$NATIVE_CACHE" --output "$RUNNER_TEMP/gate-native"
-      - uses: ./.github/actions/setup-native
-        if: steps.validated.outcome != 'success'
-        with:
-          platform: ubuntu-24.04-linux-x64-glibc
-      - name: Prepare production artifact once
-        if: steps.validated.outcome != 'success'
-        run: node scripts/build-native.ts --reuse --output "$RUNNER_TEMP/gate-native"
+      - name: Prepare pinned production and fault-injection binaries
+        run: node scripts/prepare-native.ts --all-modes --output "$RUNNER_TEMP/gate-native"
       - uses: actions/cache/save@v4
         if: steps.native-cache.outputs.cache-hit != 'true'
         with:
@@ -99,8 +88,10 @@ jobs:
         with:
           name: gate-native
           path: ${{ runner.temp }}/gate-native
-      - name: Validate and install production artifact
-        run: node scripts/build-native.ts --prebuilt "$RUNNER_TEMP/gate-native"
+      - name: Validate and install both native modes
+        run: |
+          node scripts/prepare-native.ts --prebuilt "$RUNNER_TEMP/gate-native"
+          node scripts/prepare-native.ts --test-hooks --prebuilt "$RUNNER_TEMP/gate-native/test-hooks"
       - name: Run the complete gate for this shard
         run: pnpm gate --test-shard=${{ matrix.shard }}
       - name: Preserve test failure diagnostics
@@ -134,14 +125,15 @@ jobs:
         with:
           bun-version-file: '.bun-version'
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - uses: ./.github/actions/setup-native
-        with:
-          platform: ubuntu-24.04-linux-x64-glibc
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - name: Select private fault-injection cache
-        run: echo "XDG_CACHE_HOME=$RUNNER_TEMP/hawdb-hooks-cache" >> "$GITHUB_ENV"
-      - name: Compile private fault-injection artifact
-        run: node scripts/build-native.ts --test-hooks
+      - uses: actions/download-artifact@v4
+        with:
+          name: gate-native
+          path: ${{ runner.temp }}/gate-native
+      - name: Install both binaries for fault-injection verification
+        run: |
+          node scripts/prepare-native.ts --prebuilt "$RUNNER_TEMP/gate-native"
+          node scripts/prepare-native.ts --test-hooks --prebuilt "$RUNNER_TEMP/gate-native/test-hooks"
       - name: Verify native transaction failure and crash recovery
         run: pnpm gate test/process/hawdb-native.test.ts
       - name: Preserve fault-injection diagnostics

@@ -35,11 +35,11 @@ export const signDarwinReleaseNative = Effect.fn('release.signDarwinNative')(fun
   if (createHash('sha256').update(yield* fs.readFile(binary)).digest('hex') !== metadata.binarySha256) return yield* new NativeReleaseInvalid({ message: 'Native binary checksum differs before signing' });
   yield* fs.copyFile(join(extracted, 'rg'), join(root, 'rg'));
   for (const name of ['LICENSE-MIT', 'COPYING']) yield* fs.copyFile(join(extracted, name), join(root, name));
-  for (const file of [binary, join(root, 'rg')]) {
+  yield* mustRun(['codesign', '--verify', '--strict', binary], options);
+  for (const file of [join(root, 'rg')]) {
     yield* mustRun(['codesign', '--force', '--sign', '-', file], options);
     yield* mustRun(['codesign', '--verify', '--strict', file], options);
   }
-  yield* fs.writeFileString(metadataPath, `${JSON.stringify({ ...metadata, binarySha256: createHash('sha256').update(yield* fs.readFile(binary)).digest('hex') }, null, 2)}\n`);
   yield* fs.writeFileString(join(root, 'rg-runtime.json'), `${JSON.stringify({ format: 'concord.signed-rg/v1', target: 'darwin-arm64', version: deps.ripgrep.version, asset: config.asset, upstreamSha256: config.sha256, binarySha256: createHash('sha256').update(yield* fs.readFile(join(root, 'rg'))).digest('hex') }, null, 2)}\n`);
 }, Effect.scoped);
 

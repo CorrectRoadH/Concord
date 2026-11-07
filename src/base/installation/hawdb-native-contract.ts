@@ -1,6 +1,7 @@
 import { Schema } from "effect";
+import nativeRelease from "../../../native-release.json" with { type: "json" };
 
-export const HAWDB_REVISION = '91aec4960ed27516962cf1dc918307f57faef15d';
+export const HAWDB_REVISION = nativeRelease.revision;
 export const HAWDB_ABI = 'concord-hawdb-1';
 // Mirrors the native persistent logical admission budget; namespaces share it.
 export const PERSISTENT_CACHE_MAX_BYTES = 96 * 1024 * 1024;
@@ -19,7 +20,7 @@ export const NativeArtifactSchema = Schema.Struct({
   binarySha256: Schema.String,
   noticesSha256: Schema.String,
   portable: Schema.Boolean,
-  testHooks: Schema.optional(Schema.Boolean),
+  testHooks: Schema.Boolean,
   deploymentTarget: Schema.optional(Schema.String),
 });
 export type NativeArtifact = Schema.Schema.Type<typeof NativeArtifactSchema>;

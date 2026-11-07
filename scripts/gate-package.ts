@@ -55,7 +55,7 @@ export const preparePackagingFixture = Effect.fn('gate.preparePackagingFixture')
   yield* Effect.addFinalizer(() => completed ? Effect.void : writePackagePreparation(report, { state: 'failed', code: 1,
     duration_ms: performance.now() - started, memory, message: 'Archive preparation interrupted before completion' }).pipe(Effect.orDie));
   const outcome = yield* Effect.result(Effect.scoped(Effect.gen(function*() {
-    const observation = yield* observeTestProcessTree('archive-preparation', gateMemoryBudgets.archive, ['build', 'scripts/build-native.ts'], true);
+    const observation = yield* observeTestProcessTree('archive-preparation', gateMemoryBudgets.archive, ['build', 'scripts/prepare-native.ts'], true);
     yield* Effect.addFinalizer(() => Effect.gen(function*() {
       memory = yield* observation.finish.pipe(Effect.onExit(exit => Effect.sync(() => { if (exit._tag === 'Failure') admission.failed = true; })));
     }).pipe(Effect.orDie));

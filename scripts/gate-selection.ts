@@ -59,7 +59,7 @@ export function isFullGateSelection(selected: { readonly files: readonly string[
 }
 
 const allTestsDependency = (file: string): boolean => file.startsWith('test/support/') || file.startsWith('scripts/')
-  || file === '.bun-version'
+  || file === '.bun-version' || file === 'native-release.json'
   || /(?:^|\/)package\.json$/u.test(file) || /(?:^|\/)(?:pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|Cargo\.lock)$/u.test(file);
 
 export const selectGateTests = Effect.fn('gate.selectTests')(function*(argv: readonly string[], root = checkoutRoot, output?: string) {

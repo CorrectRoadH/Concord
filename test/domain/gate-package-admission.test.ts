@@ -15,7 +15,7 @@ test('archive preparation shares the pool, persists failure receipts and returns
   const checkout = join(root, 'checkout'), cache = join(root, 'cache'), bin = join(root, 'bin');
   yield* fs.makeDirectory(checkout);
   yield* fs.makeDirectory(bin);
-  for (const path of [...nativeSourceFiles, 'native/hawdb/Cargo.lock']) {
+  for (const path of nativeSourceFiles) {
     yield* fs.makeDirectory(resolve(checkout, path, '..'), { recursive: true });
     yield* fs.writeFile(join(checkout, path), yield* fs.readFile(resolve(path)));
   }

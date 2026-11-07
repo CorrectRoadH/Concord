@@ -4,7 +4,6 @@ dist/
 coverage/
 .DS_Store
 .agents/friction-log/
-native/hawdb/target/
 native-artifacts/
 .vitest/
 .test-results/

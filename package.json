@@ -24,7 +24,7 @@
     "bench:profile": "node scripts/profile.ts",
     "test:e2e:agent": "node scripts/test-built.ts --suite=agent",
     "build:herdr": "node scripts/build-herdr-mod.ts",
-    "build:native": "node scripts/build-native.ts --reuse"
+    "build:native": "node scripts/prepare-native.ts --all-modes"
   },
   "dependencies": {
     "@effect/platform-node": "4.1.2",

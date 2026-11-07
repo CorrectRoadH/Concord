@@ -13,7 +13,7 @@ export function privateSourceInstallation(target: string): string {
   for (const path of ['src', 'web', 'scripts', 'templates', 'skills', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'vite.config.ts', 'vite.source.config.ts', 'vite.preview.config.ts']) {
     cpSync(join(checkout, path), join(target, path), { recursive: true });
   }
-  for (const path of [...nativeSourceFiles.filter(path => path.startsWith('native/')), 'native/hawdb/Cargo.lock']) {
+  for (const path of nativeSourceFiles) {
     mkdirSync(dirname(join(target, path)), { recursive: true });
     cpSync(join(checkout, path), join(target, path));
   }

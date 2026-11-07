@@ -1,12 +1,12 @@
 // 跨进程保证：原生模块与句柄——真实native引擎与clear guard双向跨进程互斥，SIGKILL事务无半批提交且加载失败可修复重试。
-import { nativeArtifactRoot } from "../../src/base/installation/index.ts";
+import { nativeArtifactRoot, nativeCacheRoot } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { cpSync, mkdtempSync, realpathSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, linkSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { hawdbTarget } from "../../src/base/installation/index.ts";
@@ -27,6 +27,14 @@ function rawEngine(path: string, admit = true): RawDatabase {
 const childRole = process.env.CONCORD_HAWDB_CHILD_ROLE;
 if (childRole) {
   const path = process.env.CONCORD_HAWDB_CHILD_PATH!;
+  if (childRole === 'fail-batch') {
+    const db = openHawdb(path, { readOnly: false, create: false }, runtime);
+    try {
+      assert.throws(() => db.put('code_cache', [{ key: 'first', payload: '1' }, { key: 'second', payload: '2' }]), (error: unknown) => error instanceof Error && 'code' in error && error.code === 'HawdbUnavailable');
+      assert.deepEqual(db.scan('code_cache'), []);
+    } finally { db.close(); }
+    process.exit(0);
+  }
   if (childRole === 'kill-batch') {
     const db = openHawdb(path, { readOnly: false, create: false }, runtime);
     db.put('code_cache', [{ key: 'precommit', payload: 'not-visible' }]);
@@ -181,6 +189,28 @@ if (childRole) {
       finally { reopened.close(); }
     } finally { f.cleanup(); }
   });
+  // @feature docs/feature/local-data-engine/architecture.md#原生边界
+  test('the real v0.13 cache is rejected unchanged and rebuilt only under the clear guard', () => {
+    const f = fixture(), path = join(f.dir, 'cache.hawdb');
+    try {
+      execFileSync('tar', ['-xzf', fileURLToPath(new URL('../fixtures/hawdb/v0.13.0-cache.tar.gz', import.meta.url)), '-C', f.dir]);
+      writeFileSync(join(f.dir, 'source.md'), 'authoritative source');
+      writeFileSync(join(f.dir, 'journal.json'), 'publication evidence');
+      const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
+      const before = diskSnapshot(path);
+      for (const readOnly of [true, false]) code(() => openHawdb(path, { readOnly, create: false }, runtime), 'HawdbIncompatible');
+      assert.deepEqual(diskSnapshot(path), before);
+      const guard = acquireHawdbClearGuard(path, runtime);
+      try { deleteInspectedCache(inspectCacheClear(f.dir), () => guard.verify()); }
+      finally { guard.close(); }
+      assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
+      const current = openHawdb(path, { readOnly: false, create: true }, runtime);
+      try { assert.deepEqual(current.scan('code_cache'), []); }
+      finally { current.close(); }
+      assert.equal(readFileSync(join(f.dir, 'source.md'), 'utf8'), 'authoritative source');
+      assert.equal(readFileSync(join(f.dir, 'journal.json'), 'utf8'), 'publication evidence');
+    } finally { f.cleanup(); }
+  });
   test('cross-process database and guard exclude both directions, preserve inode, and release', async () => {
     const f = fixture();
     let proc: ChildProcess | undefined;
@@ -284,11 +314,12 @@ if (childRole) {
   test('test-hook failure inside real transaction rolls back all SQL mutations', { skip: !hooks }, () => {
     const f = fixture();
     try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime);
-      process.env.CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST = '1';
-      try { code(() => db.put('code_cache', [{ key: 'first', payload: '1' }, { key: 'second', payload: '2' }]), 'HawdbUnavailable'); }
-      finally { delete process.env.CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST; }
-      assert.deepEqual(db.scan('code_cache'), []); db.close();
+      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime); db.close();
+      const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], {
+        env: { ...process.env, CONCORD_HAWDB_CHILD_ROLE: 'fail-batch', CONCORD_HAWDB_CHILD_PATH: f.db, CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST: '1' },
+        encoding: 'utf8', timeout: 30_000,
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
       const reopened = openHawdb(f.db, { readOnly: true, create: false }, runtime);
       assert.deepEqual(reopened.scan('code_cache'), []); reopened.close();
     } finally { f.cleanup(); }
@@ -322,7 +353,7 @@ if (childRole) {
     const root = mkdtempSync(join(tmpdir(), 'concord-native-retry-'));
     try {
       const cache = join(root, 'cache');
-      const folder = join(cache, 'concord/native', basename(nativeArtifactRoot(runtime)), hawdbTarget());
+      const folder = join(nativeCacheRoot(makeRuntimeEnvironment(process.cwd(), { ...process.env, XDG_CACHE_HOME: cache })), hawdbTarget());
       cpSync(join(nativeArtifactRoot(runtime), hawdbTarget()), folder, { recursive: true });
       const binary = join(folder, 'hawdb.node'), original = join(root, 'original.node');
       writeFileSync(original, readFileSync(binary));

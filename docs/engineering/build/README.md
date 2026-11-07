@@ -4,13 +4,13 @@
 
 ## 开始开发
 
-开发需要[运行时版本](#运行时版本)指定的 Bun、运行 pnpm 与 Vite+ 所需的 Node.js、pnpm 11.18.0、Git、Rust 1.97.1 和本机 C 链接工具链。
+开发需要[运行时版本](#运行时版本)指定的 Bun、运行 pnpm 与 Vite+ 所需的 Node.js、pnpm 11.18.0 和 Git。
 
 ```sh
 git clone https://github.com/CorrectRoadH/Concord.git
 cd Concord
 pnpm install --frozen-lockfile # 安装项目固定版本的 vp
-rustup toolchain install 1.97.1 --profile minimal
+pnpm exec vp run build:native # 下载并校验固定版本的 HawDB 二进制
 pnpm exec vp run concord --help
 pnpm exec vp run gate
 ```

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
-import { nativeArtifactRoot, hawdbTarget } from '../../src/base/installation/index.ts';
+import { join } from 'node:path';
+import { nativeArtifactRoot, nativeCacheRoot, hawdbTarget } from '../../src/base/installation/index.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { Effect } from 'effect';
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
@@ -28,22 +28,24 @@ test('client artifact verification does not load a native engine owned by the se
 test('source native hooks require explicit matching identity and preserve digest verification', () => Effect.runPromise(Effect.sync(() => {
   const root = mkdtempSync(join(tmpdir(), 'concord-native-hooks-'));
   const cache = join(root, 'cache');
-  const artifact = join(cache, 'concord/native', basename(nativeArtifactRoot(runtime)), hawdbTarget());
+  const privateRuntime = makeRuntimeEnvironment(process.cwd(), { ...process.env, XDG_CACHE_HOME: cache });
+  const artifact = join(nativeCacheRoot(privateRuntime, true), hawdbTarget());
   const module = new URL('../../src/base/cache/index.ts', import.meta.url).href;
   const env = { ...process.env, XDG_CACHE_HOME: cache, CONCORD_NATIVE_TEST_HOOKS: undefined };
-  const invoke = (hooks: string | undefined, body: string) => spawnSync(process.execPath, ['--input-type=module', '-e', `
+  const invoke = (hooks: string | undefined, body: string, failAfterFirst = false) => spawnSync(process.execPath, ['--input-type=module', '-e', `
     import assert from 'node:assert/strict';
     import { hawdbIdentity, createMemoryHawdb } from ${JSON.stringify(module)};
     const runtime = { cwd: process.cwd(), env: { ...process.env } };
     ${body}
-  `], { encoding: 'utf8', env: { ...env, CONCORD_NATIVE_TEST_HOOKS: hooks } });
+  `], { encoding: 'utf8', env: { ...env, CONCORD_NATIVE_TEST_HOOKS: hooks, CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST: failAfterFirst ? '1' : undefined } });
   const rejects = (hooks: string | undefined) => {
     const result = invoke(hooks, "assert.throws(() => hawdbIdentity(runtime), error => error.code === 'HawdbIncompatible');");
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
   try {
-    const build = spawnSync(process.execPath, ['scripts/build-native.ts', '--test-hooks'], { encoding: 'utf8', env });
-    assert.equal(build.status, 0, build.stdout + build.stderr);
+    const prepared = join(nativeCacheRoot(runtime, true), hawdbTarget());
+    cpSync(prepared, artifact, { recursive: true });
+    cpSync(prepared, join(nativeCacheRoot(privateRuntime, false), hawdbTarget()), { recursive: true });
     const manifestPath = join(artifact, 'artifact.json');
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
     assert.equal(manifest.testHooks, true);
@@ -51,15 +53,19 @@ test('source native hooks require explicit matching identity and preserve digest
     const accepted = invoke('1', `
       const db = createMemoryHawdb(runtime);
       try {
-        process.env.CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST = '1';
         assert.throws(() => db.put('document_parse', [{ key: 'first', payload: '1' }, { key: 'second', payload: '2' }]), error => error.code === 'HawdbUnavailable');
-        delete process.env.CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST;
         assert.deepEqual(db.scan('document_parse'), []);
+      } finally { db.close(); }
+    `, true);
+    assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+    const writable = invoke('1', `
+      const db = createMemoryHawdb(runtime);
+      try {
         db.put('document_parse', [{ key: 'committed', payload: 'value' }]);
         assert.deepEqual(db.scan('document_parse'), [{ key: 'committed', payload: 'value' }]);
       } finally { db.close(); }
     `);
-    assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+    assert.equal(writable.status, 0, writable.stdout + writable.stderr);
     for (const field of ['sourceDigest', 'cargoLockDigest', 'binarySha256', 'noticesSha256']) {
       writeFileSync(manifestPath, JSON.stringify({ ...manifest, [field]: '0'.repeat(64) }));
       rejects('1');

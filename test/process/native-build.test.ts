@@ -1,7 +1,9 @@
-// 跨进程保证：外部程序——构建入口在命中时不启动compiler/network，未命中或损坏时真实触达Cargo边界并保留失败。
-import { nativeArtifactRoot } from "../../src/base/installation/index.ts";
+// 跨进程保证：外部程序——准备入口只消费固定发行二进制，缓存和下载成功、缺失或损坏均不得启动Cargo。
+import { nativeArtifactRoot, readNativeRelease, nativeCacheRoot } from "../../src/base/installation/index.ts";
 import { hawdbTarget, decodeNativeArtifact, HAWDB_MACOS_DEPLOYMENT_TARGET } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { privateSourceInstallation } from '../support/private-source.ts';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -17,20 +19,41 @@ import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 
+const release = readNativeRelease();
 const target = hawdbTarget();
 const original = join(nativeArtifactRoot(runtime), target);
 const identity = Effect.runSync(Effect.sync(() => decodeNativeArtifact(JSON.parse(readFileSync(join(original, 'artifact.json'), 'utf8')))));
-const args = (root: string) => ['scripts/build-native.ts', '--reuse', '--output', join(root, 'output')];
-const cachePath = (root: string) => join(root, 'cache/concord/native', `${identity.sourceDigest}-${identity.cargoLockDigest}`, target);
+const args = (root: string) => ['scripts/prepare-native.ts', '--output', join(root, 'output')];
+const cachePath = (root: string) => join(root, 'cache/concord/native', release.tag, target);
 const setup = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-native-build-'));
   mkdirSync(join(root, 'bin'));
-  // Cargo is an external compiler boundary. A fallback must reach it and retain
-  // its failure, without rebuilding or altering the suite's frozen dist.
-  writeFileSync(join(root, 'bin/cargo'), '#!/bin/sh\necho cargo-fallback-invoked >&2\nexit 43\n', { mode: 0o755 });
+  // A compiler boundary probe proves every path stays binary-only.
+  writeFileSync(join(root, 'bin/cargo'), '#!/bin/sh\ntouch \"$CARGO_PROBE\"\necho cargo-fallback-invoked >&2\nexit 43\n', { mode: 0o755 });
   return root;
 };
-const env = (root: string) => ({ ...process.env, MACOSX_DEPLOYMENT_TARGET: HAWDB_MACOS_DEPLOYMENT_TARGET, CONCORD_NATIVE_OFFLINE: '1', XDG_CACHE_HOME: join(root, 'cache'), PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` });
+const env = (root: string) => ({ ...process.env, MACOSX_DEPLOYMENT_TARGET: HAWDB_MACOS_DEPLOYMENT_TARGET, CONCORD_NATIVE_OFFLINE: '1', CARGO_PROBE: join(root, 'cargo-invoked'), XDG_CACHE_HOME: join(root, 'cache'), PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` });
+
+// @feature docs/engineering/build/architecture.md#原生绑定复用
+test('two pinned versions with identical source digests have independent caches', () => Effect.runPromise(Effect.sync(() => {
+  const root = setup();
+  try {
+    const checkout = join(root, 'checkout');
+    privateSourceInstallation(checkout);
+    const install = () => spawnSync(process.execPath, ['scripts/prepare-native.ts', '--prebuilt', nativeCacheRoot(runtime, false)], { cwd: checkout, env: env(root), encoding: 'utf8' });
+    const first = install();
+    assert.equal(first.status, 0, first.stdout + first.stderr);
+    const changedVersion = `${release.version.split('.').slice(0, 2).join('.')}.${Number(release.version.split('.')[2]) + 1}`;
+    const secondPin = { ...release, version: changedVersion, engineVersion: changedVersion, tag: `hawdb-${changedVersion}` };
+    writeFileSync(join(checkout, 'native-release.json'), JSON.stringify(secondPin));
+    const second = install();
+    assert.equal(second.status, 0, second.stdout + second.stderr);
+    for (const tag of [release.tag, secondPin.tag]) assert.deepEqual(
+      readFileSync(join(root, 'cache/concord/native', tag, target, 'hawdb.node')), readFileSync(join(original, 'hawdb.node')),
+    );
+    assert.equal(existsSync(join(root, 'cargo-invoked')), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
 
 // @feature docs/engineering/build/README.md
 test('CI prebuilt transfer loads in a fresh cache without Cargo and rejects corrupted or test-hook artifacts', () => Effect.runPromise(Effect.sync(() => {
@@ -38,7 +61,7 @@ test('CI prebuilt transfer loads in a fresh cache without Cargo and rejects corr
   try {
     const incoming = join(root, 'incoming', target);
     cpSync(original, incoming, { recursive: true });
-    const transfer = () => spawnSync(process.execPath, ['scripts/build-native.ts', '--prebuilt', join(root, 'incoming')], { env: env(root), encoding: 'utf8' });
+    const transfer = () => spawnSync(process.execPath, ['scripts/prepare-native.ts', '--prebuilt', join(root, 'incoming')], { env: env(root), encoding: 'utf8' });
     const installed = transfer();
     assert.equal(installed.status, 0, installed.stdout + installed.stderr);
     assert.doesNotMatch(installed.stderr, /cargo-fallback-invoked|Native download/u);
@@ -55,8 +78,15 @@ test('CI prebuilt transfer loads in a fresh cache without Cargo and rejects corr
     const identified = spawnSync(process.execPath, ['scripts/ci-native-cache.ts'], { env: { ...env(root), GITHUB_OUTPUT: outputs }, encoding: 'utf8' });
     assert.equal(identified.status, 0, identified.stdout + identified.stderr);
     const values = Object.fromEntries(readFileSync(outputs, 'utf8').trim().split('\n').map(line => { const at = line.indexOf('='); return [line.slice(0, at), line.slice(at + 1)]; }));
-    assert.equal(values.directory, join(root, 'cache/concord/native', `${identity.sourceDigest}-${identity.cargoLockDigest}`));
-    assert.ok(values.key?.includes(`${identity.sourceDigest}-${identity.cargoLockDigest}`));
+    assert.equal(values.directory, join(root, 'cache/concord/native', release.tag));
+    assert.ok(values.key?.includes(release.tag));
+    cpSync(join(nativeCacheRoot(runtime, true), target), incoming, { recursive: true });
+    const hooks = spawnSync(process.execPath, ['scripts/prepare-native.ts', '--test-hooks', '--prebuilt', join(root, 'incoming')], { env: env(root), encoding: 'utf8' });
+    assert.equal(hooks.status, 0, hooks.stdout + hooks.stderr);
+    assert.equal(decodeNativeArtifact(JSON.parse(readFileSync(join(root, 'cache/concord/native', release.tag, 'test-hooks', target, 'artifact.json'), 'utf8'))).testHooks, true);
+    assert.equal(decodeNativeArtifact(JSON.parse(readFileSync(join(cachePath(root), 'artifact.json'), 'utf8'))).testHooks, false);
+    assert.equal(transfer().status, 1);
+    assert.equal(existsSync(join(root, 'cargo-invoked')), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
@@ -77,10 +107,19 @@ test('native cache validates the complete identity and skips all network/compile
       writeFileSync(join(cachePath(root), 'artifact.json'), JSON.stringify({ ...identity, ...mutation }));
       const result = spawnSync(process.execPath, args(root), { env: env(root), encoding: 'utf8' });
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.match(result.stderr, /Native cache: .*falling back/);
-      assert.match(result.stderr, /CONCORD_NATIVE_OFFLINE=1/);
-      assert.match(result.stderr, /cargo-fallback-invoked/);
+      assert.match(result.stderr, /Native cache: .*trying fixed release/);
+      assert.match(result.stdout + result.stderr, /CONCORD_NATIVE_OFFLINE=1/);
+      assert.doesNotMatch(result.stderr, /cargo-fallback-invoked/);
+      assert.equal(existsSync(join(root, 'cargo-invoked')), false);
     }
+    const binary = join(cachePath(root), 'hawdb.node'), savedBinary = readFileSync(binary);
+    writeFileSync(binary, 'tampered binary');
+    writeFileSync(join(cachePath(root), 'artifact.json'), JSON.stringify({ ...identity, binarySha256: createHash('sha256').update('tampered binary').digest('hex') }));
+    const selfConsistentCorruption = spawnSync(process.execPath, args(root), { env: env(root), encoding: 'utf8' });
+    assert.equal(selfConsistentCorruption.status, 1);
+    assert.match(selfConsistentCorruption.stderr, /native release\/mode mismatch/u);
+    assert.equal(existsSync(join(root, 'cargo-invoked')), false);
+    writeFileSync(binary, savedBinary);
     writeFileSync(join(cachePath(root), 'artifact.json'), JSON.stringify(identity));
     const dependency = readdirSync(join(cachePath(root), 'licenses'))[0]!;
     const dependencyLicense = readdirSync(join(cachePath(root), 'licenses', dependency))[0]!;
@@ -91,39 +130,51 @@ test('native cache validates the complete identity and skips all network/compile
       const result = spawnSync(process.execPath, args(root), { env: env(root), encoding: 'utf8' });
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.match(result.stderr, /native license digest mismatch/);
-      assert.match(result.stderr, /cargo-fallback-invoked/);
+      assert.doesNotMatch(result.stderr, /cargo-fallback-invoked/);
+      assert.equal(existsSync(join(root, 'cargo-invoked')), false);
       writeFileSync(file, before);
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
-test('native per-digest download populates the cache and invalid archives fall back honestly', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+test('pinned native download verifies archive bytes and never invokes Cargo on corruption or absence', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const root = yield* Effect.sync(setup);
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  let corrupt = false;
+  let responseMode: 'valid' | 'corrupt' | 'missing' = 'valid';
   const requested: string[] = [];
   const archive = join(root, 'native.tar.gz');
   yield* Effect.sync(() => execFileSync('tar', ['-czf', archive, '-C', nativeArtifactRoot(runtime), target], { env: { ...process.env, COPYFILE_DISABLE: '1' } }));
+  const checkout = join(root, 'checkout');
+  yield* Effect.sync(() => {
+    privateSourceInstallation(checkout);
+    const pin = JSON.parse(readFileSync(join(checkout, 'native-release.json'), 'utf8')) as { assets: { target: string; testHooks: boolean; archiveSha256: string }[] };
+    pin.assets.find(asset => asset.target === target && !asset.testHooks)!.archiveSha256 = createHash('sha256').update(readFileSync(archive)).digest('hex');
+    writeFileSync(join(checkout, 'native-release.json'), JSON.stringify(pin));
+  });
   const server = createServer((request, response) => {
     requested.push(request.url ?? '');
-    response.end(corrupt ? Buffer.from('invalid archive') : readFileSync(archive));
+    response.statusCode = responseMode === 'missing' ? 404 : 200;
+    response.end(responseMode === 'valid' ? readFileSync(archive) : Buffer.from(responseMode));
   });
   yield* Effect.promise(async () => { server.listen(0, '127.0.0.1'); await once(server, 'listening'); });
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
   try {
-    const options = { env: { ...env(root), CONCORD_NATIVE_OFFLINE: '0', CONCORD_NATIVE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}/releases` } };
+    const options = { cwd: checkout, env: { ...env(root), CONCORD_NATIVE_OFFLINE: '0', CONCORD_NATIVE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}/releases` } };
     const result = yield* spawner.string(ChildProcess.make(process.execPath, args(root), { ...options, stderr: 'inherit' }));
     assert.equal(result.trim(), '');
-    assert.deepEqual(requested, [`/releases/native-${identity.sourceDigest.slice(0, 16)}/concord-native-${target}.tar.gz`]);
+    assert.deepEqual(requested, [`/releases/${release.tag}/hawdb-${target}.tar.gz`]);
     assert.equal(existsSync(join(cachePath(root), 'artifact.json')), true);
     assert.deepEqual(decodeNativeArtifact(JSON.parse(readFileSync(join(cachePath(root), 'artifact.json'), 'utf8'))), identity);
     yield* Effect.sync(() => rmSync(join(root, 'cache'), { recursive: true, force: true }));
-    corrupt = true;
-    const code = yield* spawner.exitCode(ChildProcess.make(process.execPath, args(root), { ...options, stdout: 'inherit', stderr: 'inherit' }));
-    assert.equal(Number(code), 1);
-    assert.equal(requested.length, 2);
-    assert.equal(existsSync(join(cachePath(root), 'artifact.json')), false);
+    for (const mode of ['corrupt', 'missing'] as const) {
+      responseMode = mode;
+      const code = yield* spawner.exitCode(ChildProcess.make(process.execPath, args(root), { ...options, stdout: 'inherit', stderr: 'inherit' }));
+      assert.equal(Number(code), 1);
+      assert.equal(existsSync(join(cachePath(root), 'artifact.json')), false);
+      assert.equal(existsSync(join(root, 'cargo-invoked')), false);
+    }
+    assert.equal(requested.length, 3);
   } finally {
     yield* Effect.promise(() => new Promise<void>(done => { server.close(() => done()); server.closeAllConnections(); }));
     yield* Effect.sync(() => rmSync(root, { recursive: true, force: true }));

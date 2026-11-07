@@ -3,7 +3,7 @@
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { makeRuntimeEnvironment } from '../src/base/environment/index.ts';
-import { HAWDB_ABI, hawdbTarget, nativeCacheRoot, nativeLockDigest, nativeSourceDigest } from '../src/base/installation/index.ts';
+import { HAWDB_ABI, hawdbTarget, nativeCacheRoot, readNativeRelease } from '../src/base/installation/index.ts';
 
 class NativeCacheOutputsFailed extends Schema.TaggedError<NativeCacheOutputsFailed>()('NativeCacheOutputsFailed', { message: Schema.String }) {}
 
@@ -13,8 +13,8 @@ const program = Effect.gen(function*() {
   if (!destination) return yield* new NativeCacheOutputsFailed({ message: 'GITHUB_OUTPUT is required' });
   const outputs = yield* Effect.try({
     try: () => ({
-      key: `native-artifact-v1-${hawdbTarget()}-${HAWDB_ABI}-${nativeSourceDigest()}-${nativeLockDigest()}`,
-      directory: nativeCacheRoot(makeRuntimeEnvironment(process.cwd(), process.env)),
+      key: `native-artifact-v2-${hawdbTarget()}-${HAWDB_ABI}-${readNativeRelease().tag}`,
+      directory: nativeCacheRoot(makeRuntimeEnvironment(process.cwd(), process.env), false),
     }),
     catch: cause => new NativeCacheOutputsFailed({ message: String(cause) }),
   });

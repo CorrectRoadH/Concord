@@ -51,18 +51,13 @@ jobs:
         with:
           bun-version-file: '.bun-version'
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - uses: ./.github/actions/setup-native
-        with:
-          platform: ${{ matrix.os }}-${{ matrix.target }}
-          deployment-target: ${{ matrix.target == 'darwin-arm64' && '15.0' || 'none' }}
       - name: Verify native ownership, clear and recovery on the target host
         run: |
-          export XDG_CACHE_HOME="$RUNNER_TEMP/hawdb-hooks-cache"
-          node scripts/build-native.ts --test-hooks
-          bun test --no-env-file --config=/dev/null --timeout=300000 ./test/process/hawdb-native.test.ts
-      - name: Build the pinned host engine
-        run: node scripts/build-native.ts --output native-artifacts --require-portable
-      - name: Sign Darwin native addon and official ripgrep
+          node scripts/prepare-native.ts --test-hooks
+          CONCORD_NATIVE_TEST_HOOKS=1 bun test --no-env-file --config=/dev/null --timeout=300000 ./test/process/hawdb-native.test.ts
+      - name: Download the pinned host engine
+        run: node scripts/prepare-native.ts --output native-artifacts --require-portable
+      - name: Verify Darwin native signature and sign official ripgrep
         if: matrix.target == 'darwin-arm64'
         run: node scripts/prepare-release-native.ts native-artifacts
       - uses: actions/upload-artifact@v4
