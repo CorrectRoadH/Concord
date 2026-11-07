@@ -15,7 +15,8 @@ export class HerdrModBuildFailed extends Schema.TaggedError<HerdrModBuildFailed>
 /** Shared by standalone catalog generation and complete CLI archives. */
 export const buildHerdrModAssets: (output: string) => Effect.Effect<void, HerdrModBuildFailed, FileSystem.FileSystem> = Effect.fn('buildHerdrModAssets')(function*(output: string) {
   const fs = yield* FileSystem.FileSystem;
-  yield* packJavaScript({ entry: { main: 'src/entry/herdr-mod/main.ts' }, outDir: output, format: 'esm', platform: 'neutral', target: 'es2022', minify: true, sourcemap: false,
+  const version = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: ModVersion })), { onExcessProperty: 'ignore' })(yield* fs.readFileString('package.json'));
+  yield* packJavaScript({ define: { CONCORD_MOD_MINIMUM_VERSION: JSON.stringify(version.version) }, entry: { main: 'src/entry/herdr-mod/main.ts' }, outDir: output, format: 'esm', platform: 'neutral', target: 'es2022', minify: true, sourcemap: false,
     deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$)/u, onlyBundle: false },
     outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
   yield* fs.copyFile('src/entry/herdr-mod/preview.png', join(output, 'preview.png'));

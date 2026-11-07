@@ -12,7 +12,7 @@ import { tmpdir } from '../support/temporary.ts';
 test('schema is available without a repository and rejects unknown configuration fields', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-schema-'));
   try {
-    for (const name of ['config', 'test-adapter', 'change-preview', 'model']) {
+    for (const name of ['config', 'test-adapter', 'change-preview', 'model', 'workspace-wait']) {
       const result = await runCli({ argv: ['schema', name], cwd: root, env: process.env });
       assert.equal(result.exitCode, 0, result.stderr);
       assert.deepEqual(JSON.parse(result.stdout), machineSchema(name));
@@ -22,7 +22,7 @@ test('schema is available without a repository and rejects unknown configuration
     assert.equal(Schema.decodeUnknownSync(Schema.Struct({ additionalProperties: Schema.Boolean }))(document).additionalProperties, false);
     const missing = await runCli({ argv: ['schema', 'missing', '--json'], cwd: root, env: process.env });
     assert.equal(missing.exitCode, 1);
-    assert.deepEqual(JSON.parse(missing.stderr).details.available, ['config', 'test-adapter', 'change-preview', 'model']);
+    assert.deepEqual(JSON.parse(missing.stderr).details.available, ['config', 'test-adapter', 'change-preview', 'model', 'workspace-wait']);
     assert.equal(JSON.parse(missing.stderr).error, 'SchemaNotFound');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

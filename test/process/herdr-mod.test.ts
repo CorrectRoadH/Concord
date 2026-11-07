@@ -25,7 +25,7 @@ test('the native mod reads and refreshes through the public CLI and a shared wor
       const result = JSON.parse(reply.stdout) as { ms: number; text: string; boundary: string; calls: string[][] };
       assert.ok(result.ms > 0); assert.match(result.text, /measured/u);
       assert.match(result.boundary, /no native drawing/u);
-      assert.ok(result.calls.every(call => ['--version', 'doctor', 'list', 'show', 'concepts', 'taste'].includes(call[0]!)));
+      assert.ok(result.calls.every(call => ['--version', 'doctor', 'list', 'show', 'concepts', 'taste', 'action', 'workspace', 'rev-parse'].includes(call[0]!)));
       assert.equal(existsSync(join(root, '.git/concord/server/current.json')), true);
       assert.equal(readFileSync(path, 'utf8'), original, 'measurement restores its edited consumer source');
       if (mode === 'push') assert.match(result.text, /MOD_PUSH_/u);

@@ -1,3 +1,4 @@
+import type { WorkspaceWait } from '../../model/herdr-mod/index.ts';
 import type * as ModelTypes from '../../model/index.ts';
 import type { Effect, Stdio } from "effect";
 import { Context } from "effect";
@@ -23,6 +24,7 @@ export class ServerLauncher extends Context.Service<ServerLauncher, {
   readonly stop: (root: string) => Effect.Effect<unknown, unknown>;
   readonly status: (root: string) => Effect.Effect<unknown, unknown>;
   readonly projection: (root: string) => Effect.Effect<ModelTypes.WorkspaceProjection | undefined, unknown>;
+  readonly wait: (root: string, after: string | undefined, timeout: number) => Effect.Effect<WorkspaceWait, ConcordError>;
   readonly clear: (root: string) => Effect.Effect<unknown, unknown>;
   readonly cache: (root: string, action: 'cache-status' | 'cache-rebuild') => Effect.Effect<unknown, ConcordError>;
   readonly withCache: <A, E, R>(root: string | undefined, operation: Effect.Effect<A, E, R>, required?: boolean) => Effect.Effect<A, E | ConcordError, R>;

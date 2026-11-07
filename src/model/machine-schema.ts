@@ -3,6 +3,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/run-tests-with-own-runner.md#schema
 import { Schema } from 'effect';
 import { ConcordError, ProjectSchema, Text, DocumentSchema, AnnotatedCaseSchema, IssueRelationSchema, MemoryRelationSchema } from './shared.ts';
+import { WorkspaceWait } from './herdr-mod/index.ts';
 import { WorkspaceProjectionSnapshotSchema } from './workspace-projection.ts';
 import { ChangePreviewSchema } from './change-preview.ts';
 import { ADAPTER_FORMAT, ContextSchema, PayloadSchemas, ResponseSchemas } from './test-adapter-protocol.ts';
@@ -23,7 +24,7 @@ const model = Schema.Union([
     details: Schema.optional(Schema.Json), complete: Schema.optional(Schema.Boolean),
   }),
 ]);
-const schemas = { config: ProjectSchema, 'test-adapter': adapter, 'change-preview': ChangePreviewSchema, model };
+const schemas = { config: ProjectSchema, 'test-adapter': adapter, 'change-preview': ChangePreviewSchema, model, 'workspace-wait': WorkspaceWait };
 export const machineSchemaNames = Object.keys(schemas);
 export function machineSchema(name: string) {
   if (!Object.hasOwn(schemas, name)) throw new ConcordError('SchemaNotFound', `Unknown schema: ${name}`, { available: machineSchemaNames });

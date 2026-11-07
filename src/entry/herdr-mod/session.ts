@@ -3,15 +3,16 @@
 // @concord-implements docs/feature/herdr-mod/use-case/init-from-herdr.md#guide
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
-import { Effect, Hash, Schema } from 'effect';
+// @concord-implements docs/feature/herdr-mod/use-case/use-on-remote-machine.md
+import { Effect, Schema } from 'effect';
+import { WorkspaceWait } from '../../model/herdr-mod/index.ts';
 
 export interface ModHost {
-  readonly exec: (command: string, args: string[], options: { cwd: string }) => Promise<{ code: number; stdout: string; stderr: string }>;
-  readonly readTextFile: (path: string) => Promise<string | null>;
-  readonly writeTextFile: (path: string, text: string, expected: string | null) => Promise<unknown>;
+  readonly exec: (command: string, args: string[], options: { cwd: string; on: string | null }) => Promise<{ code: number; stdout: string; stderr: string }>;
 }
-export class ModFailure extends Schema.TaggedError<ModFailure>()('ModFailure', { message: Schema.String }) {}
-const failure = (cause: unknown) => cause instanceof ModFailure ? cause : new ModFailure({ message: cause instanceof Error ? cause.message : String(cause) });
+export class ModFailure extends Schema.TaggedError<ModFailure>()('ModFailure', { message: Schema.String, code: Schema.optional(Schema.String), details: Schema.optional(Schema.String) }) {}
+export class ModDisconnected extends Schema.TaggedError<ModDisconnected>()('ModDisconnected', { machine: Schema.String }) {}
+export const failure = (cause: unknown) => cause instanceof ModFailure ? cause : new ModFailure({ message: 'Concord 命令失败', details: cause instanceof Error ? cause.message : String(cause) });
 const io = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: failure });
 const Path = Schema.String.check(Schema.isPattern(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\)[^\u0000]+$/u));
 const Owner = Schema.Struct({ path: Path, kind: Schema.String, title: Schema.String, feature: Schema.optional(Schema.String) });
@@ -24,11 +25,26 @@ const Concepts = Schema.Struct({ concepts: Schema.Array(Schema.Struct({ referenc
 const Check = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String, line: Schema.optional(Schema.Int), message: Schema.String })) });
 const Initialization = Schema.Struct({ createdPaths: Schema.Array(Path), guide: Schema.Literals(['docs-from-scratch', 'docs-from-code']) });
 const ErrorReply = Schema.Struct({ error: Schema.String, message: Schema.String });
+const File = Schema.Struct({ path: Path, body: Schema.String, digest: Schema.String });
 export type ModPage = typeof Page.Type;
 export type ModCheck = typeof Check.Type;
 export type ModDetail = typeof Show.Type;
 export type ModConcept = typeof Concepts.Type['concepts'][number];
 export const fixedPages = ['docs/README.md', 'docs/architecture.md', 'docs/document-model.md', 'docs/taste.md', 'docs/concepts.md', 'docs/writing.md'] as const;
+
+/** Bound each argument by its UTF-8 size, including non-ASCII drafts. */
+export function actionArgs(input: unknown): string[] {
+  const args = ['action'];
+  let chunk = '', bytes = 0;
+  for (const character of JSON.stringify(input)) {
+    const point = character.codePointAt(0)!;
+    const size = point < 0x80 ? 1 : point < 0x800 ? 2 : point < 0x10000 ? 3 : 4;
+    if (bytes + size > 64 * 1024 - '--input-text='.length) { args.push(`--input-text=${chunk}`); chunk = ''; bytes = 0; }
+    chunk += character; bytes += size;
+  }
+  args.push(`--input-text=${chunk}`);
+  return args;
+}
 
 export function markdownTarget(current: string, target: string): string | undefined {
   if (/^(?:[a-z][a-z0-9+.-]*:|\/|\\)/iu.test(target)) return;
@@ -43,7 +59,7 @@ export function markdownTarget(current: string, target: string): string | undefi
   return /\.(?:md|mdx)$/u.test(path) ? path : undefined;
 }
 
-/** All product observations come from the public CLI; only source text is read directly. */
+/** All product observations and writes use the public CLI on the selected machine. */
 export class ModSession {
   root: string;
   initialized = false;
@@ -55,25 +71,38 @@ export class ModSession {
   selected: string | undefined;
   source = '';
   draft: string | undefined;
-  sourceDigest = 0;
+  sourceDigest = '';
+  workspaceDigest: string | undefined;
   conflict = false;
   deleted = false;
   error = '';
+  errorDetails = '';
   detail: ModDetail = {};
   check: ModCheck | undefined;
-  watchRoots: readonly string[] = [];
+  private rootResolved = false;
   closed = false;
   private observation = {};
   private selection = {};
   readonly host: ModHost;
-  constructor(host: ModHost, cwd: string) { this.host = host; this.root = cwd; }
+  readonly machine: string | null;
+  constructor(host: ModHost, cwd: string, machine: string | null = null) { this.host = host; this.root = cwd; this.machine = machine; }
+
+  private io<A>(run: () => Promise<A>) {
+    return io(run).pipe(Effect.mapError(error => this.machine === null ? error : new ModDisconnected({ machine: this.machine })));
+  }
+
+  readFile(path: string) {
+    return this.command(actionArgs({ action: 'file.get', path }), File).pipe(Effect.catch(error => error instanceof ModFailure && (error.code === 'FileNotFound' || error.code === 'ProjectNotInitialized') ? Effect.succeed(undefined) : Effect.fail(error)));
+  }
+  read(path: string) { return this.readFile(path).pipe(Effect.map(file => file?.body ?? null)); }
 
   command<S extends Schema.Top & { readonly DecodingServices: never }>(args: readonly string[], schema: S, diagnostic = false, discoverRoot = false) {
     return Effect.gen({ self: this }, function*() {
-      const reply = yield* io(() => this.host.exec('concord', ['--json', '--fresh', ...(discoverRoot ? [] : ['--root', this.root]), ...args], { cwd: this.root }));
-      if (reply.code !== 0 && (!diagnostic || !reply.stdout.trim())) {
-        const error = Schema.decodeUnknownExit(Schema.fromJsonString(ErrorReply), { onExcessProperty: 'ignore' })(reply.stderr);
-        return yield* Effect.fail(new ModFailure({ message: error._tag === 'Success' ? `${error.value.error}: ${error.value.message}` : reply.stderr || 'Concord command failed' }));
+      const reply = yield* this.io(() => this.host.exec('concord', ['--json', '--fresh', ...(discoverRoot ? [] : ['--root', this.root]), ...args], { cwd: this.root, on: this.machine }));
+      if (reply.code !== 0) {
+        const error = Schema.decodeUnknownExit(Schema.fromJsonString(ErrorReply), { onExcessProperty: 'ignore' })(reply.stderr || reply.stdout);
+        if (error._tag === 'Success') return yield* Effect.fail(new ModFailure({ message: error.value.message, code: error.value.error }));
+        if (!diagnostic || !reply.stdout.trim()) return yield* Effect.fail(new ModFailure({ message: 'Concord 命令失败', details: reply.stderr || reply.stdout }));
       }
       return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(reply.stdout).pipe(Effect.mapError(failure));
     });
@@ -83,23 +112,24 @@ export class ModSession {
     const observation = this.observation = {};
     const current = () => !this.closed && observation === this.observation;
     const selected = this.selected;
+    const selection = this.selection;
     // A pane can start below the Git top. Without a local marker, let the public
     // doctor discover that top before sending any initialization-guarded query.
     let doctor: typeof Doctor.Type | undefined;
-    let taste = yield* io(() => this.host.readTextFile(`${this.root}/docs/taste.md`));
+    let taste = yield* this.read('docs/taste.md');
     if (!current()) return;
     if (taste === null) {
       const before = this.root;
       doctor = yield* this.command(['doctor'], Doctor, true, true);
       if (!current()) return;
       this.root = doctor.root;
-      if (this.root !== before) taste = yield* io(() => this.host.readTextFile(`${this.root}/docs/taste.md`));
+      if (this.root !== before) taste = yield* this.read('docs/taste.md');
       if (!current()) return;
     }
     this.initialized = taste !== null;
     if (!this.initialized) {
       this.documents = []; this.pages = []; this.concepts = []; this.detail = {};
-      this.watchRoots = [...new Set(['docs', 'memory', ...(doctor?.configuration.sourceRoots ?? []), ...(doctor?.configuration.testRoots ?? [])])];
+      this.rootResolved = true;
       this.error = '';
       notify();
       return;
@@ -111,12 +141,12 @@ export class ModSession {
         this.documents = reply.documents;
         notify(); // The first readable Feature list need not wait for concepts or package details.
       }))),
-      selected ? this.open(selected, false).pipe(Effect.tap(() => Effect.sync(() => { if (current()) notify(); }))) : Effect.void,
+      selected ? this.open(selected, false, selection).pipe(Effect.tap(() => Effect.sync(() => { if (current()) notify(); }))) : Effect.void,
     ], { concurrency: 'unbounded' });
     if (!current()) return;
     this.root = resolvedDoctor.root;
-    this.watchRoots = [...new Set(['docs', 'memory', ...(resolvedDoctor.configuration.sourceRoots ?? []), ...(resolvedDoctor.configuration.testRoots ?? [])])];
-    const fixed = yield* Effect.forEach(fixedPages, path => io(() => this.host.readTextFile(`${this.root}/${path}`)).pipe(Effect.map(source => source === null ? undefined : { path, kind: path === 'docs/taste.md' ? 'taste' : path.endsWith('/concepts.md') ? 'concepts' : 'page', name: /^#\s+(.+)$/mu.exec(source)?.[1] ?? path })), { concurrency: 'unbounded' });
+    this.rootResolved = true;
+    const fixed = yield* Effect.forEach(fixedPages, path => this.read(path).pipe(Effect.map(source => source === null ? undefined : { path, kind: path === 'docs/taste.md' ? 'taste' : path.endsWith('/concepts.md') ? 'concepts' : 'page', name: /^#\s+(.+)$/mu.exec(source)?.[1] ?? path })), { concurrency: 'unbounded' });
     if (!current()) return;
     this.pages = fixed.filter((page): page is NonNullable<typeof page> => page !== undefined);
     notify();
@@ -124,7 +154,7 @@ export class ModSession {
     const [concepts, packages] = yield* Effect.all([
       this.command(['concepts', 'index'], Concepts),
       Effect.forEach(this.documents.filter(owner => ['feature', 'engineering', 'roadmap'].includes(owner.kind)), owner => this.command(['show', owner.path], Show), { concurrency: 4 }),
-      this.command(['taste'], Schema.Unknown).pipe(Effect.catch(() => Effect.succeed(undefined))),
+      this.command(['taste'], Schema.Unknown).pipe(Effect.catch(error => error instanceof ModDisconnected ? Effect.fail(error) : Effect.succeed(undefined))),
     ], { concurrency: 'unbounded' });
     if (!current()) return;
     this.concepts = concepts.concepts;
@@ -134,21 +164,24 @@ export class ModSession {
     notify();
   });
 
-  open = Effect.fn('ModSession.open')(function*(this: ModSession, path: string, resetDraft = true) {
+  open = Effect.fn('ModSession.open')(function*(this: ModSession, path: string, resetDraft = true, expectedSelection = this.selection) {
     const canonical = yield* Schema.decodeUnknownEffect(Path)(path).pipe(Effect.mapError(failure));
-    const token = this.selection = {};
-    if (this.watchRoots.length === 0) {
+    if (!resetDraft && expectedSelection !== this.selection) return;
+    const token = resetDraft ? this.selection = {} : expectedSelection;
+    if (!this.rootResolved) {
       const doctor = yield* this.command(['doctor'], Doctor, true);
       if (this.closed || token !== this.selection) return;
       this.root = doctor.root;
+      this.rootResolved = true;
     }
-    const source = yield* io(() => this.host.readTextFile(`${this.root}/${canonical}`));
+    const file = yield* this.readFile(canonical);
+    const source = file?.body ?? null;
     if (this.closed || token !== this.selection) return;
     if (resetDraft) this.draft = undefined;
     this.selected = canonical;
     this.deleted = source === null;
     if (this.draft !== undefined) this.conflict = source !== this.source;
-    else { this.source = source ?? ''; this.sourceDigest = Hash.string(this.source); this.conflict = false; }
+    else { this.source = source ?? ''; this.sourceDigest = file?.digest ?? ''; this.conflict = false; }
     if (source !== null) {
       const links = [...source.matchAll(/\[[^\]]*\]\(([^\s)]+)(?:\s+[^)]*)?\)/gu)].flatMap(match => {
         const target = markdownTarget(canonical, match[1]!);
@@ -157,24 +190,20 @@ export class ModSession {
       this.pages = [...new Map([...this.pages, ...links].map(page => [page.path, page])).values()];
     }
     const belongs = this.documents.some(owner => owner.path === canonical) || this.pages.some(page => page.path === canonical && !fixedPages.includes(canonical as typeof fixedPages[number]));
-    const detail = belongs ? yield* this.command(['show', canonical], Show).pipe(Effect.catch(() => Effect.succeed({} as ModDetail))) : {};
+    const detail = belongs ? yield* this.command(['show', canonical], Show).pipe(Effect.catch(error => error instanceof ModDisconnected ? Effect.fail(error) : Effect.succeed({} as ModDetail))) : {};
     if (!this.closed && token === this.selection) this.detail = detail;
   });
 
   save = Effect.fn('ModSession.save')(function*(this: ModSession, draft: string) {
     if (!this.selected) return;
-    const path = this.selected, before = this.source, beforeDigest = this.sourceDigest;
+    const path = this.selected;
     this.draft = draft;
-    const current = yield* io(() => this.host.readTextFile(`${this.root}/${path}`));
+    yield* this.command(actionArgs({ action: 'document.set', path, body: draft, expectedDigest: this.sourceDigest }), Schema.Unknown).pipe(Effect.tapError(error => Effect.sync(() => {
+      if (error instanceof ModFailure && error.code === 'FileChangedSinceRead') this.conflict = true;
+    })));
     if (this.closed || this.selected !== path) return;
-    if (current === null || Hash.string(current) !== beforeDigest || current !== before) {
-      this.conflict = true;
-      return yield* Effect.fail(new ModFailure({ message: '文件已变化；草稿已保留，请查看差异后重新合并。' }));
-    }
-    // Herdr's expected text closes the race between this read and its atomic replacement.
-    yield* io(() => this.host.writeTextFile(`${this.root}/${path}`, draft, before)).pipe(Effect.tapError(() => Effect.sync(() => { this.conflict = true; })));
-    if (this.closed || this.selected !== path) return;
-    this.source = draft; this.sourceDigest = Hash.string(draft); this.draft = undefined; this.conflict = false;
+    this.draft = undefined; this.conflict = false;
+    yield* this.open(path, false);
     this.check = yield* this.command(['check'], Check, true);
   });
 
@@ -188,8 +217,8 @@ export class ModSession {
   readGuide = Effect.fn('ModSession.readGuide')(function*(this: ModSession) {
     const guide = this.initialization?.guide;
     if (!guide) return;
-    const reply = yield* io(() => this.host.exec('concord', ['--skill', guide], { cwd: this.root }));
-    if (reply.code !== 0) return yield* Effect.fail(new ModFailure({ message: reply.stderr || 'Concord command failed' }));
+    const reply = yield* this.io(() => this.host.exec('concord', ['--skill', guide], { cwd: this.root, on: this.machine }));
+    if (reply.code !== 0) return yield* Effect.fail(new ModFailure({ message: 'Concord 命令失败', details: reply.stderr || reply.stdout }));
     const source = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(reply.stdout).pipe(Effect.mapError(failure));
     if (!this.closed && this.initialization?.guide === guide) this.guideSource = source;
   });
@@ -199,6 +228,12 @@ export class ModSession {
     yield* this.refresh();
     const path = receipt.changedPaths.find(path => path.endsWith('/README.md'));
     if (path) yield* this.open(path);
+  });
+
+  checkNow = Effect.fn('ModSession.checkNow')(function*(this: ModSession) { this.check = yield* this.command(['check'], Check, true); });
+
+  wait = Effect.fn('ModSession.wait')(function*(this: ModSession) {
+    return yield* this.command(['workspace', 'wait', ...(this.workspaceDigest === undefined ? [] : ['--after', this.workspaceDigest])], WorkspaceWait);
   });
 
   stop(): void { this.closed = true; this.observation = {}; this.selection = {}; }

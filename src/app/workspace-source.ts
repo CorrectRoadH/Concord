@@ -12,7 +12,7 @@ export const workspaceSourceDigest = Effect.fn('workspaceSourceDigest')(function
   const runtime = yield* RuntimeEnvironment;
   const installation = yield* Effect.try({ try: () => workspaceInstallationIdentity(runtime), catch: failure });
   const config = yield* workspace.inspectConfiguration(root);
-  if (!config.snapshot || !config.source) return digest(JSON.stringify([installation, config.digest]));
+  if (!config.snapshot || config.source === undefined) return digest(JSON.stringify([installation, config.digest]));
   return yield* Effect.scoped(Effect.gen(function*() {
     const repo = yield* workspace.openRead(root, { access: 'read', optimistic: true, persistentCache: 'off' });
     return yield* Effect.try({ try: () => repo.snapshot(() => {

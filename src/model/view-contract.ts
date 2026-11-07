@@ -160,6 +160,7 @@ const DryRun = { dryRun: Schema.optional(Schema.Boolean) } as const;
 
 /** Strictly decoded at every CLI and HTTP action boundary. */
 export const ViewActionSchema = Schema.Union([
+  Schema.Struct({ action: Schema.Literal('file.get'), path: Text }),
   Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), runner: Schema.optional(RunnerInputSchema), docsOnly: Schema.optional(Schema.Boolean), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('recover') }),
   Schema.Struct({

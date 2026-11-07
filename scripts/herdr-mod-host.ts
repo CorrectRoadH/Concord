@@ -22,6 +22,7 @@ class HostElement {
   child(value: HostElement | string) { this.nodes.push(value); return this; }
   children(value: readonly (HostElement | string)[]) { this.nodes.push(...value); return this; }
   size_full() { return this; } flex_1() { return this; } min_w(_v: number) { return this; } min_h(_v: number) { return this; }
+  max_w(_v: number) { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
   w(_v: number) { return this; } h(_v: number) { return this; } gap(_v: number) { return this; }
   p(_v: number) { return this; } px(_v: number) { return this; } py(_v: number) { return this; }
   bg(_v: string) { return this; } text_color(_v: string) { return this; } text_size(_v: number) { return this; }
@@ -33,7 +34,7 @@ class HostElement {
   find(id: string): HostElement | undefined { return this.key === id ? this : this.nodes.flatMap(node => typeof node === 'string' ? [] : node.find(id) ?? []).at(0); }
 }
 interface HostTask { cancel(): void; is_done(): boolean }
-interface HostContext { notify(): void; spawn(callback: (cx: HostContext) => unknown): HostTask; timer: { after(ms: number, callback: (cx: HostContext) => void): HostTask } }
+interface HostContext { notify(): void; spawn(callback: (cx: HostContext) => unknown): HostTask; timer: { after(ms: number, callback: (cx: HostContext) => void): HostTask; every(ms: number, callback: (cx: HostContext) => void): HostTask } }
 interface ModView { init(props: undefined, cx: HostContext): void; render(cx: HostContext): HostElement; close(cx: HostContext): void }
 class HostState {
   private text: string;
@@ -69,6 +70,12 @@ const main = Effect.scoped(Effect.gen(function*() {
       fibers.add(timer);
       const task = { cancel() { timer.interruptUnsafe(); done = true; }, is_done: () => done };
       tasks.add(task); return task;
+    }, every(ms, callback) {
+      const timer = Effect.runFork(Effect.forever(Effect.sleep(Duration.millis(ms)).pipe(Effect.andThen(Effect.sync(() => { if (!closed) callback(context()); })))));
+      fibers.add(timer);
+      let cancelled = false;
+      const task = { cancel() { timer.interruptUnsafe(); cancelled = true; }, is_done: () => cancelled };
+      tasks.add(task); return task;
     } },
   });
   const fileWatchers = new Map<string, { pending: string[]; resolve: ((paths: string[]) => void) | undefined }>();
@@ -78,16 +85,19 @@ const main = Effect.scoped(Effect.gen(function*() {
     EditorState: { new: (options: { value?: string }) => new HostState(options.value ?? '') },
     Editor: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
     InputState: { new: () => new HostState('') }, Input: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
-    focused: () => ({ cwd: root, pane: 'external-boundary' }), theme: () => ({}), pickFolder: async () => root,
-    panes: () => [], spaces: () => [], run: () => null, closeOverlay: () => null, appHome: () => '/external-herdr-home',
+    focused: () => ({ cwd: root, pane: 'external-boundary', tab: 'host-tab' }), theme: () => ({}), pickFolder: async () => root,
+    panes: () => [{ pane: 'external-boundary', terminal: 'host-terminal', tab: 'host-tab', focused: true, cwd: root }],
+    spaces: () => [{ id: 'host-space', machine: null, tabs: [{ id: 'host-tab', active: true }] }],
+    run: () => null, closeOverlay: () => null, appHome: () => '/external-herdr-home', home: () => '/external-home',
     props: () => ({}),
     exec: async (command: string, args: string[], options: { cwd: string } = { cwd: root }) => {
-      if (command !== 'concord') throw new Error(`Unexpected product command ${command}`);
+      if (!['concord', 'git'].includes(command)) throw new Error(`Unexpected product command ${command}`);
       const operation = args.includes('--root') ? args.slice(args.indexOf('--root') + 2) : args.filter(arg => arg !== '--json' && arg !== '--fresh');
       calls.push(operation);
       const started = performance.now();
       const execution = Effect.scoped(Effect.gen(function*() {
-        const child = yield* spawner.spawn(ChildProcess.make(packageCommand(entry)[0], [...packageCommand(entry).slice(1), ...args], {
+        const argv = command === 'concord' ? [...packageCommand(entry), ...args] : [command, ...args];
+        const child = yield* spawner.spawn(ChildProcess.make(argv[0]!, argv.slice(1), {
           cwd: options.cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
         }));
         const result = yield* Effect.all({ code: child.exitCode, stdout: Stream.mkString(Stream.decodeText(child.stdout)), stderr: Stream.mkString(Stream.decodeText(child.stderr)) }, { concurrency: 'unbounded' });
@@ -97,7 +107,7 @@ const main = Effect.scoped(Effect.gen(function*() {
       const child = await Effect.runPromise(Fiber.join(fiber), { signal });
       fibers.add(child);
       const reply = await Effect.runPromise(Fiber.join(child), { signal });
-      timings.push({ operation: operation.join(' '), ms: performance.now() - started });
+      timings.push({ operation: `${operation[0]}${reply.code ? ` failure: ${reply.stderr || reply.stdout}` : ''}`, ms: performance.now() - started });
       return reply;
     },
     readTextFile: (path: string) => path === '/external-herdr-home/mods/concord/mod.json' ? Promise.resolve(JSON.stringify({ minimumConcordVersion: 'dev' }))
@@ -123,7 +133,7 @@ const main = Effect.scoped(Effect.gen(function*() {
       return await new Promise(resolve => { state.resolve = resolve; });
     },
   };
-  const exports: Record<string, readonly (keyof typeof host)[]> = { 'gpui-kit': ['View', 'div'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'props', 'theme'] };
+  const exports: Record<string, readonly (keyof typeof host)[]> = { 'gpui-kit': ['View', 'div'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme'] };
   plugin({ name: 'concord-herdr-host', setup(builder) {
     for (const [specifier, names] of Object.entries(exports)) {
       builder.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(names.map(name => [name, host[name]])) }));
@@ -146,10 +156,10 @@ const main = Effect.scoped(Effect.gen(function*() {
     timings.push({ operation: entry.endsWith('.ts') ? 'load source mod' : 'load packaged mod', ms: performance.now() - started });
     view = new module.default(); view.init(undefined, context()); output = view.render(context());
     if (mode === 'workflow') {
-      await waitFor(() => fileWatchers.size > 0);
+      await waitFor(() => fileWatchers.size > 0 || calls.some(call => call[0] === 'workspace' && call[1] === 'wait'));
       const click = (id: string) => { const element = output?.find(id); if (!element?.click) throw new Error(`Missing UI action ${id}: ${output?.text()}`); element.click(undefined, context()); };
       click('initialize');
-      await waitFor(() => output?.find('initialize') === undefined);
+      await waitFor(() => output?.find('new-feature') !== undefined);
       click('new-feature');
       output!.find('feature-name')!.state!.set_value('measured'); output!.find('feature-title')!.state!.set_value('measured');
       click('create-feature'); await waitFor(() => output?.find('document-editor') !== undefined);
@@ -172,7 +182,7 @@ const main = Effect.scoped(Effect.gen(function*() {
     let ended = await waitFor(() => output?.find('concord-tree')?.text().includes('measured') === true);
     if (mode === 'push') {
       // Wait for the actual mod's asynchronous watcher and selected source before editing.
-      await waitFor(() => fileWatchers.size > 0);
+      await waitFor(() => fileWatchers.size > 0 || calls.some(call => call[0] === 'workspace' && call[1] === 'wait'));
       output!.find('page-docs/feature/measured/README.md')!.click!(undefined, context());
       await waitFor(() => output?.find('concord-body-docs/feature/measured/README.md') !== undefined);
       original = await Effect.runPromise(fs.readFileString(sourcePath));

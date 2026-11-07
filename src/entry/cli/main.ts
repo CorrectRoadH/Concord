@@ -385,6 +385,13 @@ const launchers = Layer.mergeAll(
       stop: root => stopWorkspaceServer(root).pipe(Effect.provideContext(context)),
       status: root => workspaceServerStatus(root).pipe(Effect.provideContext(context)),
       projection: root => readExistingWorkspaceProjection(root).pipe(Effect.provideContext(context)),
+      wait: (root, after, timeout) => Effect.scoped(Effect.gen(function*() {
+        yield* nativeAvailable;
+        const identified = yield* workspace.locate(root);
+        const connection = yield* connectQueryWorkspace(identified.root, identified.privateDir);
+        const client = yield* loadClient();
+        return yield* client.waitForWorkspaceResult(client.subscribeWorkspace(connection), after, timeout);
+      })).pipe(Effect.mapError(workspaceServerFailure), Effect.provideContext(context)),
       clear: root => clearExistingWorkspaceCache(root).pipe(Effect.provideContext(context)),
       cache: (root, action) => Effect.scoped(Effect.gen(function*() {
         if ((yield* Effect.result(persistent.verifyArtifact))._tag === 'Failure') return undefined;

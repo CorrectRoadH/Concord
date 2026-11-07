@@ -302,7 +302,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>, environment: Readonly<Record<string, string | undefined>>): Promise<unknown> {
+async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' | 'file.get' }>, environment: Readonly<Record<string, string | undefined>>): Promise<unknown> {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
     case 'document.create': throw new ConcordError('InvalidInput', 'Creation must run in its Effect scope');
@@ -355,7 +355,7 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
     case 'memory.index': case 'memory.search': case 'issue.index': case 'issue.search': case 'issue.list': case 'feedback.list':
     case 'writing.index': case 'writing.show': case 'writing.check': case 'concepts.index': case 'concepts.show':
     case 'code.marker': case 'code.at': case 'test.marker': case 'cache.status':
-    case 'check': case 'trace.check': case 'trace.show': case 'review': case 'doctor': case 'template.show':
+    case 'check': case 'trace.check': case 'trace.show': case 'review': case 'doctor': case 'template.show': case 'file.get':
       return 'read';
     default: return 'write';
   }
@@ -368,6 +368,7 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   const environment = yield* RuntimeEnvironment;
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput, environment));
   const action = yield* sync('view.decodeAction', () => decodeViewAction(input));
+  if (action.action === 'file.get') return yield* getViewFile(root, action.path, timing);
   if (action.action === 'template.show') return { operation: 'template-show', name: action.name, body: yield* templateBody(action.name, action.title ?? 'Your title') };
   if (action.action === 'document.create') return yield* withRepository(root, repo => createDocument(repo, action.kind, { ...action, dryRun: action.dryRun ?? false }), { dryRun: action.dryRun }, timing);
   if (action.action === 'init') {
