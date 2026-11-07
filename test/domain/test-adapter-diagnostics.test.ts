@@ -12,7 +12,6 @@ import { LocalRepository, runApplication } from '../support/repository.ts';
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @feature docs/feature/local-sdlc/cli.md#adapter-协议
-// @issue docs/issues/adapter-failure-diagnostics.md
 // @name adapter-failure-invocation-diagnostics
 test('adapter collection errors retain invocation states and bounded output tails', async () => {
   const root = createConsumer();
