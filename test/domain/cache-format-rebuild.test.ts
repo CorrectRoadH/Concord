@@ -77,3 +77,29 @@ test('cache rebuild refuses another clear owner and preserves the incompatible d
     } finally { guard.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// @feature docs/feature/local-data-engine/architecture.md#句柄与打开模式
+test('source snapshot aggregate caches fall back on contention without pretending historical observations exist', async () => {
+  const root = createConsumer();
+  try {
+    const privateDir = join(root, '.git/concord');
+    const runtime = makeRuntimeEnvironment(root, process.env);
+    const held = openHawdb(join(privateDir, 'cache.hawdb'), { create: true, readOnly: false }, runtime);
+    try {
+      held.put('config_cache', [{ key: 'owner', payload: 'retained' }]);
+      await Effect.runPromise(Effect.gen(function*() {
+        const sources = yield* Sources, cache = yield* PersistentCache;
+        const context = yield* (yield* Workspace).open(root, { access: 'read', cache: 'use' });
+        yield* sources.snapshot(Effect.gen(function*() {
+          assert.deepEqual(yield* cache.read(privateDir, 'config_cache'), []);
+          yield* cache.update(privateDir, 'config_cache', 'local', () => 'recomputed');
+          const historical = yield* Effect.result(cache.read(privateDir, 'feedback_cache'));
+          assert.equal(historical._tag, 'Failure');
+          if (historical._tag === 'Failure') assert.equal(historical.failure.code, 'HawdbBusy');
+        })).pipe(Effect.provideService(WorkspaceContext, context));
+      }).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, runtime)));
+      assert.deepEqual(held.get('config_cache', ['local']), []);
+      assert.equal(held.get('config_cache', ['owner'])[0]?.payload, 'retained');
+    } finally { held.close(); }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

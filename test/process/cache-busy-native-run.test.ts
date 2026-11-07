@@ -30,7 +30,7 @@ test('native test execution completes while the workspace service owns the persi
     assert.equal(result.status, 0, `the real adapter must execute despite a busy parse cache: ${result.stderr}`);
     const report = JSON.parse(result.stdout);
     assert.equal(report.scope, 'native');
-    assert.equal(report.commandOutcome, 'pass');
+    assert.equal(report.commandOutcome, 'green');
     assert.ok(report.statuses.length > 0);
     assert.equal(report.cleanupOk, true);
     assert.equal(record(root).pid, pid, 'the existing service keeps its ownership');
