@@ -6,6 +6,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join, resolve } from 'node:path';
 import { checkoutRoot } from './build-output.ts';
 import { withGateResources } from './gate-resources.ts';
+import { withGateQueue } from './gate-queue.ts';
 import { selectGateTests } from './gate-selection.ts';
 import { preparePackagingFixture, selectsPackagingTest, writePackagePreparation } from './gate-package.ts';
 import { initializeNodeCompileCache } from '../src/base/installation/startup/index.ts';
@@ -81,4 +82,5 @@ const main = Effect.gen(function*() {
   });
 });
 
-withGateResources(main).pipe(Effect.scoped, Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+const guarded = withGateResources(main);
+(process.env.CONCORD_GATE_SCOPE ? guarded : withGateQueue(guarded)).pipe(Effect.scoped, Effect.provide(NodeServices.layer), NodeRuntime.runMain);

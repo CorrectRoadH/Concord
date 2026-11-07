@@ -9,7 +9,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { initializeNodeCompileCache } from '../src/base/installation/startup/index.ts';
 import { runNodeTests } from './test-reporter.ts';
-import { currentGateMemoryMax, gateConcurrency } from './gate-resources.ts';
+import { currentGateMemoryMax, gateConcurrency, gateAdmissionBytes, gateAdmittedBrowserWorkers, gateMemoryBudgets, GateResourcesInvalid, makeGateAdmission, withGateAdmission } from './gate-resources.ts';
 import { auditTestLayers, summarizeMeasuredTestLayers } from './test-layers.ts';
 import { readBrowserLifecycle, readBrowserSelection, readFileTimings, summarizeBrowserLifecycle, summarizeFileTimings, timingMeasurement, writeTimingReport, type Measurement } from './gate-timings.ts';
 import { isPackagingTest, preparePackagingFixture, shardNodeFiles, waitForPackagePreparation } from './gate-package.ts';
@@ -20,6 +20,22 @@ class TestArgumentsInvalid extends Schema.TaggedError<TestArgumentsInvalid>()('T
   detail: Schema.String,
 }) {}
 const main = Effect.scoped(Effect.gen(function* () {
+  // Keep one detached ownership boundary around every admitted engine and
+  // browser. Cancelling its supervisor reclaims stubborn test descendants too.
+  if (process.env.CONCORD_TEST_ADMISSION_WORKER !== '1') {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+      env: { ...process.env, CONCORD_TEST_ADMISSION_WORKER: '1', NODE_TEST_CONTEXT: undefined },
+      detached: process.platform !== 'win32', stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', forceKillAfter: Duration.seconds(5),
+    }));
+    yield* Effect.addFinalizer(() => child.kill({ forceKillAfter: Duration.seconds(5) }).pipe(
+      Effect.ensuring(child.kill({ killSignal: 'SIGKILL' }).pipe(Effect.ignore)), Effect.ignore,
+    ));
+    const code = yield* child.exitCode;
+    yield* Effect.sync(() => { process.exitCode = Number(code); });
+    return;
+  }
+  yield* Effect.sync(() => { delete process.env.CONCORD_TEST_ADMISSION_WORKER; });
   // Only the gate's immediate test task owns this destination; nested runners don't.
   const gateOutput = process.env.CONCORD_GATE_TEST_OUTPUT;
   const selectedFiles = process.env.CONCORD_GATE_TEST_FILES;
@@ -28,8 +44,9 @@ const main = Effect.scoped(Effect.gen(function* () {
   yield* Effect.sync(() => { delete process.env.CONCORD_GATE_TEST_OUTPUT; delete process.env.CONCORD_GATE_TEST_FILES; delete process.env.CONCORD_GATE_ALL_TEST_FILES; delete process.env.CONCORD_GATE_PACKAGE_PREPARATION; });
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const { node: concurrency, browser: browserConcurrency } = yield* Effect.try({
-    try: () => gateConcurrency(currentGateMemoryMax()),
+  const memoryMaxBytes = currentGateMemoryMax();
+  const { node: concurrency, browser: browserUpperLimit } = yield* Effect.try({
+    try: () => gateConcurrency(memoryMaxBytes),
     catch: cause => new TestArgumentsInvalid({ detail: String(cause) }),
   });
   const { values, positionals } = yield* Effect.try({
@@ -80,6 +97,11 @@ const main = Effect.scoped(Effect.gen(function* () {
     const inventory = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(allFiles);
     yield* Effect.try({ try: () => auditTestLayers(inventory), catch: cause => cause });
   }
+  const browserConcurrency = gateAdmittedBrowserWorkers(memoryMaxBytes, browserUpperLimit);
+  const browserSelected = values.suite !== 'node' && browserFiles.length > 0;
+  const capacity = gateAdmissionBytes(memoryMaxBytes);
+  if (browserSelected && browserConcurrency < 1) return yield* new GateResourcesInvalid({ detail: `Browser worker needs ${gateMemoryBudgets.browser} bytes; admission pool has ${capacity}` });
+  const admission = yield* makeGateAdmission(capacity);
   const started = performance.now();
   yield* fs.makeDirectory('.test-results', { recursive: true });
   const output = resolve(gateOutput ?? (yield* fs.makeTempDirectory({ directory: '.test-results', prefix: 'run-' })));
@@ -115,13 +137,12 @@ const main = Effect.scoped(Effect.gen(function* () {
     yield* Effect.sync(() => console.error(`# ${name} tests: ${(elapsed / 1000).toFixed(3)}s; exit=${code}`));
     return Number(code) !== 0;
   }, Effect.catch(cause => Effect.sync(() => { console.error(`# Test suite failed: ${String(cause)}`); return true; })));
-  const nameFlags = [
-    ...(values['test-name-pattern'] === undefined ? [] : [`--test-name-pattern=${values['test-name-pattern']}`]),
-  ];
   // Apply the official file shard before splitting off the one packaging owner.
   const selectedNode = browserOnly ? [] : shardNodeFiles(nodeFiles, shard);
   const packageFiles = selectedNode.filter(file => isPackagingTest(file));
   const sourceFiles = selectedNode.filter(file => !isPackagingTest(file));
+  const required = packageFiles.length > 0 ? gateMemoryBudgets.packaging : sourceFiles.length > 0 ? gateMemoryBudgets.node : 0;
+  if (capacity < required) return yield* new GateResourcesInvalid({ detail: `Selected Node test file needs ${required} bytes; admission pool has ${capacity}` });
   const split = packageFiles.length > 0 && sourceFiles.length > 0;
   const sourceOutput = split ? join(output, 'node-source') : output;
   const packageOutput = split ? join(output, 'node-package') : output;
@@ -131,12 +152,33 @@ const main = Effect.scoped(Effect.gen(function* () {
     ? yield* preparePackagingFixture(process.cwd(), join(output, 'archive-preparation.json')).pipe(Effect.forkScoped)
     : undefined;
   const sourceCompleted = yield* Deferred.make<void>();
-  const sourceTests = (sourceFiles.length > 0
-    ? suite('Source Node', process.execPath, [fileURLToPath(import.meta.url), '--node-worker', '--suite=node', ...nameFlags, ...sourceFiles], {
-      ...env, CONCORD_NODE_OUTPUT: sourceOutput, CONCORD_TEST_CONCURRENCY: String(concurrency),
-      CONCORD_TEST_PACKAGE_ROOT: undefined, CONCORD_TEST_PACKAGE_BUILD_STATUS: undefined,
-    }) : Effect.succeed(false)).pipe(Effect.ensuring(Deferred.succeed(sourceCompleted, undefined)));
+  const nodeSuite = Effect.fn('test.admittedNodeSuite')(function*(name: string, files: string[], destination: string, bytes: number, packageRoot?: string) {
+    if (files.length === 0) return false;
+    if (capacity < bytes) return yield* new GateResourcesInvalid({ detail: `${name} needs ${bytes} bytes; admission pool has ${capacity}` });
+    const suiteStarted = performance.now();
+    yield* fs.makeDirectory(destination, { recursive: true });
+    // Node engines inherit this suite's environment at creation. Packaging starts
+    // after source completion, so installation values never race between files.
+    yield* Effect.sync(() => {
+      for (const [name, value] of Object.entries(env)) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
+      if (packageRoot === undefined) { delete process.env.CONCORD_TEST_PACKAGE_ROOT; delete process.env.CONCORD_TEST_PACKAGE_BUILD_STATUS; }
+      else process.env.CONCORD_TEST_PACKAGE_ROOT = packageRoot;
+      delete process.env.CONCORD_NODE_OUTPUT;
+    });
+    const failed = yield* runNodeTests({ files: files.map(file => resolve(file)), isolation: 'process', concurrency,
+      testNamePatterns: values['test-name-pattern'], timeout: Duration.toMillis(Duration.minutes(5)),
+      execArgv: ['--conditions=concord-source', '--import', new URL('../test/support/source-runtime.ts', import.meta.url).href],
+    }, destination, { admission, bytes });
+    const elapsed = performance.now() - suiteStarted;
+    phases.push({ name, measurement: timingMeasurement(name === 'Packaging Node' ? 'serial-packaging-wallclock' : 'suite-wallclock', [{ duration_ms: elapsed, success: !failed }], 1) });
+    yield* Effect.sync(() => console.error(`# ${name} tests: ${(elapsed / 1000).toFixed(3)}s; exit=${failed ? 1 : 0}`));
+    return failed;
+  });
+  const sourceTests = nodeSuite('Source Node', sourceFiles, sourceOutput, gateMemoryBudgets.node).pipe(Effect.ensuring(Deferred.succeed(sourceCompleted, undefined)));
   const packageTests = packageFiles.length > 0 ? Effect.gen(function*() {
+    if (capacity < gateMemoryBudgets.packaging) return yield* new GateResourcesInvalid({ detail: `Packaging needs ${gateMemoryBudgets.packaging} bytes; admission pool has ${capacity}` });
     const prepared = packagePreparation !== undefined ? yield* waitForPackagePreparation(packagePreparation)
       : directPreparation !== undefined ? yield* Fiber.join(directPreparation) : undefined;
     if (prepared?.state === 'failed') {
@@ -147,10 +189,8 @@ const main = Effect.scoped(Effect.gen(function* () {
     // the same memory boundary as source tests. Preparation remains parallel.
     if (sourceFiles.length > 0) yield* Effect.sync(() => console.error('# Packaging waits for Source Node completion'));
     yield* Deferred.await(sourceCompleted);
-    return yield* suite('Packaging Node', process.execPath, [fileURLToPath(import.meta.url), '--node-worker', '--suite=node', ...nameFlags, ...packageFiles], {
-      ...env, CONCORD_NODE_OUTPUT: packageOutput, CONCORD_TEST_CONCURRENCY: '1',
-      CONCORD_TEST_PACKAGE_ROOT: prepared?.packageRoot ?? process.env.CONCORD_TEST_PACKAGE_ROOT,
-    });
+    return yield* nodeSuite('Packaging Node', packageFiles, packageOutput, gateMemoryBudgets.packaging,
+      prepared?.packageRoot ?? process.env.CONCORD_TEST_PACKAGE_ROOT);
   }) : Effect.succeed(false);
   const nodeTests = Effect.all([sourceTests, packageTests], { concurrency: concurrency > 1 ? 'unbounded' : 1 }).pipe(Effect.map(results => results.some(Boolean)));
   const browserTests = values.suite !== 'node' && browserFiles.length > 0
@@ -158,6 +198,7 @@ const main = Effect.scoped(Effect.gen(function* () {
       ...(values.suite === 'agent' ? ['--tag', 'journey'] : []),
       ...(values['test-name-pattern'] === undefined ? [] : ['--grep', values['test-name-pattern']]),
       ...(values['test-shard'] === undefined ? [] : ['--shard', values['test-shard']]), ...browserFiles])
+      .pipe(withGateAdmission(admission, browserConcurrency * gateMemoryBudgets.browser))
     : Effect.succeed(false);
   const failures = yield* Effect.all([nodeTests, browserTests], { concurrency: 'unbounded' });
   const nodeTimings = [];
@@ -183,6 +224,8 @@ const main = Effect.scoped(Effect.gen(function* () {
     selection: { files, nodeFiles: selectedNode, browserFiles: selectedBrowser, requestedBrowserFiles: requestedBrowser, suite: values.suite,
       namePattern: values['test-name-pattern'] ?? null, shard: values['test-shard'] ?? null },
     concurrency: { node: concurrency, browser: browserConcurrency, packaging: 1 as const },
+    admission: { capacityBytes: capacity, budgets: gateMemoryBudgets, nodeConcurrencyIsUpperLimit: true,
+      browserReservation: 'all-workers-until-suite-exit', processTreeReports: split ? [join(sourceOutput, 'process-tree-peaks.jsonl'), join(packageOutput, 'process-tree-peaks.jsonl')] : [join(output, 'process-tree-peaks.jsonl')] },
     node: summarizeFileTimings(selectedNode, nodeTimings, 'node-file-elapsed-sum', !failures[0]),
     browser: summarizeFileTimings(selectedBrowser, browserTimings, 'browser-attempt-sum', !failures[1] && reportedBrowser !== null),
     browserLifecycle: summarizeBrowserLifecycle(lifecycle, requestedBrowser.length > 0, !failures[1]),

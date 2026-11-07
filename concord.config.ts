@@ -50,6 +50,8 @@ export default {
       "scripts/distribution.ts",
       "scripts/gate-build-cache.ts",
       "scripts/gate-package.ts",
+      "scripts/gate-queue.ts",
+      "scripts/gate-resource-processes.ts",
       "scripts/gate-resources.ts",
       "scripts/gate-selection.ts",
       "scripts/gate-timings.ts",

@@ -1,14 +1,23 @@
 // @concord-file
 // @concord-implements docs/engineering/testing/README.md#共享资源与同步
 // @concord-implements docs/engineering/testing/cli.md#并发
-import { Duration, Effect, Exit, FileSystem, Schema } from 'effect';
+import { Duration, Effect, Exit, FileSystem, Schema, Semaphore } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { availableParallelism, totalmem } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 
 export const GiB = 1024 ** 3;
-const BrowserBudget = 2.5 * GiB;
+// Conservative full-tree RSS estimates; shared pages can be counted twice.
+export const gateMemoryBudgets = { fixed: GiB, browser: 4 * GiB, packaging: 5 * GiB, node: 2 * GiB } as const;
+export const gateAdmissionBytes = (memoryMaxBytes: number): number => Math.max(0, memoryMaxBytes - gateMemoryBudgets.fixed);
+export const gateAdmittedBrowserWorkers = (memoryMaxBytes: number, upperLimit: number): number => Math.min(upperLimit, Math.floor(gateAdmissionBytes(memoryMaxBytes) / gateMemoryBudgets.browser));
+export const makeGateAdmission = (capacity: number) => Effect.map(Semaphore.make(capacity), pool => ({ pool, capacity, failed: false }));
+export type GateAdmission = Effect.Success<ReturnType<typeof makeGateAdmission>>;
+export const withGateAdmission = (admission: GateAdmission, bytes: number) => <A, E, R>(body: Effect.Effect<A, E, R>) =>
+  admission.pool.withPermits(bytes)(Effect.suspend<A, E | GateResourcesInvalid, R>(() => admission.failed
+    ? Effect.fail(new GateResourcesInvalid({ detail: 'Admission stopped because a test process tree could not be released safely' })) : body));
+
 const PositiveInteger = Schema.NumberFromString.pipe(
   Schema.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
 );
@@ -31,18 +40,9 @@ export const gateConcurrency = (memoryMaxBytes: number, cpus = availableParallel
   const explicitNode = read('CONCORD_TEST_CONCURRENCY');
   const explicitBrowser = read('CONCORD_E2E_WORKERS');
   const cpuLimit = Math.max(1, Math.min(8, Math.floor(cpus / 2)));
-  const browserLimit = Math.max(1, Math.min(4, Math.floor(memoryMaxBytes / 4 / BrowserBudget)));
-  let browser = explicitBrowser ?? Math.min(browserLimit, explicitNode ?? cpuLimit);
-  let node = explicitNode ?? Math.max(1, Math.min(cpuLimit, Math.floor((memoryMaxBytes - browser * BrowserBudget) / GiB)));
-  // Resolve the mutual default dependency; an explicit override remains authoritative.
-  for (;;) {
-    const nextBrowser = explicitBrowser ?? Math.max(1, Math.min(browserLimit, node));
-    const nextNode = explicitNode ?? Math.max(1, Math.min(cpuLimit, Math.floor((memoryMaxBytes - nextBrowser * BrowserBudget) / GiB)));
-    if (nextBrowser === browser && nextNode === node) break;
-    browser = nextBrowser;
-    node = nextNode;
-  }
-  return { node, browser, availableNodeMemoryBytes: Math.max(0, memoryMaxBytes - browser * BrowserBudget) };
+  const node = explicitNode ?? cpuLimit;
+  const browser = explicitBrowser ?? Math.max(1, Math.min(4, node, Math.floor(gateAdmissionBytes(memoryMaxBytes) / 2 / gateMemoryBudgets.browser)));
+  return { node, browser, availableNodeMemoryBytes: Math.max(0, gateAdmissionBytes(memoryMaxBytes) - browser * gateMemoryBudgets.browser) };
 };
 
 export const currentGateMemoryMax = (): number => {
@@ -70,6 +70,7 @@ const MemoryReport = Schema.Struct({
   exitCode: Schema.NullOr(Schema.Number),
   wallclockMs: Schema.NullOr(Schema.Number),
   observedWallclockMs: Schema.Number,
+  queueWaitMs: Schema.Number,
 });
 type MemoryReport = typeof MemoryReport.Type;
 
@@ -127,7 +128,7 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
       memoryIsolation: 'systemd-scope', reason: null, memoryMaxBytes, memorySwapMaxBytes: 0,
       memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: directory, unit: inheritedUnit,
       nodeConcurrency: concurrency.node, browserWorkers: concurrency.browser, exitCode: null,
-      wallclockMs: null, observedWallclockMs: 0,
+      wallclockMs: null, observedWallclockMs: 0, queueWaitMs: Number(process.env.CONCORD_GATE_QUEUE_WAIT_MS ?? 0),
       slice: process.env.CONCORD_GATE_SLICE ?? null, memoryPeakCgroup: process.env.CONCORD_GATE_SLICE_CGROUP ?? null,
     };
     yield* writeReport(inheritedOutput, base);
@@ -154,7 +155,7 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
     memoryMaxBytes, memorySwapMaxBytes: unavailable === null ? 0 : null,
     memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: null, unit: unavailable === null ? unit : null,
     nodeConcurrency: concurrency.node, browserWorkers: concurrency.browser, exitCode: null,
-    wallclockMs: null, observedWallclockMs: 0,
+    wallclockMs: null, observedWallclockMs: 0, queueWaitMs: Number(process.env.CONCORD_GATE_QUEUE_WAIT_MS ?? 0),
     slice: null, memoryPeakCgroup: null,
   };
   yield* writeReport(output, base);

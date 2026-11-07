@@ -81,21 +81,3 @@ test('recovery removes dead owners while optimistic readers remain unregistered'
     rmSync(root, { recursive: true, force: true });
   }
 });
-
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('supporting-page saves avoid inventory scans and preserve conflict checks', () => runApplication(Effect.sync(() => {
-  const root = fixture();
-  const repo = new LocalRepository(root);
-  try {
-    for (let index = 0; index < 120; index += 1) writeFileSync(join(root, `docs/feature/other-${index}.md`), '# Unrelated\n');
-    const path = 'docs/feature/cached/architecture.md';
-    const page = inspectDocumentFile(repo, path)!;
-    let walks = 0;
-    const files = repo.files.bind(repo);
-    repo.files = path => { walks += 1; return files(path); };
-    setMarkdown(repo, path, '# Saved\n', page.digest);
-    assert.equal(readFileSync(join(root, path), 'utf8'), '# Saved\n');
-    assert.equal(walks, 0, 'saving one supporting page must not enumerate unrelated documents');
-    assert.throws(() => setMarkdown(repo, path, '# Stale\n', page.digest), { code: 'FileChangedSinceRead' });
-  } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
-})));

@@ -151,7 +151,7 @@ setInterval(() => {}, 1000);
     }
   }).pipe(Effect.orDie));
   const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/gate.ts'), 'test/model/test-reporter.test.ts'], {
-    env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined, XDG_CACHE_HOME: join(root, 'shared-cache'), PATH: `${root}:${process.env.PATH}` },
+    env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined, XDG_CACHE_HOME: join(root, 'shared-cache'), CONCORD_GATE_QUEUE_DIRECTORY: join(root, 'gate-queue'), PATH: `${root}:${process.env.PATH}` },
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
   }));
   const ready = yield* Deferred.make<void>();
@@ -319,4 +319,95 @@ runnerTest('cancelling the source runner reaps test processes and descendants th
   const output = /# Test diagnostics: ([^\n]+)/u.exec(text)?.[1];
   assert.ok(output, text);
   assert.equal(yield* fs.exists(join(output, 'node-compile-cache')), false);
+}));
+
+// @feature docs/engineering/testing/cli.md#并发
+runnerTest('seven GiB admission bounds override concurrency and releases a failed file before starting its successor', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const files: string[] = [];
+  const active = join(root, 'active');
+  for (const name of ['first', 'second', 'third', 'fourth']) {
+    const file = join(root, `${name}.test.ts`);
+    files.push(file);
+    yield* fs.writeFileString(file, `import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, readdirSync, watchFile, unwatchFile, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+test(${JSON.stringify(name)}, async () => {
+  mkdirSync(${JSON.stringify(active)}, {recursive:true});
+  const own = join(${JSON.stringify(active)}, ${JSON.stringify(name)});
+  writeFileSync(own, String(process.pid));
+  await new Promise(resolve => { const ready = () => { if (existsSync(own + '.release')) { unwatchFile(own + '.release', ready); resolve(); } }; watchFile(own + '.release', {interval:10}, ready); ready(); });
+  try { assert.ok(readdirSync(${JSON.stringify(active)}).filter(name => !name.endsWith('.release')).length <= 3, 'six GiB pool admits at most three two-GiB files'); ${name === 'first' ? "assert.fail('intentional admitted failure');" : ''} }
+  finally { rmSync(own); }
+});\n`);
+  }
+  const running = yield* run(['--suite=node', ...files], { CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3), CONCORD_TEST_CONCURRENCY: '8' }, root).pipe(Effect.forkScoped);
+  const waitFor = (name: string) => Effect.gen(function*() { while (!(yield* fs.exists(join(active, name)))) yield* Effect.sleep('10 millis'); }).pipe(Effect.timeout('15 seconds'));
+  for (const name of ['first', 'second', 'third']) yield* waitFor(name);
+  assert.equal(yield* fs.exists(join(active, 'fourth')), false, 'an explicit concurrency of eight must not bypass the six-GiB pool');
+  const firstPid = Number(yield* fs.readFileString(join(active, 'first')));
+  yield* fs.writeFileString(join(active, 'first.release'), 'release');
+  yield* waitFor('fourth');
+  assert.throws(() => process.kill(firstPid, 0), { code: 'ESRCH' }, 'successor starts only after the failed predecessor exits');
+  for (const name of ['second', 'third', 'fourth']) yield* fs.writeFileString(join(active, `${name}.release`), 'release');
+  const result = yield* Fiber.join(running);
+  assert.equal(result.code, 1, result.text);
+  assert.match(result.text, /intentional admitted failure/u);
+  const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({file: Schema.String, cases: Schema.Number}))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
+  assert.deepEqual(timings.map(row => row.file).sort(), [...files].sort());
+  assert.equal(timings.reduce((sum, row) => sum + row.cases, 0), 4);
+  assert.deepEqual((yield* fs.readDirectory(active)).filter(name => !name.endsWith('.release')), []);
+  const peaks = (yield* fs.readFileString(join(result.output, 'process-tree-peaks.jsonl'))).trim().split('\n').map(line => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({file: Schema.String, budgetBytes: Schema.Number, state: Schema.String})))(line));
+  assert.deepEqual(peaks.map(row => row.file).sort(), [...files].sort());
+  for (const row of peaks) { assert.equal(row.budgetBytes, 2 * 1024 ** 3); assert.equal(row.state, process.platform === 'linux' ? 'observed' : 'unavailable'); }
+}));
+
+// @feature docs/engineering/testing/cli.md#并发
+runnerTest('file admission waits for normal process exit after the official summary', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const file = join(root, 'normal-exit.test.ts'), saved = join(root, 'normal-exit');
+  yield* fs.writeFileString(file, `import test from 'node:test'; import {writeFileSync} from 'node:fs';
+process.once('beforeExit', () => { setImmediate(() => writeFileSync(${JSON.stringify(saved)}, 'normally drained')); });
+test('official summary precedes final process drain', () => {});\n`);
+  const result = yield* run(['--suite=node', file], {}, root);
+  assert.equal(result.code, 0, result.text);
+  assert.equal(yield* fs.readFileString(saved), 'normally drained');
+  assert.doesNotMatch(result.text, /GateProcessCleanupFailed/u);
+}));
+
+// @feature docs/engineering/testing/cli.md#并发
+runnerTest('seven GiB pool never overlaps packaging with a browser even when both overrides permit it', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const browser = join(root, 'route.e2e.ts'), packaging = join(root, 'test/process/release-package.test.ts');
+  const browserStarted = join(root, 'browser-started'), packageStarted = join(root, 'package-started');
+  yield* fs.makeDirectory(join(root, 'test/process'), { recursive: true });
+  yield* fs.writeFileString(browser, 'export {};\n');
+  const waitSource = (marker: string) => `await new Promise(resolve => { const ready = () => { if (existsSync(${JSON.stringify(marker + '.release')})) { unwatchFile(${JSON.stringify(marker + '.release')}, ready); resolve(); } }; watchFile(${JSON.stringify(marker + '.release')}, {interval:10}, ready); ready(); });`;
+  yield* fs.writeFileString(packaging, `import test from 'node:test'; import assert from 'node:assert/strict'; import {existsSync,writeFileSync,watchFile,unwatchFile} from 'node:fs';
+test('admitted packaging', async () => { assert.equal(existsSync(${JSON.stringify(browserStarted)}) && !existsSync(${JSON.stringify(browserStarted + '.done')}), false); writeFileSync(${JSON.stringify(packageStarted)}, 'started'); ${waitSource(packageStarted)} writeFileSync(${JSON.stringify(packageStarted + '.done')}, 'done'); });\n`);
+  const pnpm = join(root, 'pnpm');
+  yield* fs.writeFileString(pnpm, `#!/usr/bin/env node
+import assert from 'node:assert/strict'; import {existsSync,writeFileSync,watchFile,unwatchFile} from 'node:fs';
+assert.equal(existsSync(${JSON.stringify(packageStarted)}) && !existsSync(${JSON.stringify(packageStarted + '.done')}), false);
+assert.equal(process.argv[process.argv.indexOf('--workers')+1], '1');
+writeFileSync(${JSON.stringify(browserStarted)}, 'started'); ${waitSource(browserStarted)} writeFileSync(${JSON.stringify(browserStarted + '.done')}, 'done');\n`);
+  yield* fs.chmod(pnpm, 0o755);
+  const running = yield* run([packaging, browser], {
+    PATH: `${root}:${process.env.PATH}`, CONCORD_TEST_PACKAGE_ROOT: join(root, 'archive'),
+    CONCORD_TEST_CONCURRENCY: '8', CONCORD_E2E_WORKERS: '4', CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3),
+  }, root).pipe(Effect.forkScoped);
+  const waitFor = (paths: string[]) => Effect.gen(function*() {
+    for (;;) { for (const path of paths) if (yield* fs.exists(path)) return path; yield* Effect.sleep('10 millis'); }
+  }).pipe(Effect.timeout('15 seconds'));
+  const first = yield* waitFor([browserStarted, packageStarted]);
+  const second = first === browserStarted ? packageStarted : browserStarted;
+  assert.equal(yield* fs.exists(second), false, 'five plus four GiB cannot enter a six-GiB pool together');
+  yield* fs.writeFileString(first + '.release', 'release');
+  yield* waitFor([second]);
+  assert.equal(yield* fs.exists(first + '.done'), true);
+  yield* fs.writeFileString(second + '.release', 'release');
+  const result = yield* Fiber.join(running);
+  assert.equal(result.code, 0, result.text);
+  assert.match(result.text, /e2e workers=1/u);
 }));
