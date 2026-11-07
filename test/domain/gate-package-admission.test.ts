@@ -33,7 +33,7 @@ test('archive preparation shares the pool, persists failure receipts and returns
   const pid = Number(yield* fs.readFileString(started));
   const entered = yield* Deferred.make<void>();
   const packaging = yield* Deferred.succeed(entered, undefined).pipe(withGateAdmission(pool, gateMemoryBudgets.packaging, 'packaging'), Effect.forkScoped);
-  assert.equal(yield* Deferred.isDone(entered), false, 'five GiB packaging cannot overlap admitted archive preparation');
+  assert.equal(yield* Deferred.isDone(entered), false, 'three GiB packaging cannot overlap admitted archive preparation in a five GiB pool');
   yield* fs.writeFileString(release, 'release');
   const result = yield* Fiber.join(preparation);
   yield* Fiber.join(packaging);
@@ -41,7 +41,7 @@ test('archive preparation shares the pool, persists failure receipts and returns
   assert.deepEqual(yield* readPackagePreparation(report), result);
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
   assert.equal(yield* Deferred.isDone(entered), true);
-  assert.deepEqual(pool.timings.map(row => [row.category, row.bytes]), [['archive-preparation', 2.5 * GiB], ['packaging', 5 * GiB]]);
+  assert.deepEqual(pool.timings.map(row => [row.category, row.bytes]), [['archive-preparation', 2.5 * GiB], ['packaging', 3 * GiB]]);
   const insufficient = yield* preparePackagingFixture(checkout, join(root, 'insufficient.json'), yield* makeGateAdmission(2 * GiB));
   assert.equal(insufficient.state, 'failed');
   if (insufficient.state === 'failed') assert.match(insufficient.message, /GateResourcesInvalid/u);

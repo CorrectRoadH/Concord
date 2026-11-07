@@ -483,7 +483,7 @@ writeFileSync(${JSON.stringify(browserStarted)}, 'started'); ${waitSource(browse
   }).pipe(Effect.timeout('15 seconds'));
   const first = yield* waitFor([browserStarted, packageStarted]);
   const second = first === browserStarted ? packageStarted : browserStarted;
-  assert.equal(yield* fs.exists(second), false, 'five plus two 2.5-GiB browser workers cannot enter a five-GiB pool together');
+  assert.equal(yield* fs.exists(second), false, 'three plus two 2.5-GiB browser workers cannot enter a five-GiB pool together');
   yield* fs.writeFileString(first + '.release', 'release');
   yield* waitFor([second]);
   assert.equal(yield* fs.exists(first + '.done'), true);
