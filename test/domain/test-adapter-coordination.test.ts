@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from '../support/temporary.ts';
 import test from 'node:test';
 import { Effect, Fiber } from 'effect';
+import { RuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { LocalRepository } from "../support/repository.ts";
 
 import { collectNativeTests, readNativeObservations } from "../../src/domain/tests/index.ts";
@@ -43,12 +44,15 @@ test('repository loading rejects symlinks in every configured adapter input path
 // @name adapter-cleanup-unknown-c12
 test('unknown adapter cleanup quarantines the same runner domain before another collect can start (C12)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
+  const environment = yield* RuntimeEnvironment;
   const repo = yield* Effect.acquireRelease(Effect.sync(() => new LocalRepository(root)), repo => Effect.sync(() => repo.close()));
   // Only the OS permission boundary is injected. OwnedProcess still runs and
   // drains the real Node child, and the runner writes its actual quarantine.
-  const owned = makeOwnedProcessService({ groupPresence: { kill: () => { throw Object.assign(new Error('permission denied'), { code: 'EPERM' }); } } });
-  const first = yield* collectNativeTests(repo, ['test/sample.ts']).pipe(Effect.provideService(OwnedProcess, owned), Effect.exit);
-  assert.equal(first._tag, 'Failure'); assert.equal(inspectRunner(root).status, 'blocked');
+  const owned = makeOwnedProcessService({ environment, groupPresence: { kill: () => { throw Object.assign(new Error('permission denied'), { code: 'EPERM' }); } } });
+  const first = yield* collectNativeTests(repo, ['test/sample.ts']).pipe(Effect.provideService(OwnedProcess, owned), Effect.result);
+  assert.equal(first._tag, 'Failure');
+  if (first._tag === 'Failure') assert.equal(first.failure.code, 'CleanupUnknown');
+  assert.equal(inspectRunner(root, environment.env).status, 'blocked');
   const second = yield* collectNativeTests(repo, ['test/sample.ts']).pipe(Effect.provideService(OwnedProcess, owned), Effect.exit);
   assert.equal(second._tag, 'Failure'); assert.deepEqual(readNativeObservations(repo), []);
 })).pipe(Effect.provide(OwnedProcessLive))));
@@ -57,6 +61,7 @@ test('unknown adapter cleanup quarantines the same runner domain before another 
 // @name adapter-invalidation-epoch-c10
 test('an invalidated collect run cannot publish an otherwise successful observation (C10)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
+  const environment = yield* RuntimeEnvironment;
   const repo = yield* Effect.acquireRelease(Effect.sync(() => new LocalRepository(root)), repo => Effect.sync(() => repo.close()));
   yield* Effect.sync(() => {
     mkdirSync(join(root, 'control'));
@@ -78,7 +83,7 @@ process.stdout.write(JSON.stringify({ format: 'concord.test-adapter/v1', op: req
   });
   const collecting = yield* Effect.forkChild(collectNativeTests(repo, ['test/sample.ts']).pipe(Effect.exit));
   yield* Effect.promise(() => pollUntil(async () => existsSync(join(root, 'control/started')) ? true : undefined, { description: 'external adapter reached collect-plan' }));
-  yield* Effect.sync(() => { repo.snapshot(() => invalidateActiveRun(root)); writeFileSync(join(root, 'control/release'), 'continue'); });
+  yield* Effect.sync(() => { repo.snapshot(() => invalidateActiveRun(root, environment.env)); writeFileSync(join(root, 'control/release'), 'continue'); });
   const result = yield* Fiber.join(collecting);
-  assert.equal(result._tag, 'Failure'); assert.deepEqual(readNativeObservations(repo), []); assert.equal(inspectRunner(root).status, 'absent');
+  assert.equal(result._tag, 'Failure'); assert.deepEqual(readNativeObservations(repo), []); assert.equal(inspectRunner(root, environment.env).status, 'absent');
 })).pipe(Effect.provide(OwnedProcessLive))));

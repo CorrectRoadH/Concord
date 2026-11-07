@@ -3,6 +3,7 @@ import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { collectNativeTests, readNativeObservations } from '../../src/app/index.ts';
 import { OwnedProcess, makeOwnedProcessService, type OwnedProcessResult } from '../../src/base/process/index.ts';
 import { RequestSchema, digest, protocolDecode, protocolJson } from '../../src/model/index.ts';
@@ -35,7 +36,7 @@ for (const mode of ['green', 'wrong-echo', 'extra-envelope'] as const) {
       // Only external process bytes are simulated; the application owns request
       // identity, strict response decoding, publication and session cleanup.
       const owner = {
-        ...makeOwnedProcessService(),
+        ...makeOwnedProcessService({ environment: makeRuntimeEnvironment(root, process.env) }),
         run: (command: readonly string[], options: { readonly stdin?: string }) => Effect.sync((): OwnedProcessResult => {
           let stdout = '';
           if (options.stdin !== undefined) {
