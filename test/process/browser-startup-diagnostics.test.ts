@@ -1,4 +1,4 @@
-// 跨进程保证：服务与IPC——浏览器worker启动失败保留服务原始原因，并在返回错误前清理部分启动的工作区。
+// 跨进程保证：服务与 IPC——浏览器 worker 启动失败保留服务原始原因，并在返回错误前清理部分启动的工作区。
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import test from 'node:test';
