@@ -12,4 +12,4 @@ NiceEval 中运行外部 adapter 的窄 `concord --json test discover`：adapter
 
 ## 期望
 
-派生批次是可重建的缓存（[本地数据引擎](../feature/local-data-engine/architecture.md#工作区服务)）：服务不可用时放弃提交，命令照常返回已经得到的结果，缓存状态报告这次没有写入。任何失败都以带具名错误的 JSON 输出，不把运行时日志写到 stdout。先写服务在提交前消失的失败回归，再按 `--fixed` 修复。
+按[本地操作的缓存快照](../feature/local-data-engine/architecture.md#本地操作的缓存快照)：只产出缓存的 `test discover` 与 `code analyze` 在派生批次提交失败时返回失败，以 JSON 输出具名错误 `CacheUpdateFailed`，details 给出传输或保存失败的原因；其它操作保留完成结果并输出 `CacheUpdateFailed` 警告。任何情况下都不崩溃，也不把运行时日志写到 stdout。先写服务在提交前消失的失败回归，再按 `--fixed` 修复。
