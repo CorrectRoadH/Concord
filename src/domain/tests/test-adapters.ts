@@ -87,7 +87,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
         const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'adapter-finalize', true, false, environment)!;
         try {
           finalizeRun(repo.root, owned.run, cleanup, environment);
-          if (cleanup) finishRun(repo.root, owned.run, environment); else { quarantineRun(repo.root, owned.run, environment); throw new ConcordError('CleanupUnknown', `Adapter cleanup is unconfirmed; preserve ${owned.session.directory} and runner ownership`); }
+          if (cleanup) finishRun(repo.root, owned.run, environment); else { quarantineRun(repo.root, owned.run, environment); throw new ConcordError('CleanupUnknown', `Adapter cleanup is unconfirmed; preserve ${owned.session.directory} and runner ownership`, { invocations: owned.session.invocations }); }
         } finally { releaseTraceLeaseSync(lease, 'adapter-finalize'); }
       } catch (cause) { quarantineRun(repo.root, owned.run, environment); throw cause; }
     });
