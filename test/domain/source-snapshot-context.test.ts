@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
@@ -97,6 +97,33 @@ test('Sources isolates concurrent operations on the same workspace and keeps a s
       yield* Deferred.succeed(continueSecond, undefined);
       assert.equal(yield* Fiber.join(second), '# Independent\n');
     })).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(root, process.env))));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/README.md
+test('Sources verifies inspected identities and absent paths before returning', async () => {
+  const root = createConsumer();
+  try {
+    await Effect.runPromise(Effect.gen(function*() {
+      const sources = yield* Sources;
+      const context = yield* (yield* Workspace).open(root, { access: 'read', cache: 'off' });
+      const snapshot = <A, E, R>(operation: Effect.Effect<A, E, R>) => sources.snapshot(operation).pipe(Effect.provideService(WorkspaceContext, context));
+      const metadata = yield* snapshot(Effect.gen(function*() {
+        const info = yield* sources.inspect('docs/README.md');
+        assert.equal(info?.file, true);
+        assert.equal(Object.isFrozen(info), true);
+        chmodSync(join(root, 'docs/README.md'), (info!.mode & 0o777) ^ 0o100);
+      })).pipe(Effect.result);
+      assert.equal(metadata._tag, 'Failure');
+      if (metadata._tag === 'Failure') assert.equal(metadata.failure.code, 'SourceChanged');
+      const absence = yield* snapshot(Effect.gen(function*() {
+        assert.equal(yield* sources.exists('docs/new.md'), false);
+        writeFileSync(join(root, 'docs/new.md'), '# New\n');
+      })).pipe(Effect.result);
+      assert.equal(absence._tag, 'Failure');
+      if (absence._tag === 'Failure') assert.equal(absence.failure.code, 'SourceChanged');
+      assert.equal(yield* snapshot(sources.exists('docs/new.md')), true);
+    }).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(root, process.env))));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

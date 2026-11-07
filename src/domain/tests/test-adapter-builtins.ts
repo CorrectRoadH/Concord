@@ -31,8 +31,8 @@ function native(adapter: TestAdapter, file: string, name: string, project = 'def
 const cargoTarget = Effect.fn('Tests.cargoTarget')(function*(root: string, file: string) {
   const sources = yield* Sources;
   let directory = dirname(file);
-  while (directory !== '.' && !(yield* sources.exists(join(root, directory, 'Cargo.toml')))) directory = dirname(directory);
-  if (!(yield* sources.exists(join(root, directory, 'Cargo.toml')))) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'Cargo test file has no workspace manifest'));
+  while (directory !== '.' && !(yield* sources.existsAt(join(root, directory, 'Cargo.toml')))) directory = dirname(directory);
+  if (!(yield* sources.existsAt(join(root, directory, 'Cargo.toml')))) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'Cargo test file has no workspace manifest'));
   const local = relative(directory, file);
   if (local === 'src/lib.rs') return { cwd: directory, args: ['--lib'], project: `${directory}:lib` };
   if (/^tests\/[^/]+\.rs$/u.test(local)) return { cwd: directory, args: ['--test', local.slice(6, -3)], project: `${directory}:test:${local.slice(6, -3)}` };

@@ -37,7 +37,8 @@ export interface SourcesService {
   readonly watchPrivateHead: (privateDir: string, changed: () => void) => Effect.Effect<void, never, Scope.Scope>;
   readonly pendingPublications: typeof inspectPendingJournals;
   readonly readReportFiles: typeof readReportFiles;
-  readonly exists: (path: string) => Effect.Effect<boolean, ConcordError>;
+  readonly existsAt: (path: string) => Effect.Effect<boolean, ConcordError>;
+  readonly exists: (path: string) => Effect.Effect<boolean, ConcordError, SourceSnapshot>;
   readonly directoryEntries: (path: string) => Effect.Effect<readonly string[], ConcordError>;
   readonly temporaryDirectory: (prefix: string, cleanupFailed?: (error: ConcordError) => void) => Effect.Effect<string, ConcordError, Scope.Scope>;
   readonly snapshot: SnapshotOperation;
@@ -50,26 +51,49 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const stdio = yield* Stdio.Stdio;
-    const active = new WeakMap<SourceSnapshot['Service'], LocalRepository>();
+    interface Session {
+      readonly repo: LocalRepository;
+      readonly inspections: Map<string, SourceInspection | undefined>;
+    }
+    const active = new WeakMap<SourceSnapshot['Service'], Session>();
     const observed = Effect.fn('Sources.observed')(function*<A>(read: (repo: LocalRepository) => A) {
       const identity = yield* SourceSnapshot;
       return yield* Effect.try({ try: () => {
-        const repo = active.get(identity);
-        if (repo === undefined) throw new ConcordError('OperationFailed', 'Source snapshot is no longer active');
-        return read(repo);
+        const session = active.get(identity);
+        if (session === undefined) throw new ConcordError('OperationFailed', 'Source snapshot is no longer active');
+        return read(session.repo);
       }, catch: failure });
     });
+    const inspect = Effect.fn('Sources.inspect')(function*(path: string) {
+      const identity = yield* SourceSnapshot;
+      return yield* Effect.try({ try: () => {
+        const session = active.get(identity);
+        if (session === undefined) throw new ConcordError('OperationFailed', 'Source snapshot is no longer active');
+        const inspected = session.repo.inspect(path);
+        const value = inspected === undefined ? undefined : Object.freeze({ ...inspected });
+        if (!session.inspections.has(path)) session.inspections.set(path, value);
+        return value;
+      }, catch: failure });
+    });
+    const verify = (session: Session) => Effect.try({ try: () => {
+      session.repo.verifySnapshot();
+      for (const [path, before] of session.inspections) {
+        const current = session.repo.inspect(path);
+        if (JSON.stringify(current) !== JSON.stringify(before)) throw new ConcordError('SourceChanged', `Source metadata changed during the snapshot: ${path}`, 'source-observation');
+      }
+    }, catch: failure });
     const runSnapshot = <A, E, R>(repo: LocalRepository, workspace: WorkspaceMetadata, operation: Effect.Effect<A, E, R>, retryLivePublication = false) => Effect.gen(function*() {
       const parent = yield* Effect.serviceOption(SourceSnapshot);
-      if (parent._tag === 'Some' && active.get(parent.value) === repo) return yield* operation.pipe(Effect.provideContext(Context.make(SourceSnapshot, parent.value).pipe(Context.add(WorkspaceContext, parent.value.workspace))));
+      if (parent._tag === 'Some' && active.get(parent.value)?.repo === repo) return yield* operation.pipe(Effect.provideContext(Context.make(SourceSnapshot, parent.value).pipe(Context.add(WorkspaceContext, parent.value.workspace))));
       for (;;) {
         const identity = SourceSnapshot.of({ workspace });
+        const session: Session = { repo, inspections: new Map() };
         const run = operation.pipe(Effect.provideContext(Context.make(SourceSnapshot, identity).pipe(Context.add(WorkspaceContext, identity.workspace))));
         const result = yield* Effect.result(Effect.acquireUseRelease(
           waitForPublication(reclaimDead => Effect.try({ try: () => repo.beginSnapshot(reclaimDead), catch: failure })),
           () => Effect.acquireUseRelease(
-            Effect.sync(() => { active.set(identity, repo); }),
-            () => run.pipe(Effect.tap(() => Effect.try({ try: () => repo.verifySnapshot(), catch: failure }))),
+            Effect.sync(() => { active.set(identity, session); }),
+            () => run.pipe(Effect.tap(() => verify(session))),
             () => Effect.sync(() => { active.delete(identity); }),
           ),
           () => Effect.sync(() => repo.endSnapshot()),
@@ -119,7 +143,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
       readBytes: path => observed(repo => repo.readBytes(path)),
       read: path => observed(repo => repo.read(path)),
       files: (prefix, scope) => observed(repo => repo.files(prefix, scope)),
-      inspect: path => observed(repo => repo.inspect(path)),
+      inspect,
       rootFiles: observed(repo => repo.rootFiles()),
       temporaryDirectory: Effect.fn('Sources.temporaryDirectory')((prefix: string, cleanupFailed?: (error: ConcordError) => void) => Effect.acquireRelease(
         fs.makeTempDirectory({ prefix, directory: runtimeTemporaryDirectory(runtime) }).pipe(Effect.mapError(failure)),
@@ -127,7 +151,8 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
       )),
       pendingPublications: (privateDir, verifyPaths) => inspectPendingJournals(runtimePath(runtime, privateDir), verifyPaths),
       readReportFiles: (directory, declared, limits, budget, validateText) => readReportFiles(runtimePath(runtime, directory), declared, limits, budget, validateText),
-      exists: path => fs.exists(runtimePath(runtime, path)).pipe(Effect.mapError(failure)),
+      existsAt: path => fs.exists(runtimePath(runtime, path)).pipe(Effect.mapError(failure)),
+      exists: path => inspect(path).pipe(Effect.map(value => value !== undefined)),
       directoryEntries: path => fs.readDirectory(runtimePath(runtime, path)).pipe(Effect.mapError(failure)),
       watch: Effect.fn('Sources.watch')((root: string, changed: () => void, failed: (error: ConcordError) => void) => Effect.acquireRelease(
         Effect.sync(() => new NodeSourceWatch(runtimePath(runtime, root), changed, failed)),
