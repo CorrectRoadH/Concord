@@ -16,6 +16,7 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 | `--test-shard=<序号>/<总数>` | 运行一个源码分片。分片分别作用于源码 Node 测试与浏览器测试，不含打包测试；所有分片的并集覆盖它们的完整集合，不保证与以往相同的分组 |
 | `--test-shard=package` | 只运行打包测试，包括准备归档 |
 | `--remote` | 把选中的测试拆成分片，每片在一台远端机器上运行，见[远端执行](architecture.md#远端执行) |
+| `--remote-prepare` | 按当前工具链建立远端执行使用的快照，见[远端执行](architecture.md#远端执行) |
 
 `--changed` 的改动是 `<base>` 到 worktree 当前文件的全部差异，`<base>` 默认是 `origin/master` 与 HEAD 的 merge-base。它选中改动的测试文件，以及按下面的规则与改动有关的测试。改动了 `test/support/`、`scripts/`、`package.json` 或锁文件时，选中全部测试。
 
