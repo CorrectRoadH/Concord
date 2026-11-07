@@ -44,7 +44,7 @@ status: ready
 path: /tmp/demo/.git/concord/cache.hawdb
 detail: projections: annotation_cache, query_cache, workspace_projection
 physicalBytes: 7418888
-physicalLimitBytes: 234881024
+reclaimThresholdBytes: 1073741824
 ```
 
 ```text

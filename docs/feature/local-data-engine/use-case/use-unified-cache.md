@@ -37,7 +37,7 @@
    path: /tmp/demo/.git/concord/cache.hawdb
    detail: projections: annotation_cache, query_cache, workspace_projection
    physicalBytes: 7418888
-   physicalLimitBytes: 234881024
+   reclaimThresholdBytes: 1073741824
    ```
 
    `ready` 表示投影可读，不表示某次扫描命中。全部字段见 [CLI](../cli.md#缓存状态)。

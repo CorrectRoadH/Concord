@@ -11,7 +11,7 @@
 | `status` | `ready` 表示投影可读，不表示某次扫描命中 |
 | `path` | 缓存目录 |
 | `detail` | 可读的投影命名空间 |
-| `physicalBytes`、`physicalLimitBytes` | 缓存的物理体积与上限 |
+| `physicalBytes`、`reclaimThresholdBytes` | 缓存的物理体积，与触发空间回收的体积（[目录体积与维护](architecture.md#目录体积与维护)）；体积不设上限 |
 | `owner` | `service`：由工作区服务持有；`process`：没有服务，由当前 CLI 进程持有 |
 | `pid` | 持有者的进程号（整数） |
 | `installation` | 持有者的[安装身份](../../concepts.md#installation-identity)，与 `concord server status` 的 `installation` 相同 |
