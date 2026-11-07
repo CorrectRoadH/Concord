@@ -3,6 +3,7 @@ import { archiveTarget } from './archive-support.ts';
 import { bunCompilerIdentity, compilationArguments } from './compile-application.ts';
 import { compiledStartupReceipts } from './compile-startup.ts';
 import { tmpdir } from 'node:os';
+import { cp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packJavaScript } from './pack-javascript.ts';
@@ -27,8 +28,11 @@ const CounterRecord = Schema.Struct({
 });
 
 export const copyProfilePackage = Effect.fn('perf.copyProfilePackage')(function*(candidatePackage: string, profilePackage: string) {
-  const fs = yield* FileSystem.FileSystem;
-  yield* fs.copy(candidatePackage, profilePackage, { overwrite: false });
+  // Resolving relative package links would make the private copy escape to the candidate.
+  yield* Effect.tryPromise({
+    try: () => cp(candidatePackage, profilePackage, { recursive: true, verbatimSymlinks: true, force: false, errorOnExist: true }),
+    catch: cause => new PerfError({ message: `Copy profile archive: ${String(cause)}` }),
+  });
 });
 
 export function summarizeProfileEvidence(evidence: ReadonlyMap<string, string>) {
@@ -48,9 +52,9 @@ export function summarizeProfileEvidence(evidence: ReadonlyMap<string, string>) 
     byPid.set(pid, group);
   }
   if (counters.some(item => !byPid.has(item.pid))) throw new Error('A counter has no matching CPU profile');
-  return [...byPid].map(([pid, profiles]) => {
-    const record = counters.find(item => item.pid === pid);
-    if (!record) throw new Error(`Missing fs counter for pid ${pid}`);
+  return counters.map(record => {
+    const { pid } = record;
+    const profiles = byPid.get(pid)!;
     const { fs, ...resources } = record;
     return { pid, resources: { ...resources, fs: Object.fromEntries(Object.entries(fs).sort((a, b) => b[1].count - a[1].count)) }, ...hotSpots(combineProfiles(profiles)) };
   });
@@ -80,9 +84,18 @@ const main = Effect.gen(function*() {
   const dir = values.out === undefined ? yield* fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-profile-out-' }) : resolve(values.out);
   yield* fs.makeDirectory(dir, { recursive: true });
   const out = yield* fs.realPath(dir);
-  const previous = new Set(yield* fs.readDirectory(out));
-  const counter = join(workDir, 'fs-counter.mjs');
-  yield* packJavaScript({ entry: { 'fs-counter': fileURLToPath(new URL('./perf/fs-counter.ts', import.meta.url)) }, outDir: workDir,
+  // Bun splits compile-exec-argv on whitespace. Keep its runtime paths private
+  // and whitespace-free, independently of the checkout, TMPDIR and requested output.
+  const sampling = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ directory: '/tmp', prefix: 'concord-profile-sampling-' }));
+  if (/\s/u.test(sampling)) return yield* new PerfError({ message: `Bun profile runtime path contains whitespace: ${sampling}` });
+  // Preserve raw evidence even when decoding or the measured command fails.
+  yield* Effect.addFinalizer(() => Effect.gen(function*() {
+    for (const name of yield* fs.readDirectory(sampling)) {
+      if (/^counter-\d+\.json$/u.test(name) || name.endsWith('.cpuprofile')) yield* fs.copyFile(join(sampling, name), join(out, name));
+    }
+  }).pipe(Effect.orDie));
+  const counter = join(sampling, 'fs-counter.mjs');
+  yield* packJavaScript({ entry: { 'fs-counter': fileURLToPath(new URL('./perf/fs-counter.ts', import.meta.url)) }, outDir: sampling,
     platform: 'node', format: 'esm', target: 'node24', logLevel: 'silent',
     deps: { alwaysBundle: /.*/u, onlyBundle: false }, outputOptions: { entryFileNames: '[name].mjs' },
   }).pipe(Effect.mapError(cause => new PerfError({ message: `Build profile preload: ${String(cause)}` })));
@@ -95,7 +108,7 @@ const main = Effect.gen(function*() {
   const receipts = yield* compiledStartupReceipts(repository);
   const compiled = yield* mustRun(['bun', ...compilationArguments(target, profileEntry),
     '--define', `CONCORD_STARTUP_RECEIPTS=${JSON.stringify(receipts)}`,
-    profileRuntimeArgument(out, counter),
+    profileRuntimeArgument(sampling, counter),
   ], { cwd: repository, outputDir: runs, timeoutMs: 120_000 });
   yield* io('Report profile compilation', () => process.stderr.write(compiled.stdout + compiled.stderr));
   const candidate = yield* loadArtifact('candidate', repository, profileEntry);
@@ -104,7 +117,7 @@ const main = Effect.gen(function*() {
   const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
   const command = cliCommand(candidate, consumer.root, args);
   const env = {
-    CONCORD_PERF_COUNTER_DIR: out, CONCORD_PERF_COUNTER_ROOT: consumer.root,
+    CONCORD_PERF_COUNTER_DIR: sampling, CONCORD_PERF_COUNTER_ROOT: consumer.root,
   };
   const run = yield* Effect.gen(function*() {
     const context = makeContext(candidate, consumer, runs, false, env, Math.max(0, ...budgets.filter(row => row.limitKind === 'max').map(row => row.limitMs)));
@@ -128,9 +141,9 @@ const main = Effect.gen(function*() {
   }).pipe(Effect.scoped);
   return { consumer, run };
   }).pipe(Effect.scoped);
-  const files = (yield* fs.readDirectory(out)).filter(name => !previous.has(name));
+  const files = yield* fs.readDirectory(sampling);
   const evidence = new Map<string, string>();
-  for (const name of files.filter(name => /^counter-\d+\.json$/u.test(name) || name.endsWith('.cpuprofile'))) evidence.set(name, yield* fs.readFileString(join(out, name)));
+  for (const name of files.filter(name => /^counter-\d+\.json$/u.test(name) || name.endsWith('.cpuprofile'))) evidence.set(name, yield* fs.readFileString(join(sampling, name)));
   const processes = yield* io(`Decode CPU profiles and counters; command exited ${run.exitCode}: ${run.stderr}`, () => summarizeProfileEvidence(evidence));
   const record = {
     format: 'concord.profile/v2', ...(scenario ? { scenario: scenario.id } : {}), path, measuredAt: new Date().toISOString(), environment: environment(), consumer, artifact: candidate,
