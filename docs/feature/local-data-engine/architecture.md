@@ -388,7 +388,7 @@ WAL 上限为 100000 条、replay 128 MiB、单条 64 MiB、每批 50000 次操�
 
 ## 诊断投影
 
-诊断投影只服务[异步查询](use-case/query-asynchronous-projections.md)。trace show、trace gaps 与 review 默认读取已完成的投影并请求后台刷新；首次无缓存返回 `QueryPending`。
+诊断投影只服务[异步查询](use-case/query-asynchronous-projections.md)。trace show、trace gaps 与 review 默认读取已完成的投影并请求后台刷新；还没有投影时等待这次刷新发布后再读，刷新失败或超时才返回 `QueryPending`（[首次运行](use-case/query-asynchronous-projections.md#first-run)）。
 
 缓存命中不加载 Repository，不等待发布租约。check、trace check、Memory 与 Issue 检索、作者读取、写入、恢复与证据裁决不读取 `query_cache`；`--fresh` 与 `--dry-run` 走当前来源扫描。
 

@@ -39,7 +39,7 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 | 变量 | 作用 | 默认值 |
 | --- | --- | --- |
 | `CONCORD_TEST_CONCURRENCY` | Node 测试的文件进程并发上限，必须为正整数 | `min(8, floor(可用 CPU / 2))`，至少 1 |
-| `CONCORD_E2E_WORKERS` | 浏览器测试的 worker 数 | `min(4, Node 并发上限, floor(准入池 / 2 / 浏览器预算))`，至少 1 |
+| `CONCORD_E2E_WORKERS` | 浏览器测试的 worker 数 | `min(4, Node 并发上限, floor(准入池 × 0.6 / 浏览器预算))`，至少 1 |
 
 两个变量只是上限，实际同时运行多少由内存准入决定。`MemoryMax` 是门禁的[内存上限](README.md#共享资源与同步)（[内存隔离](architecture.md#内存隔离)），减去固定开销后是准入池。浏览器 worker 从启动到退出占用浏览器预算；归档准备从开始到结束占用它的预算；每个 Node 测试文件从启动到它的全部后代进程退出，占用自己的预算。池中剩余不足时，后到的文件等待，不超额启动。本地与 CI 使用同一套规则。
 
@@ -47,7 +47,7 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 | --- | ---: | --- |
 | 固定开销：门禁本身与静态检查 | 2 GiB | 不进入准入池；PSS 实测 1.85 GiB |
 | 归档准备 | 2.5 GiB | PSS 实测 2.47 GiB（冷构建，六个部件都未命中） |
-| 浏览器 worker：浏览器、View 服务、计算与操作进程、私有服务 | 2 GiB | 稳态 PSS 约 1.3 GiB；完整门禁中峰值 2.04–2.45 GiB，超出部分按下文处理 |
+| 浏览器 worker：浏览器、View 服务、计算与操作进程、私有服务 | 2.5 GiB | 稳态 PSS 约 1.3 GiB；完整门禁中峰值 2.06–2.10 GiB（测试直接启动工作区服务后） |
 | 打包测试文件：运行归档 CLI 的文件 | 5 GiB | RSS 合计峰值 4.52 GiB，待按 PSS 重测 |
 | 其它 Node 测试文件，含全部后代进程 | 该文件上次的 PSS 峰值，没有记录时 2 GiB | PSS 实测 p50 0.22、p95 1.15、最大 3.05 GiB |
 
