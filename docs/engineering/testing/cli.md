@@ -15,8 +15,6 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 | `--test-name-pattern=<表达式>` | 只运行标题匹配的测试 |
 | `--test-shard=<序号>/<总数>` | 运行一个源码分片。分片分别作用于源码 Node 测试与浏览器测试，不含打包测试；所有分片的并集覆盖它们的完整集合，不保证与以往相同的分组 |
 | `--test-shard=package` | 只运行打包测试，包括准备归档 |
-| `--remote` | 把选中的测试拆成分片，每片在一台远端机器上运行，见[远端执行](architecture.md#远端执行) |
-| `--remote-prepare` | 按当前工具链建立远端执行使用的快照，见[远端执行](architecture.md#远端执行) |
 
 `--changed` 的改动是 `<base>` 到 worktree 当前文件的全部差异，`<base>` 默认是 `origin/master` 与 HEAD 的 merge-base。它选中改动的测试文件，以及按下面的规则与改动有关的测试。改动了 `test/support/`、`scripts/`、`package.json` 或锁文件时，选中全部测试。
 
@@ -28,9 +26,9 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 | 文档包内其它页面（README、cli、architecture 等） | 标记指向该 Feature 或 Engineering，或指向其中任一页面的测试 |
 | 文档包外的项目规则与普通文档 | 不因此选中测试；`concord check` 仍完整执行 |
 
-本机门禁在同一台机器上排队执行（[负载](README.md#共享资源与同步)）；`--remote` 在远端机器上并行执行（[远端执行](architecture.md#远端执行)）。退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Node 测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
+同一台机器上的门禁排队执行（[负载](README.md#共享资源与同步)）。退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Node 测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
 
-本地交付运行 `pnpm gate --changed`。推送到 master 后，CI 的八个分片各运行 `pnpm gate --test-shard=<序号>/8`，打包任务运行 `pnpm gate --test-shard=package`，并集是完整集合；失败由引入它的人立即修复。
+本地交付运行 `pnpm gate --changed`。推送到 master 后，CI 在 Instabox 的 `instabox-medium` 机器（4 vCPU、8 GiB）上运行：十六个分片各运行 `pnpm gate --test-shard=<序号>/16`，打包任务运行 `pnpm gate --test-shard=package`，并集是完整集合；每个任务一台新机器，代码只经 Git 推送到达，结果只经 CI 返回。失败由引入它的人立即修复。
 
 报告写入每次调用独立的 `.test-results/run-*`，其中有按耗时排序的测试文件与子进程启动次数。CI 按分片上传报告。
 
