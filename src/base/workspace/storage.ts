@@ -615,6 +615,8 @@ export class LocalRepository implements Repository {
         (this.verifyListings ?? this.listings).set(directory, members);
         for (const child of members.map(entry => entry.toString('utf8')).sort()) {
           if (child === '.git' || child === 'node_modules') continue;
+          // Skill discovery owns only Concord directories; never inspect foreign entries.
+          if (scope !== 'source' && /^\.(?:agents|claude)\/skills$/u.test(name) && !/^concord-[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(child)) continue;
           const childName = `${name}/${child}`;
           if (scope === 'source' && excludedSourcePath(childName, prefix, this.config.sourceIgnore ?? [])) continue;
           const { stat: childStat } = this.readablePath(childName);
