@@ -201,9 +201,10 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   if (ports.maintenance) {
     const idleMaintenance = ports.maintenance;
     yield* Effect.forkScoped(Effect.repeat(maintenance.withPermit(Effect.gen(function*() {
-      if (stopping || operations > 0 || (yield* SubscriptionRef.get(state.value)).state !== 'running' || !(yield* idleMaintenance.needed)) return;
+      if (stopping || (yield* SubscriptionRef.get(state.value)).state !== 'running' || !(yield* idleMaintenance.needed)) return;
       yield* ports.verify;
       yield* state.transition('draining');
+      yield* operationsDrained;
       yield* ports.close;
       if (stopping) return;
       yield* state.transition('maintaining');
