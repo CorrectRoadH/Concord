@@ -1,3 +1,4 @@
+// 跨进程保证：进程终止与信号——取消 PR 导出后真实 Git 进程组及后代已退出，临时对象仓库已移除。
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
