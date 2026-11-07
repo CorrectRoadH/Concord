@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/documentation-quality/format.md#writingmd
 // @concord-implements docs/feature/documentation-quality/format.md#conceptsmd
 import { repositoryDirname as dirname } from "./repo-path.ts";
-import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from "./shared.ts";
+import { ConcordError, objectDigest } from "./shared.ts";
 import { canonicalPath } from "./path-rules.ts";
 
 export const policyName = 'writing.md';
@@ -21,18 +21,16 @@ export function scopeOf(path: string, kind: 'policy' | 'catalog'): string {
 
 export const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 export const applies = (path: string, scope: string): boolean => scope === 'docs' || under(path, scope);
-export function discovered(repo: Repository, kind: 'policy' | 'catalog', members: readonly string[] = repo.files('docs')): string[] {
+export function discovered(kind: 'policy' | 'catalog', members: readonly string[]): string[] {
   const name = kind === 'policy' ? policyName : catalogName;
   return members.filter(path => path.endsWith(`/${name}`) && path.split('/').every(part => part !== '_template' && part !== '.git' && part !== 'node_modules')).sort();
 }
-export function indexWritingScopes(repo: Repository) {
-  return inRepositorySnapshot(repo, () => {
-    const paths = repo.files('docs').filter(path => path.split('/').every(part => part !== '_template' && part !== '.git' && part !== 'node_modules'));
-    const policies = new Set(paths.filter(path => path.endsWith(`/${policyName}`)));
-    const catalogs = new Set(paths.filter(path => path.endsWith(`/${catalogName}`)));
-    const scopes = new Set(['docs', ...[...policies, ...catalogs].map(dirname)]);
-    return { operation: 'writing-index', scopes: [...scopes].sort().map(scope => ({ scope, policyPath: `${scope}/${policyName}`, catalogPath: `${scope}/${catalogName}`, hasPolicy: policies.has(`${scope}/${policyName}`), hasCatalog: catalogs.has(`${scope}/${catalogName}`) })) };
-  });
+export function indexWritingScopes(members: readonly string[]) {
+  const paths = members.filter(path => path.split('/').every(part => part !== '_template' && part !== '.git' && part !== 'node_modules'));
+  const policies = new Set(paths.filter(path => path.endsWith(`/${policyName}`)));
+  const catalogs = new Set(paths.filter(path => path.endsWith(`/${catalogName}`)));
+  const scopes = new Set(['docs', ...[...policies, ...catalogs].map(dirname)]);
+  return { operation: 'writing-index', scopes: [...scopes].sort().map(scope => ({ scope, policyPath: `${scope}/${policyName}`, catalogPath: `${scope}/${catalogName}`, hasPolicy: policies.has(`${scope}/${policyName}`), hasCatalog: catalogs.has(`${scope}/${catalogName}`) })) };
 }
 export function snapshotDigest(inputs: readonly [string, string][], memberships: readonly [string, readonly string[]][]): string {
   return objectDigest({ inputs: [...inputs].sort(([a], [b]) => a.localeCompare(b)), memberships: [...memberships].sort(([a], [b]) => a.localeCompare(b)) });

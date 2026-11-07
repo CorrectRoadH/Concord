@@ -1,14 +1,15 @@
 import { ConcordError, digest, inRepositorySnapshot, type Repository } from "../../model/index.ts";
-import type { LocalRepository } from "../../base/workspace/index.ts";
 import { readWritingPolicy } from "./writing-policy.ts";
 import type { WritingPolicy } from "../../model/index.ts";
-import { applies, discovered, indexWritingScopes, globalPolicyPath, scopeOf } from "../../model/index.ts";
+import { applies, indexWritingScopes, globalPolicyPath, scopeOf } from "../../model/index.ts";
 import { effectiveConcepts, indexConcepts, spellingKey } from "../concepts/index.ts";
 
 export const WRITING_POLICY_PATH = globalPolicyPath;
 // @concord-begin
 // @concord-implements docs/feature/documentation-quality/format.md
-export const writingIndex = indexWritingScopes;
+export function writingIndex(repo: Repository) {
+  return inRepositorySnapshot(repo, () => indexWritingScopes(repo.files('docs')));
+}
 // @concord-end
 
 // @concord-code

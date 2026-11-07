@@ -147,8 +147,8 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
       return source;
     };
     const docsMembers = repo.files('docs');
-    const policyPaths = discovered(repo, 'policy', docsMembers);
-    const catalogPaths = discovered(repo, 'catalog', docsMembers);
+    const policyPaths = discovered('policy', docsMembers);
+    const catalogPaths = discovered('catalog', docsMembers);
     const policySources = new Map(policyPaths.map(path => [path, read(path)]));
     const sourceCatalogs = new Map(catalogPaths.map(path => [path, read(path)]));
     let mode: 'project' | 'managed' = 'project';
@@ -216,7 +216,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
       const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
       if (JSON.stringify(after) !== JSON.stringify(before)) throw new ConcordError('SourceChanged', `${root} membership changed during writing checks`);
     }
-    if (JSON.stringify(discovered(repo, 'policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered(repo, 'catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('SourceChanged', 'Writing owner membership changed during checks');
+    if (JSON.stringify(discovered('policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered('catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('SourceChanged', 'Writing owner membership changed during checks');
     if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
     findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
     if (persistentCache && cached === undefined) writeWritingFindings(repo, cacheDigest, findings);

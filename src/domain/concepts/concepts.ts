@@ -46,7 +46,7 @@ export function readConceptCatalog(source: string, path: string | undefined, run
 export interface CatalogRecord { path: string; scope: string; digest: string; catalog: ConceptCatalog }
 export interface ConceptDiagnostic { code: string; message: string; sources: readonly string[]; scope?: string }
 export function catalogSources(repo: Repository): Map<string, string> {
-  return new Map(discovered(repo, 'catalog').map(path => [path, repo.read(path) ?? '']));
+  return new Map(discovered('catalog', repo.files('docs')).map(path => [path, repo.read(path) ?? '']));
 }
 export function analyzeCatalogs(sources: Map<string, string>, runtime: RuntimeEnvironmentSnapshot) {
   const catalogs: CatalogRecord[] = [];
