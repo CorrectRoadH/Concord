@@ -18,7 +18,7 @@ class TestRunnerFailed extends Schema.TaggedError<TestRunnerFailed>()('TestRunne
   cause: Schema.Defect(),
 }) {}
 
-/** Keep project diagnostics beside the unmodified official reporter stream. */
+/** Keep project diagnostics beside the official reporter stream. */
 export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions, output: string, admission?: { readonly admission: GateAdmission; readonly bytes: number; readonly history?: boolean }) {
   const fs = yield* FileSystem.FileSystem;
   const logs = join(output, 'node');
@@ -87,7 +87,29 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
       () => Effect.sync(() => controller.abort()),
     );
     async function* measured(): AsyncGenerator<TestEvent, void> {
-      for await (const event of events) {
+      let emptyFile = false;
+      let emptyWrapperPassed = false;
+      for await (let event of events) {
+        if (event.type === 'test:summary' && event.data.file === files[0]) {
+          emptyFile = event.data.success && event.data.counts.tests === 0 && event.data.counts.topLevel === 0;
+        }
+        // Node synthesizes a passing file test when its isolated process ran no
+        // declarations. Its own file summary and 1..0 plan remain authoritative.
+        if (emptyFile && (event.type === 'test:start' || event.type === 'test:pass')
+          && event.data.file === files[0] && event.data.name === files[0] && !('entryFile' in event.data)) {
+          await Effect.runPromise(diagnose(event));
+          if (event.type === 'test:pass') emptyWrapperPassed = true;
+          continue;
+        }
+        if (emptyWrapperPassed) {
+          if (event.type === 'test:plan' && event.data.file === undefined) continue;
+          if (event.type === 'test:diagnostic' && (event.data.message === 'tests 1' || event.data.message === 'pass 1')) {
+            event = { ...event, data: { ...event.data, message: event.data.message.replace(/ 1$/u, ' 0') } };
+          }
+          if (event.type === 'test:summary' && event.data.file === undefined) {
+            event = { ...event, data: { ...event.data, counts: { ...event.data.counts, tests: 0, passed: 0, topLevel: 0 } } };
+          }
+        }
         await Effect.runPromise(diagnose(event));
         yield event;
       }
