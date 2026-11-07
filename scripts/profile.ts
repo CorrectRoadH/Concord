@@ -44,18 +44,20 @@ const main = Effect.gen(function*() {
   yield* fs.makeDirectory(runs);
   const candidatePackage = yield* buildForMeasurement(resolve('.'), runs);
   const candidate = yield* loadArtifact('candidate', '.', yield* packageBin(candidatePackage));
-  const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
   // Output artifacts intentionally survive; only the work directory is disposable.
   const dir = values.out === undefined ? yield* fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-profile-out-' }) : resolve(values.out);
   yield* fs.makeDirectory(dir, { recursive: true });
   const out = yield* fs.realPath(dir);
   const previous = new Set(yield* fs.readDirectory(out));
-  const command = cliCommand(candidate, consumer.root, args);
   const counter = join(workDir, 'fs-counter.mjs');
   yield* packJavaScript({ entry: { 'fs-counter': fileURLToPath(new URL('./perf/fs-counter.ts', import.meta.url)) }, outDir: workDir,
     platform: 'node', format: 'esm', target: 'node24', logLevel: 'silent',
     deps: { alwaysBundle: /.*/u, onlyBundle: false }, outputOptions: { entryFileNames: '[name].mjs' },
   }).pipe(Effect.mapError(cause => new PerfError({ message: `Build profile preload: ${String(cause)}` })));
+  // Stop owned services before collecting profiles: V8 writes them on exit.
+  const { consumer, run } = yield* Effect.gen(function*() {
+  const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
+  const command = cliCommand(candidate, consumer.root, args);
   const env = {
     NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --cpu-prof --cpu-prof-dir=${JSON.stringify(out)} --import ${JSON.stringify(counter)}`,
     CONCORD_PERF_COUNTER_DIR: out, CONCORD_PERF_COUNTER_ROOT: consumer.root,
@@ -79,6 +81,8 @@ const main = Effect.gen(function*() {
     const result = yield* timedRun(command, { cwd: consumer.root, outputDir: runs, env });
     yield* settleConsumerRefreshes(consumer);
     return result;
+  }).pipe(Effect.scoped);
+  return { consumer, run };
   }).pipe(Effect.scoped);
   const files = (yield* fs.readDirectory(out)).filter(name => !previous.has(name));
   const evidence = new Map<string, string>();
