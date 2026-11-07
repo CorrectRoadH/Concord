@@ -6,7 +6,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join, resolve } from 'node:path';
 import { checkoutRoot } from './build-output.ts';
 import { gateMemoryBudgets, withGateResources } from './gate-resources.ts';
-import { observeTestProcessTree } from './gate-resource-processes.ts';
+import { GateProcessIdentity, observeFixedGateMemory, observeTestProcessTree } from './gate-resource-processes.ts';
 import { withGateQueue } from './gate-queue.ts';
 import { selectGateTests } from './gate-selection.ts';
 import { waitForPackagePreparation, readPackagePreparation, selectsPackagingTest, writePackagePreparation } from './gate-package.ts';
@@ -62,7 +62,7 @@ const main = Effect.gen(function*() {
     const receipt = yield* readPackagePreparation(preparationReport);
     if (receipt.state === 'pending') yield* writePackagePreparation(preparationReport, { state: 'failed', code: 1, duration_ms: performance.now() - started, message: 'Gate ended before archive preparation completed' });
   }).pipe(Effect.orDie));
-  const fixedObservation = yield* observeTestProcessTree('fixed-overhead', gateMemoryBudgets.fixed, ['gate:source', 'gate:tests', 'gate:scripts', 'gate:web', 'gate:lint', 'gate:selfhost'], true);
+  const fixedObservation = yield* observeFixedGateMemory(gateMemoryBudgets.fixed);
   const env = { ...process.env,
     CONCORD_TEST_RETAIN_FILE: retainedFile, CONCORD_TEST_EVENT_DIRECTORY: eventDirectory, CONCORD_TEST_RUN_ID: output,
     TMPDIR: fixtureDirectory, TMP: fixtureDirectory, TEMP: fixtureDirectory,
@@ -83,7 +83,23 @@ const main = Effect.gen(function*() {
     if (receipt.state === 'pending') yield* writePackagePreparation(preparationReport, { state: 'failed', code: 1, duration_ms: testsTask.duration_ms, message: 'Test scheduler exited before archive preparation completed' });
   }
   const prepared = packageSelected ? yield* waitForPackagePreparation(preparationReport) : undefined;
-  const fixedMemory = yield* fixedObservation.finish;
+  const ownership = Schema.Struct({ processes: Schema.Array(GateProcessIdentity) });
+  const admitted: GateProcessIdentity[] = [];
+  for (const file of yield* fs.glob('**/process-tree-peaks.jsonl', { root: output })) {
+    for (const line of (yield* fs.readFileString(join(output, file))).split('\n').filter(Boolean)) {
+      admitted.push(...(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ownership))(line)).processes);
+    }
+  }
+  for (const name of ['packaging-process-tree.json', 'browser-process-trees.json']) {
+    const path = join(output, name);
+    if (!(yield* fs.exists(path))) continue;
+    const rows = name === 'browser-process-trees.json'
+      ? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(ownership)))(yield* fs.readFileString(path))
+      : [yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ownership))(yield* fs.readFileString(path))];
+    for (const row of rows) admitted.push(...row.processes);
+  }
+  if (prepared?.memory !== undefined && prepared.memory !== null) admitted.push(...(yield* Schema.decodeUnknownEffect(ownership)(prepared.memory)).processes);
+  const fixedMemory = yield* fixedObservation.finish(admitted, testsTask.code === 0 && (prepared?.code ?? 0) === 0);
   const codes = tasks.map(task => task.code);
   const successful = (prepared?.code ?? 0) === 0 && codes.every(code => code === 0);
   const elapsed = performance.now() - started;

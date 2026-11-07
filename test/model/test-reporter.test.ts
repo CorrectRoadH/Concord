@@ -10,6 +10,8 @@ import { tmpdir } from '../support/temporary.ts';
 import { selectsPackagingTest } from '../../scripts/gate-package.ts';
 import { gateAdmissionHistoryPath } from '../../scripts/gate-admission-history.ts';
 import { GiB } from '../../scripts/gate-resources.ts';
+import { observeFixedGateMemory, observeTestProcessTree } from '../../scripts/gate-resource-processes.ts';
+import { readTestTimingReport } from '../../scripts/gate-timings.ts';
 
 type Requirements = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
 const runnerTest = (name: string, body: (root: string) => Effect.Effect<void, unknown, Requirements>) =>
@@ -35,6 +37,34 @@ const Counts = Schema.Struct({ tests: Schema.Number, failed: Schema.Number, canc
 const Timing = Schema.Struct({ scope: Schema.String, counts: Counts });
 
 // @feature docs/engineering/testing/cli.md#并发
+runnerTest('fixed overhead counts shared controllers and excludes only admitted process identities', () => Effect.gen(function*() {
+  if (process.platform !== 'linux') return;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const fixed = yield* observeFixedGateMemory(2 * GiB);
+  const admitted = yield* observeTestProcessTree('owned-memory', 2 * GiB, ['owned-memory']);
+  const children = [];
+  for (const [name, size] of [['shared-controller', 32], ['owned-memory', 64]] as const) {
+    const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['-e', `const bytes=Buffer.alloc(${size}*1024*1024, 1); process.stdout.write('ready'); setInterval(()=>{bytes[0]++;},1000);`, name], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
+    yield* Stream.runHead(Stream.decodeText(child.stdout));
+    children.push(child);
+  }
+  // The admitted observer's final scan and normal-exit barrier are exercised too.
+  yield* Effect.sleep('150 millis');
+  for (const child of children) yield* child.kill();
+  const owned = yield* admitted.finish;
+  assert.ok(owned.processes.length > 0);
+  const all = yield* fixed.finish([], true);
+  const excluded = yield* fixed.finish(owned.processes, true);
+  const reusedPid = yield* fixed.finish(owned.processes.map(row => ({ ...row, birth: `${row.birth}-different` })), true);
+  assert.ok(all.peakBytes! - excluded.peakBytes! > 48 * 1024 ** 2, JSON.stringify({ all, excluded }));
+  assert.equal(reusedPid.peakBytes, all.peakBytes, 'PID alone must not transfer ownership');
+  assert.ok(excluded.peakBytes! > 32 * 1024 ** 2, 'shared controller and supervisor remain charged');
+  const incomplete = yield* fixed.finish(owned.processes, false);
+  assert.equal(incomplete.state, 'unknown');
+  assert.equal(incomplete.peakBytes, null);
+}));
+
+// @feature docs/engineering/testing/cli.md#并发
 runnerTest('real cold and warm file runs use the previous PSS peak while keeping the two GiB reporting budget', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const file = join(root, 'history.test.ts'), cache = join(root, 'cache');
@@ -43,6 +73,9 @@ runnerTest('real cold and warm file runs use the previous PSS peak while keeping
   const Peak = Schema.Struct({ file: Schema.String, budgetBytes: Schema.Number, admittedBytes: Schema.Number, peakBytes: Schema.NullOr(Schema.Number), state: Schema.String });
   const cold = yield* run(['--suite=node', file], env, root);
   assert.equal(cold.code, 0, cold.text);
+  const timingReport = yield* readTestTimingReport(cold.output);
+  assert.ok(timingReport, 'the persisted admission budgets must decode into the gate report');
+  assert.equal(timingReport.admission?.budgets.archive, 2.5 * GiB);
   const coldPeak = Schema.decodeUnknownSync(Schema.fromJsonString(Peak))((yield* fs.readFileString(join(cold.output, 'process-tree-peaks.jsonl'))).trim());
   assert.equal(coldPeak.admittedBytes, 2 * GiB);
   assert.equal(coldPeak.budgetBytes, 2 * GiB);
@@ -379,18 +412,26 @@ test(${JSON.stringify(name)}, async () => {
   finally { rmSync(own); }
 });\n`);
   }
-  const running = yield* run(['--suite=node', ...files], { CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3), CONCORD_TEST_CONCURRENCY: '8' }, root).pipe(Effect.forkScoped);
-  const waitFor = (name: string) => Effect.gen(function*() { while (!(yield* fs.exists(join(active, name)))) yield* Effect.sleep('10 millis'); }).pipe(Effect.timeout('15 seconds'));
-  for (const name of ['first', 'second']) yield* waitFor(name);
-  assert.equal(yield* fs.exists(join(active, 'third')), false, 'cold third file waits for admission');
-  assert.equal(yield* fs.exists(join(active, 'fourth')), false, 'an explicit concurrency of eight must not bypass the five-GiB pool');
-  const firstPid = Number(yield* fs.readFileString(join(active, 'first')));
-  yield* fs.writeFileString(join(active, 'first.release'), 'release');
-  yield* waitFor('third');
-  assert.throws(() => process.kill(firstPid, 0), { code: 'ESRCH' }, 'successor starts only after the failed predecessor exits');
-  for (const name of ['second', 'third']) yield* fs.writeFileString(join(active, `${name}.release`), 'release');
-  yield* waitFor('fourth');
-  yield* fs.writeFileString(join(active, 'fourth.release'), 'release');
+  let output = '';
+  const running = yield* run(['--suite=node', ...files], { CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3), CONCORD_TEST_CONCURRENCY: '8', XDG_CACHE_HOME: join(root, 'cold-cache') }, root, chunk => { output += chunk; }).pipe(Effect.forkScoped);
+  const waitForActive = (count: number, excluded: readonly string[] = []) => Effect.gen(function*() {
+    for (;;) {
+      const names = (yield* fs.exists(active)) ? (yield* fs.readDirectory(active)).filter(name => !name.endsWith('.release') && !excluded.includes(name)) : [];
+      if (names.length >= count) return names;
+      yield* Effect.sleep('10 millis');
+    }
+  }).pipe(Effect.timeout('15 seconds'), Effect.tapError(() => Effect.sync(() => console.error(`Admission fixture output: ${output}`))));
+  // History lookup is asynchronous; admission does not promise argument order.
+  const initial = yield* waitForActive(2);
+  assert.equal(initial.length, 2, 'an explicit concurrency of eight must not bypass the five-GiB pool');
+  const predecessor = initial.includes('first') ? 'first' : initial[0]!;
+  const predecessorPid = Number(yield* fs.readFileString(join(active, predecessor)));
+  yield* fs.writeFileString(join(active, `${predecessor}.release`), 'release');
+  const next = yield* waitForActive(1, initial);
+  assert.throws(() => process.kill(predecessorPid, 0), { code: 'ESRCH' }, 'successor starts only after the predecessor exits');
+  for (const name of [...initial.filter(name => name !== predecessor), ...next]) yield* fs.writeFileString(join(active, `${name}.release`), 'release');
+  const final = yield* waitForActive(1, [...initial, ...next]);
+  for (const name of final) yield* fs.writeFileString(join(active, `${name}.release`), 'release');
   const result = yield* Fiber.join(running);
   assert.equal(result.code, 1, result.text);
   assert.match(result.text, /intentional admitted failure/u);

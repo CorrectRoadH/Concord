@@ -12,7 +12,21 @@ export class GateProcessCleanupFailed extends Schema.TaggedError<GateProcessClea
 export class GateProcessMeasurementFailed extends Schema.TaggedError<GateProcessMeasurementFailed>()('GateProcessMeasurementFailed', {
   pid: Schema.Number, message: Schema.String,
 }) {}
-interface ProcessSample { readonly pid: number; readonly birth: string; readonly bytes: number; readonly running: boolean }
+export const GateProcessIdentity = Schema.Struct({ pid: Schema.Int, birth: Schema.String });
+export type GateProcessIdentity = typeof GateProcessIdentity.Type;
+interface ProcessSample extends GateProcessIdentity { readonly bytes: number; readonly running: boolean }
+const childrenOf = (pid: number): number[] => {
+  try { return readdirSync(`/proc/${pid}/task`).flatMap(thread => {
+    try { return readFileSync(`/proc/${pid}/task/${thread}/children`, 'utf8').trim().split(/\s+/u).filter(Boolean).map(Number); }
+    catch (cause) {
+      if (cause instanceof Error && 'code' in cause && ['ENOENT', 'ESRCH'].includes(String(cause.code))) return [];
+      throw cause;
+    }
+  }); } catch (cause) {
+    if (cause instanceof Error && 'code' in cause && ['ENOENT', 'ESRCH'].includes(String(cause.code))) return [];
+    throw cause;
+  }
+};
 const sample = (pid: number): ProcessSample | undefined => {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
@@ -48,19 +62,7 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
       known.set(pid, current.birth);
       if (!current.running) return;
       living.push(current);
-      let children: string;
-      try { children = readdirSync(`/proc/${pid}/task`).map(thread => {
-        try { return readFileSync(`/proc/${pid}/task/${thread}/children`, 'utf8'); }
-        catch (cause) {
-          if (cause instanceof Error && 'code' in cause && ['ENOENT', 'ESRCH'].includes(String(cause.code))) return '';
-          throw cause;
-        }
-      }).join(' '); }
-      catch (cause) {
-        if (cause instanceof Error && 'code' in cause && ['ENOENT', 'ESRCH'].includes(String(cause.code))) return;
-        throw cause;
-      }
-      for (const child of children.trim().split(/\s+/u).filter(Boolean)) visit(Number(child));
+      for (const child of childrenOf(pid)) visit(child);
     };
     for (const pid of known.keys()) visit(pid);
     samples++;
@@ -83,7 +85,7 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
     if (process.platform === 'linux') yield* Effect.gen(function*() { for (;;) { yield* Effect.sync(scan); yield* Effect.sleep('100 millis'); } }).pipe(Effect.forkScoped);
     return {
       finish: Effect.gen(function*() {
-        if (process.platform !== 'linux') return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, exceeded: null, samples: 0 };
+        if (process.platform !== 'linux') return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, exceeded: null, samples: 0, processes: [] };
         let living = yield* Effect.sync(scan);
         // The final TestsStream event can precede child exit and descriptor close.
         // Keep admission while normal shutdown drains; only then classify a leak.
@@ -105,11 +107,42 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
           return yield* new GateProcessCleanupFailed({ file, pids: living.map(row => row.pid), message: `${file}: descendants survived normal runner shutdown and required SIGKILL: ${living.map(row => row.pid).join(', ')}` });
         }
         return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: roots > 0 ? 'observed' as const : 'unknown' as const,
-          peakBytes: roots > 0 ? peakBytes : null, exceeded: roots > 0 ? peakBytes > budgetBytes : null, samples };
+          peakBytes: roots > 0 ? peakBytes : null, exceeded: roots > 0 ? peakBytes > budgetBytes : null, samples,
+          processes: [...known].map(([pid, birth]) => ({ pid, birth })) };
       }),
     };
   });
 };
+
+/** Shared schedulers belong to fixed overhead. Classify historical samples only
+ * after admission owners have published their complete process identities. */
+export const observeFixedGateMemory = (budgetBytes: number) => Effect.gen(function*() {
+  const frames: { process: ProcessSample; ancestors: readonly GateProcessIdentity[] }[][] = [];
+  const scan = () => {
+    const frame: typeof frames[number] = [];
+    const seen = new Set<number>();
+    const visit = (pid: number, ancestors: readonly GateProcessIdentity[]) => {
+      if (seen.has(pid)) return;
+      seen.add(pid);
+      const current = sample(pid);
+      if (!current?.running) return;
+      frame.push({ process: current, ancestors });
+      for (const child of childrenOf(pid)) visit(child, [...ancestors, current]);
+    };
+    visit(process.pid, []);
+    frames.push(frame);
+  };
+  if (process.platform === 'linux') yield* Effect.gen(function*() { for (;;) { yield* Effect.sync(scan); yield* Effect.sleep('100 millis'); } }).pipe(Effect.forkScoped);
+  return { finish: (admitted: readonly GateProcessIdentity[], complete: boolean) => Effect.sync(() => {
+    if (process.platform !== 'linux') return { file: 'fixed-overhead', budgetBytes, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, observedPeakBytes: null, exceeded: null, samples: 0 };
+    scan();
+    const owned = new Set(admitted.map(row => `${row.pid}:${row.birth}`));
+    const isOwned = (row: GateProcessIdentity) => owned.has(`${row.pid}:${row.birth}`);
+    const observedPeakBytes = Math.max(0, ...frames.map(frame => frame.reduce((sum, row) => sum + (isOwned(row.process) || row.ancestors.some(isOwned) ? 0 : row.process.bytes), 0)));
+    return { file: 'fixed-overhead', budgetBytes, metric: 'sampled-process-tree-pss' as const, state: complete ? 'observed' as const : 'unknown' as const,
+      peakBytes: complete ? observedPeakBytes : null, observedPeakBytes, exceeded: complete ? observedPeakBytes > budgetBytes : null, samples: frames.length };
+  }) };
+});
 
 /** Chromium is leased by the runner, a sibling of its worker. Join both roots
  * using their published worker identity rather than charging every browser to
