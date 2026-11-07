@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
+import { archivePartInput, cachedArchivePart } from './application-cache.ts';
 import { ArchiveFailed, attempt, command, readJson, run, sha256, verifiedDownload } from './archive-support.ts';
 
 const systemLibraries = new Set(['libc.so.6', 'libm.so.6', 'libdl.so.2', 'libpthread.so.0', 'librt.so.1', 'ld-linux-x86-64.so.2']);
@@ -18,13 +19,13 @@ export function assertGlibcBaseline(text: string, file: string): void {
 const elfInfo = (file: string) => command('readelf', ['-h', '-l', '-d', '-V', file]);
 export const archiveElfFiles = Effect.fn('archive.elfFiles')(function*(root: string) {
   const fs = yield* FileSystem.FileSystem;
-  const files: string[] = [];
   const seen = new Set<string>();
-  for (const name of yield* fs.readDirectory(root, { recursive: true })) {
+  const names = yield* fs.readDirectory(root, { recursive: true });
+  const files = yield* Effect.forEach(names, name => Effect.gen(function*() {
     const file = join(root, name);
-    if ((yield* fs.stat(file)).type !== 'File') continue;
+    if ((yield* fs.stat(file)).type !== 'File') return undefined;
     const canonical = yield* fs.realPath(file);
-    if (seen.has(canonical)) continue;
+    if (seen.has(canonical)) return undefined;
     seen.add(canonical);
     const head = yield* Effect.scoped(Effect.gen(function*() {
       const handle = yield* fs.open(file, { flag: 'r' });
@@ -32,24 +33,52 @@ export const archiveElfFiles = Effect.fn('archive.elfFiles')(function*(root: str
       yield* handle.read(head);
       return head;
     }));
-    if (Buffer.from(head).equals(Buffer.from([127, 69, 76, 70]))) files.push(canonical);
-  }
-  return files;
+    return Buffer.from(head).equals(Buffer.from([127, 69, 76, 70])) ? canonical : undefined;
+  }), { concurrency: 8 });
+  return files.filter(file => file !== undefined);
+
 }, Effect.scoped);
+
+const ubuntuPackageNames = ['gcc-14-base', 'libatomic1', 'libstdc++6', 'libgcc-s1'] as const;
+const UbuntuPackage = Schema.Struct({
+  name: Schema.Literals(ubuntuPackageNames),
+  filename: Schema.String.check(Schema.isPattern(/^pool\/main\/[^\s]+\.deb$/u)),
+  digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
+});
+const UbuntuPackages = Schema.Array(UbuntuPackage);
+
+/** Resolve mutable upstream metadata once, then pass immutable package identities
+ * to build children so the final archive key and actual libraries agree. */
+export const ubuntuRuntimeMetadata = Effect.fn('archive.ubuntuMetadata')(function*() {
+  const inherited = process.env.CONCORD_UBUNTU_RUNTIME_PACKAGES;
+  if (inherited !== undefined) {
+    const packages = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(UbuntuPackages), { onExcessProperty: 'error' })(inherited);
+    if (JSON.stringify(packages.map(item => item.name)) !== JSON.stringify(ubuntuPackageNames)) return yield* new ArchiveFailed({ message: 'Invalid Ubuntu runtime package selection' });
+    return packages;
+  }
+  const response = yield* attempt(() => fetch('https://archive.ubuntu.com/ubuntu/dists/noble-updates/main/binary-amd64/Packages.gz', { signal: AbortSignal.timeout(60_000) }));
+  if (!response.ok) return yield* new ArchiveFailed({ message: `Ubuntu package index returned ${response.status}` });
+  const index = yield* attempt(async () => gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8'));
+  const packages: typeof UbuntuPackage.Type[] = [];
+  for (const name of ubuntuPackageNames) {
+    const block = index.split('\n\n').find(block => block.startsWith(`Package: ${name}\n`));
+    packages.push(yield* Schema.decodeUnknownEffect(UbuntuPackage)({ name,
+      filename: /^Filename: (.+)$/mu.exec(block ?? '')?.[1], digest: /^SHA256: (.+)$/mu.exec(block ?? '')?.[1],
+    }));
+  }
+  yield* Effect.sync(() => { process.env.CONCORD_UBUNTU_RUNTIME_PACKAGES = JSON.stringify(packages); });
+  return packages;
+});
 
 /** Obtain Ubuntu 24.04 runtime libraries, never the Nix host's newer libc stack. */
 export const ubuntuRuntimeLibraries = Effect.fn('archive.ubuntuLibraries')(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-ubuntu-runtime-' });
-  const response = yield* attempt(() => fetch('https://archive.ubuntu.com/ubuntu/dists/noble-updates/main/binary-amd64/Packages.gz', { signal: AbortSignal.timeout(60_000) }));
-  if (!response.ok) return yield* new ArchiveFailed({ message: `Ubuntu package index returned ${response.status}` });
-  const index = yield* attempt(async () => gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8'));
-  for (const name of ['gcc-14-base', 'libatomic1', 'libstdc++6', 'libgcc-s1']) {
-    const block = index.split('\n\n').find(block => block.startsWith(`Package: ${name}\n`));
-    const metadata = yield* Schema.decodeUnknownEffect(Schema.Struct({ filename: Schema.String.check(Schema.isPattern(/^pool\/main\/[^\s]+\.deb$/u)), digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)) }))({
-      filename: /^Filename: (.+)$/mu.exec(block ?? '')?.[1], digest: /^SHA256: (.+)$/mu.exec(block ?? '')?.[1],
-    });
-    const deb = yield* verifiedDownload(`https://archive.ubuntu.com/ubuntu/${metadata.filename}`, metadata.digest);
+  const packages = yield* ubuntuRuntimeMetadata();
+  const input = yield* archivePartInput(resolve(import.meta.dirname, '..'), ['scripts/archive-linux.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'], packages);
+  const scratch = yield* cachedArchivePart('linux-runtime', input, scratch => Effect.gen(function*() {
+    yield* fs.makeDirectory(scratch, { recursive: true });
+    for (const { name, filename, digest } of packages) {
+    const deb = yield* verifiedDownload(`https://archive.ubuntu.com/ubuntu/${filename}`, digest);
     const bytes = yield* fs.readFile(deb);
     // Debian's ar container has fixed-width ASCII headers; tar handles its payload.
     if (Buffer.from(bytes.subarray(0, 8)).toString() !== '!<arch>\n') return yield* new ArchiveFailed({ message: 'Invalid Debian ar header' });
@@ -66,6 +95,7 @@ export const ubuntuRuntimeLibraries = Effect.fn('archive.ubuntuLibraries')(funct
     yield* fs.writeFile(payload, data);
     yield* run('tar', ['-xf', payload, '-C', scratch]);
   }
+  }));
   return { libraries: join(scratch, 'usr/lib/x86_64-linux-gnu'), licenses: join(scratch, 'usr/share/doc') };
 });
 

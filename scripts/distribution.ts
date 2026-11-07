@@ -6,16 +6,16 @@ import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
 import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { packJavaScript, p5RuntimeNotice } from './pack-javascript.ts';
-import { buildStartup } from './startup-build.ts';
+import { buildStartup, bindStartupPackage } from './startup-build.ts';
 import { P5_LIBRARIES } from "../src/model/p5/index.ts";
-import { captureBuildSource, writeBuildIdentity, type BuildIdentity } from './build-identity.ts';
+import { captureBuildSource, writeBuildIdentity } from './build-identity.ts';
 import { assembleArchive } from './archive.ts';
-import { cachedApplication } from './application-cache.ts';
+import { archivePartInput, cachedArchivePart } from './application-cache.ts';
 import { externalBuildOutput } from './build-output.ts';
 import { archiveTarget } from './archive-support.ts';
+import { sourceWebDigest } from '../src/base/installation/index.ts';
 import { modManifest } from '../src/model/herdr-mod/index.ts';
 
-let sourceIdentity: BuildIdentity | undefined;
 let outputRoot: string;
 const dist = (path = '') => join(outputRoot, 'dist', path);
 
@@ -112,7 +112,6 @@ const narrowGeneratedImports = Effect.fn('build.narrowGeneratedImports')(functio
 }, Effect.scoped);
 
 const prepare = Effect.gen(function*() {
-  sourceIdentity = yield* captureBuildSource();
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   yield* fs.remove(outputRoot, { recursive: true, force: true });
@@ -120,21 +119,16 @@ const prepare = Effect.gen(function*() {
   yield* fs.remove(join(outputRoot, 'node_modules'), { recursive: true, force: true });
   yield* fs.symlink(resolve('node_modules'), join(outputRoot, 'node_modules'));
   yield* fs.remove(dist(), { recursive: true, force: true });
-  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'templates', 'skills', 'docs', ...(yield* fs.readDirectory('.')).filter(name => /^README(?:\..+)?\.md$/u.test(name))]) yield* fs.copy(name, join(outputRoot, name), { overwrite: true });
-  yield* Effect.all(['tsconfig.json', 'tsconfig.web.json'].map(project => Effect.gen(function*() {
+  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) yield* fs.copy(name, join(outputRoot, name), { overwrite: true });
+  yield* Effect.all(['tsconfig.json'].map(project => Effect.gen(function*() {
     const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError', ...(project === 'tsconfig.json' ? ['--noEmit', 'false', '--outDir', dist()] : [])], { stdout: 'inherit', stderr: 'inherit' }));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
   })), { concurrency: 'unbounded' });
-  // Startup receipts authenticate the final package bytes, including gitHead.
-  const appManifest = JSON.parse(yield* fs.readFileString(join(outputRoot, 'package.json'))) as Record<string, unknown>;
-  yield* fs.writeFileString(join(outputRoot, 'package.json'), JSON.stringify({ ...appManifest, gitHead: sourceIdentity!.commit }) + '\n');
   yield* narrowGeneratedImports();
   yield* buildStartup(dist(), outputRoot);
   yield* packJavaScript({ entry: { main: 'src/entry/herdr-mod/main.ts' }, outDir: dist('herdr-mod'), format: 'esm', platform: 'neutral', target: 'es2022', minify: true,
     deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$)/u, onlyBundle: false },
     outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
-  const modPackage = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: Schema.String })), { onExcessProperty: 'ignore' })(yield* fs.readFileString('package.json'));
-  yield* fs.writeFileString(dist('herdr-mod/mod.json'), JSON.stringify(modManifest(modPackage.version)) + '\n');
   yield* fs.copyFile('src/entry/herdr-mod/preview.png', dist('herdr-mod/preview.png'));
   yield* fs.writeFileString(dist('herdr-mod/NOTICE.txt'), `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);
 });
@@ -159,34 +153,74 @@ const finish = Effect.gen(function*() {
   yield* fs.copyFile('node_modules/@fontsource-variable/noto-sans-sc/LICENSE', dist('web/FONT-LICENSE.txt'));
   const fontLicense = yield* fs.readFileString('node_modules/@fontsource-variable/noto-sans-sc/LICENSE');
   yield* fs.writeFileString(dist('preview/FONT-LICENSE.html'), `<!doctype html><meta charset="utf-8"><title>Font license</title><pre>${fontLicense.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`);
-  yield* fs.chmod(dist('entry/cli/entry.js'), 0o755);
-  yield* fs.chmod(dist('entry/cli/cli.js'), 0o755);
 });
 
-export const prepareApplication = (output: string) => Effect.runPromise(Effect.gen(function*() {
-  outputRoot = yield* externalBuildOutput(output);
-  yield* prepare;
-}).pipe(Effect.provide(NodeServices.layer)));
-export const finishApplication = (output: string) => { outputRoot = output; return Effect.runPromise(Effect.gen(function*() {
-  yield* finish;
-  if (sourceIdentity !== undefined) yield* writeBuildIdentity(sourceIdentity, dist());
+const copyPart = Effect.fn('build.copyPart')(function*(part: string, output: string) {
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.remove(join(outputRoot, 'node_modules'));
-}).pipe(Effect.provide(NodeServices.layer))); };
+  for (const name of yield* fs.readDirectory(part)) {
+    if (name !== '.application-cache.json') yield* fs.copy(join(part, name), join(output, name), { overwrite: true });
+  }
+});
 
-/** Build the target-independent JS, declarations and Web once. Release callers
- * retain this directory and call assembleArchive for each target. */
-export const buildApplication = async (output: string): Promise<void> => {
-  await prepareApplication(output);
-  const { build } = await import('vite-plus');
-  await build({ configFile: 'vite.source.config.ts', build: { outDir: join(output, 'dist/web'), write: true, minify: true, license: true, emptyOutDir: true } });
-  await finishApplication(output);
-};
+/** Build parts by their own inputs, then bind identity only in the private copy. */
+export const buildApplication = (output: string): Promise<void> => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const repository = resolve(import.meta.dirname, '..');
+  const destination = yield* externalBuildOutput(output);
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const webCheck = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.web.json', '--noEmit'], { stdout: 'inherit', stderr: 'inherit' }));
+  if (webCheck !== 0) return yield* new BuildFailed({ project: 'tsconfig.web.json', exitCode: Number(webCheck) });
+  const tooling = ['scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts', 'scripts/pack-javascript.ts',
+    'scripts/startup-build.ts', 'scripts/build-identity.ts', 'scripts/build-output.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'tsconfig.json', 'tsconfig.web.json', 'node_modules/typescript/package.json', 'node_modules/esbuild/package.json', 'node_modules/vite-plus/package.json'];
+  const codeInput = () => archivePartInput(repository, ['src', ...tooling]);
+  const codeDigest = yield* codeInput();
+  const code = yield* cachedArchivePart('application', codeDigest, directory => Effect.gen(function*() {
+    outputRoot = directory;
+    yield* prepare;
+    yield* fs.chmod(dist('entry/cli/entry.js'), 0o755);
+    yield* fs.chmod(dist('entry/cli/cli.js'), 0o755);
+    yield* fs.remove(join(directory, 'node_modules'));
+  }), codeInput);
+  const resourcePaths = ['docs', 'skills', 'templates', ...(yield* fs.readDirectory(repository)).filter(name => /^README(?:\..+)?\.md$/u.test(name))];
+  const resourceInput = () => archivePartInput(repository, [...resourcePaths, 'scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts']);
+  const resourceDigest = yield* resourceInput();
+  const resources = yield* cachedArchivePart('resources', resourceDigest, directory => Effect.gen(function*() {
+    yield* fs.makeDirectory(directory, { recursive: true });
+    for (const name of resourcePaths) yield* fs.copy(join(repository, name), join(directory, name));
+  }), resourceInput);
+  const webInput = () => Effect.gen(function*() {
+    return yield* archivePartInput(repository, [...tooling, 'src/model/p5'], yield* sourceWebDigest(repository));
+  });
+  const webDigest = yield* webInput();
+  const web = yield* cachedArchivePart('web', webDigest, directory => Effect.gen(function*() {
+    outputRoot = directory;
+    yield* fs.makeDirectory(dist(), { recursive: true });
+    yield* Effect.tryPromise(async () => {
+      const { build } = await import('vite-plus');
+      await build({ configFile: 'vite.source.config.ts', build: { outDir: dist('web'), write: true, minify: true, license: true, emptyOutDir: true } });
+    });
+    yield* finish;
+  }), webInput);
+  yield* fs.remove(destination, { recursive: true, force: true });
+  yield* fs.makeDirectory(destination, { recursive: true });
+  for (const part of [code, resources, web]) yield* copyPart(part, destination);
+  const identity = yield* captureBuildSource();
+  const manifest = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(yield* fs.readFileString(join(destination, 'package.json')));
+  yield* fs.writeFileString(join(destination, 'package.json'), `${JSON.stringify({ ...manifest, gitHead: identity.commit })}\n`);
+  const version = yield* Schema.decodeUnknownEffect(Schema.String)(manifest.version);
+  yield* fs.writeFileString(join(destination, 'dist/herdr-mod/mod.json'), `${JSON.stringify(modManifest(version))}\n`);
+  yield* writeBuildIdentity(identity, join(destination, 'dist'));
+  yield* bindStartupPackage(join(destination, 'dist'), destination);
+  if ((yield* codeInput()) !== codeDigest || (yield* resourceInput()) !== resourceDigest || (yield* webInput()) !== webDigest) return yield* new BuildOutputFailed({ file: destination, message: 'Application inputs changed while assembling parts' });
+})).pipe(Effect.provide(NodeServices.layer)));
 
 export const buildDistribution = async (output: string): Promise<void> => {
-  const target = archiveTarget(); // Must precede even temporary output creation.
-  await Effect.runPromise(Effect.gen(function*() {
-    const applicationRoot = yield* cachedApplication(buildApplication);
+  const target = archiveTarget();
+  await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-application-' });
+    const applicationRoot = join(temporary, 'app');
+    yield* Effect.tryPromise({ try: () => buildApplication(applicationRoot), catch: cause => cause });
     yield* assembleArchive({ target, applicationRoot, outputRoot: output });
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
+  })).pipe(Effect.provide(NodeServices.layer)));
 };

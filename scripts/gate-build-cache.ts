@@ -5,7 +5,7 @@ import { lstat, readlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
-import type { ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { acquireRecoverablePublicationLease, CoordinationError, ownerIsAlive, readLeaseOwner, releaseFileLease, type FileLease } from '../src/base/publication/file-lease.ts';
 import { decodeNativeArtifact, HAWDB_ABI, HAWDB_REVISION } from '../src/base/installation/hawdb-native-contract.ts';
 import { nativeSourceFiles } from '../src/base/installation/native-artifact.ts';
@@ -53,6 +53,14 @@ export const buildCacheTree = Effect.fn('gate.cache.tree')(function*(root: strin
   return entries;
 });
 
+const nativeInputCache = Effect.fn('gate.cache.nativeInput')(function*(checkout: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const sources: string[] = [];
+  for (const path of nativeSourceFiles) sources.push(`${path}\0${sha(yield* fs.readFile(join(checkout, path)))}\n`);
+  const input = `${sha(sources.join(''))}-${sha(yield* fs.readFile(join(checkout, 'native/hawdb/Cargo.lock')))}`;
+  return join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'native', input);
+});
+
 export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout: string, includeNative = true) {
   const target = includeNative ? archiveTarget() : undefined;
   const fs = yield* FileSystem.FileSystem;
@@ -68,11 +76,19 @@ export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout
       || path === 'native/hawdb/target' || path.startsWith('native/hawdb/target/');
   }, true);
   if (!includeNative) return sha(JSON.stringify({ entries, node: process.version }));
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const commit = yield* spawner.string(ChildProcess.make('git', ['-C', checkout, 'rev-parse', 'HEAD'], { stderr: 'ignore' })).pipe(Effect.map(value => value.trim()), Effect.catch(() => Effect.succeed(null)));
+  const libraryDirectory = process.env.CONCORD_LINUX_RUNTIME_LIBRARIES;
+  const linuxLibraries = libraryDirectory !== undefined ? yield* buildCacheTree(resolve(libraryDirectory), undefined, true)
+    : target === 'linux-x64' && (yield* fs.exists(join(checkout, 'scripts/archive-linux.ts')))
+      ? yield* Effect.promise(() => import('./archive-linux.ts')).pipe(Effect.flatMap(module => module.ubuntuRuntimeMetadata())) : null;
   const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
-  const native = prebuilt === undefined ? null : yield* buildCacheTree(resolve(prebuilt), undefined, true);
+  const cachedNative = join(yield* nativeInputCache(checkout), target === 'linux-x64' ? 'linux-x64-glibc' : target!);
+  const native = prebuilt !== undefined ? yield* buildCacheTree(resolve(prebuilt), undefined, true)
+    : (yield* fs.exists(cachedNative)) ? yield* buildCacheTree(cachedNative, undefined, true) : null;
   return sha(JSON.stringify({ entries, platform: process.platform, arch: process.arch, node: process.version,
     abi: process.versions.modules, target, nativeAbi: HAWDB_ABI, nativeRevision: HAWDB_REVISION,
-    requirePortableNative: process.env.CONCORD_REQUIRE_PORTABLE_NATIVE ?? '', native }));
+    requirePortableNative: process.env.CONCORD_REQUIRE_PORTABLE_NATIVE ?? '', commit, linuxLibraries, native }));
 });
 
 // Reuse Concord's atomic, token-owned file lease. Recovery removes only the
@@ -209,6 +225,15 @@ export const prepareGateBuildCache = Effect.fn('gate.cache.prepare')(function*(c
   yield* fs.makeDirectory(cache, { recursive: true });
   cache = yield* fs.realPath(cache);
   if (isInside(cache)) return yield* new GateBuildCacheFailed({ message: 'Gate build cache resolves inside the checkout' });
+  if (process.env.CONCORD_NATIVE_ARTIFACTS === undefined && (yield* fs.exists(join(checkout, 'scripts/distribution.ts')))) {
+    const target = archiveTarget();
+    const native = join(yield* nativeInputCache(checkout), target === 'linux-x64' ? 'linux-x64-glibc' : target);
+    if (!(yield* fs.exists(native))) {
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const code = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['scripts/build-native.ts', '--reuse'], { cwd: checkout, stdout: 'inherit', stderr: 'inherit' }));
+      if (Number(code) !== 0) return yield* new GateBuildCacheFailed({ message: `Native preparation exited ${code}` });
+    }
+  }
   const digest = yield* gateBuildDigest(checkout);
   const packageRoot = join(cache, digest);
   const leaseDirectory = join(cache, '.leases', digest, randomUUID());

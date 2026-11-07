@@ -1,10 +1,11 @@
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
+import type { Scope } from 'effect';
+import type { ChildProcessSpawner } from 'effect/unstable/process';
 import { Effect, FileSystem } from 'effect';
 import { acquireRecoverablePublicationLease, CoordinationError, releaseFileLease } from '../src/base/publication/file-lease.ts';
-import { buildCacheTree, gateBuildDigest } from './gate-build-cache.ts';
+import { buildCacheTree } from './gate-build-cache.ts';
 import { ArchiveFailed, sha256 } from './archive-support.ts';
-import { captureBuildSource } from './build-identity.ts';
 
 
 const pruneApplications = Effect.fn('archive.pruneApplications')(function*(cache: string) {
@@ -25,15 +26,18 @@ const pruneApplications = Effect.fn('archive.pruneApplications')(function*(cache
   }
 });
 
-/** Shared target-independent application bytes. The outer caller's scope owns
- * the lock until its archive has copied them; no target participates in the key. */
-export const cachedApplication = Effect.fn('archive.applicationCache')(function*(compile: (root: string) => Promise<void>) {
+/** Hash the actual byte inputs, including untracked files and linked tools. */
+export const archivePartInput = Effect.fn('archive.partInput')(function*(repository: string, paths: readonly string[], identity: unknown = null) {
+  const entries = yield* buildCacheTree(repository, path => !paths.some(input => path === input || path.startsWith(`${input}/`) || input.startsWith(`${path}/`)), true);
+  return sha256(JSON.stringify({ entries, identity, node: process.version, platform: process.platform, arch: process.arch }));
+});
+
+/** The caller retains a recoverable use lease through the private copy. Cache
+ * bytes are verified before every use and published by one atomic rename. */
+export const cachedArchivePart = Effect.fn('archive.partCache')(function*(name: string, input: string, compile: (root: string) => Effect.Effect<void, unknown, FileSystem.FileSystem | Scope.Scope | ChildProcessSpawner.ChildProcessSpawner>, verifyInput?: () => Effect.Effect<string, unknown, FileSystem.FileSystem>, cacheHome = process.env.XDG_CACHE_HOME || join(homedir(), '.cache')) {
   const fs = yield* FileSystem.FileSystem;
-  const repository = resolve(import.meta.dirname, '..');
-  const identity = yield* captureBuildSource();
-  const input = yield* gateBuildDigest(repository, false);
-  const digest = sha256(`${input}\0${identity.commit}`);
-  const cache = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord/application');
+  const digest = sha256(input);
+  const cache = join(cacheHome, 'concord', 'parts', name);
   const output = join(cache, digest);
   yield* fs.makeDirectory(join(cache, '.access'), { recursive: true });
   for (;;) {
@@ -52,15 +56,17 @@ export const cachedApplication = Effect.fn('archive.applicationCache')(function*
   const manifest = join(output, '.application-cache.json');
   if (yield* fs.exists(output)) {
     const entries = yield* buildCacheTree(output, path => path === '.application-cache.json');
-    if ((yield* fs.readFileString(manifest)) !== JSON.stringify(entries)) return yield* new ArchiveFailed({ message: `Application cache integrity mismatch: ${output}` });
+    if ((yield* fs.readFileString(manifest)) !== JSON.stringify(entries)) return yield* new ArchiveFailed({ message: `Archive part cache integrity mismatch: ${output}` });
+    yield* Effect.sync(() => console.error(`# Archive part ${name}: hit; digest=${digest}`));
     return output;
   }
   const staging = yield* fs.makeTempDirectoryScoped({ directory: cache, prefix: `.staging-${digest}-` });
-  const app = join(staging, 'app');
-  yield* Effect.tryPromise({ try: () => compile(app), catch: cause => cause });
-  if ((yield* gateBuildDigest(repository, false)) !== input || (yield* captureBuildSource()).commit !== identity.commit) return yield* new ArchiveFailed({ message: 'Application inputs changed while building; retry after edits settle' });
+  const app = join(staging, 'part');
+  yield* compile(app);
+  if (verifyInput !== undefined && (yield* verifyInput()) !== input) return yield* new ArchiveFailed({ message: `Archive part inputs changed while building: ${name}` });
   const entries = yield* buildCacheTree(app);
   yield* fs.writeFileString(join(app, '.application-cache.json'), JSON.stringify(entries));
   yield* fs.rename(app, output);
+  yield* Effect.sync(() => console.error(`# Archive part ${name}: miss; digest=${digest}`));
   return output;
 });

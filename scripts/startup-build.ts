@@ -151,3 +151,17 @@ export const buildStartup = Effect.fn('build.startup')(function*(directory: stri
   yield* fs.writeFileString(dist('startup-data.js'), `// Generated from the complete CLI. Do not edit.\nexport default ${JSON.stringify(data)};\n`);
   yield* Console.error(`# Startup: recorded ${paths.length} help paths, version and no-argument output`);
 });
+
+/** Package identity is applied to a private assembly, never to cached code. */
+export const bindStartupPackage = Effect.fn('build.bindStartupPackage')(function*(directory: string, packageRoot: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const file = join(directory, 'startup-data.js');
+  const text = yield* fs.readFileString(file);
+  const prefix = '// Generated from the complete CLI. Do not edit.\nexport default ';
+  if (!text.startsWith(prefix) || !text.endsWith(';\n')) return yield* new StartupBuildFailed({ message: 'Invalid startup data module' });
+  const data = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Data), { onExcessProperty: 'error' })(text.slice(prefix.length, -2));
+  const { dataDigest: _, ...payload } = data;
+  const next = { ...payload, packageDigest: yield* digest(join(packageRoot, 'package.json')) };
+  const rebound = { ...next, dataDigest: createHash('sha256').update(JSON.stringify(next)).digest('hex') };
+  yield* fs.writeFileString(file, `${prefix}${JSON.stringify(rebound)};\n`);
+});
