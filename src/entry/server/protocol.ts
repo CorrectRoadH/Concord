@@ -23,7 +23,7 @@ export const CommandScope = strict(Schema.Struct({ root: Schema.String, privateD
 export const QueryEnvironment = Schema.Record(Schema.String, Schema.String);
 export const CallerCwd = Schema.String.check(Schema.makeFilter(value => isAbsolute(value) && !value.includes('\0')));
 export const HelloInput = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, scope: Schema.optional(Schema.String) }));
-export const Hello = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, token: Schema.String, state: ServerState, sourceDigest: Schema.NullOr(Schema.String) }));
+export const Hello = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, token: Schema.String, state: ServerState, sourceDigest: Schema.NullOr(Schema.String), error: Schema.optional(strict(Schema.Struct({ code: Schema.String, message: Schema.String }))) }));
 export const Identity = { token: Schema.String, installation: Schema.String, requestId: Schema.String, deadline: Schema.Number, scope: Schema.optional(Schema.String) };
 export const Packet = strict(Schema.Struct({ data: Schema.Uint8Array, last: Schema.Boolean }));
 export const QueryInput = strict(Schema.Struct({ name: Schema.String, input: Schema.Json }));

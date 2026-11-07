@@ -23,7 +23,7 @@ import { Socket, SocketServer } from 'effect/unstable/socket';
 import { makeOwnedProcessService } from '../../app/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { Git } from '../../base/git/index.ts';
-import { OwnedProcess, OwnedProcessLive, ProcessEventsLive } from '../../base/process/index.ts';
+import { OwnedProcess, OwnedProcessLive, ProcessEventsLive, makeProcessGroupCpuReader } from '../../base/process/index.ts';
 import { recordProcessEvent } from '../../app/index.ts';
 import { existsSync } from 'node:fs';
 import { channel } from 'node:diagnostics_channel';
@@ -32,6 +32,7 @@ import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWo
 import { CacheSnapshotUnavailable, ConcordError, failure, objectDigest } from '../../model/index.ts';
 import { Computation, ComputationReply, ComputeRpcs } from './computation.ts';
 import { makeComputationProtocol } from './computation-protocol.ts';
+import { watchComputation } from './computation-watchdog.ts';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, CommandScope, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.ts';
 import { makeAdmittedProtocol } from './admission.ts';
 import { makeRequestAdmission } from './request-admission.ts';
@@ -222,7 +223,8 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
   const installation = yield* Installation;
   const execution = yield* RuntimeEnvironment;
   const mutex = yield* Semaphore.make(1);
-  let active: { scope: Scope.Closeable; client: RpcClient.RpcClient<RpcGroupTypes.Rpcs<typeof ComputeRpcs>, RpcClientErrorTypes.RpcClientError>; owner: ReturnType<typeof makeOwnedProcessService>; snapshot?: { readonly text: string; readonly id: string } } | undefined;
+  const readCpu = yield* makeProcessGroupCpuReader();
+  let active: { progress: { groupId: number; responses: number }; scope: Scope.Closeable; client: RpcClient.RpcClient<RpcGroupTypes.Rpcs<typeof ComputeRpcs>, RpcClientErrorTypes.RpcClientError>; owner: ReturnType<typeof makeOwnedProcessService>; snapshot?: { readonly text: string; readonly id: string } } | undefined;
   let starting: { scope: Scope.Closeable; owner: ReturnType<typeof makeOwnedProcessService> } | undefined;
   const close = Effect.gen(function*() {
     const worker = active ?? starting; active = undefined; starting = undefined;
@@ -238,9 +240,10 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
     const ready = yield* Deferred.make<(bytes: string | Uint8Array) => void, WorkspaceServerError>();
     const opened = yield* Deferred.make<void, WorkspaceServerError>();
     const output = yield* Queue.unbounded<Uint8Array, WorkspaceServerError>();
+    const progress = { groupId: 0, responses: 0 };
     yield* Effect.forkIn(owner.run([process.execPath, ...installation.worker('compute-worker'), root, role], {
       cwd: execution.cwd, outputLimitBytes: 128 * 1024 * 1024,
-      stream: { ready: write => { Deferred.doneUnsafe(ready, Effect.succeed(write)); }, stdout: chunk => { Queue.offerUnsafe(output, chunk); } },
+      stream: { ready: (write, _end, identity) => { progress.groupId = identity.groupId ?? identity.pid ?? 0; Deferred.doneUnsafe(ready, Effect.succeed(write)); }, stdout: chunk => { progress.responses++; Queue.offerUnsafe(output, chunk); } },
     }).pipe(Effect.scoped, Effect.ensuring(Effect.gen(function*() {
       const error = new WorkspaceServerError({ code: 'WorkspaceComputeExited', message: 'Computation process exited' });
       yield* Deferred.fail(ready, error); yield* Queue.fail(output, error);
@@ -253,7 +256,7 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
     const protocolContext = yield* Layer.build(protocol).pipe(Effect.provideService(Scope.Scope, scope));
     const client = yield* RpcClient.make(ComputeRpcs).pipe(Effect.provideContext(protocolContext), Effect.provideService(Scope.Scope, scope));
     yield* Deferred.await(opened).pipe(Effect.timeout('60 seconds'));
-    active = { scope, owner, client };
+    active = { scope, owner, client, progress };
     starting = undefined;
     return active;
   });
@@ -276,8 +279,8 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
       const reply = yield* collectPackets(stream).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(ComputationReply, { onExcessProperty: 'error' })(value)));
       if (reply.derived.length > 0 && !(operation.kind === 'query' && operation.cache === 'off')) yield* acceptDerived(reply.derived);
       return reply.value;
-    });
-  }).pipe(Effect.timeout('60 seconds'), Effect.onError(cause => {
+    }).pipe(Effect.raceFirst(watchComputation(readCpu(worker.progress.groupId), () => worker.progress.responses)));
+  }).pipe(Effect.onError(cause => {
     // A completed domain error leaves the RPC peer usable. Transport failures,
     // malformed replies, resource limits and cancellation retire its owner.
     const reusable = cause.reasons.length > 0 && cause.reasons.every(reason =>
@@ -454,7 +457,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       })), Effect.ignore), serverScope);
     });
     const handlers = WorkspaceRpcs.toLayer({
-      hello: request => authorizeScope(request.scope).pipe(Effect.andThen(SubscriptionRef.get(service.state.value)), Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, sourceDigest: value.sourceDigest }))),
+      hello: request => authorizeScope(request.scope).pipe(Effect.andThen(SubscriptionRef.get(service.state.value)), Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, sourceDigest: value.sourceDigest, ...(value.error ? { error: value.error } : {}) }))),
       shutdown: request => authorizeScope(request.scope).pipe(Effect.andThen(request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : Effect.forkIn(Effect.sleep('10 millis').pipe(Effect.andThen(service.stop)), serverScope).pipe(Effect.asVoid))),
       subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(workspaceEvents(event).pipe(Stream.takeUntil(value => value.state === 'stopping')), output.json)))),
       workspace: request => result(request, readProjection),

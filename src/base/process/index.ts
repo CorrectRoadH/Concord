@@ -36,3 +36,6 @@ export type { Pending } from './lsp-protocol.ts';
 export { LspConnection } from './lsp-protocol.ts';
 export { adapterRuntimeInputs } from './runtime-inputs.ts';
 export { PROCESS_EVENT_FILE_LIMIT, ProcessEvent, ProcessRole, ProcessEventsLive, classifyConcordProcess, processEventEnvironment, processEventsHealthy, observeProcessEvents, recordProcessEvent, recordProcessSpawn } from './process-events.ts';
+
+export { makeProcessGroupCpuReader } from './group-cpu.ts';
+export type { ProcessGroupCpu } from './group-cpu.ts';
