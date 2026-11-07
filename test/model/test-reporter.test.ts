@@ -99,6 +99,7 @@ test('packaging receives ready archive only', () => { assert.equal(process.env.C
   let observed = '';
   const running = yield* run(['--suite=node', source, packaging], {
     CONCORD_GATE_PACKAGE_PREPARATION: receipt, CONCORD_TEST_PACKAGE_ROOT: undefined, CONCORD_TEST_CONCURRENCY: '2',
+    CONCORD_GATE_MEMORY_MAX: String(15 * 1024 ** 3),
   }, root, chunk => {
     observed += chunk;
   }).pipe(Effect.forkScoped);

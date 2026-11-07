@@ -23,6 +23,11 @@ test('archive part keys isolate source and resources while including their actua
   yield* fs.writeFileString(join(root, 'src/main.ts'), 'changed source');
   assert.notEqual(yield* code(), originalCode);
   assert.equal(yield* resources(), changedResources);
+  yield* fs.makeDirectory(join(root, 'docs/empty'));
+  assert.notEqual(yield* resources(), changedResources, 'empty resource directories affect archive bytes');
+  const beforeMode = yield* code();
+  yield* fs.chmod(join(root, 'src/main.ts'), 0o755);
+  assert.notEqual(yield* code(), beforeMode, 'copied executable mode belongs to the input identity');
   const changedCode = yield* code();
   yield* fs.writeFileString(join(root, 'scripts/build.ts'), 'changed producer');
   assert.notEqual(yield* code(), changedCode);

@@ -20,7 +20,7 @@ const linkText = (path: string) => Effect.tryPromise({ try: () => readlink(path)
 const Digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
 const Manifest = Schema.Struct({
   format: Schema.Literal('concord.gate-build/v1'), digest: Digest,
-  entries: Schema.Array(Schema.Struct({ path: Schema.String, kind: Schema.Literals(['file', 'link']), digest: Digest })),
+  entries: Schema.Array(Schema.Struct({ path: Schema.String, kind: Schema.Literals(['file', 'link', 'directory']), mode: Schema.Number, digest: Digest })),
 });
 const manifestName = '.concord-build-cache.json';
 export const gateBuildCacheRoot = () => join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'build');
@@ -28,7 +28,7 @@ export const gateBuildCacheRoot = () => join(process.env.XDG_CACHE_HOME || join(
 /** Hash file bytes and link destinations, without following directory links. */
 export const buildCacheTree = Effect.fn('gate.cache.tree')(function*(root: string, exclude: (path: string) => boolean = () => false, followLinks = false) {
   const fs = yield* FileSystem.FileSystem;
-  const entries: { path: string; kind: 'file' | 'link'; digest: string }[] = [];
+  const entries: { path: string; kind: 'file' | 'link' | 'directory'; mode: number; digest: string }[] = [];
   const walk = (directory: string, ancestors: readonly string[] = []): Effect.Effect<void, unknown, FileSystem.FileSystem> => Effect.gen(function*() {
     const canonical = yield* fs.realPath(join(root, directory));
     if (ancestors.includes(canonical)) return yield* new GateBuildCacheFailed({ message: `Cyclic build input link: ${directory}` });
@@ -37,15 +37,18 @@ export const buildCacheTree = Effect.fn('gate.cache.tree')(function*(root: strin
       if (exclude(path)) continue;
       const full = join(root, path), stat = yield* inspect(full);
       if (stat.isSymbolicLink()) {
-        entries.push({ path, kind: 'link', digest: sha(yield* linkText(full)) });
+        entries.push({ path, kind: 'link', mode: stat.mode & 0o777, digest: sha(yield* linkText(full)) });
         if (followLinks) {
           const target = yield* fs.stat(full);
           if (target.type === 'Directory') yield* walk(path, [...ancestors, canonical]);
-          else entries.push({ path, kind: 'file', digest: sha(yield* fs.readFile(full)) });
+          else entries.push({ path, kind: 'file', mode: (yield* inspect(yield* fs.realPath(full))).mode & 0o777, digest: sha(yield* fs.readFile(full)) });
         }
       }
-      else if (stat.isDirectory()) yield* walk(path, [...ancestors, canonical]);
-      else if (stat.isFile()) entries.push({ path, kind: 'file', digest: sha(yield* fs.readFile(full)) });
+      else if (stat.isDirectory()) {
+        entries.push({ path, kind: 'directory', mode: stat.mode & 0o777, digest: sha('') });
+        yield* walk(path, [...ancestors, canonical]);
+      }
+      else if (stat.isFile()) entries.push({ path, kind: 'file', mode: stat.mode & 0o777, digest: sha(yield* fs.readFile(full)) });
       else return yield* new GateBuildCacheFailed({ message: `Unsupported build entry: ${full}` });
     }
   });
@@ -83,12 +86,16 @@ export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout
     : target === 'linux-x64' && (yield* fs.exists(join(checkout, 'scripts/archive-linux.ts')))
       ? yield* Effect.promise(() => import('./archive-linux.ts')).pipe(Effect.flatMap(module => module.ubuntuRuntimeMetadata())) : null;
   const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
+  const tools = (yield* fs.exists(join(checkout, 'scripts/distribution.ts')))
+    ? yield* Effect.forEach(process.platform === 'linux' ? ['pnpm', 'tar', 'patchelf', 'readelf'] : ['pnpm', 'tar'], tool =>
+      spawner.string(ChildProcess.make(tool, ['--version'], { stderr: 'ignore' })).pipe(Effect.map(version => ({ tool, version })))) : [];
+  if (process.platform === 'darwin' && tools.length > 0) tools.push({ tool: 'codesign', version: sha(yield* fs.readFile('/usr/bin/codesign')) });
   const cachedNative = join(yield* nativeInputCache(checkout), target === 'linux-x64' ? 'linux-x64-glibc' : target!);
   const native = prebuilt !== undefined ? yield* buildCacheTree(resolve(prebuilt), undefined, true)
     : (yield* fs.exists(cachedNative)) ? yield* buildCacheTree(cachedNative, undefined, true) : null;
   return sha(JSON.stringify({ entries, platform: process.platform, arch: process.arch, node: process.version,
     abi: process.versions.modules, target, nativeAbi: HAWDB_ABI, nativeRevision: HAWDB_REVISION,
-    requirePortableNative: process.env.CONCORD_REQUIRE_PORTABLE_NATIVE ?? '', commit, linuxLibraries, native }));
+    requirePortableNative: process.env.CONCORD_REQUIRE_PORTABLE_NATIVE ?? '', commit, linuxLibraries, native, tools }));
 });
 
 // Reuse Concord's atomic, token-owned file lease. Recovery removes only the

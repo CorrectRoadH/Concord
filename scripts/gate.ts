@@ -47,7 +47,9 @@ const main = Effect.gen(function*() {
   const output = resolve(process.env.CONCORD_GATE_REPORT!);
   const retainedFile = join(output, 'retained-consumers.jsonl');
   yield* Effect.addFinalizer(() => Effect.gen(function*() {
-    if (yield* fs.exists(retainedFile)) {
+    const retained = (yield* fs.exists(retainedFile))
+      ? yield* Effect.forEach((yield* fs.readFileString(retainedFile)).split('\n').filter(Boolean), path => fs.exists(path)) : [];
+    if (retained.some(Boolean)) {
       yield* Effect.sync(() => console.error(`# Gate fixture cleanup unconfirmed; retained=${fixtureDirectory}; receipt=${retainedFile}`));
     } else yield* fs.remove(fixtureDirectory, { recursive: true, force: true });
   }).pipe(Effect.orDie));

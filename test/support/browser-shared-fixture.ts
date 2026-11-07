@@ -245,7 +245,7 @@ export class BrowserSharedFixture {
         if (result.status !== 200) return undefined;
         const value = parseWorkspaceProjection(await result.text());
         return value && Date.parse(value.projection.builtFrom) >= requestedAt && value.projection.changedPaths.length === 0 &&
-          value.projection.status === 'ready' && value.projection.complete && value.snapshot.complete &&
+          value.projection.status === 'ready' && (phase !== 'restore-refresh' || value.projection.complete && value.snapshot.complete) &&
           (expectedSourceDigest === undefined || value.projection.sourceDigest === expectedSourceDigest) ? value : undefined;
       }, { description: 'worker workspace refresh after fixture setup', timeoutMs: 65_000 });
       success = true;

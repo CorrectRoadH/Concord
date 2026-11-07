@@ -31,7 +31,7 @@ test('development and CI share the Node 26 declaration included in runner eviden
         assert.equal(step.with?.['node-version'], undefined, `${name}/${jobName}: use the declaration as the only version owner`);
         setups.push(`${name}/${jobName}`);
       }
-      if (name === 'gate') assert.deepEqual(job.strategy?.matrix, { shard: [1, 2, 3, 4] });
+      if (name === 'gate') assert.deepEqual(job.strategy?.matrix, { shard: ['1/8', '2/8', '3/8', '4/8', '5/8', '6/8', '7/8', '8/8', 'package'] });
     }
   }
   assert.deepEqual(setups.sort(), ['gate/gate', 'native/native', 'release/herdr-mod', 'release/native', 'release/package', 'release/verify']);

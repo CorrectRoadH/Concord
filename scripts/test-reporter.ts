@@ -76,7 +76,7 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
         if (exit._tag === 'Failure' && admission !== undefined) admission.admission.failed = true;
       })));
       yield* fs.writeFileString(join(output, 'process-tree-peaks.jsonl'), `${JSON.stringify(report)}\n`, { flag: 'a' });
-      if (report.exceeded) yield* Effect.sync(() => console.error(`# Gate file exceeds memory budget: ${report.file}; sampled RSS+swap=${report.peakBytes}; budget=${report.budgetBytes}`));
+      if (report.exceeded) yield* Effect.sync(() => console.error(`# Gate file exceeds memory budget: ${report.file}; sampled PSS=${report.peakBytes}; budget=${report.budgetBytes}`));
     }).pipe(Effect.orDie));
     const events = yield* Effect.acquireRelease(
       Effect.try({ try: () => run({ ...options, files, shard: undefined, concurrency: 1,
