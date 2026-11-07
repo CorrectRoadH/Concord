@@ -1,5 +1,6 @@
 import type * as ModelTypes from '../../src/model/index.ts';
 import { sourceCli } from './source-consumer.ts';
+import { runCli } from './cli.ts';
 import assert from 'node:assert/strict';
 import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,8 +42,9 @@ export const setup = Effect.fn('adapterTest.pack')(function* (root: string, need
 export const prepare = Effect.fn('adapterTest.consumer')(function* (scratch: string, name: string, cli: string, tool: string) {
   const root = join(scratch, name); yield* Effect.sync(() => mkdirSync(root));
   yield* requireCommand(['git', 'init', '-q'], root);
-  yield* requireCommand([process.execPath, cli, '--root', root, 'init', '--json'], root);
-  yield* requireCommand([process.execPath, cli, '--root', root, 'new', 'feature', 'example', '--title', 'Example', '--json'], root);
+  yield* success(root, cli, ['init']);
+  yield* Effect.addFinalizer(() => success(root, cli, ['server', 'stop']).pipe(Effect.asVoid, Effect.orDie));
+  yield* success(root, cli, ['new', 'feature', 'example', '--title', 'Example']);
   yield* Effect.sync(() => {
     text(root, 'package.json', '{"private":true,"type":"module"}');
     symlinkSync(join(tool, 'node_modules'), join(root, 'node_modules'), 'dir');
@@ -55,7 +57,22 @@ export const configure = (root: string, adapters: readonly TestAdapter[], source
   const config = existsSync(configPath) ? parseTypeScriptConfig(readFileSync(configPath, 'utf8')) : {};
   writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig(Schema.decodeUnknownSync(ProjectSchema)({ ...config, runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 60000 }, testAdapters: adapters, sourceIgnore })));
 };
-export const call = (root: string, cli: string, args: readonly string[]) => command([process.execPath, cli, '--root', root, '--json', ...args], root);
+export const call = Effect.fn('adapterTest.call')(function* (root: string, cli: string, args: readonly string[]) {
+  assert.equal(cli, sourceCli(), 'In-process adapter fixtures must use the source CLI');
+  let pending: ReturnType<typeof runCli> | undefined;
+  return yield* Effect.tryPromise({
+    try: async signal => {
+      pending = runCli({ argv: ['--root', root, '--json', ...args], cwd: root, env: { ...process.env }, signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) });
+      const result = await pending;
+      const bytes = Buffer.byteLength(result.stdout, 'utf8') + Buffer.byteLength(result.stderr, 'utf8');
+      if (bytes > 8 * 1024 * 1024) throw new Error(`Adapter CLI output exceeds 8 MiB: ${bytes} bytes`);
+      return result;
+    },
+    catch: cause => cause instanceof Error ? cause : new Error(String(cause)),
+  }).pipe(Effect.ensuring(Effect.promise(async () => {
+    if (pending !== undefined) await pending.then(() => undefined, () => undefined);
+  })));
+});
 export const success = Effect.fn('adapterTest.cli')(function* (root: string, cli: string, args: readonly string[]) {
   const result = yield* call(root, cli, args); assert.equal(result.exitCode, 0, `${args.join(' ')}\n${result.stderr}\n${result.stdout}`); return result;
 });

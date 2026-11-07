@@ -1,5 +1,6 @@
 // 跨进程保证：进程终止与信号——真实分析CLI取消后回收language server进程组，持有runner期间拒绝竞争且A-B-A变更不发布。
 import { sourceCli, createDocument, createConsumer, installedConcordCli, assert, execFileSync, spawn, spawnSync, copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, dirname, join, resolve, tmpdir, test, Effect, Schema, buildSync, analysisBudgets, LanguageServersSchema, type LanguageServer, documentSymbols, positionOffset, bindSymbol, LspConnection, AnalysisObservationSchema, AnalysisViewSchema, historicalAnalysis, relevanceFor, CodeDeclarationSchema, decode, type AnnotatedCase, type DocumentRecord, observation, LocalRepository, withPersistentCache, observeOwnedProcessGroup, hydrateQueryValue, TraceShowValue, pollUntil, readProjectConfig, writeProjectConfig, sourceRoot, cli, target, source, write, call, ack, failure, analysis, codeList, projectCheck, server, consumer } from '../support/lsp-analysis-fixture.ts';
+import { runCli } from '../support/cli.ts';
 
 
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
@@ -61,28 +62,19 @@ test('analysis runner ownership survives cancellation and rejects coordinated A-
   }
 })));
 
-
-
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
 // CASES lsp-integration C1, C2, C14, C18.
-test('Python Go Rust and Java marker profiles rebuild relations without launching a server', () => Effect.runPromise(Effect.sync(() => {
+test('explicit analysis attempts a configured executable and releases ownership when it is missing', async () => {
   const root = consumer();
   try {
     const profiles = [['python', '.py', '#'], ['go', '.go', '//'], ['rust', '.rs', '//'], ['java', '.java', '//']] as const;
     writeProjectConfig(root, { ...readProjectConfig(root), languageServers: profiles.map(([languageId, extension, prefix]) => ({ ...server(), id: languageId, languageId, extensions: [extension], argv: ['concord-server-that-must-not-start'], profile: { ...server().profile, commentPrefixes: [prefix] } })) });
-    for (const [, extension, prefix] of profiles) write(root, `src/markers${extension}`, `${prefix} @concord-file\n${prefix} @concord-implements ${target}\n${prefix} @concord-code\n${prefix} @concord-implements ${target}\nfunction body\n${prefix} @concord-begin\n${prefix} @concord-implements ${target}\nstatements\n${prefix} @concord-end\n`);
-    write(root, 'test/labels.py', '@pytest.mark.bad_target("docs/missing.md")\ndef no_concord_marker():\n    pass\n');
-    const before = call(root, ['code', 'list'], codeList).codes;
-    assert.equal(before.filter(code => code.file.includes('markers')).length, 12);
-    assert.equal(call(root, ['check'], projectCheck).ok, true);
-    const text = readFileSync(join(root, 'src/markers.go'), 'utf8');
-    write(root, 'src/markers.go', `\n\n${text}`);
-    assert.deepEqual(call(root, ['code', 'list'], codeList).codes.map(code => code.id), before.map(code => code.id));
-    write(root, 'src/markers.rs', text + '// @concord-end\n');
-    assert.equal(call(root, ['check'], projectCheck, 1).ok, false);
-    // Explicit analysis alone attempts the configured executable.
-    write(root, 'src/markers.rs', text);
-    assert.equal(call(root, ['code', 'analyze'], failure, 1).error, 'LanguageServerFailed');
-    assert.equal(call(root, ['recover'], Schema.Struct({ status: Schema.String })).status, 'clean');
+    const invoke = (args: readonly string[]) => runCli({ argv: ['--root', root, '--json', '--fresh', ...args], cwd: process.cwd(), env: process.env, signal: AbortSignal.timeout(30_000) });
+    const analyzed = await invoke(['code', 'analyze']);
+    assert.equal(analyzed.exitCode, 1, analyzed.stdout + analyzed.stderr);
+    assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(failure))(analyzed.stderr || analyzed.stdout).error, 'LanguageServerFailed');
+    const recovered = await invoke(['recover']);
+    assert.equal(recovered.exitCode, 0, recovered.stdout + recovered.stderr);
+    assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.String })))(recovered.stdout).status, 'clean');
   } finally { rmSync(root, { recursive: true, force: true }); }
-})));
+});

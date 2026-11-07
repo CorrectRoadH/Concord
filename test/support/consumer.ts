@@ -2,7 +2,7 @@
 // @concord-implements docs/engineering/testing/use-case/extend-fixtures.md
 import { initialize } from './operations.ts';
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from './temporary.ts';
 import { join } from 'node:path';
 import { after, before } from 'node:test';
@@ -16,7 +16,11 @@ const retained = new Set<string>();
 
 /** Resource owners release their service before this file's template tree is removed. */
 export function beforeConsumerCleanup(finalizer: () => Promise<void>): void { finalizers.add(finalizer); }
-export function retainConsumer(root: string): void { retained.add(root); }
+export function retainConsumer(root: string): void {
+  retained.add(root);
+  const receipt = process.env.CONCORD_TEST_RETAIN_FILE;
+  if (receipt !== undefined) appendFileSync(receipt, `${root}\n`);
+}
 
 /** One initialized consumer per test process, cloned with its real Git metadata. */
 export function createConsumer(): string {

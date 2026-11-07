@@ -1,4 +1,5 @@
-import { createConsumer } from './consumer.ts';
+import { createConsumer, retainConsumer } from './consumer.ts';
+import { stopWorkspaceServer } from './stop-workspace-server.ts';
 import { createDocument } from './operations.ts';
 import { sourceCli, assert, existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, join, tmpdir, fileURLToPath, test, Effect, Schema, OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess, ProjectSchema, renderTypeScriptConfig, parseTypeScriptConfig, type TestAdapter, LocalRepository, closeRepositoryCache, withPersistentCache, prepareSourceConsumer, sourceRoot, text, scratch, command, requireCommand, parse, CaseList, Receipt, setup, prepare, configure, call, success, idFor, environment, builtin } from '../support/test-adapters-consumer-fixture.ts';
 
@@ -6,7 +7,11 @@ import { sourceCli, assert, existsSync, copyFileSync, mkdirSync, mkdtempSync, re
 
 export const externalCase = Effect.fn('adapterTest.externalCase')(function*() {
   const root = yield* scratch; const { cli, tool } = yield* setup(root, true);
-  const consumer = yield* Effect.acquireRelease(Effect.sync(createConsumer), path => Effect.sync(() => rmSync(path, { recursive: true, force: true })));
+  const consumer = yield* Effect.acquireRelease(Effect.sync(createConsumer), path => Effect.sync(() => {
+    try { stopWorkspaceServer(path, cli); }
+    catch (cause) { retainConsumer(path); throw cause; }
+    rmSync(path, { recursive: true, force: true });
+  }));
   yield* Effect.sync(() => {
     const repo = new LocalRepository(consumer);
     try {
