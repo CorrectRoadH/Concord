@@ -7,8 +7,6 @@
 文件只有一个 `export default` 字面对象，可以带类型导入、`as const` 与 `satisfies`。运行时只读取这个文件并静态求值，不执行模块，也不读取或检测其它文件（[当前格式](../../architecture.md#当前格式)）。
 
 ```ts
-import type { ProjectConfig } from 'concord-sdlc/config';
-
 export default {
   testRoots: ['spec'],
   runner: {
@@ -17,10 +15,10 @@ export default {
     sourceFiles: [],
     timeoutMs: 60000,
   },
-} as const satisfies ProjectConfig;
+};
 ```
 
-类型 `ProjectConfig` 来自库包 `concord-sdlc/config`，见[库接口](../local-sdlc/library.md)。
+配置是静态数据。编辑器补全与校验所用的 JSON Schema 由 `concord schema config` 输出，见[机器可读 Schema](../local-sdlc/cli.md#机器可读-schema)。
 
 ## 配置项
 

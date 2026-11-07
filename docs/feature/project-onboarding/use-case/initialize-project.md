@@ -72,8 +72,6 @@
    `runner.json` 是一个 runner 对象，例如 `{"kind":"command","argv":["node","--test","{file}"],"sourceFiles":[],"timeoutMs":60000}`。init 据此创建 `concord.config.ts`：
 
    ```ts
-   import type { ProjectConfig } from 'concord-sdlc/config';
-
    export default {
      "testRoots": [
        "spec"
@@ -88,7 +86,7 @@
        "sourceFiles": [],
        "timeoutMs": 60000
      }
-   } as const satisfies ProjectConfig;
+   };
    ```
 
    测试或实现不在约定位置时用 `--test-root`、`--source-root` 覆盖发现范围；没有测试的项目可以没有测试根。之后的修改见[安全维护项目配置](maintain-project-config.md)。

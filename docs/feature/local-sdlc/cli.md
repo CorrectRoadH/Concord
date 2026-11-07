@@ -85,7 +85,7 @@ Inspect configuration: concord doctor
 
 在还没有初始化的仓库里，需要项目的命令返回 `ProjectNotInitialized`（退出 1），`details.guide` 给出初始化后推荐的写作指南；哪些命令照常执行见[在还没初始化的仓库里打开 Concord](../project-onboarding/use-case/open-uninitialized-repo.md)。
 
-`concord doctor --json` 报告配置与接入缺口，不运行测试；项目安装的库包 `concord-sdlc` 与 CLI 版本不一致时给出 `LibraryVersionMismatch`，见[库接口](library.md#版本)：
+`concord doctor --json` 报告配置与接入缺口，不运行测试：
 
 ```json
 {

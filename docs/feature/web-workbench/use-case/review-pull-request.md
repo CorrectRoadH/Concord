@@ -19,7 +19,7 @@
 
    - PR head 等于构建提交与检出的 HEAD，拒绝检出 merge 提交。构建前与部署前各查询一次 PR，base ref、base SHA 或 head SHA 变化即失败。
    - 补全 shallow 历史与缺失的对象后再导出，历史中要包含 base 与 head 的共同祖先。
-   - 用[安装脚本](../../cross-platform-release/use-case/install-with-script.md)加 `CONCORD_VERSION` 安装固定版本的 Concord 发版归档，按 Release 的 `SHA256SUMS` 校验。解码器取自同一版本的[库包](../../local-sdlc/library.md#安装)。不依赖相邻源码或未发版的版本，不手改归档。
+   - 用[安装脚本](../../cross-platform-release/use-case/install-with-script.md)加 `CONCORD_VERSION` 安装固定版本的 Concord 发版归档，按 Release 的 `SHA256SUMS` 校验。导出与部署前的校验都用这一份 CLI，不依赖相邻源码或未发版的版本，不手改归档。
 
 ### 导出与审阅
 
@@ -44,7 +44,25 @@
 
 3. 部署前核对产物。 {#check}
 
-   用[库包解码器](../library.md)读取 `concord-preview/changes.json`，核对 base、head 与 baseLabel，再独立计算 merge-base 与 `comparison.mergeBase` 比对。产物的结构见 [PR 预览产物](../format.md#pr-预览产物)。
+   ```sh
+   concord view verify ./concord-preview --json
+   ```
+
+   ```json
+   {
+     "operation": "view-verify",
+     "directory": "/home/ci/shop/concord-preview",
+     "comparison": {
+       "base": "5ae5556b04a9e27e2c6e56f47ac44aee01663bd5",
+       "head": "f67b833a744dc75fe3c48057f75a887ff3f86fb8",
+       "mergeBase": "5ae5556b04a9e27e2c6e56f47ac44aee01663bd5",
+       "baseLabel": "master"
+     },
+     "files": 5
+   }
+   ```
+
+   命令严格解码 `changes.json` 并检查输出目录的构成，失败时以具名错误和字段路径退出 1，见[校验产物](../cli.md#校验产物)。通过后核对输出中的 base、head 与 baseLabel，再独立计算 merge-base 与 `comparison.mergeBase` 比对。产物的结构见 [PR 预览产物](../format.md#pr-预览产物)。
 
 4. 接入静态 Preview，从 PR 链接过去。 {#publish}
 
@@ -95,4 +113,4 @@
 | 二进制文件、子模块、符号链接 | 只显示对象，不读取外部目标 |
 | Markdown 含恶意 HTML 与链接 | 不执行脚本，不加载图片或远程资源，不产生 mutation 请求 |
 
-导出由固定版本的发版归档独立完成，不需要相邻源码、全局安装或 Rust 编译器。验收用隔离的 Git 消费者，经已安装的 CLI 与公共解码器覆盖以上各项，另含脏 attributes、replace refs、子模块忽略配置、非 UTF-8 路径、大对象小 patch，以及未初始化、配置无效与在子目录启动；取消时回收 Git 子进程与临时目录。部署与远端链接只由已授权的真实部署证明。
+导出由固定版本的发版归档独立完成，不需要相邻源码、全局安装或 Rust 编译器。验收用隔离的 Git 消费者，经已安装的 CLI 与 `concord view verify` 覆盖以上各项，另含脏 attributes、replace refs、子模块忽略配置、非 UTF-8 路径、大对象小 patch，以及未初始化、配置无效与在子目录启动；取消时回收 Git 子进程与临时目录。部署与远端链接只由已授权的真实部署证明。

@@ -204,7 +204,7 @@ Git 子进程清除继承的 GIT 环境，禁用 global/system config、system a
 
 ### 静态阅读器
 
-阅读器只读 `changes.json`，用[随包解码器](library.md)解码，不调用 `/api`，不依赖项目目录、扫描、HawDB 或服务进程。文本经 React 转义；Markdown 用独立 react-markdown 入口而非本地渲染器：跳过原始 HTML，不渲染图片，不加载远程资源，链接只保留 https、http 与 mailto。
+阅读器只读 `changes.json`，用与 `concord view verify` 相同的 `concord.change-preview/v1` 解码器解码，不调用 `/api`，不依赖项目目录、扫描、HawDB 或服务进程。文本经 React 转义；Markdown 用独立 react-markdown 入口而非本地渲染器：跳过原始 HTML，不渲染图片，不加载远程资源，链接只保留 https、http 与 mailto。
 
 ## URL 与导航状态
 

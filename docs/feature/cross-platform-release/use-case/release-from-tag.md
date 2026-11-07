@@ -2,7 +2,7 @@
 
 ## 用户目标
 
-维护者推送一个版本标签，得到每个目标平台一个自带运行时的 Concord 归档、同版本的库包，以及自动同步的 Homebrew 与 Linux Nix recipe，各渠道从同一份归档安装。
+维护者推送一个版本标签，得到每个目标平台一个自带运行时的 Concord 归档，以及自动同步的 Homebrew 与 Linux Nix recipe，各渠道从同一份归档安装。
 
 ## 起始状态
 
@@ -35,9 +35,9 @@
 
 3. 原生任务分别构建固定版本的 `linux-x64` 与 `darwin-arm64` HawDB 引擎；macOS 任务给 HawDB 绑定与 `runtime/rg` 做 ad-hoc 签名。 {#native}
 
-4. 一台 Ubuntu 24.04 CI 机器打包全部候选归档与库包，同一标签 commit 执行完整检查。 {#package}
+4. 一台 Ubuntu 24.04 CI 机器打包全部候选归档，同一标签 commit 执行完整检查。 {#package}
 
-   这台 CI 机器从标签派生版本，构建并类型检查应用一次，为两个目标各组装一个候选归档，打出库包 `concord-sdlc-<version>.tgz`，计算全部资产的 SHA-256。
+   这台 CI 机器从标签派生版本，构建并类型检查应用一次，为两个目标各组装一个候选归档，计算全部资产的 SHA-256。
 
 5. 在 `ubuntu-24.04` 与 `macos-15` arm64 的 CI 机器上各验证本目标的候选归档。 {#verify}
 
@@ -54,7 +54,7 @@
 
 6. 全部通过后创建源码 GitHub Release。 {#publish}
 
-   第 4 步的完整检查和两个目标的验证全部通过后，Release 附带两个归档、库包、`SHA256SUMS` 与[安装脚本](install-with-script.md) `install.sh`，字节与验证过的候选相同。任何一项失败都不发版。
+   第 4 步的完整检查和两个目标的验证全部通过后，Release 附带两个归档、`SHA256SUMS` 与[安装脚本](install-with-script.md) `install.sh`，字节与验证过的候选相同。任何一项失败都不发版。
 
    ```sh
    gh release view v0.9.0 --repo CorrectRoadH/Concord --json assets --jq '.assets[].name'
@@ -66,7 +66,6 @@
    SHA256SUMS
    concord-0.9.0-darwin-arm64.tar.gz
    concord-0.9.0-linux-x64.tar.gz
-   concord-sdlc-0.9.0.tgz
    install.sh
    ```
 
@@ -91,7 +90,7 @@
    concord v0.9.0
    ```
 
-   安装脚本与文档中的 Nix flake 得到同一版本。需要配置类型或解码器的项目按[库接口](../../local-sdlc/library.md)安装同版本库包。
+   安装脚本与文档中的 Nix flake 得到同一版本。编辑器与脚本使用的 JSON Schema 由同一版本 CLI 的 [`concord schema`](../../local-sdlc/cli.md#机器可读-schema) 输出。
 
 9. 随本次发版更新同版本的 Concord mod。 {#herdr-mod}
 

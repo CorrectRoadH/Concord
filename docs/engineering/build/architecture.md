@@ -38,7 +38,7 @@
 2. 每个目标用独立、干净的安装树装运行依赖：按 `pnpm-lock.yaml` 冻结、`--ignore-scripts`、保留可选依赖，并用 pnpm 的 `--os`、`--cpu` 与 `--libc` 选择目标平台的包（`linux-x64` 为 glibc）。安装树中的符号链接不得指向归档之外。依赖必须在目标平台执行安装脚本或编译时，组装失败，不静默漏包。
 3. 按归档构成取得并校验 `runtime/node`、`runtime/rg`、Linux 的 `runtime/lib/` 与许可证文本。
 4. Linux 目标按 [Linux 运行库](../../feature/cross-platform-release/architecture.md#linux-运行库)设置 RPATH 并检查全部 ELF，不满足即失败。macOS 目标的 HawDB 绑定与 `rg` 使用原生任务签名后的字节，不改写。
-5. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。发版时打包任务另打出[库包](../../feature/cross-platform-release/architecture.md#库包)。
+5. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。
 
 下载的上游发行包按文件内容的 SHA-256 缓存在 `${XDG_CACHE_HOME:-~/.cache}/concord/runtime/`，先校验再使用，校验失败不进入缓存或归档。入口不读取 `PATH` 中的 `node` 或 `rg`。
 

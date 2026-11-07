@@ -101,14 +101,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 ## 公开接口
 
-库包 `concord-sdlc` 只导出四个子路径，行为见[库接口](../../feature/local-sdlc/library.md)：
-
-- `concord-sdlc/config`：`concord.config.ts` 的类型；
-- `concord-sdlc/model`：文档 Schema 与模型类型；
-- `concord-sdlc/test-adapter-protocol`：原生测试 adapter 的协议；
-- `concord-sdlc/change-preview`：PR 静态预览产物的 Schema。
-
-其余模块是内部实现，不导出。CLI 入口是发版归档中的 `bin/concord`，库包没有 `bin`。
+Concord 只以 CLI 交付，全部模块都是内部实现，不作为包导出（[目标与原则](../../architecture.md#目标与原则)）。唯一入口是发版归档中的 `bin/concord`。对外的接口是命令的 `--json` 输出、外部 adapter 的 stdin/stdout 协议与导出产物；配置、adapter 协议与 PR 预览产物的 JSON Schema 由 `concord schema` 从拥有这些结构的内部 Schema 输出，见[机器可读 Schema](../../feature/local-sdlc/cli.md#机器可读-schema)。
 
 ## 测试布局
 

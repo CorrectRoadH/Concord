@@ -98,3 +98,36 @@ concord view export --base <ref> [--head <ref>] [--base-label <label>] --out <ne
 | `PreviewAssetsInvalid` | 安装目录内的阅读器资源缺失或超出发布预算 |
 | `PreviewPublicationFailed` | 写入失败；不完整输出保留在 `details.output` |
 | `PreviewExportFailed` | 整体超过 120 秒或其它导出失败 |
+
+### 校验产物
+
+```sh
+concord view verify <目录> [--json]
+```
+
+消费者在部署前用同一版本的 CLI 校验 `concord view export` 的输出目录。命令只读该目录，不需要项目目录，不运行 Git，不联网，也不读写缓存。
+
+目录必须恰好含[输出目录](format.md#输出目录)列出的文件且没有 symlink，`changes.json` 按 [`concord.change-preview/v1`](format.md#changesjson) 严格解码，并在[导出上限](#导出上限)的 entries 与 `changes.json` 上限之内；解码规则与静态阅读器相同，Schema 由 `concord schema change-preview` 输出。
+
+通过时退出 0，输出 `{ operation: 'view-verify', directory, comparison, files }`：`directory` 为绝对路径，`comparison` 原样取自 `changes.json`，`files` 为条目数。消费者据此核对 base、head 与 baseLabel；`comparison.mergeBase` 由消费者独立计算后比对，本命令不核对它与仓库是否一致。
+
+```json
+{
+  "operation": "view-verify",
+  "directory": "/home/ci/shop/concord-preview",
+  "comparison": {
+    "base": "5ae5556b04a9e27e2c6e56f47ac44aee01663bd5",
+    "head": "f67b833a744dc75fe3c48057f75a887ff3f86fb8",
+    "mergeBase": "5ae5556b04a9e27e2c6e56f47ac44aee01663bd5",
+    "baseLabel": "master"
+  },
+  "files": 5
+}
+```
+
+失败时退出 1，不修改目录：
+
+| 错误 | 条件 |
+| --- | --- |
+| `PreviewDirectoryInvalid` | 目录不存在或不是真实目录，缺少或多出顶层条目，或含 symlink；`details.path` 给出出问题的路径 |
+| `PreviewDataInvalid` | `changes.json` 不是 JSON、版本未知、含未知字段、违反字段约束或超出上限；`details.path` 给出字段路径，如 `entries[3].previousPath` |

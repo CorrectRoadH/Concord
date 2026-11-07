@@ -76,7 +76,7 @@ Git 面板显示已暂存（HEAD 对 index）、未暂存（index 对 worktree �
 
 打开工作台默认进入 Git 变更页，先列出全部变更；可筛选文档或测试，选择文件后切换暂存区域与差异布局。总览仍从侧栏进入。读取失败会显示错误，可点击刷新重试。
 
-PR 只读预览使用 `concord view export --base <actual-base-commit> --head <head-commit> --base-label <target-branch> --out <new-directory>`。比较唯一最佳 merge-base 到 head，不假定 main，不包含未提交的改动，不加载消费者配置或文档代码。消费者先准备完整 Git 历史，并核对真实 PR 身份；Concord 不联网、不部署。输出目录可放到静态站点子路径；文件选择与阅读模式存入 hash。静态 Markdown 不运行 p5、不接受原始 HTML、不加载图片。Schema 由 `concord-sdlc/change-preview` 拥有。
+PR 只读预览使用 `concord view export --base <actual-base-commit> --head <head-commit> --base-label <target-branch> --out <new-directory>`。比较唯一最佳 merge-base 到 head，不假定 main，不包含未提交的改动，不加载消费者配置或文档代码。消费者先准备完整 Git 历史，并核对真实 PR 身份；Concord 不联网、不部署。输出目录可放到静态站点子路径；文件选择与阅读模式存入 hash。静态 Markdown 不运行 p5、不接受原始 HTML、不加载图片。部署前用同一版本的 `concord view verify <目录>` 校验输出目录，`concord schema change-preview` 输出 `changes.json` 的 JSON Schema。
 
 导出只接受受信父目录下不存在的目标，拒绝 symlink 祖先和 Git-private 路径。失败保留不完整输出，检查现场后选择新路径；不要自动覆盖或清理未知文件。超出 2000 文件、单 blob 4 MiB、单 Markdown 正文 1 MiB 或 JSON 8 MiB 时明确失败。
 

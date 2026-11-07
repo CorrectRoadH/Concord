@@ -37,11 +37,9 @@
 2. 直接创建 `concord.config.ts`。 {#write}
 
    ```ts
-   import type { ProjectConfig } from 'concord-sdlc/config';
-
    export default {
      testRoots: ['spec'],
-   } as const satisfies ProjectConfig;
+   };
    ```
 
    再运行 `concord doctor`：
@@ -54,7 +52,7 @@
        src
    ```
 
-   显式的 `testRoots` 替换默认值，只发现 `spec/`。Concord 只静态读取这个文件，不执行它。
+   显式的 `testRoots` 替换默认值，只发现 `spec/`。Concord 只静态读取这个文件，不执行它；编辑器可用 `concord schema config` 输出的 JSON Schema 补全与校验。
 
 3. 写错时看到具名错误，原文不变。 {#invalid}
 

@@ -2,7 +2,7 @@
 
 本页声明工作台读写的两种文件：
 
-- [PR 预览产物](#pr-预览产物)：`concord view export` 输出的目录，由消费者托管、审阅者打开。调用与错误见 [PR 静态预览导出](cli.md#pr-静态预览导出)，解码器见[库接口](library.md)，用户路径见[在 PR 预览中审阅变更](use-case/review-pull-request.md)。
+- [PR 预览产物](#pr-预览产物)：`concord view export` 输出的目录，由消费者托管、审阅者打开。调用与错误见 [PR 静态预览导出](cli.md#pr-静态预览导出)，Schema 由 `concord schema change-preview` 输出、`concord view verify` 校验，用户路径见[在 PR 预览中审阅变更](use-case/review-pull-request.md)。
 - [p5 图块](#p5-图块)：Markdown 中由工作台运行、可以交互的图解。用户路径见[在 Markdown 中运行 p5 图块](use-case/embed-p5-sketch.md)。
 
 ## PR 预览产物

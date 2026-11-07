@@ -2,13 +2,13 @@
 
 ## 实体所有权
 
-源码标签、应用与库包的包元数据、GitHub Release 中的归档与库包由 CorrectRoadH/Concord 拥有。CorrectRoadH/homebrew-tap 拥有 Formula、Nix 表达式、recipe 标签，以及 Nix 渠道修补后的安装身份。
+源码标签、应用的包元数据、GitHub Release 中的归档与安装脚本由 CorrectRoadH/Concord 拥有。CorrectRoadH/homebrew-tap 拥有 Formula、Nix 表达式、recipe 标签，以及 Nix 渠道修补后的安装身份。
 
 运行时协调遵循[可移植协调架构](../portable-coordination/architecture.md)：来源读取不取得租约，提交与恢复使用同一 Node 文件租约。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时协调。
 
 ## 数据流
 
-标签工作流从校验后的标签派生版本。原生任务在各自目标系统上构建 HawDB 引擎；一个打包任务只构建一次应用，再为每个目标平台组装候选归档并打出库包，核验版本、原生产物身份与摘要。验证任务在目标系统上运行同一份候选，全部通过后创建源码 Release。
+标签工作流从校验后的标签派生版本。原生任务在各自目标系统上构建 HawDB 引擎；一个打包任务只构建一次应用，再为每个目标平台组装候选归档，核验版本、原生产物身份与摘要。验证任务在目标系统上运行同一份候选，全部通过后创建源码 Release。
 
 tap 定期或经通知发现新的公开发版，核验标签、归档与资产身份，生成 Formula 与 Nix 候选。候选分别完成安装和运行检查后才提交并打 recipe 标签，创建同版本渠道完成记录。日常发现、验证与更新不依赖 LLM。
 
@@ -56,11 +56,7 @@ Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`li
 
 ### 版本与身份
 
-发版版本只从规范标签写入。应用的 `app/package.json` 与库包的 `package.json` 写入相同的 `version`，并以 `gitHead` 记录标签 commit；两者都在同一个打包任务中从该 commit 构建。版本、源码标签 commit、各归档与库包的 SHA-256 和 recipe commit 构成发版映射，只有这些身份完全一致时，重跑才能继续中断的阶段。Repository 实现身份包含包内 JavaScript、包元数据、依赖锁与运行时版本。
-
-### 库包
-
-库包 `concord-sdlc-<version>.tgz` 的 `package.json` 只声明 `name`、`version`、`gitHead`、`type`、`license`、`exports` 与 `dependencies`。`exports` 恰好是[库接口](../local-sdlc/library.md)列出的四个子路径，每项只有 `types` 与 `import` 两个条件，不含 `concord-source` 等源码条件，也没有 `bin`。包内只有这四个入口可达的编译 JavaScript 与声明，`dependencies` 只列这些文件实际导入的第三方包，版本取 `pnpm-lock.yaml` 中的精确版本。打包时在仓库之外的临时目录安装该 tgz，类型检查一个导入 `concord-sdlc/config` 的配置文件，并实际导入、调用其余三个入口，不借助 worktree 的 `node_modules`。
+发版版本只从规范标签写入。应用的 `app/package.json` 写入 `version`，并以 `gitHead` 记录标签 commit，应用在同一个打包任务中从该 commit 构建。版本、源码标签 commit、各归档的 SHA-256 和 recipe commit 构成发版映射，只有这些身份完全一致时，重跑才能继续中断的阶段。Repository 实现身份包含包内 JavaScript、包元数据、依赖锁与运行时版本。
 
 ### Homebrew
 
@@ -109,7 +105,7 @@ Concord 拥有源码校验、归档字节与源码 Release，tap 拥有包管理
 
 Linux 与 macOS 原生任务分别在 Ubuntu 24.04 与 Apple Silicon macOS 15 上从源码构建 `linux-x64` 与 `darwin-arm64` HawDB 引擎，后者 deployment target 为 macOS 15.0。native manifest 绑定桥接源码、Cargo lock、ABI、HawDB revision 与二进制摘要；本机 Nix 构建的原生产物不进入归档。
 
-一个 Ubuntu 24.04 任务在原生任务之后运行：清理输出目录，构建并类型检查应用一次，收集完整且经核验的原生产物集合，为每个目标平台组装候选归档、打出库包并核验版本与摘要，把候选与摘要作为不可变产物上传。
+一个 Ubuntu 24.04 任务在原生任务之后运行：清理输出目录，构建并类型检查应用一次，收集完整且经核验的原生产物集合，为每个目标平台组装候选归档并核验版本与摘要，把候选与摘要作为不可变产物上传。
 
 验证任务依赖打包任务，分别在 `ubuntu-24.04` 与 `macos-15` arm64 的 CI 机器上下载本目标的候选与摘要，校验后解压运行，不重新构建，核对项见[从标签发版](use-case/release-from-tag.md#verify)。验证的 `PATH` 只含系统基础命令与 Git，没有真实的 `node`、`pnpm` 与 `rg`；另放以非零退出的 `node` 与 `rg` 探针，确认应用不回退到 `PATH`。发版任务同时依赖两个验证任务与同一标签 commit 的完整检查。
 

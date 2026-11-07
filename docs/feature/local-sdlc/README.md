@@ -81,7 +81,7 @@
 
    检查以退出码 1 失败，指出标记所在的文件和行。改正标记后重新通过。
 
-完整的命令清单、JSON 输出和错误码见[命令体验](cli.md)，文档路径、frontmatter 与标记的写法见[文档与标记格式](format.md)，从程序里调用见[库接口](library.md)。
+完整的命令清单、JSON 输出和错误码见[命令体验](cli.md)，文档路径、frontmatter 与标记的写法见[文档与标记格式](format.md)，校验配置、adapter 消息与导出产物的 JSON Schema 见[机器可读 Schema](cli.md#机器可读-schema)。
 
 ## Spec、测试与实现怎样保持一致
 

@@ -4,7 +4,7 @@
 
 维护者在已推送的 commit 上创建并推送附注标签 `v<version>` 来发版，工作流以标签中的版本作为发版版本。工作流同样接受 `concord-v<version>`。无效标签，或已有身份不同的同名标签与 Release，都会被拒绝。
 
-工作流在自己的 CI 机器中把版本写入应用与库包的包元数据，安装后的 CLI 从包内元数据读取版本，库包 `concord-sdlc` 的版本与它相同。手动触发且不带标签时只做校验，不发版。
+工作流在自己的 CI 机器中把版本写入应用的包元数据，安装后的 CLI 从包内元数据读取版本。手动触发且不带标签时只做校验，不发版。
 
 ```sh
 git tag -a v0.9.0 -m 'Concord 0.9.0'
@@ -13,14 +13,13 @@ git push origin v0.9.0
 
 ## 发版资产 {#发布资产}
 
-一个 GitHub Release 恰好附带以下资产。CLI 只通过归档分发，库只通过库包分发：
+一个 GitHub Release 恰好附带以下资产。Concord 只通过归档分发：
 
 | 资产 | 内容 |
 | --- | --- |
 | `concord-<version>-linux-x64.tar.gz` | x86_64 Linux（glibc 2.39 及以上）归档 |
 | `concord-<version>-darwin-arm64.tar.gz` | Apple Silicon macOS 归档 |
-| `concord-sdlc-<version>.tgz` | 只含库的 npm 包 `concord-sdlc`：四个[库导出](../local-sdlc/library.md)，不含 `bin`、原生绑定或 CLI 资源；运行 CLI 不需要它 |
-| `SHA256SUMS` | 两个归档、库包与 `install.sh` 的 SHA-256，每行 `<sha256>  <资产文件名>`，不含自身 |
+| `SHA256SUMS` | 两个归档与 `install.sh` 的 SHA-256，每行 `<sha256>  <资产文件名>`，不含自身 |
 | `install.sh` | [安装脚本](use-case/install-with-script.md) |
 
 归档解压后的根目录：

@@ -78,7 +78,7 @@ Markdown 支持行内与独立的数学公式、Mermaid 结构图与 [p5 图块]
 - [工作台界面](ui.md)：布局、导航、Markdown 呈现、自动保存、工作区状态与界面验收。
 - [CLI 与 Web 操作对应](cli.md)：启动输出、工作区投影与 PR 预览导出的命令。
 - [工作区 HTTP 接口](api.md)：其它程序读取工作区投影。
-- [文件格式](format.md)：PR 预览产物与 p5 图块；解码器见[库接口](library.md)。
+- [文件格式](format.md)：PR 预览产物与 p5 图块；产物校验见 [PR 静态预览导出](cli.md#pr-静态预览导出)。
 - [实现](architecture.md)
 
 ## 范围与验收
