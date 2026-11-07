@@ -15,7 +15,6 @@ import { pollUntil } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/feature/local-data-engine/architecture.md#进程与资源
-// @issue docs/issues/large-repo-compute-restart-loop.md
 test('a cold computation with CPU progress survives sixty seconds and completes without restarting', { skip: process.platform === 'win32' }, async () => {
   const root = fixture();
   const boundary = mkdtempSync(join(tmpdir(), 'concord-compute-busy-'));
