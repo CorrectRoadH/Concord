@@ -6,7 +6,7 @@ import { makeWorkspaceService } from '../../src/entry/server/service.ts';
 import { ports, stateLayer } from '../support/workspace-service-fixture.ts';
 
 // @feature docs/feature/local-data-engine/architecture.md#进程与资源
-test('scheduled maintenance drains an accepted operation instead of skipping its turn', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+test('scheduled reclamation waits for an idle turn without closing computation owners', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   let needed = false, maintained = 0, closed = 0;
   const release = yield* Deferred.make<void>();
   const entered = yield* Deferred.make<void>();
@@ -26,8 +26,8 @@ test('scheduled maintenance drains an accepted operation instead of skipping its
   assert.equal(maintained, 0);
   yield* Deferred.succeed(release, undefined);
   yield* Fiber.join(operation);
-  yield* TestClock.adjust(0);
-  assert.equal(maintained, 1, 'the pending maintenance runs as soon as accepted work drains');
-  assert.equal(closed, 1);
+  yield* TestClock.adjust('30 seconds');
+  assert.equal(maintained, 1, 'reclamation runs on the next idle turn');
+  assert.equal(closed, 0, 'automatic reclamation does not close computation owners');
   yield* service.stop;
 })).pipe(Effect.provide(stateLayer))));

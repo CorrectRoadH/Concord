@@ -1,5 +1,4 @@
-// Cross-process guarantee: a real workspace service owns the database while the
-// command-owned native runner completes through the public CLI.
+// 跨进程保证：原生模块与句柄——真实工作区服务持有数据库时，独立命令的公开 CLI 原生执行仍完成并保留结果。
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

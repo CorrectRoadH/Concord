@@ -1,4 +1,4 @@
-// 跨进程保证：真实计算进程在同步来源读取期间持续消耗CPU，超过60秒的逻辑时钟仍可完成请求并复用进程。
+// 跨进程保证：服务与 IPC——真实计算子进程在同步来源读取期间持续消耗 CPU，超过 60 秒逻辑时钟仍完成请求并复用进程。
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
