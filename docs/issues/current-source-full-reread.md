@@ -12,4 +12,4 @@ NiceEval（`e2e/` 下 1950 个文件）在服务已热时运行 `concord --json 
 
 ## 期望
 
-按[解析缓存](../feature/local-data-engine/architecture.md#解析缓存)：每个文件按元数据指纹判断是否变化，指纹不变就复用缓存的摘要与解析结果，只读取变化的文件。在 NiceEval 上，服务已热、没有文件变化时，`test list` 的耗时接近 CLI 启动加一次服务往返；交付时给出前后实测。以 `--reason` 关闭，写明提交与实测数字。
+先在 NiceEval 上 profile 服务已热、没有文件变化时的 `test list`，分出 CLI 启动、服务往返、读取与核对来源、标记扫描、输出各自的耗时（[快到每次都愿意跑](../taste.md#t-7)）。按占比最大的一段提出改法；如果要放宽“当前源字节每次读取”，必须同时说明它与[缓存与原生边界的约束](../feature/local-data-engine/architecture.md#缓存与原生边界的约束)第 5 条的关系，先交 t84 定 Spec。
