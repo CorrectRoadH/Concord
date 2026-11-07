@@ -2,7 +2,8 @@ import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createRequire } from 'node:module';
 import { sourceCli } from './source-consumer.ts';
 import { runCli } from './cli.ts';
-import { createConsumer } from './consumer.ts';
+import { createConsumer, retainConsumer } from './consumer.ts';
+import { stopCliWorkspace } from './cli-complex-fixture.ts';
 import { sourceRoot, prepareSourceConsumer } from './source-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -39,6 +40,7 @@ export const OwnerOutput = Schema.Struct({ document: Schema.Struct({ metadata: S
 export const StateOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ state: Schema.String }) }) });
 export const TemplatesOutput = Schema.Struct({ templates: Schema.Array(Schema.Struct({ name: Schema.String })) });
 export const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
+const consumers = new Set<string>();
 export let cli: string;
 before(async () => {
  cli = sourceCli();
@@ -49,6 +51,10 @@ before(async () => {
  assert.equal(version.stdout.trim(), `concord v${source.version}`);
 });
 after(() => Effect.runPromise(Effect.gen(function*() {
+ yield* Effect.tryPromise(async () => {
+  try { for (const root of consumers) await stopCliWorkspace(root); }
+  catch (cause) { retainConsumer(scratch); throw cause; }
+ });
  yield* settleRefreshes(join(scratch, 'async-query')).pipe(Effect.provide(NodeServices.layer));
  yield* Effect.sync(() => rmSync(scratch, { recursive: true, force: true }));
 })));
@@ -67,6 +73,7 @@ export function savePage(root: string, path: string, body: string, expectedDiges
 }
 export function consumer(name: string){
  const root=join(scratch,name);cpSync(createConsumer(),root,{recursive:true});
+ consumers.add(root);
  writeProjectConfig(root,{testRoots:['test','tests']});
  openHawdb(join(root,'.git/concord/cache.hawdb'),{readOnly:false,create:true}, nativeRuntime).close();
  return root;
