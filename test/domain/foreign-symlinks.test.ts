@@ -8,7 +8,6 @@ import { createConsumer } from '../support/consumer.ts';
 import { LocalRepository } from '../support/repository.ts';
 
 // @feature docs/feature/local-sdlc/architecture.md#路径安全
-// @issue docs/issues/foreign-symlink-blocks-repo.md
 test('check ignores foreign skill and CLAUDE symlinks while rejecting owner and Concord skill symlinks', () => Effect.runSync(Effect.sync(() => {
   const root = createConsumer();
   const repo = new LocalRepository(root, { dryRun: true, persistentCache: 'off' });
