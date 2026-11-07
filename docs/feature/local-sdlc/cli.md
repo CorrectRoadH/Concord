@@ -377,7 +377,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 | `select-plan` | 去重 nativeIds 与当前清单身份 | 非空 Invocation 列表及各自负责的 requested 子集 |
 | `report-parse` | 同一计划、requested、状态与报告 | `observed`、`capabilities`、`completeness` |
 
-- Invocation 含 `invocationId`、不经 shell 的非空 `argv`、仓库相对 `cwd`、取自配置白名单的 `envNames` 与 Concord 分配目录内的相对 `reports`；响应不能携带秘密值。Concord 回传每个调用的退出码、信号、超时、取消、截断与清理状态，parser 的成功响应不能覆盖它们。
+- Invocation 含 `invocationId`、不经 shell 的非空 `argv`、仓库相对 `cwd`、取自配置白名单的 `envNames` 与 Concord 分配目录内的相对 `reports`；响应不能携带秘密值。Concord 回传每个调用的退出码、信号、超时、取消、截断与清理状态，parser 的成功响应不能覆盖它们。收集或运行因某个 Invocation 失败而结束时（例如 `CollectFailed`），错误的 `details.invocations` 列出每个 Invocation 的这些状态，以及 stdout 与 stderr 各自末尾最多 64 KiB，使用者不必重跑就能看到失败原因。
 - `capabilities` 分别声明真实收集、leaf 或参数组、精确选择、逐项报告、范围、标签与 skip 可见性，每项观察带 provenance。静态 AST 候选不能声明真实收集；范围缺失时不用单行位置伪造结束行。
 - 原生项含 `nativeId`、`project`、`file`、`kind`（leaf 或 suite）、`group`、`range`、`selection` 与 `tags`。`nativeId` 含 provider 命名空间；range 为以 1 起计、两端包含的行号加源码摘要。同一 group 共享声明范围与 project。`complete` 为 false 时 `gaps` 非空；为 true 只表示 provider 声明的收集范围完整。
 - 硬上限：响应 8 MiB，每调用 stdout 与 stderr 合计 16 MiB，原生项 100000，Invocation 128，报告文件 64 个、单个 8 MiB、合计 32 MiB。
