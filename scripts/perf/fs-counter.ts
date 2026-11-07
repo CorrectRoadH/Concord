@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { mock } from 'bun:test';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as Effect from 'effect/Effect';
@@ -42,7 +42,9 @@ Effect.runSync(Effect.sync(() => {
   };
   wrap(fs as unknown as Record<string, unknown>, '');
   wrap(fs.promises as unknown as Record<string, unknown>, 'promises.');
-  syncBuiltinESMExports();
+  // Bun keeps named builtin bindings separate from the mutable default object.
+  mock.module('node:fs', () => ({ ...fs, default: fs }));
+  mock.module('node:fs/promises', () => ({ ...fs.promises, default: fs.promises }));
   const started = performance.now();
   process.once('exit', code => Effect.runSync(Effect.sync(() => {
     const usage = process.resourceUsage();
