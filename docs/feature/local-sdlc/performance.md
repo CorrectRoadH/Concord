@@ -25,6 +25,7 @@
 | `local-sdlc/code-list` | 代码声明列表 | 2460ms |
 | `local-sdlc/test-list` | 测试声明列表 | 1910ms |
 | `local-sdlc/template-list` | 随包模板列表 | 430ms |
+| `local-sdlc/schema` | 输出一个机器可读 Schema，不需要项目目录 | 430ms |
 
 帮助预算按静态输出的实测确定（禁用编译缓存时 p50 约 47 ms）；代码、测试、模板与作者正文四行的参照消费者为本仓库 `d267e06` 的独立 clone。
 
