@@ -40,7 +40,7 @@
 | 有 `herdr-app` 命令 | 安装后运行 `herdr-app check` 检查 mod，检查失败时返回 `HerdrModCheckFailed` 并附上 Herdr 的输出，已写入的 mod 保留以便排查 |
 | `concord herdr uninstall` 时没有装过 | 成功，输出 `Concord mod is not installed` |
 
-mod 打开后遇到的情形见[从 Herdr 安装 Concord mod](install-from-herdr.md)与[在空仓库里初始化 Concord](init-from-herdr.md)。当前 pane 位于远程机器时，mod 只显示“Concord mod 只能用于本机的 pane”，因为它在 Herdr 所在的机器上运行 `concord`。
+mod 打开后遇到的情形见[从 Herdr 安装 Concord mod](install-from-herdr.md)与[在空仓库里初始化 Concord](init-from-herdr.md)。终端位于远程机器时，mod 使用那台机器上的 Concord，见[在远程机器的终端旁使用](use-on-remote-machine.md)；`concord herdr install` 只需在 Herdr 所在的机器上运行。
 
 ## Spec 来源
 

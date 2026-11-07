@@ -42,6 +42,7 @@ Herdr 用户在 herdr.dev/mods 看到 Concord，想在自己的 Herdr 里用它�
 | 本机的 Concord 低于 mod 要求的版本 | 显示当前版本、要求的版本与升级命令，不显示文档 |
 | 本机的 Concord 高于 mod 的版本 | 照常工作，并提示用 `concord herdr install` 换成同版本的 mod |
 | 用户已经装了 Concord | 也可以直接运行 `concord herdr install`，结果相同 |
+| 终端位于远程机器 | 检测的是那台机器上的 Concord，安装说明写明机器名，见[在远程机器的终端旁使用](use-on-remote-machine.md) |
 
 mod 要求的最低版本写在它的 `mod.json` 中，来自构建时的 Concord 版本。源码版本 `dev` 不参与发行版排序；使用者通过 Concord 的 `releases/latest` 入口安装 CLI。独立分发目录见[交付 mod](../../../engineering/build/use-case/share-herdr-mod.md)。
 
