@@ -8,7 +8,7 @@ relations:
 
 ## 现象
 
-NiceEval 中运行外部 adapter 的窄 `concord --json test discover`：adapter 的 Invocation 与 `collect-parse` 都以 0 退出，278.956 秒时 CLI 在把派生批次交给工作区服务（`RpcClient` 的 cache-derived 请求）时遇到 socket `EPIPE`，命令失败，stdout 是 Effect 的错误日志而不是 JSON（`accept-discover-package-traced.stdout` 与 strace 尾部，niceeval-accept 证据）。当时服务已不存在。
+NiceEval 中运行外部 adapter 的窄 `concord --json test discover`：adapter 的 Invocation 与 `collect-parse` 都以 0 退出，278.956 秒时，CLI 把派生批次交给工作区服务（`RpcClient` 的 cache-derived 请求），遇到 socket `EPIPE`。命令因此失败，stdout 是 Effect 的错误日志而不是 JSON（证据见 niceeval-accept 的 `accept-discover-package-traced.stdout` 与 strace 尾部）。当时服务已不存在。
 
 ## 期望
 
