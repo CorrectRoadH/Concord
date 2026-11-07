@@ -6,11 +6,13 @@ Concord mod 是可独立分发、也随归档提供的一组 JavaScript 文件�
 
 ## 数据
 
-- 仓库地址：mod 跟随所在 tab 里最近聚焦的终端 pane，取它的实时 `cwd`（`panes()`）与它所在 space 的 `machine`，两者合起来是仓库地址。`cwd` 变化后重新解析仓库根；根没变（只是进了子目录）不重新加载。每个 tab 的 mod 只管自己的 tab。mod 不提供目录选择器，因为 `pickFolder` 只能选本机目录，跟随终端已覆盖换仓库的需要。
+- 目标 tab：布局侧栏在每次渲染时从 `focused()` 读取当前 tab；没有当前 tab 时显示没有终端。带 `props.pane` 的独立 pane 从 `panes()` 查所属 tab，只跟随这个 tab。切换目标 tab 时停止旧的变化等待，重新解析机器与仓库根；前一目标的异步解析结果不能覆盖当前目标。
+- 仓库地址：mod 按 tab 记住最近聚焦的终端 pane，取它的实时 `cwd`（`panes()`）与所在 space 的 `machine`。机器与根目录共同确定仓库；只是进入同一仓库的子目录时保留当前内容。切换 tab 后即使仓库相同也立即刷新，保留选中的文档与草稿；换仓库时重新检测 CLI，清除前一仓库的错误。
+- 编辑中换仓库：保留原仓库的草稿，提示保存或放弃后切换。保存仍写入原仓库；等待期间再次切换 tab 时，以最新目标为准。mod 不提供目录选择器，因为 `pickFolder` 只能选本机目录，跟随终端已覆盖换仓库的需要。
 - 通路：mod 与 Concord 之间没有常驻连接。每个操作是一次 `exec('concord', ['--json', ...], { cwd, on })`，`on` 是仓库地址的机器（本机为 null）；命令在那台机器上找到仓库根，经本机 socket 使用该仓库的[工作区服务](../local-data-engine/architecture.md#cli-查询)。CLI 检测同样带 `on`。本机与远程是同一条通路，mod 不使用 `readTextFile`、`writeTextFile`、`watchFolder` 或 `pickFolder`：后三个只作用于本机，正文与它的摘要又要来自同一次读取。
 - 读取：调用[mod 调用的命令](cli.md#mod-调用的命令)；正文用 `action` 的 `file.get` 读取，同时得到它的 `digest`。mod 不缓存结论，每次刷新重新取。
 - 写入：保存时运行 `concord --json action --input-text <JSON>`，执行 `document.set`，`expectedDigest` 取打开这页时 `file.get` 返回的 `digest`，所以文档包的附页与固定入口也能保存。返回 `FileChangedSinceRead` 时按保存冲突处理、保留草稿，不覆盖。写入后运行 `concord --json check` 显示结果。
-- 刷新：前台 tab 的 mod 循环运行 `concord --json workspace wait --after <sourceDigest>`，命令返回新结果时重新取数据；当前打开的文档、滚动位置与草稿保持不变。不在前台的 tab 不等待，回到前台时立即刷新一次。服务不可用（例如 `HawdbUnavailable`）时改为每 2 秒重新取一次。
+- 刷新：布局侧栏或所属 tab 在前台的独立 pane 循环运行 `concord --json workspace wait --after <sourceDigest>`，命令返回新结果时重新取数据；当前打开的文档、滚动位置与草稿保持不变。独立 pane 所属 tab 不在前台时不等待，回到前台时立即刷新一次。服务不可用（例如 `HawdbUnavailable`）时改为每 2 秒重新取一次。
 - 连接：`exec` 因机器不可达而失败时显示“连不上 <机器>”，每 2 秒重试，恢复后自动继续。
 
 ## 界面

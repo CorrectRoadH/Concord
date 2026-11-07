@@ -73,6 +73,7 @@ class Boundary {
   imagePaths: string[] = [];
   beforeUnlink: (() => Promise<void>) | undefined;
   renderGate: ReturnType<typeof pending<void>> | undefined;
+  beforeRoot: ((cwd: string) => Promise<void>) | undefined;
   installedVersion: string | undefined = 'dev';
   props: Record<string, unknown> = {};
   files = new Map([[`/repo/${page}`, '# Cart\n'], ['/repo/docs/taste.md', '# Taste\n']]);
@@ -117,6 +118,17 @@ class Boundary {
     }
   }
   draw() { if (this.view) this.output = this.view.render(this.context()) as Element; }
+  selectTab(tab: string, cwd: string, machine: string | null = null) {
+    this.focusedTab = tab;
+    for (const pane of this.paneList) pane.focused = false;
+    if (!this.paneList.some(pane => pane.tab === tab)) this.paneList.push({ pane: `pane-${tab}`, terminal: `terminal-${tab}`, tab, cwd, focused: true });
+    if (!this.spaceList.some(space => space.tabs.some(item => item.id === tab))) this.spaceList.push({ id: `space-${tab}`, folder: '/unused', active: true, machine, tabs: [{ id: tab, active: true }] });
+    for (const space of this.spaceList) {
+      space.active = space.tabs.some(item => item.id === tab);
+      for (const item of space.tabs) item.active = item.id === tab;
+    }
+    this.draw();
+  }
   click(key: string) { const element = this.output.find(key); assert.ok(element?.click, key); element.click(undefined, this.context()); }
   state(value = '') { const state = new State(value); this.states.push(state); return state; }
   async exec(command: string, args: string[], options?: { cwd?: string; on?: string | null }) {
@@ -124,6 +136,7 @@ class Boundary {
     if (options?.on && !this.reachable) throw new Error('transport unavailable: private diagnostic');
     if (command === 'git' || command === 'sh') {
       const root = this.roots.get(options?.cwd ?? '');
+      await this.beforeRoot?.(options?.cwd ?? '');
       return { code: root ? 0 : 128, stdout: root ? command === 'sh' ? `/home/remote\n${root}\n` : `${root}\n` : '', stderr: root ? '' : 'fatal: not a git repository' };
     }
     assert.equal(command, 'concord');
@@ -301,7 +314,10 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('workspace timeouts keep waiting, accepted changes refresh, and background tabs stop waiting', async () => {
-      const b = await start();
+      const b = await start(boundary => {
+        boundary.props = { pane: 'mod-pane' };
+        boundary.paneList.push({ pane: 'mod-pane', terminal: null, mod: 'concord', cwd: null, focused: false, tab: 't1' });
+      });
       try {
         const listed = () => b.calls.filter(call => call[0] === 'list').length;
         const before = listed();
@@ -318,6 +334,68 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         const background = listed(); b.focusedTab = 't1'; b.draw();
         await b.until(() => listed() > background && b.watches.length === 4);
       } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    // @issue docs/issues/herdr-sidebar-tab.md
+    await t.test('layout sidebar follows selected tabs and machines after an earlier CLI error', async () => {
+      for (const machine of [null, 'vps']) {
+        host = new Boundary();
+        host.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'ConfigurationInvalid', message: 'Previous repository error' }) };
+        const view = new Mod(); host.view = view; view.init(undefined, host.context()); host.draw();
+        try {
+          await host.until(() => host.output.text().includes('Previous repository error'));
+          host.commandError = undefined;
+          const cwd = machine === null ? '/other' : '/repo';
+          host.selectTab('t2', cwd, machine);
+          await host.until(() => host.watches.some(watch => watch.root === cwd));
+          assert.match(host.output.text(), machine === null ? /\/other/u : /vps:\/repo/u);
+          assert.doesNotMatch(host.output.text(), /Previous repository error/u);
+          assert.deepEqual(host.requests.filter(request => request.args[0] === '--version').at(-1)?.options, { cwd, on: machine });
+          assert.equal(host.output.find(machine === null ? 'initialize' : `page-${page}`) !== undefined, true);
+        } finally { await host.close(); }
+      }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    // @issue docs/issues/herdr-sidebar-tab.md
+    await t.test('layout sidebar refreshes the same repository on tab changes and remembers each terminal', async () => {
+      const b = await start();
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.files.set(`/repo/${page}`, '# Changed while switching tabs\n');
+        b.selectTab('t2', '/repo');
+        await b.until(() => b.output.text().includes('# Changed while switching tabs'));
+        const oldWatch = b.watches[0]!;
+        b.paneList.push({ pane: 'other-terminal', terminal: 'other-terminal', tab: 't2', focused: true, cwd: '/other' });
+        b.paneList.find(pane => pane.pane === 'pane-t2')!.focused = false; b.draw();
+        await b.until(() => b.output.find('initialize') !== undefined);
+        b.selectTab('t1', '/repo');
+        await b.until(() => b.output.find(`page-${page}`) !== undefined);
+        b.selectTab('t2', '/repo');
+        await b.until(() => b.output.find('initialize') !== undefined);
+        assert.match(b.output.text(), /\/other/u);
+        const calls = b.calls.length;
+        oldWatch.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'late' }), stderr: '' });
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(b.calls.length, calls, 'a previous repository watch cannot refresh the selected repository');
+        assert.match(b.output.text(), /\/other/u);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    // @issue docs/issues/herdr-sidebar-tab.md
+    await t.test('layout sidebar ignores delayed root resolution from an earlier tab', async () => {
+      const b = await start();
+      const entered = pending<void>(), release = pending<void>();
+      try {
+        b.beforeRoot = async cwd => { if (cwd === '/other') { entered.resolve(); await release.promise; } };
+        b.selectTab('t2', '/other');
+        await b.until(() => b.requests.some(request => request.command === 'git' && request.options?.cwd === '/other'));
+        await entered.promise;
+        b.selectTab('t3', '/repo', 'vps');
+        await b.until(() => b.output.text().includes('vps:/repo') && b.output.find(`page-${page}`) !== undefined);
+        release.resolve(); await new Promise<void>(resolve => setImmediate(resolve));
+        assert.match(b.output.text(), /vps:\/repo/u);
+        assert.equal(b.output.find('initialize'), undefined);
+      } finally { release.resolve(); await b.close(); }
     });
     await t.test('unavailable service falls back every two seconds and closes retained resources', async () => {
       const b = await start();
@@ -405,7 +483,8 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
     await t.test('live cwd follows the most recent terminal in its own tab, retaining same-root state', async () => {
-      const b = await start();
+      const b = await start(boundary => { boundary.props = { pane: 'mod-pane' }; });
+      b.paneList.push({ pane: 'mod-pane', terminal: null, mod: 'concord', cwd: null, focused: false, tab: 't1' });
       try {
         b.click(`page-${page}`);
         await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
@@ -420,14 +499,37 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         await b.until(() => b.output.find('initialize') !== undefined);
         assert.match(b.output.text(), /\/other/u);
         assert.ok(b.watches[0]!.root === '/repo' && b.watches.at(-1)!.root === '/other');
-        b.paneList[1]!.focused = false;
+        b.paneList.find(pane => pane.pane === 'p2')!.focused = false;
         b.paneList.push({ pane: 'p3', terminal: 't3', tab: 't2', focused: true, cwd: '/repo' });
         b.focusedTab = 't2'; b.draw();
         assert.match(b.output.text(), /\/other/u, 'another tab cannot redirect this mod');
-        b.paneList[1]!.cwd = '/repo'; b.draw();
+        b.paneList.find(pane => pane.pane === 'p2')!.cwd = '/repo'; b.draw();
         await b.until(() => b.output.find(`page-${page}`) !== undefined);
         assert.match(b.output.text(), /\/repo/u, 'mod focus preserves the most recently focused terminal');
       } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    // @issue docs/issues/herdr-sidebar-tab.md
+    await t.test('layout sidebar retains drafts through tab switches and uses the latest destination', async () => {
+      for (const action of ['save', 'discard']) {
+        const b = await start();
+        try {
+          b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+          b.click('edit'); const editor = b.output.find('document-editor')!.state!;
+          editor.set_value('# Draft in original repository\n');
+          b.selectTab('t2', '/other');
+          await b.until(() => b.output.text().includes('终端已切到 /other，保存或放弃修改后切换'));
+          b.selectTab('t3', '/other', 'vps');
+          await b.until(() => b.output.text().includes('终端已切到 vps:/other，保存或放弃修改后切换'));
+          assert.equal(b.output.find('document-editor')!.state, editor);
+          b.click(action);
+          await b.until(() => b.output.find('initialize') !== undefined);
+          assert.match(b.output.text(), /vps:\/other/u);
+          assert.equal(b.files.get(`/repo/${page}`), action === 'save' ? '# Draft in original repository\n' : '# Cart\n');
+          const writes = b.requests.filter(request => request.args.some(arg => arg.includes('document.set')));
+          assert.deepEqual(writes.map(request => request.options), action === 'save' ? [{ cwd: '/repo', on: null }] : []);
+        } finally { await b.close(); }
+      }
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
     await t.test('saving or discarding a draft releases a pending repository switch', async () => {
