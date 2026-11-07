@@ -3,6 +3,7 @@ import type * as CacheTypes from '../../base/cache/index.ts';
 import type * as ProcessTypes from '../../base/process/index.ts';
 import type * as RpcGroupTypes from 'effect/unstable/rpc/RpcGroup';
 import type * as RpcClientErrorTypes from 'effect/unstable/rpc/RpcClientError';
+import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
 import type * as ModelTypes from '../../model/index.ts';
 import type * as AppTypes from '../../app/index.ts';
 import { Installation } from '../../base/installation/index.ts';
@@ -280,7 +281,7 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
       if (reply.derived.length > 0 && !(operation.kind === 'query' && operation.cache === 'off')) yield* acceptDerived(reply.derived);
       return reply.value;
     }).pipe(Effect.raceFirst(watchComputation(readCpu(worker.progress.groupId), () => worker.progress.responses)));
-  }).pipe(Effect.onError(cause => {
+  }).pipe(Effect.mapError(cause => cause instanceof RpcClientError ? new ConcordError('WorkspaceComputeExited', 'Computation transport failed', { message: String(cause) }) : cause), Effect.onError(cause => {
     // A completed domain error leaves the RPC peer usable. Transport failures,
     // malformed replies, resource limits and cancellation retire its owner.
     const reusable = cause.reasons.length > 0 && cause.reasons.every(reason =>
