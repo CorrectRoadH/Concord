@@ -30,6 +30,7 @@ const namedFailure = (cause: unknown) => {
 /** Production scheduling uses the same Clock-driven state machine as tests. */
 export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(ports: RuntimePorts) {
   const state = yield* WorkspaceState;
+  const serviceScope = yield* Effect.scope;
   const stopped = yield* Deferred.make<void>();
   const invalidations = yield* Queue.sliding<void>(1);
   const maintenance = yield* Semaphore.make(1);
@@ -71,7 +72,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* ports.persist(context, undefined, undefined, attempt);
     yield* ports.restore(context).pipe(Effect.flatMap(state.accept), Effect.ignore);
     yield* state.attempt(attempt);
-    yield* Effect.forkScoped(Effect.sleep('1 second').pipe(Effect.andThen(request)));
+    yield* Effect.forkIn(Effect.sleep('1 second').pipe(Effect.andThen(request)), serviceScope);
   });
   const refresh = Effect.gen(function*() {
     const status = yield* SubscriptionRef.get(state.value);
@@ -97,11 +98,11 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   }).pipe(Effect.catch(cause => Effect.gen(function*() {
     const error = namedFailure(cause);
     if (stopping) return;
-    if (error.code === 'RepositoryBusy') { yield* Effect.forkScoped(Effect.sleep('100 millis').pipe(Effect.andThen(request))); return; }
+    if (error.code === 'RepositoryBusy') { yield* Effect.forkIn(Effect.sleep('100 millis').pipe(Effect.andThen(request)), serviceScope); return; }
     if (error.code === 'SourceChanged') {
       const context = yield* Effect.result(ports.context);
       if (context._tag === 'Success') yield* discard(context.success, ['.']);
-      else yield* Effect.forkScoped(Effect.sleep('1 second').pipe(Effect.andThen(request)));
+      else yield* Effect.forkIn(Effect.sleep('1 second').pipe(Effect.andThen(request)), serviceScope);
       return;
     }
     const context = yield* Effect.result(ports.context);
