@@ -220,6 +220,8 @@ clear、维护与 shutdown 串行执行。
 
 协议由固定版本 Effect 的 `effect/rpc` 实现：每种请求是一个 Rpc，经 `effect/socket` 在本机 socket 上传输。下文的帧、字节帧与额度是对 Rpc 消息的约束，字节帧对应 `Uint8Array` 字段。
 
+客户端写入 socket 失败时返回 `WorkspaceServerUnavailable`，消息保留底层原因（例如 `EPIPE`），不把传输故障作为运行时 defect 逃逸。
+
 - 客户端协议以 `RpcSerialization.layerSchemaBinary` 序列化；计算进程与后台计算进程的内部 RPC 例外，见[进程能力](../../engineering/code/architecture.md#进程能力)。
 - 字节字段以原生二进制传输，不接受 Base64，由真实往返与边界大小测试验收。
 - 领域 Schema 严格解码，显式拒绝未知字段。

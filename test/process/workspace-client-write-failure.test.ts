@@ -7,6 +7,7 @@ import { Effect } from 'effect';
 import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
+// @issue docs/issues/bun-socket-diagnostic.md
 test('a socket write defect becomes a named transport failure during derivation submission', { timeout: 30_000 }, async t => {
   const root = fixture();
   try {
