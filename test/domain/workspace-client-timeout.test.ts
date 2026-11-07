@@ -44,7 +44,7 @@ test('a query transport open timeout stays WorkspaceServerUnavailable after the 
   const { client } = yield* RpcClient.makeNoSerialization(WorkspaceRpcs, { onFromClient: () => Effect.fail(transport) });
   const result = yield* requestWorkspace({
     client, hello: { protocol: PROTOCOL, installation: 'installation', token: 'token', state: 'running', sourceDigest: null },
-    identity: () => ({ token: 'token', installation: 'installation', requestId: 'request', deadline: Number.MAX_SAFE_INTEGER }),
+    identity: () => ({ token: 'token', installation: 'installation', requestId: crypto.randomUUID(), deadline: Number.MAX_SAFE_INTEGER }),
   }, 'query', { name: 'test-list', input: {}, cwd: '/fixture', environment: {}, cache: 'use' }).pipe(Effect.result);
   assert.equal(result._tag, 'Failure');
   if (result._tag === 'Failure') {
