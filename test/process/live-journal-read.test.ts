@@ -1,4 +1,4 @@
-// 跨进程保证：真实发布者持租约并写完 journal 后，读取等待发布结束而不是要求恢复。
+// 跨进程保证：OS 锁与互斥——真实发布者持租约并写完 journal 后，读取等待发布结束而不是要求恢复。
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';

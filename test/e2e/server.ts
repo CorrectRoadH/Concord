@@ -64,7 +64,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       const signal = options.signal ? AbortSignal.any([options.signal, startup.signal]) : startup.signal;
       const lease = await Effect.runPromise(Effect.gen(function*() {
         const record = yield* waitForServerHandshake(Effect.try(() => readServerRecord(genericPrivateDirectorySync(options.root))).pipe(
-          Effect.map(value => value?.state === 'running' ? value : undefined),
+          Effect.map(value => value && ['running', 'degraded', 'blocked'].includes(value.state) ? value : undefined),
         ));
         if (record.pid !== processHandle.pid) throw new Error('Direct browser fixture did not acquire its own workspace service');
         const connection = yield* connectWorkspaceSocket(record.socket.path, record.installation, record.token);

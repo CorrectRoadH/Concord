@@ -1,4 +1,4 @@
-// 跨进程保证：只读快照验证时遇到正在发布的 journal，丢弃旧观察并在发布结束后重读；不重放写入。
+// 跨进程保证：OS 锁与互斥——只读快照验证时遇到正在发布的 journal，丢弃旧观察并在发布结束后重读；不重放写入。
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
