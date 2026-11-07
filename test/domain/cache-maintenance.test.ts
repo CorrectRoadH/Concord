@@ -1,7 +1,7 @@
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { PersistentCache, cachePhysicalBytes, openHawdb, createMemoryHawdb, HawdbFailure } from '../../src/base/cache/index.ts';
-import { CACHE_PHYSICAL_LIMIT_BYTES } from '../../src/base/installation/index.ts';
-import { maintainCache } from '../../src/app/index.ts';
+import { CACHE_MAINTENANCE_THRESHOLD_BYTES } from '../../src/base/installation/index.ts';
+import { maintainCache, cacheMaintenanceNeeded } from '../../src/app/index.ts';
 import { cacheStatus } from '../../src/domain/tests/index.ts';
 import { initialize } from '../support/operations.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
@@ -32,7 +32,7 @@ const read = (path: string) => {
 };
 
 // @feature docs/feature/local-data-engine/cli.md#缓存状态
-test('physical status counts internal hard links once and reports the unchanged logical-budget hard limit', () => Effect.runPromise(Effect.sync(() => {
+test('physical status counts internal hard links once and reports the reclamation threshold without a physical limit', () => Effect.runPromise(Effect.sync(() => {
   const fixtureRoot = realpathSync(mkdtempSync(join(tmpdir(), 'concord-physical-')));
   const path = join(fixtureRoot, 'cache.hawdb');
   try {
@@ -48,7 +48,8 @@ test('physical status counts internal hard links once and reports the unchanged 
     const repo = new LocalRepository(f.root, { access: 'read' });
     try {
       const report = cacheStatus(repo, nativeRuntime);
-      assert.equal(report.physicalLimitBytes, 224 * 1024 * 1024);
+      assert.equal(Reflect.get(report, 'reclaimThresholdBytes'), 1024 * 1024 * 1024);
+      assert.equal('physicalLimitBytes' in report, false);
       assert.equal(report.physicalBytes, cachePhysicalBytes(f.privateDir));
     } finally { repo.close(); }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
@@ -83,7 +84,7 @@ test('native sweep budget and I/O failures defer even an oversized cache and rel
   const reclaim = boundary.reclaim;
   db.close();
   try {
-    pad(f.padding, CACHE_PHYSICAL_LIMIT_BYTES + 1);
+    pad(f.padding, CACHE_MAINTENANCE_THRESHOLD_BYTES + 1);
     // Inject only the external engine failure. The real worker opens and closes
     // the real database and must not turn either failure into discard authority.
     for (const code of ['HawdbLimit', 'HawdbUnavailable'] as const) {
@@ -93,4 +94,24 @@ test('native sweep budget and I/O failures defer even an oversized cache and rel
       assert.equal(read(f.path)[0]?.payload, 'a current logical value');
     }
   } finally { boundary.reclaim = reclaim; rmSync(f.root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+// @issue docs/issues/maintenance-restarts-computation.md
+test('reclamation preserves an arbitrarily large cache and waits for 256 MiB of further growth', async () => {
+  const f = fixture();
+  try {
+    pad(f.padding, 1024 * 1024 * 1024 + 1);
+    assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), true);
+    assert.equal(await runApplication(maintainCache(f.root).pipe(Effect.provide(PersistentCache.layer))), 'reclaimed');
+    assert.equal(existsSync(f.padding), true);
+    assert.equal(read(f.path)[0]?.payload, 'a current logical value');
+    assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), false);
+    const after = cachePhysicalBytes(f.privateDir);
+    pad(f.padding, 1024 * 1024 * 1024 + 1 + 256 * 1024 * 1024);
+    assert.ok(cachePhysicalBytes(f.privateDir) >= after + 256 * 1024 * 1024);
+    assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), false, 'exactly 256 MiB is not more than the growth threshold');
+    truncateSync(f.padding, 1024 * 1024 * 1024 + 2 + 256 * 1024 * 1024);
+    assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), true);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
