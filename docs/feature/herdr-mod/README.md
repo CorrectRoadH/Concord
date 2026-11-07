@@ -40,7 +40,7 @@ Herdr loads it on save; open it with the "Concord" command.
 
 CLI、Web 工作台与 mod 用同一个项目的工作区服务：mod 调用 `concord --json`，命令自动启动或复用这个服务，Web 工作台也由它提供，所以三边看到同一份缓存与检查结果。
 
-mod 不保存任何事实，也不和 Concord 保持连接。它认的是终端的仓库地址：机器加目录，本机写作 `~/code/shop`，远程写作 `vps:~/code/shop`。每个操作都通过 Herdr 在那台机器、那个目录里运行一次 `concord --json`：取文档列表、关系和检查结果，保存一页文档，等待下一次变化。命令自己找到仓库根，自动启动或复用这个仓库的工作区服务，与其它 CLI 调用共享缓存；生命周期由[工作区服务](../local-data-engine/architecture.md#cli-查询)拥有。正文由 Herdr 按同一地址直接读取。
+mod 不保存任何事实，也不和 Concord 保持连接。它认的是终端的仓库地址：机器加目录，本机写作 `~/code/shop`，远程写作 `vps:~/code/shop`。每个操作都通过 Herdr 在那台机器、那个目录里运行一次 `concord --json`：取文档列表、关系和检查结果，保存一页文档，等待下一次变化。命令自己找到仓库根，自动启动或复用这个仓库的工作区服务，与其它 CLI 调用共享缓存；生命周期由[工作区服务](../local-data-engine/architecture.md#cli-查询)拥有。正文也经同一条命令读取，同时得到保存时比对用的摘要。
 
 所以本机与远程走同一条路，区别只在 Herdr 把命令送到哪台机器；远程不需要开放端口，连接与认证就是 Herdr 连那台机器用的 ssh。见[在远程机器的终端旁使用](use-case/use-on-remote-machine.md)。
 

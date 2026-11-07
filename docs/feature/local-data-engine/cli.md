@@ -29,7 +29,7 @@
 concord --json workspace wait --after <sourceDigest> [--timeout <秒>]
 ```
 
-命令自动启动或复用工作区服务，在服务接受一份 `sourceDigest` 与 `--after` 不同的结果时返回；省略 `--after` 或当前结果已经不同时立即返回。超时（默认 25 秒，上限 120 秒）返回 `changed: false`。它给不能保持 socket 订阅的调用方（例如经 Herdr 在远程机器上运行的 Concord mod）一个长等待，语义与[订阅](architecture.md#刷新与推送)相同：只是信号，调用方收到后再读结果。
+命令自动启动或复用工作区服务，在服务接受一份 `sourceDigest` 与 `--after` 不同的结果时返回；省略 `--after` 或当前结果已经不同时立即返回。服务还没有接受过结果时，先等首份结果。超时（默认 25 秒，上限 120 秒）返回 `changed: false`，`sourceDigest` 为当前结果的摘要，还没有结果时为 `null`。它给不能保持 socket 订阅的调用方（例如经 Herdr 在远程机器上运行的 Concord mod）一个长等待，语义与[订阅](architecture.md#刷新与推送)相同：只是信号，调用方收到后再读结果。
 
 ```json
 {"operation":"workspace-wait","changed":true,"sourceDigest":"sha256:..."}

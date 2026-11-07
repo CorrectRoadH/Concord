@@ -19,7 +19,7 @@
 | 检查与恢复 | `check`、`doctor`、`cache`、`recover` | 检查与设置 |
 | 审阅 | `review` | 审阅 |
 
-`action` 从 `--input <file|->` 或 `--input-text <JSON>` 读取请求。`--input-text` 给不能提供 stdin 的调用方（例如 Herdr 的 `exec`）使用：可以重复，按出现顺序拼接成一份 JSON，因为单个命令行参数有系统上限（Linux 为 128 KiB）；与 `--input` 同时出现时返回 `InvalidInput`。结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新执行同一领域校验；保存冲突需要重新读取并合并，不提供强制覆盖选项。`document.set` 拒绝的内容见[自动保存](ui.md#自动保存)。
+`action` 从 `--input <file|->` 或 `--input-text <JSON>` 读取请求。`--input-text` 给不能提供 stdin 的调用方（例如 Herdr 的 `exec`）使用：可以重复，按出现顺序拼接成一份 JSON，因为单个命令行参数有系统上限（Linux 为 128 KiB）；与 `--input` 同时出现时返回 `InvalidInput`。只读的 `file.get {path}` 返回与 `GET /api/file` 相同的 `{path, body, digest}`，供不能连 HTTP 的调用方取得正文与编辑前像。结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新执行同一领域校验；保存冲突需要重新读取并合并，不提供强制覆盖选项。`document.set` 拒绝的内容见[自动保存](ui.md#自动保存)。
 
 ## 工作区投影
 
