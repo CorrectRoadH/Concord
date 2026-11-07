@@ -1,6 +1,6 @@
 import { defineBenchmarks } from '../scripts/perf/scenario.ts';
 const commands: Readonly<Record<string, readonly string[]>> = {
-  help: ['--help'], skill: ['--skill'],
+  help: ['--help'], skill: ['--skill'], schema: ['schema', 'test-adapter'],
   'memory-list': ['list', 'memory'], 'memory-search': ['memory', 'search', 'HawDB'],
   'issue-list': ['list', 'issue'], 'issue-search': ['issue', 'search', 'HawDB'],
   'feature-list': ['list', 'feature'], 'use-case-list': ['list', 'use-case'], 'design-list': ['list', 'design'], 'roadmap-list': ['list', 'roadmap'], 'engineering-list': ['list', 'engineering'],

@@ -8,7 +8,7 @@ test('installed CLI exposes exactly the current command inventory and rejects re
   const result = await runCli({ argv: ['--help'], cwd: root, env: process.env });
   assert.equal(result.exitCode, 0, result.stderr);
   const commands = result.stdout.split('SUBCOMMANDS')[1]!.trim().split('\n').map(line => line.trim().split(/\s+/u)[0]).filter(Boolean);
-  assert.deepEqual(commands.sort(), ['init','skills','new','show','list','check','trace','test','code','use-case','issue','memory','roadmap','taste','concepts','writing','docs','feedback','view','server','herdr','config','template','cache','recover','doctor','lsp','review','action','workspace','git'].sort());
+  assert.deepEqual(commands.sort(), ['schema','init','skills','new','show','list','check','trace','test','code','use-case','issue','memory','roadmap','taste','concepts','writing','docs','feedback','view','server','herdr','config','template','cache','recover','doctor','lsp','review','action','workspace','git'].sort());
   for (const group of ['memory', 'issue', 'use-case', 'roadmap']) {
     const help = await runCli({ argv: [group, '--help'], cwd: root, env: process.env });
     assert.equal(help.exitCode, 0, help.stderr);
