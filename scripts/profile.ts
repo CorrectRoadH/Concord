@@ -35,7 +35,7 @@ export const copyProfilePackage = Effect.fn('perf.copyProfilePackage')(function*
   });
 });
 
-export function summarizeProfileEvidence(evidence: ReadonlyMap<string, string>) {
+export function summarizeProfileEvidence(evidence: ReadonlyMap<string, string>, _completedPreparationCounters: ReadonlySet<string> = new Set()) {
   const files = [...evidence.keys()];
   const counters = files.filter(name => /^counter-\d+\.json$/u.test(name)).map(name =>
     Schema.decodeUnknownSync(Schema.fromJsonString(CounterRecord), { onExcessProperty: 'error' })(evidence.get(name)!));
