@@ -179,7 +179,7 @@ for (const outcome of ['failure', 'cancellation'] as const) {
       // Node publishes spawn:end before assigning child.pid; the microtask sees the completed spawn.
       queueMicrotask(() => {
         const decoded = Schema.decodeUnknownExit(SpawnedView, { onExcessProperty: 'ignore' })(value);
-        if (decoded._tag !== 'Success' || !decoded.value.process.spawnargs.includes('view')) return;
+        if (decoded._tag !== 'Success' || !decoded.value.process.spawnargs.includes('server') || !decoded.value.process.spawnargs.includes('run')) return;
         startupPid = decoded.value.process.pid;
         if (outcome === 'cancellation') controller.abort(new Error('cancel during startup'));
       });

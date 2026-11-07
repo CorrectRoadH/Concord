@@ -80,6 +80,7 @@ for (const mode of ['success', 'assertion-failure', 'timeout'] as const) {
       pid = fixture.server.process.pid;
       service = record(fixture.root);
       yield* Effect.tryPromise(async () => {
+        assert.equal(pid, service?.pid, 'the fixture directly owns server run without a View host');
         const url = new URL('/api/workspace', fixture.server.address);
         const before = parseWorkspaceProjection(await (await fetchFresh(url)).text())!;
         const server = fixture.server;

@@ -22,7 +22,7 @@ test('view writes request failure codes without copying request targets or diagn
       const status = spawnSync(process.execPath, [cli, '--root', root, '--json', 'server', 'status'], { encoding: 'utf8', timeout: 10_000 });
       return status.status === 0 && Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ state: Schema.String })))(status.stdout).state === 'running' ? true : undefined;
     }, { description: 'foreground workspace service accepts clients', timeoutMs: 10_000 });
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0, cliView: true });
     const result = await send(server, '/api/missing?token=private');
     assert.equal(result.status, 404);
     assert.equal(parsed(result).error, 'ApiNotFound');

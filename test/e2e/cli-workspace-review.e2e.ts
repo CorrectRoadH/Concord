@@ -32,7 +32,7 @@ test('packed view serves its frontend and API without credentials in an isolated
  write(root, 'implementation.ts', 'export const value = "staged";\n');
  execFileSync('git', ['-C', root, 'add', 'implementation.ts']);
  write(root, 'implementation.ts', 'export const value = "working";\n');
- const server=await workspace.privateServer({root,host:'127.0.0.1',port:0});
+ const server=await workspace.privateServer({root,host:'127.0.0.1',port:0,cliView:true});
  try {
   const ready=Schema.decodeUnknownSync(Schema.Struct({operation:Schema.Literal('view'),root:Schema.String,address:Schema.String,host:Schema.String,port:Schema.Int,local:Schema.Array(Schema.String),network:Schema.Array(Schema.String)}),{onExcessProperty:'error'})(JSON.parse(server.startupOutput.split('\n')[0]!));
   const help = execFileSync(globalThis.process.execPath, [cli, 'view', '--help'], { encoding: 'utf8' });
