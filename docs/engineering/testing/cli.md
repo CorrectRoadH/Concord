@@ -30,7 +30,7 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 
 本地交付运行 `pnpm gate --changed`。推送到 master 后，CI 在 Instabox 的 `instabox-medium` 机器（4 vCPU、8 GiB）上运行：十六个分片各运行 `pnpm gate --test-shard=<序号>/16`，打包任务运行 `pnpm gate --test-shard=package`，并集是完整集合；每个任务一台新机器，代码只经 Git 推送到达，结果只经 CI 返回。失败由引入它的人立即修复。
 
-CI 先统一准备生产原生产物，分片只校验并使用。故障注入由独立任务从源码编译带钩子的产物，再运行 `pnpm gate test/process/hawdb-native.test.ts`。全部任务必须通过；任务依赖与产物传递见[CI 任务](architecture.md#ci-任务)。
+CI 先统一下载固定版本的生产与测试原生产物，分片只校验并使用。故障注入由独立任务选择预编译的测试产物，再运行 `pnpm gate test/process/hawdb-native.test.ts`。全部任务必须通过；任务依赖与产物传递见[CI 任务](architecture.md#ci-任务)。
 
 报告写入每次调用独立的 `.test-results/run-*`，其中有按耗时排序的测试文件与子进程启动次数。CI 按分片上传报告。
 

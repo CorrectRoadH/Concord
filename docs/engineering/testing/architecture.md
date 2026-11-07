@@ -26,23 +26,23 @@ Bun 直接加载 TypeScript 测试源码，并兼容 `node:test` 声明。同步
 2. 从入口沿两类边求传递闭包：相对导入（含 `import type` 与字面 `import()`），以及以字面路径加载模块的位置，例如作为 `--import` 或子进程入口的 `new URL('../x.ts', import.meta.url)`。
 3. 结果去掉 `src/` 下的文件、测试文件本身、依赖包与 `concord.config.ts`；入口脚本本身计入。runner 配置由修复核验单独冻结。
 4. 无法静态枚举的加载目标使推导失败，不静默跳过。
-5. `.bun-version`、`.node-version`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 决定产品运行时、工具宿主与依赖，但不在导入图中，固定列入。
+5. `.bun-version`、`.node-version`、`native-release.json`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 决定产品运行时、工具宿主与依赖，但不在导入图中，固定列入。
 
 清单留在 `concord.config.ts`。`test/model/runner-source-files.test.ts` 从导入图推导期望集合并与清单比较，缺项或多出的项都失败。owner 测试直接写出声明，不通过包装函数隐藏。
 
 ## CI 任务
 
-GitHub Actions 的 `gate.yml` 使用现有构建与门禁入口，任务之间只传递经校验的生产原生产物。任务使用同一提交；手动指定的 ref 先由准备任务解析为提交 SHA，其余任务检出这个 SHA（[复用已有计算](../../taste.md#t-7)）。
+GitHub Actions 的 `gate.yml` 使用现有构建与门禁入口，任务之间只传递经校验的生产与故障注入原生产物。任务使用同一提交；手动指定的 ref 先由准备任务解析为提交 SHA，其余任务检出这个 SHA（[复用已有计算](../../taste.md#t-7)）。
 
 | 任务 | 职责与依赖 |
 | --- | --- |
-| `prepare-native` | 恢复并校验最终原生产物缓存；未命中时按[原生绑定复用](../build/architecture.md#原生绑定复用)取得，一次运行只准备一份生产产物 |
+| `prepare-native` | 恢复并校验两模式的最终原生产物缓存；未命中时按[原生绑定复用](../build/architecture.md#原生绑定复用)下载固定发行，不编译 |
 | `gate` | 等待准备成功；十六个源码分片和一个打包任务分别下载、校验产物，再运行对应的完整门禁 |
-| `native-hooks` | 检出与准备任务相同的 SHA 后独立编译故障注入产物，运行 `pnpm gate test/process/hawdb-native.test.ts`；它不属于源码分片 |
+| `native-hooks` | 检出与准备任务相同的 SHA 后使用准备好的故障注入产物，运行 `pnpm gate test/process/hawdb-native.test.ts`；它不属于源码分片 |
 
-准备任务上传的产物只包含本目标的二进制、身份与许可证。分片不安装 Rust 工具链、不恢复 Cargo 缓存、不编译原生绑定。打包任务不安装浏览器；源码分片仍按需要准备浏览器与外部 adapter。静态检查在各次门禁中完整执行，测试结果不缓存。
+准备任务上传的产物只包含本目标的二进制、身份与许可证。所有任务均不为 HawDB 安装 Rust 工具链、恢复 Cargo 缓存或编译；测试 Cargo adapter 的用户项目功能仍使用真实 Cargo。打包任务不安装浏览器；源码分片仍按需要准备浏览器与外部 adapter。静态检查在各次门禁中完整执行，测试结果不缓存。
 
-带钩子的最终产物与生产产物分别存放，故障注入任务不写生产产物缓存。它等待准备任务给出提交 SHA，再与分片和打包并行。任何必需任务失败或被取消，整条 CI 都不通过；一个分片失败不取消其它分片。
+带钩子的最终产物与生产产物分别存放，故障注入只选择测试目录。它等待准备任务给出提交 SHA，再与分片和打包并行。任何必需任务失败或被取消，整条 CI 都不通过；一个分片失败不取消其它分片。
 
 验证同时检查工作流依赖、完整分片集合与实际构建入口：把真实生产产物交给空缓存的消费者，在编译器不可用时完成校验和加载；破坏身份或二进制时必须失败。CI 保存各任务的失败诊断，性能验收按[成本与稳定](README.md#成本与稳定)计算完整任务及依赖链。
 

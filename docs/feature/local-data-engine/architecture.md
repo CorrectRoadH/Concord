@@ -6,7 +6,7 @@
 
 Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [技术栈](../../engineering/build/README.md#技术栈)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放；它复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。
 
-引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。
+引擎固定为 v0.28.0，使用 fork 的 `hawdb-0.28.0` 二进制发行；revision `d47dd9b2b6a51c57a8a621367f5ff6d5d958b3e6`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。
 
 关系缓存使用参数化 SQL。子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据。
 

@@ -16,6 +16,6 @@ Web 工作台的第三方库声明由构建生成在 `dist/web/.vite/license.md`
 
 可选扩展 p5.sound（LGPL-2.1）与 p5.brush（MIT）的 JavaScript 和相邻许可证文件保存在 `dist/web/p5-libraries/`。包版本由锁文件固定，图解从本地加载这些资源。
 
-原生缓存引擎嵌入 [HawDB](https://github.com/nowledge-co/hawdb)，采用 Apache-2.0。固定 revision 由源码中的 `native/hawdb/UPSTREAM.txt` 声明，并随原生产物的 `UPSTREAM.txt` 分发。绑定依赖由 `native/hawdb/Cargo.lock` 固定。
+原生缓存引擎嵌入 [HawDB](https://github.com/nowledge-co/hawdb)，采用 Apache-2.0。固定发行版本与完整性摘要由 `native-release.json` 声明；引擎和依赖许可证随预编译产物分发。桥接源码、Cargo 锁文件与构建由 [HawDB fork](https://github.com/CorrectRoadH/hawdb) 维护。
 
 引擎与依赖的许可证材料随目标产物保存在 `dist/native/`。HawDB 不拥有 Concord 的 Spec、Memory、Issue 或测试证据。

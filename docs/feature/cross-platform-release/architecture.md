@@ -103,7 +103,7 @@ Concord 拥有源码校验、归档字节与源码 Release，tap 拥有包管理
 
 ### 运行
 
-Linux 与 macOS 原生任务分别在 Ubuntu 24.04 与 Apple Silicon macOS 15 上从源码构建 `linux-x64` 与 `darwin-arm64` HawDB 引擎，后者 deployment target 为 macOS 15.0。native manifest 绑定桥接源码、Cargo lock、ABI、HawDB revision 与二进制摘要；本机 Nix 构建的原生产物不进入归档。
+Linux 与 macOS 原生任务分别在 Ubuntu 24.04 与 Apple Silicon macOS 15 上下载并验证固定版本的 HawDB 二进制，后者 deployment target 为 macOS 15.0。native manifest 绑定桥接源码、Cargo lock、ABI、HawDB revision 与二进制摘要；本机 Nix 构建的原生产物不进入归档。
 
 一个 Ubuntu 24.04 任务在原生任务之后运行：清理输出目录，构建并类型检查应用一次，收集完整且经核验的原生产物集合，为每个目标平台组装候选归档并核验版本与摘要，把候选与摘要作为不可变产物上传。
 
@@ -115,7 +115,7 @@ CI 在四台独立的 CI 机器上分片运行同一完整套件，每个分片�
 
 重试任务可以复用成功的不可变产物；commit、版本或资产摘要变化时不能复用。已有源码资产仅在摘要相同时复用，不覆盖不同字节。tap 版本与摘要一致时不下载归档、不运行平台任务；中断的渠道完成记录可由后续发现修复。
 
-Cargo 缓存按 CI 机器镜像、原生目标、部署目标、Rust 工具链、lockfile 与 Rust 源码划分。命中缓存仍运行锁定构建并生成当前产物身份，缓存编译不是测试证据。
+原生绑定按固定发行版本缓存；命中后仍校验字节与身份，不编译。HawDB 的编译与发布只由 fork 拥有。
 
 失败任务最多自动重试一次，复用同一运行中已成功的任务与产物。后续定时发现可以重新尝试未完成的元数据同步；安装失败保留当前 recipe。
 

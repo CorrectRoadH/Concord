@@ -14,7 +14,7 @@
 
 完整归档包含启动脚本、Node.js 运行时、ripgrep、CLI、原生绑定、Web、PR 预览与随包资源。
 
-原生绑定只有在 `native/hawdb` 或其锁文件变化时才需要重建。`build:native` 遇到下载失败、产物缺失或校验不一致时，进入下一项来源并输出原因，不中断构建。
+原生绑定只在 `native-release.json` 固定版本升级时更新。`build:native` 下载并校验本机的生产与测试绑定；遇到缺包、下载失败或校验不一致时非零退出，绝不调用编译器。
 
 `pnpm gate` 是检查入口，不是构建命令，见[检查入口](../testing/README.md#检查入口)。Vite+ 内置的 `vp check` 和 `vp test` 不调用本项目脚本。任务结果不缓存。
 
@@ -22,7 +22,7 @@
 
 | 变量 | 作用 |
 | --- | --- |
-| `CONCORD_NATIVE_OFFLINE=1` | `build:native` 跳过下载，只用共享缓存或从源码编译 |
+| `CONCORD_NATIVE_OFFLINE=1` | 准备绑定时跳过下载，只用已经验证的共享缓存；未命中则失败 |
 | `XDG_CACHE_HOME` | 原生产物共享缓存的根目录，省略时为 `~/.cache` |
 | `CONCORD_NATIVE_TEST_HOOKS=1` | 源码模式只加载带测试钩子的原生产物（[故障注入产物](architecture.md#故障注入产物)） |
 | `CONCORD_TARGET` | `vp build` 组装的目标：`linux-x64` 或 `darwin-arm64`，省略时取本机目标 |
@@ -47,4 +47,4 @@
 CONCORD_TARGET=darwin-arm64 vp build --outDir /tmp/concord-darwin-arm64
 ```
 
-该目标的原生产物取自共享缓存或按摘要的 Release，发版流程传入原生任务的产物；Ubuntu 上不编译 macOS 原生绑定。
+该目标的原生产物取自共享缓存或固定版本的 Release，发版流程传入原生任务的产物；Ubuntu 上不编译 macOS 原生绑定。

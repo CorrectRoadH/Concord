@@ -38,7 +38,7 @@
 
 源码按层分目录，每个目录是一个模块。入口文件 `index.ts` 是模块对外的唯一出口，只导出本模块的接口，不转出其它模块的实现；模块之间只通过出口导入。
 
-产品运行时代码位于 `src/`、`web/`（浏览器前端）与 `native/hawdb/`（原生绑定）。`test/`、`bench/` 与 `scripts/` 是维护的 TypeScript 源码，分别拥有验证、性能场景与构建编排。
+产品运行时代码位于 `src/`、`web/`（浏览器前端）。`test/`、`bench/` 与 `scripts/` 是维护的 TypeScript 源码，分别拥有验证、性能场景与构建编排。
 
 ```text
 src/
@@ -48,7 +48,6 @@ src/
   app/          应用操作、Queries 端口与 ViewAction
   entry/        入口：cli、http（Web 工作台的服务端）、server（工作区服务的主进程、计算进程与操作进程）、lsp、herdr-mod
 web/            浏览器前端，只调用 HTTP 接口
-native/hawdb/   HawDB 的 N-API 绑定
 ```
 
 下表说明每个 Feature 的架构职责边界。同一模块被多个 Feature 使用是正常的交叉职责；实际的实现归属由源码声明派生，不维护第二份登记。
@@ -62,11 +61,11 @@ native/hawdb/   HawDB 的 N-API 绑定
 | [taste](../../feature/taste/README.md) | `domain/taste` |
 | [feedback](../../feature/feedback/README.md) | `domain/feedback`、`domain/issues` |
 | [neutral-project-governance](../../feature/neutral-project-governance/README.md) | `domain/tests`（runner 与 adapter）、`domain/docs-work` |
-| [local-data-engine](../../feature/local-data-engine/README.md) | `base/cache`、`native/hawdb`、`entry/server` |
+| [local-data-engine](../../feature/local-data-engine/README.md) | `base/cache`、`entry/server` |
 | [portable-coordination](../../feature/portable-coordination/README.md) | `base/publication` |
 | [web-workbench](../../feature/web-workbench/README.md) | `entry/http`、`web/` |
 | [herdr-mod](../../feature/herdr-mod/README.md) | `entry/herdr-mod`（Concord mod） |
-| [cross-platform-release](../../feature/cross-platform-release/README.md) | `base/installation`、`scripts/` 与 `native/hawdb` 的发行构建 |
+| [cross-platform-release](../../feature/cross-platform-release/README.md) | `base/installation` 与 `scripts/` 的发行组装 |
 
 同一职责只有一个实现：一个关系编译器、一个文档解码器、一个 publication 协议。
 
@@ -75,7 +74,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | 模块 | 可以导入 |
 | --- | --- |
 | `model` | `effect`、纯解析依赖白名单、`node:crypto` 的摘要函数，以及其它 `model` 模块 |
-| `base` | `model`、平台层与 `native/hawdb` 的 TypeScript 绑定 |
+| `base` | `model`、平台层与预编译 HawDB 的 TypeScript 绑定 |
 | `domain` | `model`、`base` 与下文层级中排在它之前的 `domain` 模块 |
 | `app` | `domain`、`base`、`model` |
 | `entry` | `app` 与 `model`；组合根另可导入 Layer 与其它入口的出口 |

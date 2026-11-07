@@ -12,27 +12,21 @@
 
 ## 原生绑定复用
 
-原生产物按以下顺序取得，第一项命中即停止。每一项都经 `--prebuilt` 的身份校验：target、ABI、HawDB revision、源码摘要、锁文件摘要、二进制与许可证摘要全部一致才使用。
+Concord 只使用 [HawDB fork](https://github.com/CorrectRoadH/hawdb) 发布的二进制。本仓库不保留 Rust 源码、Cargo 清单或工具链配置，本机开发、测试、CI 与产品发版均不编译 HawDB，也不回退到 Cargo（[复用已有计算](../../taste.md#t-7)）。
 
-1. 本机共享缓存 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<源码摘要>-<锁文件摘要>/<target>/`，同一台机器的所有 worktree 共用。
-2. 本仓库 GitHub Release `native-<源码摘要前 16 位>` 中的 `concord-native-<target>.tar.gz`。下载后校验，写入共享缓存。
-3. 用固定 Rust 工具链编译，结果写入共享缓存。
+fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。发行版本跟随上游，例如 `hawdb-0.28.0`，没有独立版本后缀。fork 拥有桥接、引擎编译、许可证收集与 macOS 签名；发布 Linux x64 glibc 和 macOS arm64 的生产与故障注入包。构建与真实绑定测试成功后才发布；已有版本只验证和复用，不覆盖。
 
-发版流程不使用前两项，始终从源码编译要发版的原生产物。
+`native-release.json` 固定版本、下载仓库、四份资产和 SHA-256。准备入口先校验本机共享缓存，未命中时下载固定版本；归档先校验 SHA-256，再安全解包并核对 target、ABI、引擎 revision、来源与锁摘要、二进制及完整许可证。缺失、离线、下载失败或身份不符均具名失败，不编译替代品。普通 TypeScript 修改不改变该二进制依赖。
 
-按摘要的 Release 由手动触发的 `native` workflow 为每个 target 编译并上传，本地构建与 CI 只读取它。
+缓存为 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<发行标签>/`，版本间隔离。生产产物在 `<target>/`；故障注入产物在 `test-hooks/<target>/`。替换文件通过 rename，不能截断其它进程已映射的绑定。
 
-CI 由一个准备任务取得生产原生产物，再交给同次运行的测试任务，见[CI 任务](../testing/architecture.md#ci-任务)。跨运行缓存保存完整的原生产物与许可证，键由现有源码摘要、锁文件摘要、目标和 ABI 派生。Cargo 编译缓存只加速源码编译，不代表最终产物命中（[复用已有计算](../../taste.md#t-7)）。
-
-准备任务恢复缓存后仍运行 `--prebuilt` 校验。缺失或无效时按上述来源顺序重新取得；成功后才保存最终产物缓存并上传本次运行的产物。测试任务只用 `--prebuilt` 校验并安装这份产物，缺失、损坏或带测试钩子时失败，不自行下载或编译。
+`--prebuilt` 校验并安装显式给定的资产；`--test-hooks` 选择测试模式；`--require-portable` 只接受生产可移植产物。准备任务同时取得本机两种模式，测试任务消费已校验的产物，见[CI 任务](../testing/architecture.md#ci-任务)。
 
 ### 故障注入产物
 
-验证事务失败与崩溃恢复的测试需要带测试钩子的原生产物。`node scripts/build-native.ts --test-hooks` 从源码编译它，产物身份记录 `testHooks: true`，只写入调用方用 `XDG_CACHE_HOME` 指定的私有缓存。它不参与上面的复用顺序，不能复用、下载或打包进归档。
+测试产物必须显式记录 `testHooks: true`，生产必须记录 `false`；两者不能交叉使用。源码运行只有 `CONCORD_NATIVE_TEST_HOOKS=1` 才选择测试目录。事务失败、崩溃恢复和身份测试使用真实预编译测试绑定，不在测试中编译。
 
-CI 的故障注入任务独立编译并验证带钩子的产物，私有缓存位于该任务的临时目录。生产原生产物准备与测试分片都不等待此任务；整条 CI 必须等待它成功。允许复用 Cargo 的编译中间文件，不缓存或上传带钩子的最终产物。
-
-源码模式加载原生产物时，`CONCORD_NATIVE_TEST_HOOKS=1` 表示要求带钩子的产物，省略表示要求不带钩子的产物；产物的 `testHooks` 与要求不一致时返回 `HawdbIncompatible`。其余身份项照常全部校验。安装模式始终拒绝带钩子的产物。
+安装模式始终拒绝测试产物。源码缓存按固定发行清单核验原始字节；Linux 归档和 Nix 渠道的既有重定位在私有副本完成，核验并生成最终安装身份，不改写源缓存。安装运行按归档或渠道的最终身份校验；macOS 绑定保留 fork 已签名的字节。
 
 ## 归档组装
 
