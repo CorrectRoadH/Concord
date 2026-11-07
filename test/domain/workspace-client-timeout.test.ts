@@ -9,7 +9,6 @@ import { SocketOpenError } from 'effect/unstable/socket/Socket';
 import { connectWorkspaceSocket, requestWorkspace, WorkspaceRpcs, WorkspaceServerError, PROTOCOL } from '../../src/entry/server/index.ts';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/command-server-socket-open-timeout.md
 test('parallel client socket opens share their handshake deadline and report named unavailability', async t => {
   const sockets: Socket[] = [];
   const opened = Deferred.makeUnsafe<void>();

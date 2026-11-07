@@ -6,7 +6,6 @@ import { runCli } from '../support/cli.ts';
 import { fixture, record, recordPath } from '../support/workspace-server-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/command-server-socket-open-timeout.md
 test('parallel command CLIs include stalled socket opens in their ten-second startup deadline', { timeout: 45_000 }, async t => {
   const roots = Array.from({ length: 3 }, () => fixture());
   const sockets: Socket[] = [];
