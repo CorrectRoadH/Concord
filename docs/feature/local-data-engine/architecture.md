@@ -110,7 +110,8 @@ Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git
 | 实体 | 身份 | 拥有与生命周期 |
 | --- | --- | --- |
 | 服务主进程 | worktree 的 Git-private 目录 + 安装身份 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算 |
-| 计算进程 | 由主进程经 `OwnedProcessService` 启动的长期子进程 | 持有内存解析缓存，执行刷新扫描与只读查询；不打开持久库 |
+| 计算进程 | 由主进程经 `OwnedProcessService` 启动的长期子进程 | 持有内存解析缓存，执行前台只读查询；不打开持久库 |
+| 后台计算进程 | 由主进程经 `OwnedProcessService` 启动的另一个长期子进程 | 持有自己的内存解析缓存，执行工作区投影的刷新扫描；不打开持久库 |
 | 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动 | 执行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库 |
 | 服务锁 | `<privateDir>/server/lock`，原生排他文件锁，单链接普通文件，按 device/inode 校验 | 服务存活期间一直持有，清理期间也不释放；进程死亡时由操作系统释放 |
 | 运行记录 | `<privateDir>/server/current.json`：`{state, pid, startedAt, token, lock, installation, protocol, socket}`，严格解码 | 只由服务锁持有者在锁内原子写入与按 token 删除 |
@@ -118,7 +119,8 @@ Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git
 | HTTP 监听 | `(host, port)`，每次开启返回绑定实例 token 的租约 | 按租约计数，见 [Web 工作台架构](../web-workbench/architecture.md#服务托管) |
 
 - 服务主进程只在清理时、关闭持久库之后持有发布租约。
-- 计算进程 60 秒无响应或超出预算时整组终止并重启，缓存冷启动。
+- 计算进程与后台计算进程 60 秒无响应或超出预算时，各自整组终止并重启，缓存冷启动。
+- 刷新不阻塞前台查询：前台查询只排在计算进程自己的请求之后，不等待后台计算进程，也不等待刷新持有的任何锁或信号量。缓存清除等维护操作同时等两个进程空闲。
 - 主进程保持一个已就绪的空闲操作进程。请求到达时交给它，它执行完这一个请求后退出；主进程确认进程组清理，再预热下一个。
 - 空闲的操作进程不持有 lease、journal、来源快照或请求数据。服务进入 draining 或 stopping 时，它与其它操作进程一同回收。
 - 服务锁与数据库[协调锁](#协调锁)是两把锁。
@@ -158,7 +160,7 @@ CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选�
 1. 启动者读取运行记录，核对 worktree、privateDir 与安装身份，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
 3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者。权限、I/O、类型或身份失败以具名错误 `ServerLockUnavailable` 报告。
-4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`。然后打开持久库、读取最近一份已接受的结果并启动计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务，并在状态中报告原因。
+4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`。然后打开持久库、读取最近一份已接受的结果并启动计算进程与后台计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务，并在状态中报告原因。
 5. 启动者等待自己拉起或竞争中胜出的服务完成握手，最多 10 秒；连接已在运行的服务时握手最多 1 秒。`opening` 已可握手，项目查询等待服务就绪。
 
 服务锁由原生绑定提供。原生产物缺失或无法加载时，同样报告 `ServerLockUnavailable`（原因 native），服务不启动；客户端报告 `WorkspaceServerUnavailable`，不在本进程执行查询。
@@ -194,7 +196,7 @@ clear、维护与 shutdown 串行执行。
 
 1. 停止受理新工作，向全部订阅者与 SSE 连接发送 `stopping` 事件，并关闭长期订阅。
 2. 在 3 秒内完成或明确失败在途请求。3 秒是请求与交接的等待上限，不授权跳过清理确认。
-3. 经 `OwnedProcessService` 收拢计算进程与全部操作进程，确认进程组清理。
+3. 经 `OwnedProcessService` 收拢计算进程、后台计算进程与全部操作进程，确认进程组清理。
 4. 关闭 HTTP 与持久句柄，按 token 删除记录与 socket，最后释放服务锁。
 
 来源提交结果无法确认的请求返回结果未知，不透明重跑，保留 journal 与未知现场。进程组清理无法确认时按 CleanupFailed 处理。
@@ -204,7 +206,7 @@ clear、维护与 shutdown 串行执行。
 服务是该 worktree 唯一的工作区投影刷新者，服务内的刷新串行执行，不存在两个并发刷新。
 
 - 监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。
-- 刷新在计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)。
+- 刷新在后台计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)。
 
 刷新开始时记录来源摘要，完成时重新核对当前来源。只有与计算时一致、身份不变且没有待恢复的 journal，主进程才接受这份结果：在内存中替换当前结果，并写入 `workspace_projection`，作为服务重启后的首份结果与无服务时的历史读取。核对不上的过时结果直接丢弃。
 
@@ -218,7 +220,7 @@ clear、维护与 shutdown 串行执行。
 
 协议由固定版本 Effect 的 `unstable/rpc` 实现：每种请求是一个 Rpc，经 `unstable/socket` 在本机 socket 上传输。下文的帧、字节帧与额度是对 Rpc 消息的约束，字节帧对应 `Uint8Array` 字段。
 
-- 客户端协议以 `RpcSerialization.layerSchemaBinary` 序列化；计算进程的内部 RPC 例外，见[进程能力](../../engineering/code/architecture.md#进程能力)。
+- 客户端协议以 `RpcSerialization.layerSchemaBinary` 序列化；计算进程与后台计算进程的内部 RPC 例外，见[进程能力](../../engineering/code/architecture.md#进程能力)。
 - 字节字段以原生二进制传输，不接受 Base64，由真实往返与边界大小测试验收。
 - 领域 Schema 严格解码，显式拒绝未知字段。
 - 单帧、累计、连接、在途与发送字节的准入由传输适配层执行；`maxBufferSize` 只限不完整消息。
@@ -307,6 +309,7 @@ CLI 默认自动启动或复用同安装身份、同协议的服务，再发送 
 | 运行目录不符合要求 | 不创建服务，报告原因 |
 | 活跃服务的安装或协议不同 | `WorkspaceServerVersionConflict`，已有实例继续运行 |
 | 计算进程超时或崩溃 | 当前请求以具名错误失败，计算进程重启，后续请求冷启动 |
+| 后台计算进程超时或崩溃 | 这次刷新按失败记录，保留上一份结果；后台计算进程重启，下一次刷新冷启动 |
 | 服务进程被杀 | 操作系统释放服务锁，下一个启动者删除残留 socket 后启动；面板与浏览器显示重连中 |
 
 ## 资源预算
