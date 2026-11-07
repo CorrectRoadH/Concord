@@ -8,6 +8,7 @@ import { Effect } from 'effect';
 import { command, installer, run, withInstaller } from '../support/install-script-fixture.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md#run
+// @issue docs/issues/bun-archive-installer.md
 test('first install verifies the local archive and runs its root executable', { timeout: 55_000 }, () => withInstaller(f => {
   let result = f.install('0.8.0'); assert.notEqual(result.status, 0); assert.equal(existsSync(join(f.home, '.local')), false);
   for (const invalid of ['../escape', '0.9.1\n../../escape']) {
@@ -20,7 +21,7 @@ test('first install verifies the local archive and runs its root executable', { 
   assert.match(result.stdout, /Installing Concord 0\.9\.1/); assert.match(result.stdout, /PATH/);
   const cli = f.cli(['--version']); assert.equal(cli.status, 0, cli.stderr); assert.equal(cli.stdout.trim(), 'concord v0.9.1');
   const help = f.cli(['--help']); assert.equal(help.status, 0, help.stderr); assert.match(help.stdout, /concord/iu);
-  assert.equal(existsSync(join(f.root, '0.9.1/runtime/node')), true);
+  for (const name of ['node', 'bun']) assert.equal(existsSync(join(f.root, `0.9.1/runtime/${name}`)), false);
   assert.equal(existsSync(join(f.root, '0.9.1/app/package.json')), true);
   assert.equal(existsSync(join(f.home, '.bashrc')), false); assert.equal(existsSync(join(f.home, '.zshrc')), false);
 }));

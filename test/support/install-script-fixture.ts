@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,14 +21,13 @@ const createFixture = (scratch: string) => {
   const adapter = fileURLToPath(new URL('./install-script-download.ts', import.meta.url));
   writeFileSync(join(adapters, 'curl'), `#!${process.execPath}\n${readFileSync(adapter, 'utf8').split('\n').slice(1).join('\n')}`);
   chmodSync(join(adapters, 'curl'), 0o755);
-  // A forbidden PATH runtime proves that the installer does not use Node or pnpm.
-  for (const name of ['node', 'npm', 'pnpm', 'rg']) {
+  // Forbidden PATH runtimes prove that installation needs no JavaScript interpreter.
+  for (const name of ['node', 'bun', 'npm', 'pnpm', 'rg']) {
     writeFileSync(join(adapters, name), '#!/bin/sh\nexit 97\n'); chmodSync(join(adapters, name), 0o755);
   }
   const env = { ...process.env, HOME: home, PATH: `${adapters}:${process.env.PATH}`, NODE_OPTIONS: '', INSTALL_FIXTURE_RELEASE: release, INSTALL_FIXTURE_CURL: command('curl'), CI: 'true' };
   const source = join(scratch, 'candidate');
-  mkdirSync(join(source, 'bin'), { recursive: true }); mkdirSync(join(source, 'runtime')); mkdirSync(join(source, 'app'));
-  symlinkSync(command('sh'), join(source, 'runtime/node'));
+  mkdirSync(join(source, 'bin'), { recursive: true }); mkdirSync(join(source, 'app'));
   const publishArchive = (version: string, archiveRoot: string) => {
     const target = join(release, 'download', `v${version}`); mkdirSync(target, { recursive: true });
     const platform = process.platform === 'darwin' ? 'darwin-arm64' : 'linux-x64';

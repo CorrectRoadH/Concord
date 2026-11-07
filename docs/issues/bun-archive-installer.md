@@ -15,4 +15,4 @@ relations:
 
 ## 复现
 
-运行 `pnpm gate test/process/install-script-bun.test.ts`。测试通过真实安装脚本安装没有 `runtime/node` 的校验归档，并核对入口与版本输出。
+运行 `pnpm gate test/process/install-script.test.ts`。其中首次安装用例通过真实安装脚本安装没有独立 Node 或 Bun 解释器的校验归档，并核对入口与版本输出。
