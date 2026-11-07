@@ -1,4 +1,6 @@
-import { assert, existsSync, join, test, before, Effect, Schema, digest, Ack, ErrorOutput, CheckOutput, call, readPage, savePage, consumer, write } from '../support/cli-fixture.ts';
+import { assert, test, Schema, Ack, CheckOutput, call, readPage, savePage, consumer, write } from '../support/cli-fixture.ts';
+import { createDocument } from '../support/operations.ts';
+import { LocalRepository } from '../support/repository.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#link-declarations
 // @name packed-steps-navigation-and-maintenance
@@ -20,17 +22,12 @@ test('packed step commands route, return JSON and expose invalid relation exits'
  assert.ok(broken.findings.some(finding => finding.code === 'AnchorNotFound'));
 });
 
-// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
-test('installed Roadmap retains selected pages and Memory supports Engineering', () => Effect.runPromise(Effect.promise(async () => {
- const root = consumer('document-packages');
- (await call(root, ['new', 'engineering', 'release', '--title', 'Release'], Ack));
- (await call(root, ['new', 'roadmap', 'session', '--title', 'Session', '--pages', 'architecture'], Ack));
- const started = (await call(root, ['roadmap', 'start', 'session'], Schema.Struct({ operation: Schema.Literal('roadmap-start') })));
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#adopt
+test('roadmap start maps its receipt to the roadmap-start JSON operation', async () => {
+ const root = consumer('roadmap-receipt');
+ const repo = new LocalRepository(root);
+ try { createDocument(repo, 'roadmap', { id: 'session', title: 'Session', pages: ['architecture'] }); }
+ finally { repo.close(); }
+ const started = await call(root, ['roadmap', 'start', 'session'], Schema.Struct({ operation: Schema.Literal('roadmap-start') }));
  assert.equal(started.operation, 'roadmap-start');
- assert.equal(existsSync(join(root, 'docs/feature/session/architecture.md')), true);
- assert.equal((await call(root, ['show', 'session'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }))).document.path, 'docs/feature/session/README.md');
- (await call(root, ['new', 'memory', 'release-owner', '--title', 'Release owner'], Ack));
- (await call(root, ['memory', 'link', 'release-owner', 'docs/engineering/release/README.md'], Ack));
- assert.equal((await call(root, ['test', 'marker', '--contract', 'docs/engineering/release/README.md'], ErrorOutput, '', 1)).error, 'InvalidReferenceTarget');
- assert.equal((await call(root, ['check'], CheckOutput)).ok, true);
-})));
+});

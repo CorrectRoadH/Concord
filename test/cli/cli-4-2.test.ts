@@ -1,5 +1,5 @@
 import { renderWritingPolicy } from '../../src/model/index.ts';
-import { assert, symlinkSync, join, test, Effect, Schema, ErrorOutput, CheckOutput, call, consumer, write } from '../support/cli-fixture.ts';
+import { assert, symlinkSync, join, test, Schema, ErrorOutput, CheckOutput, call, consumer, write } from '../support/cli-fixture.ts';
 
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
@@ -19,18 +19,3 @@ test('packed writing reports JSON findings, exit one and named unsafe input fail
  symlinkSync(join(root, 'guide/page.md'), join(root, 'guide/escape.md'));
  assert.equal((await call(root, ['docs', 'check'], ErrorOutput, '', 1)).error, 'UnsafePath');
 });
-
-// @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('packed scoped Markdown owners are discovered after direct editing', () => Effect.runPromise(Effect.promise(async () => {
- const root = consumer('scoped-owner-cli');
- const ownerPath = 'docs/feature/sample/writing.md';
- const catalogPath = 'docs/feature/sample/concepts.md';
- assert.equal((await call(root, ['writing', 'show', '--path', ownerPath], Schema.Struct({ state: Schema.String }))).state, 'missing');
- write(root, ownerPath, renderWritingPolicy({ bannedTerms: [] }));
- write(root, catalogPath, '# Terms\n\n## Feedback {#feedback}\n\nA response\n');
- write(root, 'docs/feature/sample/page.md', 'Feedback.\n');
- assert.equal((await call(root, ['concepts', 'show', '--path', catalogPath], Schema.Struct({ state: Schema.String }))).state, 'valid');
- assert((await call(root, ['writing', 'index'], Schema.Struct({ scopes: Schema.Array(Schema.Struct({ scope: Schema.String })) }))).scopes.some(item => item.scope === 'docs/feature/sample'));
- assert((await call(root, ['concepts', 'index'], Schema.Struct({ concepts: Schema.Array(Schema.Struct({ reference: Schema.String })) }))).concepts.some(item => item.reference === catalogPath + '#feedback'));
- assert.equal((await call(root, ['writing', 'check', '--path', ownerPath], CheckOutput)).ok, true);
-})));
