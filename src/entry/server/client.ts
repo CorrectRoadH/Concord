@@ -5,6 +5,7 @@ import type * as ClientTypes from './client.ts';
 import { NodeSocket } from '@effect/platform-node';
 import { Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
 import * as RpcClient from 'effect/unstable/rpc/RpcClient';
+import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization';
 import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.ts';
 import { collectPackets, collectBytes } from './protocol.ts';
@@ -30,12 +31,15 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
     if (countReuse && events.hasSubscribers) events.publish({ kind: 'service-reuse', environment });
   });
   return { client, hello, identity: () => ({ token, installation, ...(scope === undefined ? {} : { scope }), requestId: crypto.randomUUID(), deadline: Date.now() + 60_000 }) };
-}, Effect.timeout('1 second'));
+}, Effect.catchTag('RpcClientError', () => Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Workspace service transport is unavailable' }))),
+Effect.timeoutOrElse({ duration: '1 second', orElse: () => Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Workspace service did not complete a handshake within one second' })) }));
 export type WorkspaceConnection = Effect.Success<ReturnType<typeof connectWorkspaceSocket>>;
 export const requestWorkspace = <N extends Exclude<keyof WorkspaceClient, 'hello' | 'shutdown' | 'subscribe'>>(connection: WorkspaceConnection, name: N, input: Omit<Parameters<WorkspaceClient[N]>[0], 'token' | 'installation' | 'requestId' | 'deadline'>) => {
   const call = connection.client[name] as (input: unknown) => Stream.Stream<typeof Packet.Type, unknown>;
   const stream = call({ ...(name === 'query' ? JSON.parse(JSON.stringify(input)) : input), ...connection.identity() });
-  return name === 'read' ? collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes)), Effect.map(decodeWorkspaceRead)) : collectPackets(stream);
+  const result = name === 'read' ? collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes)), Effect.map(decodeWorkspaceRead)) : collectPackets(stream);
+  return result.pipe(Effect.mapError(cause => cause instanceof RpcClientError
+    ? new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Workspace service transport is unavailable' }) : cause));
 };
 
 export const subscribeWorkspace = (connection: WorkspaceConnection) => Stream.callback<unknown, unknown>(queue => Effect.gen(function*() {
