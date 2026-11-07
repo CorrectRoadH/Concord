@@ -11,7 +11,7 @@ import { command, fixture, record, recordPath, rpcModule, stop } from '../suppor
 
 // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md#upgrade-running-service
 test('explicit stop from another installation preserves data and scope authorization and stops only the selected project', { timeout: 45_000 }, async () => {
-  const root = fixture(), other = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-installer-stop-'));
+  const root = (await fixture()), other = (await fixture()), installation = mkdtempSync(join(tmpdir(), 'concord-installer-stop-'));
   const entry = privateSourceInstallation(installation);
   try {
     const startA = await command(root, ['server', 'start']); assert.equal(startA.status, 0, startA.stdout + startA.stderr);
