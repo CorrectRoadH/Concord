@@ -7,7 +7,6 @@ import test from 'node:test';
 import { command, fixture, record, recordPath, stop } from '../support/workspace-server-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/derivation-submit-crashes-cli.md
 test('discovery reports CacheUpdateFailed as JSON when its cache owner disappears after collection', { timeout: 60_000 }, async () => {
   const root = fixture();
   const source = fileURLToPath(new URL('../..', import.meta.url));
