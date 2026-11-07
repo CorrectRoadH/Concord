@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 
 export const profileRuntimeArgument = (output: string, preload: string) =>
-  `--compile-exec-argv=--cpu-prof --cpu-prof-dir=${output} --preload=${preload}`;
+  `--compile-exec-argv=--cpu-prof --cpu-prof-dir=${JSON.stringify(output)} --preload=${JSON.stringify(preload)}`;
 
 const Int = Schema.Int;
 const CallFrame = Schema.Struct({ functionName: Schema.String, scriptId: Schema.String, url: Schema.String, lineNumber: Int, columnNumber: Int });
