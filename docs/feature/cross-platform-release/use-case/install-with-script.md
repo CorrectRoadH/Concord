@@ -62,7 +62,7 @@
 | 没有 Git | 以非零退出，说明缺少 Git 与安装方式，不写文件 |
 | 下载失败或校验不符 | 以非零退出，不写安装目录，不切换链接、不清理，原有版本不受影响 |
 
-归档自带 Node.js 运行时与 ripgrep，系统中有没有、是哪个版本的 Node.js 都不影响 Concord。脚本不修改 shell 配置、不需要 sudo。用 `curl` 下载的文件没有 `com.apple.quarantine`，macOS 直接运行。
+归档携带内嵌 Bun 运行时的编译可执行文件与 ripgrep，系统中是否安装 Node.js 或 Bun 都不影响 Concord。脚本不修改 shell 配置、不需要 sudo。用 `curl` 下载的文件没有 `com.apple.quarantine`，macOS 直接运行。
 
 Homebrew、Nix 与安装脚本可以同时安装，各自的目录互不改写，`PATH` 中排在前面的那个生效。它们的安装身份不同，同一项目同时只运行其中一个的工作区服务，另一个返回 `WorkspaceServerVersionConflict`。
 
