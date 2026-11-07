@@ -73,7 +73,6 @@ export default {
       "scripts/perf/workspace.ts",
       "scripts/prepare-release.ts",
       "scripts/process-events.ts",
-      "scripts/release-library.ts",
       "scripts/release-package.ts",
       "scripts/startup-build.ts",
       "scripts/test-built.ts",
