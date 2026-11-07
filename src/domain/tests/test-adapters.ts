@@ -56,7 +56,15 @@ function safeEnvironment(env: Readonly<Record<string, string | undefined>>, name
 function status(invocationId: string, value: OwnedProcessResult): ProcessStatus {
   return { invocationId, exitCode: value.error === undefined ? value.exitCode : null, signal: value.signal, timedOut: value.timedOut, cancelled: value.cancelled, outputTruncated: value.outputLimitExceeded, cleanup: hasConfirmedOwnedGroupCleanup(value) ? 'complete' : 'unknown' };
 }
-interface Session { readonly runId: string; readonly directory: string; readonly deadline: number; cleanupKnown: boolean; readonly reportBudget: ReportBudget; readonly reportErrors: string[]; }
+const DIAGNOSTIC_OUTPUT_BYTES = 64 * 1024;
+function outputTail(output: string): string {
+  const bytes = Buffer.from(output);
+  let start = Math.max(0, bytes.length - DIAGNOSTIC_OUTPUT_BYTES);
+  while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start++;
+  return bytes.subarray(start).toString('utf8');
+}
+interface InvocationDiagnostic extends ProcessStatus { readonly stdout: string; readonly stderr: string; }
+interface Session { readonly runId: string; readonly directory: string; readonly deadline: number; cleanupKnown: boolean; readonly reportBudget: ReportBudget; readonly reportErrors: string[]; readonly invocations: InvocationDiagnostic[]; }
 const sync = <A>(use: () => A) => Effect.try({ try: use, catch: failure });
 const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[], use: (session: Session) => Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication>, publish?: (value: A) => void): Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication> => Effect.gen(function* () {
   const service = yield* OwnedProcess;
@@ -66,7 +74,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
   const now = yield* Clock.currentTimeMillis;
   const owned = yield* Effect.acquireRelease(sync(() => repo.snapshot(() => {
       const run = beginRun(repo.root, environment);
-      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, reportErrors: [] };
+      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, reportErrors: [], invocations: [] };
       return { run, session };
   })), owned => Effect.gen(function* () {
     const results = yield* service.cleanupResults;
@@ -84,7 +92,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
       } catch (cause) { quarantineRun(repo.root, owned.run, environment); throw cause; }
     });
   }));
-  const value = yield* use(owned.session);
+  const value = yield* use(owned.session).pipe(Effect.mapError(error => owned.session.invocations.length === 0 ? error : new ConcordError(error.code, error.message, { ...(typeof error.details === 'object' && error.details !== null ? error.details : {}), invocations: owned.session.invocations })));
   yield* scratch.remove.pipe(Effect.mapError(() => { owned.session.cleanupKnown = false; scratch.preserve(); return new ConcordError('CleanupUnknown', 'Could not remove adapter report directories'); }));
   const finishedAt = yield* Clock.currentTimeMillis;
   yield* sync(() => {
@@ -98,11 +106,12 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
   return value;
 }).pipe(Effect.scoped, Effect.mapError(error => ['FileChangedSinceRead', 'SourceChanged'].includes(error.code) ? new ConcordError('InputChanged', error.message) : error), Effect.catchDefect(cause => Effect.fail(failure(cause))));
 
-const callProcess = Effect.fn('testAdapter.process')(function* (repo: Repository, adapter: TestAdapter, session: Session, argv: readonly string[], options: { cwd?: string; stdin?: string; timeout?: number; envNames?: readonly string[] } = {}) {
+const callProcess = Effect.fn('testAdapter.process')(function* (repo: Repository, adapter: TestAdapter, session: Session, argv: readonly string[], options: { cwd?: string; stdin?: string; timeout?: number; envNames?: readonly string[]; invocationId?: string } = {}) {
   const service = yield* OwnedProcess;
   const remaining = session.deadline - (yield* Clock.currentTimeMillis);
   if (remaining <= 0) return yield* Effect.fail(new ConcordError('CollectFailed', 'Adapter run wall time budget expired'));
   const value = yield* runOwnedProcess(argv, { cwd: options.cwd ?? repo.root, env: { ...safeEnvironment(service.environment.env, options.envNames ?? adapter.envNames), ...(adapter.builtin === 'pytest' ? { PYTHONDONTWRITEBYTECODE: '1' } : {}) }, stdin: options.stdin, timeoutMs: Math.max(1, Math.min(remaining, options.timeout ?? adapter.collectTimeoutMs ?? 60_000)), outputLimitBytes: adapter.budgets?.outputBytes ?? 16 * 1024 * 1024 }).pipe(Effect.scoped, Effect.mapError(failure));
+  if (options.invocationId !== undefined) session.invocations.push({ ...status(options.invocationId, value), stdout: outputTail(value.stdout), stderr: outputTail(value.stderr) });
   if (!hasConfirmedOwnedGroupCleanup(value)) { session.cleanupKnown = false; return yield* Effect.fail(new ConcordError('CleanupUnknown', 'Owned adapter process group cleanup is unknown')); }
   return value;
 });
@@ -137,7 +146,7 @@ const executePlan = Effect.fn('testAdapter.executePlan')(function* (repo: Reposi
     const directory = join(context.reportDirectory, item.invocationId);
     const sources = yield* Sources;
     yield* sources.createReportDirectory(directory);
-    const result = yield* callProcess(repo, adapter, session, item.argv, { cwd: item.cwd === '.' ? repo.root : repo.absolute(item.cwd), envNames: item.envNames, timeout: collecting ? adapter.collectTimeoutMs ?? 60_000 : adapter.runTimeoutMs ?? 300_000 });
+    const result = yield* callProcess(repo, adapter, session, item.argv, { invocationId: item.invocationId, cwd: item.cwd === '.' ? repo.root : repo.absolute(item.cwd), envNames: item.envNames, timeout: collecting ? adapter.collectTimeoutMs ?? 60_000 : adapter.runTimeoutMs ?? 300_000 });
     if (collecting && !hasSuccessfulOwnedProcessResult(result)) return yield* Effect.fail(new ConcordError('CollectFailed', 'A native collection invocation did not exit normally with code 0'));
     const reports = yield* readReports(directory, item.reports, adapter, session.reportBudget).pipe(Effect.catch(error => { if (collecting) return Effect.fail(error); session.reportErrors.push(error.code); return Effect.succeed([]); }));
     captures.push({ status: status(item.invocationId, result), stdout: result.stdout, stderr: result.stderr, reports });
