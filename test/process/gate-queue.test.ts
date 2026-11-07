@@ -69,7 +69,7 @@ withGateQueue(Effect.gen(function*() {
   assert.equal(yield* fs.exists(dead.marker + '.done'), false, 'crashed owner did not finish its body');
   yield* fs.writeFileString(successor.marker + '.release', 'release');
   yield* successor.finish;
-  assert.equal(yield* fs.exists(join(slot, 'publication.lease')), false, 'the final owner releases its slot');
+  assert.deepEqual(JSON.parse(yield* fs.readFileString(join(slot, 'requests.json'))).requests, [], 'the final owner releases its slot');
 })).pipe(Effect.provide(NodeServices.layer))));
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
@@ -108,7 +108,7 @@ test('the real gate queues full, file and title selections behind an all-slot ow
     assert.equal(yield* fs.exists(marker), true);
     yield* fs.remove(marker);
   }
-  assert.equal(yield* fs.exists(join(slot, 'publication.lease')), false);
+  assert.deepEqual(JSON.parse(yield* fs.readFileString(join(slot, 'requests.json'))).requests, []);
 })).pipe(Effect.provide(NodeServices.layer)), { signal: t.signal }));
 
 // @feature docs/engineering/performance/README.md#开发与交付流程
@@ -148,7 +148,7 @@ test('the real reference benchmark waits for the gate slot while comparison argu
   assert.equal(Number(yield* reference.exitCode), 1);
   yield* Fiber.join(drain);
   assert.match(referenceText, /Decode sample count/u);
-  assert.equal(yield* fs.exists(join(slot, 'publication.lease')), false);
+  assert.deepEqual(JSON.parse(yield* fs.readFileString(join(slot, 'requests.json'))).requests, []);
 })).pipe(Effect.provide(NodeServices.layer))));
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
@@ -167,7 +167,7 @@ const [slot, marker, demand] = process.argv.slice(2);
 withGateQueue(Effect.gen(function*(){
   writeFileSync(marker, 'entered');
   while (!existsSync(marker+'.release')) yield* Effect.sleep('10 millis');
-}), slot, {cpus:8, demand:demand === 'all' ? 'all' : 1}).pipe(NodeRuntime.runMain);
+}), slot, {cpus:8, demand:demand === 'all' ? 'all' : 1}).pipe(effect => Effect.yieldNow.pipe(Effect.andThen(effect)), NodeRuntime.runMain);
 `);
   const waitFile = (path: string) => Effect.gen(function*() {
     while (!(yield* fs.exists(path))) yield* Effect.sleep('10 millis');

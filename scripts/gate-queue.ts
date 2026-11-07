@@ -5,7 +5,7 @@ import { availableParallelism, homedir, hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, readLeaseOwner, releaseFileLease, syncLeaseDirectory } from '../src/base/publication/file-lease.ts';
+import { acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, releaseFileLease, syncLeaseDirectory } from '../src/base/publication/file-lease.ts';
 
 export const gateSlotCapacity = (cpus = availableParallelism()): number => Math.max(1, Math.floor(cpus / 4));
 class GateQueueInvalid extends Schema.TaggedError<GateQueueInvalid>()('GateQueueInvalid', { message: Schema.String }) {}
@@ -26,13 +26,13 @@ const processBirth = (pid: number): string | null | undefined => {
   } catch (cause) { if (['ENOENT', 'ESRCH'].includes((cause as NodeJS.ErrnoException).code ?? '')) return undefined; throw cause; }
 };
 
-const takeLease = (directory: string, mode: 'exclusive' | 'shared') => Effect.try({
-  try: () => acquireRecoverablePublicationLease(directory, directory, 'publication.lease', mode, 'gate-queue')!, catch: cause => cause,
+const takeLease = (directory: string) => Effect.try({
+  try: () => acquireRecoverablePublicationLease(directory, directory, 'publication.lease', 'exclusive', 'gate-queue')!, catch: cause => cause,
 }).pipe(Effect.catch(cause => cause instanceof CoordinationError && cause.reason === 'occupied' ? Effect.succeed(undefined) : Effect.fail(cause)));
 
-const acquireLease = (directory: string, mode: 'exclusive' | 'shared', interruptibleWait: boolean) => Effect.gen(function*() {
+const acquireLease = (directory: string, interruptibleWait: boolean) => Effect.gen(function*() {
   for (;;) {
-    const lease = yield* takeLease(directory, mode);
+    const lease = yield* takeLease(directory);
     if (lease) return lease;
     const pause = Effect.sleep('50 millis');
     yield* (interruptibleWait ? Effect.interruptible(pause) : pause);
@@ -42,7 +42,7 @@ const acquireLease = (directory: string, mode: 'exclusive' | 'shared', interrupt
 /** One short mutex transaction publishes a whole claim; no partial slot acquisition. */
 const updateQueue = <A>(directory: string, capacity: number, edit: (requests: Request[]) => A, interruptibleWait = true) => Effect.scoped(Effect.gen(function*() {
   const lock = resolve(directory, 'updates');
-  yield* Effect.acquireRelease(acquireLease(lock, 'exclusive', interruptibleWait), lease => Effect.sync(() => releaseFileLease(lease, 'gate-queue')));
+  yield* Effect.acquireRelease(acquireLease(lock, interruptibleWait), lease => Effect.sync(() => releaseFileLease(lease, 'gate-queue')));
   return yield* Effect.try({ try: () => {
     const path = join(directory, 'requests.json');
     assertLeasePath(path);
@@ -100,19 +100,6 @@ export const withGateQueue = <A, E, R>(body: Effect.Effect<A, E, R>, directory =
       }
       yield* Effect.sleep('50 millis');
   }
-  // Shared leases retain an observable live owner and exclude older exclusive
-  // gate/reference invocations while they finish their already-running snapshot.
-  yield* Effect.acquireRelease(Effect.gen(function*() {
-    // A shared acquisition alone can join a dead shared token. An exclusive
-    // probe reclaims that set when every previous owner has exited.
-    const stale = yield* takeLease(directory, 'exclusive');
-    if (stale) yield* Effect.sync(() => releaseFileLease(stale, 'gate-queue'));
-    const lease = yield* takeLease(directory, 'shared');
-    if (lease) return lease;
-    const owner = yield* Effect.try(() => readLeaseOwner(join(directory, 'publication.lease'), 'gate-queue'));
-    if (owner) yield* Effect.sync(() => console.error(`# Gate queued: waiting for pid=${owner.pid} host=${owner.host}; slot=${directory}`));
-    return yield* acquireLease(directory, 'shared', true);
-  }), lease => Effect.sync(() => releaseFileLease(lease, 'gate-queue')));
   const waitMs = performance.now() - started;
   yield* Effect.sync(() => {
     process.env.CONCORD_GATE_QUEUE_WAIT_MS = String(waitMs);
