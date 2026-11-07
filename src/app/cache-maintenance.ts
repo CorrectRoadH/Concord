@@ -2,25 +2,31 @@ import { RuntimeEnvironment } from '../base/environment/index.ts';
 import type * as WorkspaceTypes from '../base/workspace/index.ts';
 import { Effect } from "effect";
 import type { Publication } from "../base/publication/index.ts";
-import { clearCache } from "../domain/tests/index.ts";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cachePhysicalBytes, cacheRootOwnerOnly } from "../base/cache/index.ts";
 import { genericPrivateDirectorySync } from "../base/publication/index.ts";
-import { CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../base/installation/index.ts";
+import { CACHE_MAINTENANCE_THRESHOLD_BYTES } from "../base/installation/index.ts";
 import { PersistentCache } from "../base/cache/index.ts";
-import { openWriteRepository } from "../base/workspace/index.ts";
 import { failure } from "../model/index.ts";
 
+const reclaimedSizes = new Map<string, number>();
+const growthThreshold = 256 * 1024 * 1024;
+
 export const cacheMaintenanceNeeded = (privateDir: string) => Effect.try({
-  try: () => cachePhysicalBytes(privateDir) > CACHE_MAINTENANCE_THRESHOLD_BYTES,
+  try: () => {
+    const bytes = cachePhysicalBytes(privateDir);
+    if (bytes <= CACHE_MAINTENANCE_THRESHOLD_BYTES) { reclaimedSizes.delete(privateDir); return false; }
+    const previous = reclaimedSizes.get(privateDir);
+    return previous === undefined || bytes > previous + growthThreshold;
+  },
   catch: failure,
 });
 
-/** Best effort: reclaim first, then release every native lock before publication. */
-export const maintainCache = Effect.fn('maintainCache')(function*(root: string): Effect.fn.Return<'below-threshold' | 'reclaimed' | 'cleared' | 'deferred', never, WorkspaceTypes.Workspace | Publication | PersistentCache | RuntimeEnvironment> {
+/** Reclamation never discards logical data, irrespective of directory size. */
+export const maintainCache = Effect.fn('maintainCache')(function*(root: string): Effect.fn.Return<'below-threshold' | 'reclaimed' | 'deferred', never, WorkspaceTypes.Workspace | Publication | PersistentCache | RuntimeEnvironment> {
   const runtime = yield* RuntimeEnvironment;
   try {
     const privateDir = genericPrivateDirectorySync(root, runtime.env), path = cacheDatabasePath(privateDir);
-    if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) || cachePhysicalBytes(privateDir) <= CACHE_MAINTENANCE_THRESHOLD_BYTES) return 'below-threshold';
+    if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) || !(yield* cacheMaintenanceNeeded(privateDir))) return 'below-threshold';
     const cache = yield* PersistentCache;
     const deferred = yield* cache.reclaim(privateDir).pipe(
       Effect.map(result => result === undefined || result.deferredForActiveLeases),
@@ -28,14 +34,8 @@ export const maintainCache = Effect.fn('maintainCache')(function*(root: string):
     );
     // A failed or budget-limited sweep is a deferral, never permission to clear.
     if (deferred) return 'deferred';
-    if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed';
-    return yield* Effect.scoped(Effect.gen(function*() {
-      const repo = yield* openWriteRepository(root, { persistentCache: 'off', reclaimPublication: false });
-      return yield* Effect.try({ try: () => repo.snapshot(() => {
-        if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed' as const;
-        return clearCache(repo, CACHE_PHYSICAL_LIMIT_BYTES, runtime).status === 'cleared' ? 'cleared' as const : 'reclaimed' as const;
-      }), catch: cause => cause });
-    })).pipe(Effect.catch(() => Effect.succeed('deferred' as const)));
+    reclaimedSizes.set(privateDir, cachePhysicalBytes(privateDir));
+    return 'reclaimed';
   } catch { return 'deferred'; }
 });
 

@@ -18,6 +18,7 @@ export interface RuntimePorts {
   readonly open: Effect.Effect<void, unknown>;
   readonly close: Effect.Effect<void, unknown>;
   readonly clear: Effect.Effect<unknown, unknown>;
+  readonly foregroundPending?: () => number;
   readonly maintenance?: { readonly needed: Effect.Effect<boolean, unknown>; readonly run: Effect.Effect<unknown, unknown> };
   readonly exists: Effect.Effect<boolean, unknown>;
   readonly reconcile?: (candidate: WorkspaceProjectionCandidate) => Effect.Effect<boolean, unknown>;
@@ -34,7 +35,9 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   const stopped = yield* Deferred.make<void>();
   const invalidations = yield* Queue.sliding<void>(1);
   const maintenance = yield* Semaphore.make(1);
-  let operations = 0;
+  let operations = 0, foreground = 0;
+  const nativeOwnership = yield* Semaphore.make(1);
+  let reclaiming: Fiber.Fiber<void, unknown> | undefined;
   let operationIdle = yield* Deferred.make<void>();
   yield* Deferred.succeed(operationIdle, undefined);
   const operationsDrained = Effect.suspend(() => Deferred.await(operationIdle));
@@ -69,8 +72,8 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   const discard = (context: WorkspaceProjectionContext, changedPaths: readonly string[]) => Effect.gen(function*() {
     yield* synchronizeIdentity(context);
     const attempt = { at: new Date(yield* Clock.currentTimeMillis).toISOString(), complete: false, changedPaths };
-    yield* ports.persist(context, undefined, undefined, attempt);
-    yield* ports.restore(context).pipe(Effect.flatMap(state.accept), Effect.ignore);
+    yield* nativeOwnership.withPermit(ports.persist(context, undefined, undefined, attempt));
+    yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.ignore);
     yield* state.attempt(attempt);
     yield* Effect.forkIn(Effect.sleep('1 second').pipe(Effect.andThen(request)), serviceScope);
   });
@@ -92,8 +95,8 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     if (stopping) return;
     if (candidate.sourceDigest === undefined) { yield* discard(context, candidate.changedPaths); return; }
     if (candidate.sourceDigest !== sourceDigest || (yield* ports.sourceDigest) !== sourceDigest) { yield* discard(context, ['.']); return; }
-    yield* ports.persist(context, candidate);
-    yield* state.accept(yield* ports.restore(context));
+    yield* nativeOwnership.withPermit(ports.persist(context, candidate));
+    yield* state.accept(yield* nativeOwnership.withPermit(ports.restore(context)));
     if ((yield* SubscriptionRef.get(state.value)).state === 'running') yield* state.transition('running');
   }).pipe(Effect.catch(cause => Effect.gen(function*() {
     const error = namedFailure(cause);
@@ -108,8 +111,8 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     const context = yield* Effect.result(ports.context);
     if (context._tag === 'Success') {
       yield* synchronizeIdentity(context.success);
-      yield* ports.persist(context.success, undefined, error).pipe(Effect.ignore);
-      yield* ports.restore(context.success).pipe(Effect.flatMap(state.accept), Effect.ignore);
+      yield* nativeOwnership.withPermit(ports.persist(context.success, undefined, error)).pipe(Effect.ignore);
+      yield* nativeOwnership.withPermit(ports.restore(context.success)).pipe(Effect.flatMap(state.accept), Effect.ignore);
     }
     const prior = yield* SubscriptionRef.get(state.value);
     if (error.code === 'CleanupFailed') yield* state.transition('blocked', { code: error.code, message: error.message });
@@ -120,6 +123,11 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     stopping = true;
     return state.transition('stopping').pipe(Effect.andThen(Deferred.succeed(stopped, undefined)), Effect.asVoid);
   });
+  // Count before acquiring the permit, so queued foreground work also prevents reclamation.
+  const foregroundRequest = <A, E, R>(operation: Effect.Effect<A, E, R>) => Effect.scoped(Effect.acquireRelease(
+    Effect.sync(() => { foreground++; }),
+    () => Effect.sync(() => { foreground--; }),
+  ).pipe(Effect.andThen(Effect.suspend(() => reclaiming ? Fiber.interrupt(reclaiming).pipe(Effect.asVoid) : Effect.void)), Effect.andThen(operation)));
   const maintain = <A, E, R>(operation: Effect.Effect<A, E, R>) => maintenance.withPermit(Effect.gen(function*() {
     yield* ports.verify;
     const current = yield* SubscriptionRef.get(state.value);
@@ -138,7 +146,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* ports.open;
     const context = yield* ports.context;
     yield* synchronizeIdentity(context);
-    yield* ports.restore(context).pipe(Effect.flatMap(state.accept), Effect.ignore);
+    yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.ignore);
     yield* state.transition('running');
   }).pipe(Effect.catch(fail), Effect.andThen(request));
   yield* Effect.forkScoped(startup);
@@ -200,26 +208,24 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   yield* Effect.addFinalizer(() => stop.pipe(Effect.andThen(Fiber.interrupt(refreshFiber)), Effect.andThen(ports.close), Effect.orDie));
   if (ports.maintenance) {
     const idleMaintenance = ports.maintenance;
-    yield* Effect.forkScoped(Effect.repeat(maintenance.withPermit(Effect.gen(function*() {
+    yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() {
+      if (foreground > 0 || (ports.foregroundPending?.() ?? 0) > 0) return;
+      const fiber = yield* Effect.forkScoped(maintenance.withPermit(nativeOwnership.withPermit(Effect.gen(function*() {
       if (stopping || (yield* SubscriptionRef.get(state.value)).state !== 'running' || !(yield* idleMaintenance.needed)) return;
       yield* ports.verify;
-      yield* state.transition('draining');
-      yield* operationsDrained;
-      yield* ports.close;
-      if (stopping) return;
-      yield* state.transition('maintaining');
+      if (foreground > 0 || (ports.foregroundPending?.() ?? 0) > 0) return;
       yield* idleMaintenance.run;
-      if (stopping) return;
-      yield* state.transition('opening');
-      yield* ports.open;
-      yield* state.transition('running');
-      yield* request;
-    })).pipe(Effect.catch(fail)), Schedule.spaced('30 seconds')));
+    }))).pipe(Effect.catch(fail)));
+      reclaiming = fiber;
+      yield* Fiber.await(fiber);
+      reclaiming = undefined;
+    }), Schedule.spaced('30 seconds')));
   }
   return { state, current, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
-    maintain, operate,
+    maintain: <A, E, R>(operation: Effect.Effect<A, E, R>) => foregroundRequest(maintain(operation)),
+    operate: <A, E, R>(operation: Effect.Effect<A, E, R>) => foregroundRequest(operate(operation)),
     drain: maintenance.withPermit(operationsDrained),
     connect: Effect.acquireRelease(Effect.sync(() => { connections++; }), () => Effect.sync(() => { connections--; })),
-    execute: (operation: Computation) => maintain(ports.compute(operation)),
+    execute: (operation: Computation) => foregroundRequest(maintain(ports.compute(operation))),
   };
 });
