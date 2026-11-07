@@ -25,6 +25,36 @@ const CounterRecord = Schema.Struct({
   voluntaryContextSwitches: NonNegative, involuntaryContextSwitches: NonNegative,
   fs: Schema.Record(Schema.String, Schema.Struct({ count: Schema.Int, ms: NonNegative })),
 });
+
+export const copyProfilePackage = Effect.fn('perf.copyProfilePackage')(function*(candidatePackage: string, profilePackage: string) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.copy(candidatePackage, profilePackage, { overwrite: false });
+});
+
+export function summarizeProfileEvidence(evidence: ReadonlyMap<string, string>) {
+  const files = [...evidence.keys()];
+  const counters = files.filter(name => /^counter-\d+\.json$/u.test(name)).map(name =>
+    Schema.decodeUnknownSync(Schema.fromJsonString(CounterRecord), { onExcessProperty: 'error' })(evidence.get(name)!));
+  const profiles = files.filter(name => name.endsWith('.cpuprofile'));
+  if (profiles.length === 0 || counters.length === 0) throw new Error('Missing profile evidence');
+  const byPid = new Map<number, CpuProfile[]>();
+  for (const name of profiles) {
+    const match = /^CPU\.\d{8}\.\d{6}\.(\d+)\.\d+(?:\.\d+)?\.cpuprofile$/u.exec(name);
+    if (!match) throw new Error(`Unexpected CPU profile name: ${name}`);
+    const pid = Number(match[1]);
+    const profile = Schema.decodeUnknownSync(Schema.fromJsonString(CpuProfile), { onExcessProperty: 'error' })(evidence.get(name)!);
+    const group = byPid.get(pid) ?? [];
+    group.push(profile);
+    byPid.set(pid, group);
+  }
+  if (counters.some(item => !byPid.has(item.pid))) throw new Error('A counter has no matching CPU profile');
+  return [...byPid].map(([pid, profiles]) => {
+    const record = counters.find(item => item.pid === pid);
+    if (!record) throw new Error(`Missing fs counter for pid ${pid}`);
+    const { fs, ...resources } = record;
+    return { pid, resources: { ...resources, fs: Object.fromEntries(Object.entries(fs).sort((a, b) => b[1].count - a[1].count)) }, ...hotSpots(combineProfiles(profiles)) };
+  });
+}
 /** A private compiled executable carries profiler flags into its internal children. */
 const main = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -57,7 +87,7 @@ const main = Effect.gen(function*() {
     deps: { alwaysBundle: /.*/u, onlyBundle: false }, outputOptions: { entryFileNames: '[name].mjs' },
   }).pipe(Effect.mapError(cause => new PerfError({ message: `Build profile preload: ${String(cause)}` })));
   const profilePackage = join(workDir, 'profile-install');
-  yield* fs.copy(candidatePackage, profilePackage, { overwrite: false });
+  yield* copyProfilePackage(candidatePackage, profilePackage);
   const profileEntry = yield* packageBin(profilePackage);
   const repository = resolve('.');
   const target = archiveTarget(`${process.platform}-${process.arch}`);
@@ -101,29 +131,7 @@ const main = Effect.gen(function*() {
   const files = (yield* fs.readDirectory(out)).filter(name => !previous.has(name));
   const evidence = new Map<string, string>();
   for (const name of files.filter(name => /^counter-\d+\.json$/u.test(name) || name.endsWith('.cpuprofile'))) evidence.set(name, yield* fs.readFileString(join(out, name)));
-  const processes = yield* io('Decode CPU profiles and counters', () => {
-    const counters = files.filter(name => /^counter-\d+\.json$/u.test(name)).map(name =>
-      Schema.decodeUnknownSync(Schema.fromJsonString(CounterRecord), { onExcessProperty: 'error' })(evidence.get(name)!));
-    const profiles = files.filter(name => name.endsWith('.cpuprofile'));
-    if (profiles.length === 0 || counters.length === 0) throw new Error(`Missing profile evidence; command exited ${run.exitCode}: ${run.stderr}`);
-    const byPid = new Map<number, CpuProfile[]>();
-    for (const name of profiles) {
-      const match = /^CPU\.\d{8}\.\d{6}\.(\d+)\.\d+(?:\.\d+)?\.cpuprofile$/u.exec(name);
-      if (!match) throw new Error(`Unexpected CPU profile name: ${name}`);
-      const pid = Number(match[1]);
-      const profile = Schema.decodeUnknownSync(Schema.fromJsonString(CpuProfile), { onExcessProperty: 'error' })(evidence.get(name)!);
-      const group = byPid.get(pid) ?? [];
-      group.push(profile);
-      byPid.set(pid, group);
-    }
-    if (counters.some(item => !byPid.has(item.pid))) throw new Error('A counter has no matching CPU profile');
-    return [...byPid].map(([pid, profiles]) => {
-      const record = counters.find(item => item.pid === pid);
-      if (!record) throw new Error(`Missing fs counter for pid ${pid}`);
-      const { fs, ...resources } = record;
-      return { pid, resources: { ...resources, fs: Object.fromEntries(Object.entries(fs).sort((a, b) => b[1].count - a[1].count)) }, ...hotSpots(combineProfiles(profiles)) };
-    });
-  });
+  const processes = yield* io(`Decode CPU profiles and counters; command exited ${run.exitCode}: ${run.stderr}`, () => summarizeProfileEvidence(evidence));
   const record = {
     format: 'concord.profile/v2', ...(scenario ? { scenario: scenario.id } : {}), path, measuredAt: new Date().toISOString(), environment: environment(), consumer, artifact: candidate,
     command: ['concord', ...(scenario && 'scan' in scenario.run ? ['--json', '--fresh', '--dry-run', ...scenario.run.scan] : args)], wallMs: run.ms, exitCode: run.exitCode, stderr: run.stderr, stdout: run.stdout, output: out,
@@ -137,4 +145,4 @@ const main = Effect.gen(function*() {
     if (run.exitCode !== (scenario?.expect.exitCode ?? 0)) process.exitCode = 1;
   });
 }).pipe(Effect.scoped);
-main.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+if (import.meta.main) main.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
