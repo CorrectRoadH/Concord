@@ -6,7 +6,6 @@ import { LocalRepository } from '../support/repository.ts';
 import { waitForWorkspaceProjection } from '../support/support.ts';
 
 // @feature docs/feature/web-workbench/ui.md
-// @issue docs/issues/default-preview-overrides-click.md
 test('a selection made before the category default preview stays selected', async ({ page, workspace }) => {
   const repo = new LocalRepository(workspace.root);
   try {
