@@ -47,7 +47,7 @@
 
 | 错误 | 条件 |
 | --- | --- |
-| `QueryPending` | 等待首次刷新结束后仍没有可读的投影，或 `--dry-run` 时没有投影；`details.refresh` 是最近一次失败对象，尚无失败时为 `"requested"`；退出 1 |
+| `QueryPending` | 等待首次刷新结束后仍没有可读的投影；`details.refresh` 是最近一次失败对象，尚无失败时为 `"requested"`；退出 1 |
 | `QueryCacheInvalid` | 投影记录无法严格解码 |
 
 不一致的结果仍以 0 退出，消费者先检查 `projection.consistent` 再使用列表。`--fresh` 使用当前来源并等待扫描结果；`--dry-run` 不启动后台刷新。
