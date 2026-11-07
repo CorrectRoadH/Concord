@@ -34,7 +34,7 @@ test('a CLI current-source check falls back while another process holds the pers
       assert.equal(report.ok, expected.ok);
       assert.deepEqual(report.findings, expected.findings);
       assert.equal(report.cache.status, 'unavailable');
-      assert.equal(report.cache.detail, 'Persistent cache is owned by another command');
+      assert.equal(report.cache.detail, 'HawdbBusy: Persistent cache is owned by another command');
       assert.equal(result.stderr, '');
     } finally { stopWorkspaceServer(root); held.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
