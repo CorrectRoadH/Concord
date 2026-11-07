@@ -19,7 +19,7 @@ export function closeRepositoryCache(repo: Repository): void {
   }
 }
 
-/** The outer LocalRepository snapshot closes the handle before its lease. Fake repositories get a short handle. */
+/** The outer source snapshot closes the handle before its lease. Fake repositories get a short handle. */
 function withPersistentCache<A>(repo: Repository, writable: boolean, use: (database: HawdbDatabase | undefined) => A, create = false, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})): A {
   if (repo.persistentCache === 'off') {
     if (writable) throw new HawdbFailure('HawdbUnavailable', 'Persistent cache access is disabled');

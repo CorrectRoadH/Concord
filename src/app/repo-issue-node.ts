@@ -8,12 +8,8 @@ import { IssueProject } from "../domain/issues/index.ts";
 import type { IssueCommandRunner } from "./issue-operations.ts";
 import { IssuePlanStore, IssueRemote } from "../domain/issues/index.ts";
 import { makeNodeIssuePlanStore } from "./issue-plan-store.ts";
-import { makeGhIssueRemote, type IssueGhRequest } from "../domain/issues/index.ts";
-import { IssueConnectionUnbound, IssueInputError, IssueRemoteTransportUnsupported, type IssueGhError } from "../model/index.ts";
-interface Connection { readonly id: string; readonly provider: string; readonly transport?: string; readonly repositoryId?: string; readonly owner?: string; readonly repo?: string }
-interface Repository { readonly root: string; readonly config: { readonly feedbackConnections?: readonly Connection[] }; readonly close: () => void }
-interface StorageModule { readonly LocalRepository: new(root?: string, options?: { readonly access: "read"; readonly optimistic: boolean }) => Repository }
-interface GhModule { readonly withGhIssueTransport: <A, E>(root: string, connection: Connection, execute: boolean, use: (request: IssueGhRequest) => Effect.Effect<A, E>) => Effect.Effect<A, E | IssueGhError> }
+import { makeGhIssueRemote } from "../domain/issues/index.ts";
+import { IssueConnectionUnbound, IssueInputError, IssueRemoteTransportUnsupported } from "../model/index.ts";
 export const makeNodeIssueCommandRunner = (root: string | undefined): IssueCommandRunner<storage.Workspace | Sources | Publication | OwnedProcess> => (connectionId, execute, program) => Effect.gen(function*() {
   const sources = yield* Sources;
   const snapshot = yield* Effect.scoped(Effect.map(storage.openReadRepository(root, { access: 'read', optimistic: true }), repo => ({ root: repo.root, connections: repo.config.feedbackConnections ?? [] })));
