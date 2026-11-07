@@ -12,7 +12,6 @@ import { createConsumer } from '../support/consumer.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 
 // @feature docs/feature/local-sdlc/architecture.md#写入管线
-// @issue docs/issues/live-journal-read-recovery.md
 test('a read snapshot encountering a live journal during verification rereads after publication', { timeout: 20_000 }, async () => {
   const root = createConsumer();
   const document = join(root, 'docs/feature/live/README.md');

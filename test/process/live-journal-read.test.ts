@@ -10,7 +10,6 @@ import { createConsumer } from '../support/consumer.ts';
 import { runCli } from '../support/cli.ts';
 
 // @feature docs/feature/local-sdlc/architecture.md#写入管线
-// @issue docs/issues/live-journal-read-recovery.md
 test('a current read waits for a live journal publisher and observes its completed publication', { timeout: 20_000 }, async () => {
   const root = createConsumer();
   const document = join(root, 'docs/feature/live/README.md');
