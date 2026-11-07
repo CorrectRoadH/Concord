@@ -154,7 +154,7 @@ test('release builds two native targets and gates publication on the same commit
     );
     assert.deepEqual(Object.keys(gate.on), ['push', 'workflow_dispatch', 'workflow_call']);
     assert.deepEqual(gate.on.push, { branches: ['master'] });
-    assert.deepEqual(gate.jobs.gate.strategy?.matrix.shard, ['1/8', '2/8', '3/8', '4/8', '5/8', '6/8', '7/8', '8/8', 'package']);
+    assert.deepEqual(gate.jobs.gate.strategy?.matrix.shard, [...Array.from({ length: 16 }, (_, i) => `${i + 1}/16`), 'package']);
     assert.ok(gate.jobs.gate.steps.some(step => step.run?.includes('pnpm gate --test-shard=${{ matrix.shard }}')));
   }).pipe(Effect.provide(NodeServices.layer)));
 });

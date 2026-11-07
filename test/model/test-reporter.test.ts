@@ -349,7 +349,7 @@ runnerTest('Node and browser failures leave the other suite running and retain o
   yield* fs.chmod(fakePnpm, 0o755);
   yield* fs.symlink(fakePnpm, join(root, 'pnpm'));
   yield* fs.symlink(fakePnpm, join(root, 'vp'));
-  const env = { PATH: `${root}:${process.env.PATH}`, CONCORD_E2E_WORKERS: '2', CONCORD_TEST_PACKAGE_ROOT: root };
+  const env = { PATH: `${root}:${process.env.PATH}`, CONCORD_GATE_MEMORY_MAX: String(7 * GiB), CONCORD_E2E_WORKERS: '2', CONCORD_TEST_PACKAGE_ROOT: root };
   yield* fs.writeFileString(node, `import test from 'node:test';\ntest('selected', () => { throw new Error('NODE_EXPECTED_FAILURE'); });\n`);
   const nodeFailed = yield* run(['--test-name-pattern=selected', '--test-shard=1/1', node, browser], { ...env, BROWSER_EXIT: '0' });
   assert.equal(nodeFailed.code, 1, nodeFailed.text);

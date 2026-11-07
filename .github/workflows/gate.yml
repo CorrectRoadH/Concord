@@ -58,5 +58,6 @@ jobs:
         with:
           name: test-diagnostics-${{ strategy.job-index }}
           path: .test-results/
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
