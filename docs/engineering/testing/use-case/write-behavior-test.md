@@ -7,14 +7,14 @@
 ## 起始状态
 
 - 要守护的验收已经写在 Spec 中，例如[无外部服务时管理本地 Issue](../../../feature/feedback/use-case/manage-local-observations.md)的结果表：仍有其它 Issue 链接时，`issue close` 拒绝并返回 `IssueReferenced`。
-- 依赖已安装，`pnpm concord --help` 可以运行。
+- 依赖已安装，`bun run concord --help` 可以运行。
 
 ## 完整路径
 
 1. 找到测试要指向的验收。 {#locate}
 
    ```sh
-   pnpm concord use-case steps docs/feature/feedback/use-case/manage-local-observations.md --fresh
+   bun run concord use-case steps docs/feature/feedback/use-case/manage-local-observations.md --fresh
    ```
 
    输出列出每个步骤的 `ref`、已关联的 `tests` 与 `testCount`。验收是一个步骤时指向它的 `ref`；是结果表或跨多个步骤时，指向标题 anchor 或整个 Use Case（[把测试关联到步骤](../../../feature/local-sdlc/use-case/link-tests-to-steps.md)）。本例的拒绝情形在“结果”表中，指向 `#结果`。
@@ -26,7 +26,7 @@
 3. 生成标记。 {#marker}
 
    ```sh
-   pnpm concord test marker --contract 'docs/feature/feedback/use-case/manage-local-observations.md#结果'
+   bun run concord test marker --contract 'docs/feature/feedback/use-case/manage-local-observations.md#结果'
    ```
 
    输出：
@@ -84,7 +84,7 @@
 6. 运行受改动影响的测试。 {#run}
 
    ```sh
-   pnpm gate --changed
+   bun run gate --changed
    ```
 
    预期输出（节选）：

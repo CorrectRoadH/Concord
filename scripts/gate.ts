@@ -28,7 +28,7 @@ const task = Effect.fn('gate.task')(function* (name: string, args: readonly stri
 const main = (selected: Effect.Success<ReturnType<typeof selectGateTests>>) => Effect.gen(function*() {
   const started = performance.now();
   const fs = yield* FileSystem.FileSystem;
-  if (yield* fs.exists(join(checkoutRoot, 'dist'))) return yield* new DistInCheckout({ message: 'Delete dist/ from the checkout before running pnpm gate. Tests run source; build packages with vp build --outDir <external-directory>.' });
+  if (yield* fs.exists(join(checkoutRoot, 'dist'))) return yield* new DistInCheckout({ message: 'Delete dist/ from the checkout before running bun run gate. Tests run source; build packages with vp build --outDir <external-directory>.' });
   // Keep fixture fsync traffic off the checkout disk. tmpfs pages are charged
   // to this gate's memory scope, and the same scope owns their removal.
   const fixtureDirectory = yield* (process.platform === 'linux' && (yield* fs.exists('/dev/shm'))

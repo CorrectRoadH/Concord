@@ -10,7 +10,7 @@ const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
 export function privateSourceInstallation(target: string): string {
   mkdirSync(target, { recursive: true });
   const checkout = sourceRoot;
-  for (const path of ['src', 'web', 'scripts', 'templates', 'skills', 'patches', '.bun-version', 'tsconfig.json', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'vite.config.ts', 'vite.source.config.ts', 'vite.preview.config.ts']) {
+  for (const path of ['src', 'web', 'scripts', 'templates', 'skills', 'patches', '.bun-version', 'tsconfig.json', 'package.json', 'bun.lock', 'vite.config.ts', 'vite.source.config.ts', 'vite.preview.config.ts']) {
     cpSync(join(checkout, path), join(target, path), { recursive: true });
   }
   for (const path of nativeSourceFiles) {

@@ -34,8 +34,8 @@ export const prepareBaseline = Effect.fn('perf.prepareBaseline')(function*(repos
   }
   const before = (yield* mustRun(['git', 'rev-parse', 'HEAD'], { cwd: folder, outputDir })).stdout.trim();
   if (before !== commit) return yield* new PerfError({ message: 'Baseline changed before build' });
-  yield* mustRun(['pnpm', 'install', '--frozen-lockfile', '--offline'], { cwd: folder, outputDir });
-  yield* mustRun(['pnpm', 'exec', 'vp', 'build', '--outDir', built], { cwd: folder, outputDir });
+  yield* mustRun(['vp', 'install', '--frozen-lockfile', '--offline'], { cwd: folder, outputDir });
+  yield* mustRun(['bun', 'run', '--no-install', 'vp', 'build', '--outDir', built], { cwd: folder, outputDir });
   const artifact = yield* loadArtifact('baseline', folder, yield* packageBin(built));
   if (artifact.commit !== commit || artifact.dirty) return yield* new PerfError({ message: 'Baseline source identity changed while building' });
   yield* fs.writeFileString(marker, `${JSON.stringify({ format: 'concord.bench-baseline/v1', commit, digest: artifact.digest, node: process.version })}\n`);

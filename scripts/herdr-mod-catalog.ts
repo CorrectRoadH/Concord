@@ -34,7 +34,7 @@ mods/concord/main.js 是从源码构建的原生 Herdr View，依赖 gpui-kit、
 
 ## Watch out
 
-先读 Herdr 配置目录的 AGENTS.md 和所有 mod 文件，向用户说明会运行 concord 并读写当前项目文件；mod 自身不发网络请求。需要 PATH 上的 ${required}，安装命令为 curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh；Homebrew 与 Nix 安装方式见 Concord README。读取 src/entry/herdr-mod/ 来重建，使用固定 pnpm 工具链运行 pnpm build:herdr，保留原生 Herdr 导入和 NOTICE。只复制 mods/concord/ 到用户 mods 目录，名称冲突时按 Herdr 指南调整；不复制本说明和预览，不修改布局或快捷键。没有 Git 目录时先选择目录。p5 动画通过“在浏览器中播放”打开，面板只显示说明与源码。
+先读 Herdr 配置目录的 AGENTS.md 和所有 mod 文件，向用户说明会运行 concord 并读写当前项目文件；mod 自身不发网络请求。需要 PATH 上的 ${required}，安装命令为 curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh；Homebrew 与 Nix 安装方式见 Concord README。读取 src/entry/herdr-mod/ 来重建，使用固定 Bun 工具链运行 bun run build:herdr，保留原生 Herdr 导入和 NOTICE。只复制 mods/concord/ 到用户 mods 目录，名称冲突时按 Herdr 指南调整；不复制本说明和预览，不修改布局或快捷键。没有 Git 目录时先选择目录。p5 动画通过“在浏览器中播放”打开，面板只显示说明与源码。
 
 ## Done when
 

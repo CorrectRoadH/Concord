@@ -9,8 +9,8 @@ export default {
   "runner": {
     "kind": "command",
     "prepare": [
-      ["pnpm", "install", "--frozen-lockfile", "--offline"],
-      ["pnpm", "exec", "vp", "run", "build:native"]
+      ["bun", "install", "--frozen-lockfile", "--offline"],
+      ["bun", "run", "--no-install", "vp", "run", "build:native"]
     ],
     "argv": [
       "node",
@@ -24,7 +24,7 @@ export default {
       "native-release.json",
       ".node-version",
       "package.json",
-      "pnpm-lock.yaml",
+      "bun.lock",
       "tsconfig.test.json",
       "bench/documentation-quality.bench.ts",
       "bench/feedback.bench.ts",
@@ -46,6 +46,7 @@ export default {
       "scripts/browser-test-report.ts",
       "scripts/build-identity.ts",
       "scripts/prepare-native.ts",
+      "scripts/prepare-release.ts",
       "scripts/build-output.ts",
       "scripts/bun-licenses.ts",
       "scripts/build-herdr-mod.ts",

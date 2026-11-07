@@ -16,7 +16,7 @@
 1. 在已推送的 commit 上完成 Concord 驱动的 Spec、实现与测试工作。 {#prepare}
 
    ```sh
-   pnpm gate --changed
+   bun run gate --changed
    git push origin master
    ```
 

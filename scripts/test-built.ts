@@ -146,7 +146,7 @@ const main = Effect.scoped(Effect.gen(function* () {
   });
   const nodeTests = nodeSuite(selectedNode);
   const browserTests = values.suite !== 'node' && browserFiles.length > 0
-    ? suite('Browser', 'pnpm', ['exec', 'e2e', 'run', '--config', values.suite === 'agent' ? 'e2e.agent.config.ts' : 'e2e.config.ts', '--no-cache', '--workers', String(browserConcurrency),
+    ? suite('Browser', 'vp', ['exec', 'e2e', 'run', '--config', values.suite === 'agent' ? 'e2e.agent.config.ts' : 'e2e.config.ts', '--no-cache', '--workers', String(browserConcurrency),
       ...(values.suite === 'agent' ? ['--tag', 'journey'] : []),
       ...(values['test-name-pattern'] === undefined ? [] : ['--grep', values['test-name-pattern']]),
       ...(values['test-shard'] === undefined ? [] : ['--shard', values['test-shard']]), ...browserFiles])

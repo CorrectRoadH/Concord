@@ -33,7 +33,7 @@
    门禁输出开头的 `# Machine load:` 行记录运行时的 load average。过载或并发运行其它门禁时，在空闲机器上复跑这个文件后再判断（[共享资源与同步](../README.md#共享资源与同步)）：
 
    ```sh
-   pnpm gate test/cli/onboarding-independent.test.ts
+   bun run gate test/cli/onboarding-independent.test.ts
    ```
 
 3. 先把领域情形下沉一层。 {#sink}
@@ -53,10 +53,10 @@
 5. 运行拆分后的文件，核对耗时。 {#run}
 
    ```sh
-   pnpm gate test/process/editor-lsp.test.ts test/process/editor-lsp-2.test.ts
+   bun run gate test/process/editor-lsp.test.ts test/process/editor-lsp-2.test.ts
    ```
 
-   在新的 `file-timings.json` 中，每个文件都不超过 60 秒，用例总数与拆分前相同。交付前运行 `pnpm gate --changed`；改动了 `test/support/` 时它选中全部测试（[扩展 Fixture](extend-fixtures.md#run)）。
+   在新的 `file-timings.json` 中，每个文件都不超过 60 秒，用例总数与拆分前相同。交付前运行 `bun run gate --changed`；改动了 `test/support/` 时它选中全部测试（[扩展 Fixture](extend-fixtures.md#run)）。
 
 ## 结果
 

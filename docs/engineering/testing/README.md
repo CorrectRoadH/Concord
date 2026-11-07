@@ -11,7 +11,7 @@
 1. 生成指向这个步骤的标记。
 
    ```sh
-   pnpm concord test marker --contract 'docs/feature/feedback/use-case/manage-local-observations.md#close'
+   bun run concord test marker --contract 'docs/feature/feedback/use-case/manage-local-observations.md#close'
    ```
 
    输出：
@@ -43,7 +43,7 @@
 3. 运行受改动影响的测试。
 
    ```sh
-   pnpm gate --changed
+   bun run gate --changed
    ```
 
    预期输出（节选；只有这一处改动时只选中这个文件，耗时与路径随运行变化）：
@@ -55,7 +55,7 @@
    # Bun layer domain: files=1; cases=1; countedFiles=1; 2.209s (sum of file durations)
    ```
 
-4. 确认关联已建立：`pnpm concord use-case steps docs/feature/feedback/use-case/manage-local-observations.md --fresh` 在 `close` 步骤的 `tests` 下列出这个测试。
+4. 确认关联已建立：`bun run concord use-case steps docs/feature/feedback/use-case/manage-local-observations.md --fresh` 在 `close` 步骤的 `tests` 下列出这个测试。
 
 交付前还要让新测试失败一次，见[质量标准](#质量标准)中的“会失败”。
 
@@ -126,7 +126,7 @@ flowchart TB
 
 ## 检查入口
 
-`pnpm gate`（等价于 `vp run gate`）是唯一的检查入口，满足[用 Concord 管理自身](../self-hosting/README.md#用-concord-管理自身)。默认运行完整门禁，日常开发和 CI 使用同一条命令，不提供只做部分检查的入口。
+`bun run gate`（等价于 `vp run gate`）是唯一的检查入口，满足[用 Concord 管理自身](../self-hosting/README.md#用-concord-管理自身)。默认运行完整门禁，日常开发和 CI 使用同一条命令，不提供只做部分检查的入口。
 
 | 阶段 | 内容 |
 | --- | --- |
@@ -215,7 +215,7 @@ CI 发版工作流在每个目标宿主构建并解压最终归档，用只含�
 | 单个测试文件 | 不超过 60 秒 |
 | 单个测试 | 所在层的 p50 上限 |
 
-CI 的任务耗时从 runner 开始执行到任务清理完成，包含 checkout、工具安装、缓存恢复、产物传输与校验。单独列出 `pnpm gate` 耗时不能代替任务耗时。原生产物准备、故障注入与分片分别报告，缓存命中与首次下载分开验收。
+CI 的任务耗时从 runner 开始执行到任务清理完成，包含 checkout、工具安装、缓存恢复、产物传输与校验。单独列出 `bun run gate` 耗时不能代替任务耗时。原生产物准备、故障注入与分片分别报告，缓存命中与首次下载分开验收。
 
 整条 CI 另外报告从本次运行开始到全部必需任务结束的墙钟，包含排队与任务依赖等待。准备任务成功后的分片与故障注入并行；执行链不超过 6 分钟。runner 排队时间单列，不能通过移动步骤隐藏准备成本。
 

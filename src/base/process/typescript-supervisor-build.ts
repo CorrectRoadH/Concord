@@ -35,7 +35,7 @@ export function compilerSupervisorPath(): string {
   if (execFileSync(bun, ['--version'], { encoding: 'utf8', timeout: 10_000 }).trim() !== version) throw new Error(`Compiler supervisor requires Bun ${version}`);
   const compiler = execFileSync(bun, ['--no-env-file', '--config=/dev/null', '-p', 'process.execPath'], { encoding: 'utf8', timeout: 10_000 }).trim();
   const compilerDigest = fileHash(compiler);
-  const inputs = ['src/entry/compiler/main.ts', 'src/base/process/typescript-supervisor.ts', 'src/base/process/typescript-supervisor-build.ts', 'pnpm-lock.yaml', '.bun-version'];
+  const inputs = ['src/entry/compiler/main.ts', 'src/base/process/typescript-supervisor.ts', 'src/base/process/typescript-supervisor-build.ts', 'bun.lock', '.bun-version'];
   const identity = hash(JSON.stringify([packageRoot, process.platform, process.arch, compilerDigest, ...inputs.map(file => [file, hash(readFileSync(join(packageRoot, file)))])]));
   const directory = join(homedir(), '.cache', 'concord', 'compiler-supervisor', identity);
   const executable = join(directory, 'compiler');

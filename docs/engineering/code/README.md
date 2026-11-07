@@ -4,7 +4,7 @@
 
 ## 由门禁检查的规则
 
-`pnpm gate` 的静态检查运行 Vite+ 自带的 Oxlint，以下规则违反即失败：
+`bun run gate` 的静态检查运行 Vite+ 自带的 Oxlint，以下规则违反即失败：
 
 | 规则 | 要求 | Oxlint 规则 |
 | --- | --- | --- |

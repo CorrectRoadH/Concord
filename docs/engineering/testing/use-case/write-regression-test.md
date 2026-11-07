@@ -14,7 +14,7 @@
 1. 记下缺陷。 {#record}
 
    ```sh
-   pnpm concord new issue close-ignores-links
+   bun run concord new issue close-ignores-links
    ```
 
    在 `docs/issues/close-ignores-links.md` 中写现象、期望与复现命令。调查与根因写进 Memory，用 `relations` 关联（`concord --skill feedback`）。
@@ -22,7 +22,7 @@
 2. 生成带 `@issue` 的标记。 {#marker}
 
    ```sh
-   pnpm concord test marker --contract 'docs/feature/feedback/use-case/manage-local-observations.md#结果' --issue docs/issues/close-ignores-links.md
+   bun run concord test marker --contract 'docs/feature/feedback/use-case/manage-local-observations.md#结果' --issue docs/issues/close-ignores-links.md
    ```
 
    输出：
@@ -56,7 +56,7 @@
 4. 确认它在当前代码上失败，单独提交。 {#commit-test}
 
    ```sh
-   pnpm gate test/domain/issue-close-links.test.ts
+   bun run gate test/domain/issue-close-links.test.ts
    ```
 
    预期输出（节选）：
@@ -75,12 +75,12 @@
 
 5. 修复并单独提交。 {#commit-fix}
 
-   只改产品文件。修复提交不改回归测试、runner 配置、`runner.sourceFiles` 与测试指向的 Spec，否则核验返回 `FixUnverifiable`。提交前运行 `pnpm gate --changed` 与 `pnpm concord check`。
+   只改产品文件。修复提交不改回归测试、runner 配置、`runner.sourceFiles` 与测试指向的 Spec，否则核验返回 `FixUnverifiable`。提交前运行 `bun run gate --changed` 与 `bun run concord check`。
 
 6. 核验并关闭 Issue。 {#close}
 
    ```sh
-   pnpm concord issue close close-ignores-links --fixed --reason "close 检查入链"
+   bun run concord issue close close-ignores-links --fixed --reason "close 检查入链"
    ```
 
    命令在临时 worktree 中对缺陷提交执行 `runner.prepare` 与 runner，在当前 worktree 对 HEAD 执行 runner；前者失败、后者通过才删除 Issue。输出与拒绝条件见[核验修复并关闭缺陷](../../../feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed)。

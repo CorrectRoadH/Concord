@@ -69,7 +69,7 @@ testAdapters: [{
   id: 'python',
   include: ['test/python'],
   builtin: 'pytest',
-  frameworkVersion: '9.1.1',
+  frameworkVersion: '9.2.0',
   implementationFiles: [],
   inputRoots: ['fixtures'],
   lockFiles: ['uv.lock'],

@@ -36,7 +36,7 @@ tap 定期或经通知发现新的公开发版，核验标签、归档与资产�
 | `runtime/rg` | 仓库根目录的 `runtime-deps.json` 唯一记录 ripgrep 版本与每个目标的官方发行资产（文件名与 SHA-256），按它校验后取出 `rg` 与许可证；Linux 使用官方静态链接的 musl 版本，不设 RPATH；macOS 的 `rg` 由 macOS 原生任务校验、ad-hoc 签名后随原生产物交给组装，签名后的摘要记在该任务的产物清单 |
 | `runtime/lib/` | 仅 Linux：Ubuntu 24.04 构建环境中的 `libatomic.so.1` 与 `libstdc++.so.6`，以及检查发现的其它 glibc 之外的 `DT_NEEDED` 库 |
 | `app/` 中的资源 | 包元数据、锁文件、docs、skills、templates、Web、预览、p5 类型与 Herdr mod；不保留应用模块 JS 作为另一套执行入口 |
-| `app/` 中的依赖 | 按 `pnpm-lock.yaml` 冻结、`--ignore-scripts` 安装的运行依赖；平台相关的可选依赖按目标平台选择 |
+| `app/` 中的依赖 | 按 `bun.lock` 冻结、`--ignore-scripts` 安装的运行依赖；平台相关的可选依赖按目标平台选择 |
 | `app/` 中的原生绑定 | 该目标经身份校验的 HawDB N-API 引擎 |
 | `licenses/` | 固定 Bun 发行版及其内嵌组件、ripgrep、`runtime/lib/` 中的运行库与运行依赖的许可证文本 |
 | `bin/concord` | 固定 Bun 以 `--compile --bytecode --format=esm` 生成的目标原生可执行文件，包含应用与固定角色入口 |

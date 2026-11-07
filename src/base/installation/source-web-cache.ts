@@ -76,7 +76,7 @@ export const sourceWebDigest = Effect.fn('sourceWebDigest')(function*(root: stri
       queue.push(found.replaceAll('\\', '/'));
     }
   }
-  for (const path of ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'src/base/installation/source-web-inputs.ts', 'src/base/installation/source-web-cache.ts', 'src/base/installation/source-web-builder.ts']) yield* read(path);
+  for (const path of ['bun.lock', 'src/base/installation/source-web-inputs.ts', 'src/base/installation/source-web-cache.ts', 'src/base/installation/source-web-builder.ts']) yield* read(path);
   // Vite discovers the nearest tsconfig even though all output targets are explicit.
   if (yield* fs.exists(join(root, 'tsconfig.json'))) yield* read('tsconfig.json');
   const manifest = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(DependencyManifest))(yield* fs.readFileString(join(root, 'package.json')));

@@ -70,10 +70,10 @@
 5. 运行这个文件。 {#run}
 
    ```sh
-   pnpm gate test/e2e/workspace-health.e2e.ts
+   bun run gate test/e2e/workspace-health.e2e.ts
    ```
 
-   文件路径路由到浏览器 runner；静态检查与构建仍完整执行。交付时运行 `pnpm gate --changed`。
+   文件路径路由到浏览器 runner；静态检查与构建仍完整执行。交付时运行 `bun run gate --changed`。
 
 6. 失败时读现场。 {#diagnose}
 

@@ -95,7 +95,7 @@
 6. 运行门禁。 {#run}
 
    ```sh
-   pnpm gate --changed
+   bun run gate --changed
    ```
 
    改动了 `test/support/` 时，`--changed` 选中全部测试（[完整门禁](../cli.md#完整门禁)）。这是一次完整门禁，与同一台机器上的其它门禁排队执行。

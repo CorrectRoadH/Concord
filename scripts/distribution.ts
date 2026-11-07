@@ -73,7 +73,7 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
   const destination = yield* externalBuildOutput(output);
   yield* typecheck();
   const tooling = ['scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts', 'scripts/pack-javascript.ts',
-    'scripts/build-herdr-mod.ts', 'scripts/herdr-mod-catalog.ts', 'scripts/build-identity.ts', 'scripts/build-output.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches', 'package.json', 'tsconfig.json', 'tsconfig.web.json', 'node_modules/typescript/package.json', 'node_modules/esbuild/package.json', 'node_modules/vite-plus/package.json'];
+    'scripts/build-herdr-mod.ts', 'scripts/herdr-mod-catalog.ts', 'scripts/build-identity.ts', 'scripts/build-output.ts', 'bun.lock', 'patches', 'package.json', 'tsconfig.json', 'tsconfig.web.json', 'node_modules/typescript/package.json', 'node_modules/esbuild/package.json', 'node_modules/vite-plus/package.json'];
   const resourcePaths = ['docs', 'skills', 'templates', ...(yield* fs.readDirectory(repository)).filter(name => /^README(?:\..+)?\.md$/u.test(name))];
   const resourceInput = () => archivePartInput(repository, [...resourcePaths, 'scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts']);
   const resourceDigest = yield* resourceInput();
@@ -98,7 +98,7 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
   yield* fs.remove(destination, { recursive: true, force: true });
   yield* fs.makeDirectory(destination, { recursive: true });
   for (const part of [resources, web]) yield* copyPart(part, destination);
-  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) yield* fs.copyFile(join(repository, name), join(destination, name));
+  for (const name of ['package.json', 'bun.lock']) yield* fs.copyFile(join(repository, name), join(destination, name));
   if (yield* fs.exists(join(repository, 'patches'))) yield* fs.copy(join(repository, 'patches'), join(destination, 'patches'));
   const identity = yield* captureBuildSource();
   const manifest = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(yield* fs.readFileString(join(destination, 'package.json')));

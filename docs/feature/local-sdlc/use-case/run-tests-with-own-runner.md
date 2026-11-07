@@ -34,7 +34,7 @@
      implementationFiles: ['tools/e2e-adapter.mjs'],
      inputRoots: ['e2e'],
      frameworkVersion: 'e2e-adapter/1',
-     lockFiles: ['pnpm-lock.yaml'],
+     lockFiles: ['bun.lock'],
      envNames: ['PATH', 'HOME'],
    }],
    ```

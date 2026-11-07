@@ -104,6 +104,7 @@ runnerTest('real cold and warm file runs use the previous PSS peak while keeping
 // @feature docs/engineering/testing/README.md#检查入口
 runnerTest('all Bun layers and their typed children run source without a package or V8 compile cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
+  const bunVersion = (yield* fs.readFileString(resolve('.bun-version'))).trim();
   const source = join(root, 'test/model/source.test.ts'), cli = join(root, 'test/cli/source.test.ts');
   const child = join(root, 'typed-child.ts');
   const cacheHome = join(root, 'shared-cache'), compileCache = join(cacheHome, 'concord/node-compile');
@@ -112,7 +113,7 @@ runnerTest('all Bun layers and their typed children run source without a package
   yield* fs.writeFileString(child, `const value: number = 42; console.log(JSON.stringify({value, bun: process.versions.bun, options: process.env.NODE_OPTIONS, cache: process.env.NODE_COMPILE_CACHE}));\n`);
   for (const file of [source, cli]) yield* fs.writeFileString(file, `import test from 'node:test'; import assert from 'node:assert/strict'; import { spawnSync } from 'node:child_process';
 test('source uses native type erasure', () => {
-  assert.equal(process.versions.bun, '1.4.2');
+  assert.equal(process.versions.bun, ${JSON.stringify(bunVersion)});
   assert.ok(process.execArgv.every(arg => !arg.includes('tsx')));
   const child = spawnSync(process.execPath, [${JSON.stringify(child)}], { encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
@@ -144,8 +145,8 @@ runnerTest('cancelling gate reaps static task groups and fixture scratch without
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.optional(Schema.String), cgroup: Schema.String, packageRoot: Schema.optional(Schema.String), fixtureRoot: Schema.optional(Schema.String), task: Schema.String }));
-  const fakePnpm = join(root, 'pnpm.ts');
-  yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env node
+  const fakeVp = join(root, 'vp.ts');
+  yield* fs.writeFileString(fakeVp, `#!/usr/bin/env node
 import { writeFileSync, readFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
 const task = process.argv.find(value => /^(?:gate:|test:)/.test(value)) ?? 'build';
@@ -153,9 +154,8 @@ writeFileSync(${JSON.stringify(root)} + '/' + task + '.json', JSON.stringify({ta
 console.log('TASK_READY');
 setInterval(() => {}, 1000);
 `);
-  yield* fs.chmod(fakePnpm, 0o755);
-  yield* fs.symlink(fakePnpm, join(root, 'pnpm'));
-  yield* fs.symlink(fakePnpm, join(root, 'vp'));
+  yield* fs.chmod(fakeVp, 0o755);
+  yield* fs.symlink(fakeVp, join(root, 'vp'));
   // Keep a failed cleanup regression from leaking the deliberately stubborn boundary.
   yield* Effect.addFinalizer(() => Effect.gen(function*() {
     for (const file of (yield* fs.readDirectory(root)).filter(file => file.endsWith('.json'))) {
@@ -259,10 +259,11 @@ runnerTest('name-filtered files count executed cases instead of successful file 
 
 runnerTest('official name filtering and shard union select each requested source test exactly once', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
+  const bunVersion = (yield* fs.readFileString(resolve('.bun-version'))).trim();
   const files: string[] = [];
   for (const name of ['alpha', 'beta', 'gamma']) {
     const file = join(root, `${name}.test.ts`);
-    yield* fs.writeFileString(file, `import test from 'node:test';\nimport assert from 'node:assert/strict';\ntest('selected ${name}', () => { assert.equal(process.versions.bun, '1.4.2'); assert.equal(process.env.CONCORD_TEST_FILE_ID, ${JSON.stringify(file)}); });\ntest('excluded ${name}', () => assert.fail('name filter was lost'));\n`);
+    yield* fs.writeFileString(file, `import test from 'node:test';\nimport assert from 'node:assert/strict';\ntest('selected ${name}', () => { assert.equal(process.versions.bun, ${JSON.stringify(bunVersion)}); assert.equal(process.env.CONCORD_TEST_FILE_ID, ${JSON.stringify(file)}); });\ntest('excluded ${name}', () => assert.fail('name filter was lost'));\n`);
     files.push(file);
   }
   const observed: string[] = [];
@@ -309,11 +310,10 @@ runnerTest('Bun and browser failures leave the other suite running and retain of
   const browser = join(root, 'route.e2e.ts'), node = join(root, 'route.test.ts');
   const browserArgs = join(root, 'browser-args.json'), nodeDone = join(root, 'node-done');
   yield* fs.writeFileString(browser, 'export {};\n');
-  const fakePnpm = join(root, 'pnpm.ts');
-  yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env node\nimport { writeFileSync } from 'node:fs';\nsetTimeout(() => { writeFileSync(${JSON.stringify(browserArgs)}, JSON.stringify(process.argv.slice(2))); console.log('BROWSER_EXECUTED'); process.exitCode = Number(process.env.BROWSER_EXIT); }, 150);\n`);
-  yield* fs.chmod(fakePnpm, 0o755);
-  yield* fs.symlink(fakePnpm, join(root, 'pnpm'));
-  yield* fs.symlink(fakePnpm, join(root, 'vp'));
+  const fakeVp = join(root, 'vp.ts');
+  yield* fs.writeFileString(fakeVp, `#!/usr/bin/env node\nimport { writeFileSync } from 'node:fs';\nsetTimeout(() => { writeFileSync(${JSON.stringify(browserArgs)}, JSON.stringify(process.argv.slice(2))); console.log('BROWSER_EXECUTED'); process.exitCode = Number(process.env.BROWSER_EXIT); }, 150);\n`);
+  yield* fs.chmod(fakeVp, 0o755);
+  yield* fs.symlink(fakeVp, join(root, 'vp'));
   const env = { PATH: `${root}:${process.env.PATH}`, CONCORD_GATE_MEMORY_MAX: String(7 * GiB), CONCORD_E2E_WORKERS: '2' };
   yield* fs.writeFileString(node, `import test from 'node:test';\ntest('selected', () => { throw new Error('NODE_EXPECTED_FAILURE'); });\n`);
   const nodeFailed = yield* run(['--test-name-pattern=selected', '--test-shard=1/1', node, browser], { ...env, BROWSER_EXIT: '0' });

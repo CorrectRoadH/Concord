@@ -188,7 +188,7 @@ const collectOne = Effect.fn('testAdapter.collect')(function* (repo: LocalReposi
     const version = yield* callProcess(repo, adapter, session, builtinVersionCommand(adapter));
     if (!hasSuccessfulOwnedProcessResult(version) || !`${version.stdout}\n${version.stderr}`.split(/[\s/]+/u).some(token => token === adapter.frameworkVersion || adapter.builtin === 'node-test' && token === `v${adapter.frameworkVersion}`)) return yield* Effect.fail(new ConcordError('CollectFailed', 'Installed framework version does not match the pinned adapter version'));
     versions.observedFramework = version.stdout.trim() || version.stderr.trim();
-    const runtimeCommand = adapter.builtin === 'cargo' ? ['rustc', '+stable', '--version'] : adapter.builtin === 'pytest' ? ['uv', 'run', '--offline', '--no-project', '--with', 'pytest==9.1.1', 'python', '--version'] : adapter.builtin === 'vitest' ? ['node', '--version'] : undefined;
+    const runtimeCommand = adapter.builtin === 'cargo' ? ['rustc', '+stable', '--version'] : adapter.builtin === 'pytest' ? ['uv', 'run', '--offline', '--no-project', '--with', 'pytest==9.2.0', 'python', '--version'] : adapter.builtin === 'vitest' ? ['node', '--version'] : undefined;
     if (runtimeCommand) {
       const runtime = yield* callProcess(repo, adapter, session, runtimeCommand);
       if (hasSuccessfulOwnedProcessResult(runtime)) {

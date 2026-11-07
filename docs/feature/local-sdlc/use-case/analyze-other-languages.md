@@ -23,7 +23,7 @@
      argv: ['node', 'node_modules/pyright/langserver.index.js', '--stdio'],
      cwd: '.',
      initializationOptions: {},
-     implementationFiles: ['node_modules/pyright/langserver.index.js', 'pnpm-lock.yaml'],
+     implementationFiles: ['node_modules/pyright/langserver.index.js', 'bun.lock'],
      sourceFiles: ['pyproject.toml'],
      profile: {
        version: 'python/v1',

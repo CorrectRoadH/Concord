@@ -1,6 +1,6 @@
 # 自举实现
 
-`pnpm concord` 执行当前 worktree 的源码 CLI，不依赖构建、全局安装或 link。文档直接编辑；Issue 与 Memory 的 frontmatter 按[文档模型](../../document-model.md)书写，由 `check` 校验。
+`bun run concord` 执行当前 worktree 的源码 CLI，不依赖构建、全局安装或 link。文档直接编辑；Issue 与 Memory 的 frontmatter 按[文档模型](../../document-model.md)书写，由 `check` 校验。
 
 测试关系由 `test/*.test.ts` 中的注释拥有。自举 smoke 先只读解析当前项目格式、runner argv、sourceFiles 与构建版本，再按配置复制全部 sourceRoots、testRoots、Memory 来源、docs 与 runner sourceFiles 到隔离 Git 消费者。扫描该副本并运行源码 CLI 的 `check` 与 `trace check`。输出 JSON 严格解码。缓存或检查副作用只发生在临时消费者，不修改当前仓库、不创建当前仓库证据，也不递归启动完整检查。
 

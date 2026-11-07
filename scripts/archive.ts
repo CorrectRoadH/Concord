@@ -46,27 +46,15 @@ export const installTargetDependencies = Effect.fn('archive.dependencies')(funct
   const fs = yield* FileSystem.FileSystem;
   yield* fs.remove(join(app, 'node_modules'), { recursive: true, force: true });
   const [os, cpu] = target.split('-');
-  yield* run('pnpm', ['install', '--prod', '--frozen-lockfile', '--ignore-scripts', '--optional', `--os=${os}`, `--cpu=${cpu}`, `--libc=${os === 'linux' ? 'glibc' : 'any'}`], app);
+  yield* run('bun', ['install', '--production', '--frozen-lockfile', '--ignore-scripts', '--linker=hoisted', '--backend=copyfile', `--os=${os}`, `--cpu=${cpu}`], app);
   // Both consumers need their optional platform executable despite ignored install scripts.
   for (const [scope, packageName, executable] of [['@esbuild', target, 'bin/esbuild'], ['@typescript', `typescript-${target}`, 'lib/tsc']] as const) {
-    const store = join(app, 'node_modules/.pnpm');
-    const directories = (yield* fs.readDirectory(store)).filter(name => name.startsWith(`${scope}+${packageName}@`));
-    if (directories.length !== 1 || !(yield* fs.exists(join(store, directories[0]!, 'node_modules', scope, packageName, executable)))) return yield* new ArchiveFailed({ message: `Missing target executable: ${scope}/${packageName}/${executable}` });
-  }
-  // This optional package ships both libc flavors in one tarball. Its loader
-  // selects tagged prebuilds; exclude musl images from our glibc-only archive.
-  if (target === 'linux-x64') {
-    const store = join(app, 'node_modules/.pnpm');
-    for (const directory of (yield* fs.readDirectory(store)).filter(name => name.startsWith('@msgpackr-extract+msgpackr-extract-linux-x64@'))) {
-      const folder = join(store, directory, 'node_modules/@msgpackr-extract/msgpackr-extract-linux-x64');
-      if (!(yield* fs.exists(join(folder, 'node.napi.glibc.node')))) return yield* new ArchiveFailed({ message: 'Missing glibc msgpackr prebuild' });
-      for (const name of yield* fs.readDirectory(folder)) if (name.endsWith('.musl.node')) yield* fs.remove(join(folder, name));
-    }
+    if (!(yield* fs.exists(join(app, 'node_modules', scope, packageName, executable)))) return yield* new ArchiveFailed({ message: `Missing target executable: ${scope}/${packageName}/${executable}` });
   }
   yield* validateArchiveLinks(app);
 });
 
-const dependencyLicenses = Effect.fn('archive.licenses')(function*(root: string, modules = join(root, 'app/node_modules/.pnpm')) {
+const dependencyLicenses = Effect.fn('archive.licenses')(function*(root: string, modules: string) {
   const fs = yield* FileSystem.FileSystem;
   for (const name of yield* fs.readDirectory(modules, { recursive: true })) {
     if (!/^(?:LICENSE|LICENCE|COPYING|NOTICE)(?:[._-].*)?$/iu.test(basename(name))) continue;
@@ -122,16 +110,16 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
     if (!assetEntries.has(name)) return yield* new ArchiveFailed({ message: `Application contains an execution module instead of resources: dist/${name}` });
   }
   const dependencyInput = () => archivePartInput(repository,
-    ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches', 'scripts/archive.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'],
-    { target, pnpm: process.env.npm_config_user_agent ?? '' });
+    ['package.json', 'bun.lock', '.bun-version', 'patches', 'scripts/archive.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'],
+    { target });
   const dependencies = yield* cachedArchivePart('dependencies', yield* dependencyInput(), directory => Effect.gen(function*() {
     yield* fs.makeDirectory(directory, { recursive: true });
-    for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) yield* fs.copyFile(join(repository, file), join(directory, file));
+    for (const file of ['package.json', 'bun.lock']) yield* fs.copyFile(join(repository, file), join(directory, file));
     if (yield* fs.exists(join(repository, 'patches'))) yield* fs.copy(join(repository, 'patches'), join(directory, 'patches'));
     yield* installTargetDependencies(directory, target);
-    yield* dependencyLicenses(directory, join(directory, 'node_modules/.pnpm'));
+    yield* dependencyLicenses(directory, join(directory, 'node_modules'));
   }), dependencyInput);
-  // Effect's copy resolves symlink targets. pnpm links must retain their exact
+  // Effect's copy resolves symlink targets. Package links must retain their exact
   // relative text when moving a readonly dependency part into a private tree.
   yield* attempt(() => cp(join(dependencies, 'node_modules'), join(app, 'node_modules'), { recursive: true, verbatimSymlinks: true }));
 

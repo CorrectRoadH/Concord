@@ -40,7 +40,7 @@ type InstallationFiles = string[][];
 function requireNativeArtifacts(runtime: RuntimeEnvironmentSnapshot): void {
   for (const name of ['artifact.json', 'hawdb.node', 'THIRD-PARTY-NOTICES.txt']) {
     if (lstatSync(join(nativeArtifactRoot(runtime), hawdbTarget(), name), { throwIfNoEntry: false }) === undefined) {
-      throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; run pnpm exec vp run build:native.');
+      throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; run bun run --no-install vp run build:native.');
     }
   }
   if (sourceInstallation) verifySourceNativeArtifact(runtime);
@@ -57,7 +57,7 @@ export function workspaceInstallationIdentity(runtime: RuntimeEnvironmentSnapsho
   const runtimeIdentity = [['mode', sourceInstallation ? 'source' : 'compiled'], ['bun', process.versions.bun ?? 'unavailable']];
   return sourceInstallation
     ? installationIdentity(directory, [{ root: directory, prefix: 'src', accept: () => true }, { root: join(packageRoot, 'web'), prefix: 'web', accept: () => true }, { root: nativeArtifactRoot(runtime), prefix: 'native', accept: () => true },
-      ...['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.bun-version', 'native-release.json', 'patches'].map(path => ({ root: join(packageRoot, path), prefix: path, accept: () => true })),
+      ...['package.json', 'bun.lock', '.bun-version', 'native-release.json', 'patches'].map(path => ({ root: join(packageRoot, path), prefix: path, accept: () => true })),
     ], runtimeIdentity, runtime)
     : installationIdentity(packageRoot, [
       { root: packageRoot, prefix: 'app', accept: () => true, linkRoot: realpathSync(packageRoot) },

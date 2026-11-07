@@ -3,14 +3,14 @@
 import { isDeepStrictEqual } from 'node:util';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { parse } from 'yaml';
 
 const Dependencies = Schema.Record(Schema.String, Schema.String);
-const Manifest = Schema.Struct({ version: Schema.String, dependencies: Dependencies, devDependencies: Dependencies });
-const LockedDependencies = Schema.Record(Schema.String, Schema.Struct({ specifier: Schema.String }));
+const InstallPolicy = { overrides: Dependencies, patchedDependencies: Dependencies, trustedDependencies: Schema.Array(Schema.String) };
+const Manifest = Schema.Struct({ version: Schema.String, packageManager: Schema.String, dependencies: Dependencies, devDependencies: Dependencies, ...InstallPolicy });
 const Lock = Schema.Struct({
-  lockfileVersion: Schema.Literal('9.0'), overrides: Dependencies,
-  importers: Schema.Struct({ '.': Schema.Struct({ dependencies: LockedDependencies, devDependencies: LockedDependencies }) }),
+  lockfileVersion: Schema.Literal(2), configVersion: Schema.Literal(1), ...InstallPolicy,
+  workspaces: Schema.Struct({ '': Schema.Struct({ name: Schema.Literal('concord-sdlc'), dependencies: Dependencies, devDependencies: Dependencies }) }),
+  packages: Schema.Record(Schema.String, Schema.Unknown),
 });
 class ReleasePreparationError extends Schema.TaggedError<ReleasePreparationError>()('ReleasePreparationError', { message: Schema.String }) {}
 
@@ -20,14 +20,22 @@ const prepare = Effect.gen(function*() {
   const tag = process.env.RELEASE_TAG ?? '';
   const manifest = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(yield* fs.readFileString('package.json'));
   const current = yield* Schema.decodeUnknownEffect(Manifest)(manifest);
-  const locked = yield* Schema.decodeUnknownEffect(Lock)(parse(yield* fs.readFileString('pnpm-lock.yaml')));
-  const workspace = yield* Schema.decodeUnknownEffect(Schema.Struct({ overrides: Dependencies }))(parse(yield* fs.readFileString('pnpm-workspace.yaml')));
-  for (const kind of ['dependencies', 'devDependencies'] as const) {
-    const specifiers = Object.fromEntries(Object.entries(locked.importers['.'][kind]).map(([name, value]) => [name, value.specifier]));
-    if (!isDeepStrictEqual(current[kind], specifiers)) return yield* new ReleasePreparationError({ message: `Package and pnpm-lock.yaml ${kind} disagree` });
+  const text = yield* fs.readFileString('bun.lock');
+  const parsed: unknown = yield* Effect.try({ try: () => Bun.JSON5.parse(text), catch: cause => new ReleasePreparationError({ message: `Invalid bun.lock: ${String(cause)}` }) });
+  const locked = yield* Schema.decodeUnknownEffect(Lock, { onExcessProperty: 'error' })(parsed).pipe(
+    Effect.mapError(cause => new ReleasePreparationError({ message: `Invalid bun.lock: ${String(cause)}` })),
+  );
+  const versionPin = (yield* fs.readFileString('.bun-version')).trim();
+  if (current.packageManager !== `bun@${versionPin}` || process.versions.bun !== versionPin) {
+    return yield* new ReleasePreparationError({ message: 'Package manager and running Bun must match .bun-version' });
   }
-  if (!isDeepStrictEqual(workspace.overrides, locked.overrides) || manifest.overrides !== undefined) {
-    return yield* new ReleasePreparationError({ message: 'Overrides must be owned by pnpm-workspace.yaml and match pnpm-lock.yaml' });
+  for (const kind of ['dependencies', 'devDependencies'] as const) {
+    if (!isDeepStrictEqual(current[kind], locked.workspaces[''][kind])) return yield* new ReleasePreparationError({ message: `Package and bun.lock ${kind} disagree` });
+  }
+  for (const kind of ['overrides', 'patchedDependencies', 'trustedDependencies'] as const) {
+    const expected = kind === 'trustedDependencies' ? [...current[kind]].sort() : current[kind];
+    const actual = kind === 'trustedDependencies' ? [...locked[kind]].sort() : locked[kind];
+    if (!isDeepStrictEqual(expected, actual)) return yield* new ReleasePreparationError({ message: `Package and bun.lock ${kind} disagree` });
   }
   if (tag === '') return;
   const match = /^(?:concord-)?v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(tag);

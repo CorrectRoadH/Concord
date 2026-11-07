@@ -11,7 +11,7 @@ import { type AdapterContext, type AdapterPlan, type AdapterReport, type Capture
 
 const capabilities = (changes: Partial<Capabilities> = {}): Capabilities => ({ realCollection: true, leaf: true, parameterGroups: false, exactSelection: true, perItemReport: true, range: false, rangeTrivia: false, tags: false, skipVisibility: true, ...changes });
 const regex = (text: string) => text.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&');
-const PYTEST: [string, ...string[]] = ['uv', 'run', '--offline', '--no-project', '--with', 'pytest==9.1.1', 'pytest'];
+const PYTEST: [string, ...string[]] = ['uv', 'run', '--offline', '--no-project', '--with', 'pytest==9.2.0', 'pytest'];
 const VitestCollected = Schema.Array(Schema.Struct({ name: Text, file: Text, project: Text, skipped: Schema.Boolean }));
 const VitestReport = Schema.Struct({ success: Schema.Boolean, testResults: Schema.Array(Schema.Struct({ name: Text, status: Text, message: Schema.String, assertionResults: Schema.Array(Schema.Struct({ fullName: Text, status: Text, title: Text, ancestorTitles: Schema.Array(Schema.String), failureMessages: Schema.Array(Schema.String), duration: Schema.optional(Schema.Number), meta: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)), tags: Schema.optional(Schema.Array(Schema.String)) })) })) });
 const GoEvent = Schema.Struct({ Action: Text, Test: Schema.optional(Text), Package: Schema.optional(Text), Output: Schema.optional(Schema.String), Time: Schema.optional(Schema.String), Elapsed: Schema.optional(Schema.Number), FailedBuild: Schema.optional(Schema.String) });

@@ -8,6 +8,12 @@
 
 `vp build` 的生产构建钩子准备本机目标的完整归档内容，每次清空输出目录。
 
+## 依赖安装
+
+`bun.lock` 是唯一的依赖锁文件。发版准备通过 Bun 的 JSON5 解析器读取文本锁，并严格校验根工作区的依赖、覆盖项、补丁和受信任依赖；清单、锁或 `.bun-version` 不一致时以 `ReleasePreparationError` 拒绝发版。版本标签只改发布版本，不重新解析依赖。
+
+归档在目标宿主安装生产依赖，验证 esbuild 与 TypeScript 的目标可选包，收集安装树中的许可证，再验证相对符号链接均留在归档内。使用私有复制的安装树，后续 ELF 改写不能污染 Bun 缓存或其它安装。编译、Web、源码服务与归档缓存的输入包含 `bun.lock`；生产依赖缓存还包含 `.bun-version`。
+
 ## 编译入口
 
 `src/entry/compiled/main.ts` 是 Bun 编译根，使用 ESM 与 bytecode。归档入口通过字面量惰性 import 选择角色的显式 `run` 函数；导入角色实现不启动进程、不安装 listener，源码薄入口调用同一函数一次。CLI 在 `run` 内捕获 argv、cwd 和环境，完整命令 fallback 使用可静态打包的字面量 import。
@@ -43,7 +49,7 @@ fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。
 各部分的来源与校验只由归档构成定义，本节只写组装顺序。
 
 1. 构建共享资源与 Web，并严格检查应用类型。
-2. 每目标准备干净的运行依赖树：冻结锁文件、`--ignore-scripts`、按目标选择可选依赖；链接规则由归档构成拥有。
+2. 每目标准备干净的运行依赖树：使用固定 Bun、`bun.lock`、`--production --frozen-lockfile --ignore-scripts --linker hoisted --backend copyfile`，按目标选择可选依赖；链接规则由归档构成拥有。
 3. 在目标宿主用 `.bun-version` 的 Bun 编译产品入口，关闭自动 dotenv、bunfig 与 tsconfig 加载；Linux 使用 x64 baseline。校验实际 Bun 版本，编译失败不发布缓存。
 4. 取得并校验 HawDB、ripgrep、运行库和许可证，复制到私有组装目录。Linux 完成 RPATH 处理后实跑；macOS 完成最终签名后冻结字节。
 5. 写入确定的版本和构建身份，打成最终候选并计算 SHA-256。验证阶段使用该候选，不重新构建。
@@ -61,7 +67,7 @@ fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。
 | 编译可执行文件 | 源码、构建配置、依赖锁、TypeScript 与 Bun 版本、目标及 CPU baseline |
 | 随应用发布的资源 | `docs`、`skills`、`templates` 等被复制进应用的文件 |
 | Web 产物 | 已有的 Web 产物缓存键 |
-| 目标的运行依赖安装树 | `pnpm-lock.yaml`、`package.json` 与目标 |
+| 目标的运行依赖安装树 | `bun.lock`、`package.json` 与目标 |
 | 运行时文件与许可证 | `.bun-version`、`.node-version`、`runtime-deps.json`、目标，以及 Linux `runtime/lib/` 的来源身份 |
 | 原生产物 | 自身的身份 |
 

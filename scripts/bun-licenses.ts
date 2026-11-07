@@ -4,7 +4,7 @@ import { Effect, FileSystem, Schema } from 'effect';
 import { ArchiveFailed, command, readJson, sha256, verifiedDownload } from './archive-support.ts';
 
 const Digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
-const ArchivePath = Schema.String.check(Schema.isPattern(/^package\/(?:[a-zA-Z0-9_-][a-zA-Z0-9_.-]*\/)*[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$/u));
+const ArchivePath = Schema.String.check(Schema.isPattern(/^(?:[a-zA-Z0-9_@][a-zA-Z0-9_.@+-]*\/)*[a-zA-Z0-9_@][a-zA-Z0-9_.@+-]*$/u));
 const BunLicenseSource = Schema.Struct({
   component: Schema.String,
   evidence: Schema.String,
@@ -14,8 +14,8 @@ const BunLicenseSource = Schema.Struct({
   files: Schema.optional(Schema.Array(Schema.Struct({ path: ArchivePath, sha256: Digest }))),
 });
 export const BunLicenseInventory = Schema.Struct({
-  version: Schema.Literal('1.4.2'),
-  commit: Schema.Literal('744846f844374847c902b5e7fd59b4342a51ef99'),
+  version: Schema.Literal('1.4.4'),
+  commit: Schema.Literal('38afee6c84fcf48c0edb2466aa4b27d287a59c30'),
   sources: Schema.Array(BunLicenseSource),
 });
 type BunLicenseSource = typeof BunLicenseSource.Type;

@@ -145,7 +145,7 @@ test('real builder failure leaves no publication and deletion, corruption and a 
   try {
     mkdirSync(root); symlinkSync(join(checkout, 'node_modules'), join(root, 'node_modules'), 'junction');
     write('package.json', '{"type":"module","dependencies":{}}');
-    for (const path of ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'src/base/installation/source-web-inputs.ts', 'src/base/installation/source-web-cache.ts', 'src/base/installation/source-web-builder.ts']) write(path, '');
+    for (const path of ['bun.lock', 'src/base/installation/source-web-inputs.ts', 'src/base/installation/source-web-cache.ts', 'src/base/installation/source-web-builder.ts']) write(path, '');
     for (const [config, web] of [['vite.source.config.ts', 'web'], ['vite.preview.config.ts', 'web/preview']]) {
       write(config!, `import { defineConfig } from 'vite-plus'; export default defineConfig({root:new URL('./${web}/',import.meta.url).pathname,envDir:false,build:{minify:false}});`);
       write(`${web}/index.html`, '<!doctype html><html><body><script type="module" src="./main.ts"></script></body></html>');

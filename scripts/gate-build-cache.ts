@@ -69,7 +69,7 @@ export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout
   const roots = new Set(['src', 'web', 'scripts', 'docs', 'templates', 'skills', 'patches']);
   const inputs = (yield* fs.readDirectory(checkout)).filter(name => roots.has(name)
     || name === '.bun-version' || name === '.node-version' || name === 'runtime-deps.json' || name === 'native-release.json'
-    || /^(?:README(?:\..+)?\.md|package\.json|pnpm[^/]*\.yaml|tsconfig[^/]*\.json|vite[^/]*\.config\.ts)$/u.test(name));
+    || /^(?:README(?:\..+)?\.md|package\.json|bun\.lock|tsconfig[^/]*\.json|vite[^/]*\.config\.ts)$/u.test(name));
   const entries = yield* buildCacheTree(checkout, path => {
     const parts = path.split('/');
     return !inputs.includes(parts[0]!) || parts.includes('node_modules') || parts.includes('.git');
@@ -85,7 +85,7 @@ export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout
       ? yield* Effect.promise(() => import('./archive-linux.ts')).pipe(Effect.flatMap(module => module.ubuntuRuntimeMetadata())) : null;
   const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
   const tools = (yield* fs.exists(join(checkout, 'scripts/distribution.ts')))
-    ? yield* Effect.forEach(process.platform === 'linux' ? ['bun', 'pnpm', 'tar', 'patchelf', 'readelf'] : ['bun', 'pnpm', 'tar'], tool =>
+    ? yield* Effect.forEach(process.platform === 'linux' ? ['bun', 'tar', 'patchelf', 'readelf'] : ['bun', 'tar'], tool =>
       spawner.string(ChildProcess.make(tool, ['--version'], { stderr: 'ignore' })).pipe(Effect.map(version => ({ tool, version })))) : [];
   if (process.platform === 'darwin' && tools.length > 0) tools.push({ tool: 'codesign', version: sha(yield* fs.readFile('/usr/bin/codesign')) });
   const cachedNative = join(yield* nativeInputCache(checkout), target === 'linux-x64' ? 'linux-x64-glibc' : target!);
@@ -135,7 +135,7 @@ const validatePackage = Effect.fn('gate.cache.validatePackage')(function*(archiv
     if (yield* fs.exists(join(root, 'dist', name))) return yield* new GateBuildCacheFailed({ message: `Archive must not contain application modules: dist/${name}` });
   }
   const required = ['dist/compiler.json', 'dist/web/index.html', 'dist/preview/index.html', 'dist/herdr-mod/main.js',
-    'dist/herdr-mod/mod.json', 'dist/herdr-mod/preview.png', 'dist/build-identity.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'];
+    'dist/herdr-mod/mod.json', 'dist/herdr-mod/preview.png', 'dist/build-identity.json', 'bun.lock'];
   for (const path of required) {
     if (!(yield* inspect(join(root, path))).isFile() || (yield* fs.readFile(join(root, path))).length === 0) return yield* new GateBuildCacheFailed({ message: `Missing package file: ${path}` });
   }

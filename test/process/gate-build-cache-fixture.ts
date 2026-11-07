@@ -40,9 +40,8 @@ const fixture = Effect.fn('test.cache.fixture')(function*(root: string) {
   }
   const pkg = { name: 'gate-cache-fixture', version: '1.0.0', type: 'module', bin: { concord: '../bin/concord' }, dependencies: {} };
   yield* fs.writeFileString(join(seed, 'package.json'), JSON.stringify(pkg));
-  const code = yield* spawner.exitCode(ChildProcess.make('pnpm', ['install', '--lockfile-only', '--ignore-scripts', '--offline'], { cwd: seed, stdout: 'ignore', stderr: 'inherit', stdin: 'ignore' }));
-  assert.equal(Number(code), 0);
-  yield* fs.writeFileString(join(seed, 'pnpm-workspace.yaml'), 'allowBuilds: {}\n');
+  // The fake builder owns these artifact bytes; this test never resolves packages.
+  yield* fs.writeFileString(join(seed, 'bun.lock'), '{}\n');
   for (const path of ['dist/compiler.json', 'dist/web/index.html', 'dist/preview/index.html',
     'dist/herdr-mod/main.js', 'dist/herdr-mod/mod.json', 'dist/herdr-mod/preview.png', 'dist/build-identity.json',
     'docs/example.md', 'templates/example.md', 'skills/example.md', 'dist/p5-types/index.d.ts']) {

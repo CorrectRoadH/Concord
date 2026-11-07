@@ -17,7 +17,7 @@ test('Web digest follows runtime shared inputs and ignores CLI, scripts, type-on
   const write = (path: string, value: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), value); };
   try {
     symlinkSync(join(checkout, 'node_modules'), join(root, 'node_modules'), 'junction');
-    for (const path of ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'vite.source.config.ts', 'vite.preview.config.ts', 'src/base/installation/source-web-inputs.ts', 'src/base/installation/source-web-cache.ts', 'src/base/installation/source-web-builder.ts']) write(path, '');
+    for (const path of ['bun.lock', 'vite.source.config.ts', 'vite.preview.config.ts', 'src/base/installation/source-web-inputs.ts', 'src/base/installation/source-web-cache.ts', 'src/base/installation/source-web-builder.ts']) write(path, '');
     write('package.json', '{"dependencies":{},"scripts":{"concord":"before"}}');
     write('web/main.tsx', 'import { value } from "../src/model/index.ts"; import type { NeverRead } from "../src/domain/unused.ts"; export default <div>{value}#</div>');
     write('web/styles.css', 'body { color: red }');
@@ -34,7 +34,7 @@ test('Web digest follows runtime shared inputs and ignores CLI, scripts, type-on
     assert.notEqual(await digest(), first, 'runtime re-exports participate');
     write('src/model/shared.ts', 'export const value = 1;');
     assert.equal(await digest(), first, 'restoring bytes restores the key');
-    for (const path of ['web/main.tsx', 'web/styles.css', 'vite.source.config.ts', 'vite.preview.config.ts', 'pnpm-lock.yaml']) {
+    for (const path of ['web/main.tsx', 'web/styles.css', 'vite.source.config.ts', 'vite.preview.config.ts', 'bun.lock']) {
       const bytes = readFileSync(join(root, path), 'utf8');
       write(path, `${bytes}\n/* changed */`);
       assert.notEqual(await digest(), first, path);

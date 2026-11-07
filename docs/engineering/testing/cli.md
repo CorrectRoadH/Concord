@@ -5,7 +5,7 @@
 ## 完整门禁
 
 ```sh
-pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<序号>/<总数>] [<测试文件>...]
+bun run gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<序号>/<总数>] [<测试文件>...]
 ```
 
 | 参数 | 作用 |
@@ -27,9 +27,9 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 
 本机门禁按名额排队：定向门禁占 1 个名额，选中全部测试的门禁占全部名额（[负载](README.md#共享资源与同步)）。退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Bun 源码测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
 
-本地交付运行 `pnpm gate --changed`。推送到 master 后，CI 的原生产物准备、测试分片与故障注入任务均在 GitHub Actions 托管的 `ubuntu-24.04` runner 上运行：十六个分片各运行 `pnpm gate --test-shard=<序号>/16`，并集是完整集合；每个任务一台新机器，代码只经 Git 推送到达，结果只经 CI 返回。失败由引入它的人立即修复。
+本地交付运行 `bun run gate --changed`。推送到 master 后，CI 的原生产物准备、测试分片与故障注入任务均在 GitHub Actions 托管的 `ubuntu-24.04` runner 上运行：十六个分片各运行 `bun run gate --test-shard=<序号>/16`，并集是完整集合；每个任务一台新机器，代码只经 Git 推送到达，结果只经 CI 返回。失败由引入它的人立即修复。
 
-CI 先统一下载固定版本的生产与测试原生产物，分片只校验并使用。故障注入由独立任务选择预编译的测试产物，再运行 `pnpm gate test/process/hawdb-native.test.ts`。全部任务必须通过；任务依赖与产物传递见[CI 任务](architecture.md#ci-任务)。
+CI 先统一下载固定版本的生产与测试原生产物，分片只校验并使用。故障注入由独立任务选择预编译的测试产物，再运行 `bun run gate test/process/hawdb-native.test.ts`。全部任务必须通过；任务依赖与产物传递见[CI 任务](architecture.md#ci-任务)。
 
 报告写入每次调用独立的 `.test-results/run-*`，其中有按耗时排序的测试文件与子进程启动次数。CI 按分片上传报告。
 
@@ -62,11 +62,11 @@ PSS 把共享页按进程平摊，一棵树的 PSS 之和就是它实际占用�
 
 ## 浏览器环境
 
-`pnpm gate` 包含真实 Chromium 的界面验收。
+`bun run gate` 包含真实 Chromium 的界面验收。
 
 | 方式 | 作用 |
 | --- | --- |
-| `pnpm exec playwright install chromium` | 在开发环境安装浏览器 |
+| `bun run --no-install vp exec playwright install chromium` | 在开发环境安装浏览器 |
 | `CONCORD_BROWSER_PATH=<可执行文件>` | 使用已有的浏览器 |
 | NixOS | 默认识别 `/run/current-system/sw/bin/chromium` |
 

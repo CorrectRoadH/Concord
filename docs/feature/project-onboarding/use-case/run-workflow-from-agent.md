@@ -49,7 +49,7 @@
 
 3. agent 读取当前版本的说明并执行。 {#follow}
 
-   每个 skill 只让 agent 运行对应的 `concord --skill <主题>`；项目的 `AGENTS.md` 指定了其它运行方式（例如 `pnpm concord`）时按它运行。说明正文来自已安装的 Concord，升级后自动是新版本的说明。
+   每个 skill 只让 agent 运行对应的 `concord --skill <主题>`；项目的 `AGENTS.md` 指定了其它运行方式（例如 `bun run concord`）时按它运行。说明正文来自已安装的 Concord，升级后自动是新版本的说明。
 
 | skill | 读取的 skill 主题 | agent 做什么 |
 | --- | --- | --- |

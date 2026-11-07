@@ -100,7 +100,7 @@ export const ubuntuRuntimeLibraries = Effect.fn('archive.ubuntuLibraries')(funct
 });
 
 
-/** Always break pnpm/store hardlinks before changing ELF bytes. */
+/** Always break package-cache hardlinks before changing ELF bytes. */
 export const relocateElf = Effect.fn('archive.relocateElf')(function*(file: string, rpath: string, hasInterpreter: boolean) {
   const fs = yield* FileSystem.FileSystem;
   const staged = `${file}.relocate-${randomUUID()}`;
