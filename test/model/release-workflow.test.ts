@@ -37,82 +37,16 @@ const Job = Schema.Struct({
   })),
 });
 
-// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('Herdr catalog sync uses the tagged package after source publication even when tap notification fails', () => Effect.runPromise(Effect.gen(function*() {
+// @use-case docs/engineering/build/use-case/share-herdr-mod.md
+test('CLI release never overwrites the independently committed Herdr catalog', () => Effect.runPromise(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const workflow = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ publish: Job, 'herdr-mod': Job }) }))(
+  const workflow = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Schema.Struct({ steps: Schema.optional(Schema.Array(Schema.Struct({ run: Schema.optional(Schema.String) }))) })) }))(
     parse(yield* fs.readFileString('.github/workflows/release.yml')),
   );
-  const source = workflow.jobs.publish, mirror = workflow.jobs['herdr-mod'];
-  assert.equal(source.outputs?.['source-published'], "${{ steps.source-release.outcome == 'success' }}");
-  assert.ok(source.steps.some(step => step.id === 'source-release' && step.run?.includes('gh release create')));
-  assert.ok(source.steps.some(step => step.name === 'Notify Homebrew tap of the published release' && step.run?.endsWith('exit 1\n')));
-  assert.equal(mirror.needs, 'publish');
-  assert.equal(mirror.if, "${{ always() && inputs.tag != '' && needs.publish.outputs.source-published == 'true' }}");
-  assert.equal(mirror.permissions?.contents, 'write');
-  const checkouts = mirror.steps.filter(step => step.uses === 'actions/checkout@v4');
-  assert.deepEqual(checkouts.map(step => step.with?.ref), ["${{ format('refs/tags/{0}', inputs.tag) }}", 'master']);
-  assert.equal(checkouts[0]?.with?.['persist-credentials'], false);
-  assert.equal(checkouts[1]?.with?.token, '${{ github.token }}');
-  assert.equal(checkouts[1]?.with?.path, 'herdr-mirror');
-  assert.ok(mirror.steps.some(step => step.uses === 'pnpm/action-setup@v4' && step.with?.version === '11.18.0'));
-  assert.ok(mirror.steps.some(step => step.uses === 'actions/setup-node@v4' && step.with?.['node-version-file'] === '.node-version'));
-  assert.ok(mirror.steps.some(step => step.run === 'pnpm install --frozen-lockfile --ignore-scripts'));
-  assert.ok(mirror.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
-  const generation = mirror.steps.find(step => step.name === 'Generate Herdr mirror from the verified release package');
-  assert.equal(generation?.env?.RELEASE_TAG, '${{ inputs.tag }}');
-  assert.match(generation?.run ?? '', /cd release && sha256sum --check SHA256SUMS/u);
-  assert.match(generation?.run ?? '', /tar -xzf release\/concord-\*-linux-x64\.tar\.gz/u);
-  assert.match(generation?.run ?? '', /scripts\/herdr-mod-release\.ts "\$RUNNER_TEMP\/herdr-package\/app" "\$RUNNER_TEMP\/herdr-mirror" "\$RELEASE_TAG"/u);
-  const commands = mirror.steps.map(step => step.run ?? '').join('\n');
-  assert.match(commands, /git -C herdr-mirror add -- concord/u);
-  assert.equal((commands.match(/ commit -m /gu) ?? []).length, 1);
-  assert.match(commands, /commit -m "Concord Herdr mod \$RELEASE_TAG" -- concord/u);
-  assert.match(commands, /git -C herdr-mirror push origin HEAD:master/u);
-  assert.doesNotMatch(commands, /--force|gh repo create|gh release|vp build|HERDR_MOD_REPOSITORY_TOKEN/u);
+  assert.equal(Object.hasOwn(workflow.jobs, 'herdr-mod'), false);
+  const commands = Object.values(workflow.jobs).flatMap(job => (job.steps ?? []).map(step => step.run ?? '')).join('\n');
+  assert.doesNotMatch(commands, /herdr-mirror|herdr-mod-release|HEAD:master/u);
 }).pipe(Effect.provide(NodeServices.layer))));
-
-// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('Herdr workflow sync commits only generated catalog files once and reports a failed push', () => Effect.runPromise(Effect.gen(function*() {
-  const fs = yield* FileSystem.FileSystem;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const workflow = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ 'herdr-mod': Job }) }))(
-    parse(yield* fs.readFileString('.github/workflows/release.yml')),
-  );
-  const script = workflow.jobs['herdr-mod'].steps.find(step => step.name === 'Synchronize the generated Concord directory')?.run;
-  assert.ok(script);
-  const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-herdr-workflow-' });
-  const git = Effect.fn('herdrWorkflowTest.git')(function*(args: readonly string[]) {
-    return yield* spawner.string(ChildProcess.make('git', args, { cwd: root }));
-  });
-  yield* git(['init', '--bare', '--initial-branch=master', 'remote.git']);
-  yield* git(['clone', join(root, 'remote.git'), 'herdr-mirror']);
-  yield* fs.writeFileString(join(root, 'herdr-mirror/README.md'), 'source stays intact\n');
-  yield* git(['-C', 'herdr-mirror', 'add', '--', 'README.md']);
-  yield* git(['-C', 'herdr-mirror', '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.test', 'commit', '-m', 'source']);
-  yield* git(['-C', 'herdr-mirror', 'push', 'origin', 'HEAD:master']);
-  const generated = join(root, 'runner/herdr-mirror/concord');
-  yield* fs.makeDirectory(join(generated, 'mods/concord'), { recursive: true });
-  yield* fs.writeFileString(join(generated, 'RECIPE.md'), '# Concord\n');
-  yield* fs.writeFileString(join(generated, 'preview.png'), 'packaged screenshot fixture');
-  yield* fs.writeFileString(join(generated, 'mods/concord/main.js'), 'package bytes');
-  yield* fs.writeFileString(join(generated, 'mods/concord/mod.json'), '{"minimumConcordVersion":"1.2.3"}');
-  const sync = () => spawner.exitCode(ChildProcess.make('bash', ['-e', '-c', script], { cwd: root, extendEnv: true, env: {
-    RELEASE_TAG: 'v1.2.3', RUNNER_TEMP: join(root, 'runner'), GITHUB_STEP_SUMMARY: join(root, 'summary'), GITHUB_REPOSITORY: 'fixture/concord',
-  } }));
-  assert.equal(Number(yield* sync()), 0);
-  assert.equal((yield* git(['-C', 'herdr-mirror', 'rev-list', '--count', 'HEAD'])).trim(), '2');
-  assert.deepEqual((yield* git(['-C', 'herdr-mirror', 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'])).trim().split('\n'), [
-    'concord/RECIPE.md', 'concord/mods/concord/main.js', 'concord/mods/concord/mod.json', 'concord/preview.png',
-  ]);
-  assert.equal(yield* fs.readFileString(join(root, 'herdr-mirror/README.md')), 'source stays intact\n');
-  assert.equal((yield* git(['--git-dir', 'remote.git', 'rev-parse', 'master'])).trim(), (yield* git(['-C', 'herdr-mirror', 'rev-parse', 'HEAD'])).trim());
-  assert.equal(Number(yield* sync()), 0);
-  assert.equal((yield* git(['-C', 'herdr-mirror', 'rev-list', '--count', 'HEAD'])).trim(), '2', 'identical release must not add another commit');
-  yield* fs.writeFileString(join(generated, 'RECIPE.md'), '# Concord changed\n');
-  yield* git(['-C', 'herdr-mirror', 'remote', 'set-url', 'origin', join(root, 'missing.git')]);
-  assert.notEqual(Number(yield* sync()), 0, 'push failure must fail the mirror job');
-}).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('release builds two native targets and gates publication on the same commit gate', async () => {

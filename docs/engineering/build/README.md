@@ -25,6 +25,8 @@ pnpm exec vp run gate
 
 产品代码可以使用该版本的全部 API，例如 `Temporal`。升级运行时只改 `.node-version`，交付前跑完整门禁与打包测试。
 
+只交付 Herdr mod 时运行 `pnpm build:herdr`，生成目录直接随 Git 提交分发，不需要完整归档或 CLI Release，见[独立交付 Concord mod](use-case/share-herdr-mod.md)。
+
 ## 怎样工作
 
 开发用的 worktree 中没有 `dist/`：日常开发运行源码，测试同样运行源码，Web 产物与原生绑定来自 worktree 外按输入摘要共享的缓存。worktree 只有源码这一个安装身份，CLI 与工作区服务不会因新旧产物并存而冲突。

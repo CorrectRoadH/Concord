@@ -92,13 +92,7 @@
 
    安装脚本与文档中的 Nix flake 得到同一版本。编辑器与脚本使用的 JSON Schema 由同一版本 CLI 的 [`concord schema`](../../local-sdlc/cli.md#机器可读-schema) 输出。
 
-9. 随本次发版更新同版本的 Concord mod。 {#herdr-mod}
-
-   源码 Release 成功后，发版 workflow 把归档中构建好的 mod、`RECIPE.md` 与截图 `preview.png` 写到本仓库顶层的 `concord/` 目录，以一个提交推到 master。
-
-   目录结构为 `concord/RECIPE.md`、`concord/preview.png` 与 `concord/mods/concord/`（`main.js`、`mod.json`），截图来自真实 Herdr 主机。本仓库带 GitHub topic `herdr-mod`，herdr.dev 按账号与目录名把它列为 `herdr.dev/mods/CorrectRoadH/concord`；`mod.json` 写明要求的最低 Concord 版本，即本次发版的版本。
-
-   `concord/` 是唯一提交到仓库的构建产物，只由发版 workflow 写入，人与 agent 不手改；它不属于源码、测试或 Spec，不参与类型检查、`concord check` 与测试选择。workflow 使用自带的 `GITHUB_TOKEN` 写入。
+Concord mod 的仓库分发目录按[独立交付](../../../engineering/build/use-case/share-herdr-mod.md)更新；本工作流只在归档中携带 mod，不写入 master。
 
 ## 结果
 
@@ -108,7 +102,6 @@
 | --- | --- |
 | 矩阵、身份、摘要、候选验证或运行时清理失败 | 可见，停止所在的发版阶段，不创建源码 Release |
 | Formula 或 Nix 候选失败 | 可见，停止渠道更新；源码 Release 保持不变 |
-| 第 9 步失败 | 报告失败，不影响源码 Release 与 Homebrew、Nix 渠道 |
 | 缺少通知凭据或通知重试耗尽 | 通知步骤非零退出，保留已上传的不可变资产；源码 Release 存在不表示渠道完成 |
 | 重跑失败的发版任务 | 复用相同资产，识别已有的渠道完成记录 |
 

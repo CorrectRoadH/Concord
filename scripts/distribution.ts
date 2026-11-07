@@ -14,6 +14,7 @@ import { archivePartInput, cachedArchivePart } from './application-cache.ts';
 import { externalBuildOutput } from './build-output.ts';
 import { archiveTarget } from './archive-support.ts';
 import { sourceWebDigest } from '../src/base/installation/index.ts';
+import { buildHerdrModAssets } from './build-herdr-mod.ts';
 import { modManifest } from '../src/model/herdr-mod/index.ts';
 
 let outputRoot: string;
@@ -126,11 +127,7 @@ const prepare = Effect.gen(function*() {
   })), { concurrency: 'unbounded' });
   yield* narrowGeneratedImports();
   yield* buildStartup(dist(), outputRoot);
-  yield* packJavaScript({ entry: { main: 'src/entry/herdr-mod/main.ts' }, outDir: dist('herdr-mod'), format: 'esm', platform: 'neutral', target: 'es2022', minify: true,
-    deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$)/u, onlyBundle: false },
-    outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
-  yield* fs.copyFile('src/entry/herdr-mod/preview.png', dist('herdr-mod/preview.png'));
-  yield* fs.writeFileString(dist('herdr-mod/NOTICE.txt'), `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);
+  yield* buildHerdrModAssets(dist('herdr-mod'));
 });
 
 const finish = Effect.gen(function*() {
