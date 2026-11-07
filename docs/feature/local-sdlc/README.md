@@ -180,6 +180,7 @@ export default function (p: P5) {
 - [从源码追踪实现归属](use-case/trace-code-ownership.md)
 - [分析其它语言的代码声明与测试依赖](use-case/analyze-other-languages.md)
 - [通过 adapter 执行原生测试用例](use-case/run-native-test-adapters.md)
+- [用自己的执行器接入 Concord](use-case/run-tests-with-own-runner.md)
 
 检查与审阅：
 

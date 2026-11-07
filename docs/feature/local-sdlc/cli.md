@@ -366,7 +366,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 ### adapter 协议
 
-外部 adapter 使用 `concord.test-adapter/v1`；每次请求启动一个受管子进程，stdin/stdout 各一个 JSON，stderr 只用于诊断。Concord 拥有原生 Invocation 的执行、状态裁决和报告目录。协议的 Schema 由库子路径 `concord-sdlc/test-adapter-protocol` 导出，见[库接口](library.md)。
+外部 adapter 使用 `concord.test-adapter/v1`；每次请求启动一个受管子进程，stdin/stdout 各一个 JSON，stderr 只用于诊断。Concord 拥有原生 Invocation 的执行、状态裁决和报告目录。协议的 JSON Schema 由 `concord schema test-adapter` 输出，见[机器可读 Schema](#机器可读-schema)；adapter 可以用任何语言实现。
 
 `concord.test-adapter/v1` 的请求与响应都含 `format`、`op` 与 `requestId`，响应回显 `planId` 与 `inputs`；未知字段、重复键、非有限数与超限值拒绝，返回 `AdapterProtocolInvalid`。
 
@@ -418,3 +418,19 @@ agent 和脚本只依赖机器可读输出。
 1. `--json` 输出结构、具名错误码与退出码是 agent 和脚本依赖的公开 Spec，由对应 Feature 的 CLI 页面或 Use Case 声明。
 2. 删除或改变已声明字段、错误码与退出码含义属于破坏消费者兼容，须先经过[独立设计挑战](../../engineering/self-hosting/README.md#协作与授权)；新增字段不改变既有字段语义。
 3. 人读输出不是 Spec，消费者不解析人读输出。
+
+## 机器可读 Schema
+
+```sh
+concord schema [<名称>] [--json]
+```
+
+不带名称时列出可用的 Schema；带名称时向 stdout 输出该 Schema 的 JSON Schema（draft 2020-12），不需要项目目录，也不读写缓存。输出与本次 CLI 版本一致，未知字段一律不允许。
+
+| 名称 | 描述的内容 |
+| --- | --- |
+| `config` | `concord.config.ts` 默认导出的配置对象，编辑器可用它补全与校验 |
+| `test-adapter` | `concord.test-adapter/v1` 的全部请求与响应，见 [adapter 协议](#adapter-协议) |
+| `change-preview` | `concord view export` 产出的 `changes.json`，见 [PR 静态预览导出](../web-workbench/cli.md#pr-静态预览导出) |
+
+未知名称以 `SchemaNotFound` 退出 1，`details.available` 列出可用名称。

@@ -4,6 +4,8 @@
 
 Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致（[为什么需要 Concord](../README.md)）。它是可安装到任意 Git 仓库的本地 CLI。
 
+Concord 只以 CLI 交付，不提供可导入的库。配置是静态数据；机器之间的接口是命令的 `--json` 输出、外部 adapter 在 stdin/stdout 上的 JSON 协议与导出产物，任何语言都能读写。需要校验时，用 `concord schema <名称>` 取得 JSON Schema，或运行对应的校验命令。使用者不导入 Concord 的模块、不调用内部入口，也不自行计算 Concord 的标识、摘要或签名：用例 ID 从 `concord test list --json` 读取，执行结果与修复核验由 `concord test run`、`concord test verify` 产生（[用自己的执行器接入](feature/local-sdlc/use-case/run-tests-with-own-runner.md)）。
+
 文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。
 
 全部文件都可以直接编辑。Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。
