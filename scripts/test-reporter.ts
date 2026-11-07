@@ -9,7 +9,9 @@ import { basename, join, resolve } from 'node:path';
 import { inspect } from 'node:util';
 import { summarizeTestLayers } from './test-layers.ts';
 import { observeTestProcessTree } from './gate-resource-processes.ts';
-import { withGateAdmission, type GateAdmission, type GateResourcesInvalid } from './gate-resources.ts';
+import { withGateAdmission, type GateAdmission } from './gate-resources.ts';
+import { gateMemoryBudgets } from './gate-resources.ts';
+import { readGateNodeReservation, writeGateNodePeak } from './gate-admission-history.ts';
 
 type TestEvent = Parameters<typeof tap>[0] extends AsyncIterable<infer Event> ? Event : never;
 class TestRunnerFailed extends Schema.TaggedError<TestRunnerFailed>()('TestRunnerFailed', {
@@ -17,7 +19,7 @@ class TestRunnerFailed extends Schema.TaggedError<TestRunnerFailed>()('TestRunne
 }) {}
 
 /** Keep project diagnostics beside the unmodified official reporter stream. */
-export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions, output: string, admission?: { readonly admission: GateAdmission; readonly bytes: number }) {
+export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions, output: string, admission?: { readonly admission: GateAdmission; readonly bytes: number; readonly history?: boolean }) {
   const fs = yield* FileSystem.FileSystem;
   const logs = join(output, 'node');
   yield* fs.makeDirectory(logs, { recursive: true });
@@ -68,14 +70,15 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
       yield* Effect.sync(() => console.error(`# Node file: ${file}; ${(timing.duration_ms / 1000).toFixed(3)}s; success=${timing.success}; logs=${logs}`));
     }
   });
-  const engine = (files: string[]) => Effect.scoped(Effect.gen(function*() {
+  const engine = (files: string[], admittedBytes: number) => Effect.scoped(Effect.gen(function*() {
     const controller = new AbortController();
-    const observation = yield* observeTestProcessTree(files[0]!, admission?.bytes ?? 0);
+    const observation = yield* observeTestProcessTree(files[0]!, admission?.history ? gateMemoryBudgets.node : admission?.bytes ?? gateMemoryBudgets.packaging);
     yield* Effect.addFinalizer(() => Effect.gen(function*() {
       const report = yield* observation.finish.pipe(Effect.onExit(exit => Effect.sync(() => {
         if (exit._tag === 'Failure' && admission !== undefined) admission.admission.failed = true;
       })));
-      yield* fs.writeFileString(join(output, 'process-tree-peaks.jsonl'), `${JSON.stringify(report)}\n`, { flag: 'a' });
+      yield* fs.writeFileString(join(output, 'process-tree-peaks.jsonl'), `${JSON.stringify({ ...report, admittedBytes })}\n`, { flag: 'a' });
+      if (admission?.history && report.state === 'observed' && report.peakBytes !== null) yield* writeGateNodePeak(files[0]!, report.peakBytes);
       if (report.exceeded) yield* Effect.sync(() => console.error(`# Gate file exceeds memory budget: ${report.file}; sampled PSS=${report.peakBytes}; budget=${report.budgetBytes}`));
     }).pipe(Effect.orDie));
     const events = yield* Effect.acquireRelease(
@@ -96,10 +99,11 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
   const files = options.files ?? [];
   // Node owns file isolation, execution, filtering, timeouts and all reporter events.
   // Effect only controls admission; a new official engine starts after its permit.
-  yield* Effect.forEach(files, file => {
-    const execute: Effect.Effect<void, TestRunnerFailed | GateResourcesInvalid> = engine([file]);
-    return admission === undefined ? execute : withGateAdmission(admission.admission, admission.bytes)(execute);
-  }, { concurrency: typeof options.concurrency === 'number' ? options.concurrency : 1, discard: true });
+  yield* Effect.forEach(files, file => Effect.gen(function*() {
+    const bytes = admission?.history ? yield* readGateNodeReservation(file) : admission?.bytes ?? 0;
+    const execute = engine([file], bytes);
+    return yield* admission === undefined ? execute : withGateAdmission(admission.admission, bytes)(execute);
+  }), { concurrency: typeof options.concurrency === 'number' ? options.concurrency : 1, discard: true });
   yield* fs.writeFileString(process.env.CONCORD_TEST_TIMINGS ?? join(output, 'node-timings.jsonl'), `${JSON.stringify({ scope: 'run', success, counts: runCounts, fileProcessStarts: fileProcesses.size })}\n`, { flag: 'a' });
   const missing = files.filter(file => !fileTimings.has(resolve(file)));
   if (missing.length > 0) return yield* new TestRunnerFailed({ cause: new Error(`Official runner did not complete selected files: ${missing.join(', ')}`) });

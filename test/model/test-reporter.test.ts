@@ -8,6 +8,8 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { tmpdir } from '../support/temporary.ts';
 import { selectsPackagingTest } from '../../scripts/gate-package.ts';
+import { gateAdmissionHistoryPath } from '../../scripts/gate-admission-history.ts';
+import { GiB } from '../../scripts/gate-resources.ts';
 
 type Requirements = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
 const runnerTest = (name: string, body: (root: string) => Effect.Effect<void, unknown, Requirements>) =>
@@ -31,6 +33,40 @@ const run = Effect.fn('test.runner.integration')(function*(args: string[], env: 
 
 const Counts = Schema.Struct({ tests: Schema.Number, failed: Schema.Number, cancelled: Schema.Number });
 const Timing = Schema.Struct({ scope: Schema.String, counts: Counts });
+
+// @feature docs/engineering/testing/cli.md#并发
+runnerTest('real cold and warm file runs use the previous PSS peak while keeping the two GiB reporting budget', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const file = join(root, 'history.test.ts'), cache = join(root, 'cache');
+  yield* fs.writeFileString(file, `import test from 'node:test'; test('sampled file', () => {});\n`);
+  const env = { XDG_CACHE_HOME: cache, CONCORD_GATE_MEMORY_MAX: String(7 * GiB) };
+  const Peak = Schema.Struct({ file: Schema.String, budgetBytes: Schema.Number, admittedBytes: Schema.Number, peakBytes: Schema.NullOr(Schema.Number), state: Schema.String });
+  const cold = yield* run(['--suite=node', file], env, root);
+  assert.equal(cold.code, 0, cold.text);
+  const coldPeak = Schema.decodeUnknownSync(Schema.fromJsonString(Peak))((yield* fs.readFileString(join(cold.output, 'process-tree-peaks.jsonl'))).trim());
+  assert.equal(coldPeak.admittedBytes, 2 * GiB);
+  assert.equal(coldPeak.budgetBytes, 2 * GiB);
+  const record = gateAdmissionHistoryPath(file, join(cache, 'concord/gate-admission'));
+  if (process.platform === 'linux') {
+    assert.equal(coldPeak.state, 'observed');
+    const stored = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ file: Schema.String, peakBytes: Schema.Number })))(yield* fs.readFileString(record));
+    assert.equal(stored.file, file);
+    assert.equal(stored.peakBytes, coldPeak.peakBytes);
+  }
+  const warm = yield* run(['--suite=node', file], env, root);
+  assert.equal(warm.code, 0, warm.text);
+  const warmPeak = Schema.decodeUnknownSync(Schema.fromJsonString(Peak))((yield* fs.readFileString(join(warm.output, 'process-tree-peaks.jsonl'))).trim());
+  assert.equal(warmPeak.budgetBytes, 2 * GiB);
+  assert.equal(warmPeak.admittedBytes, coldPeak.peakBytes === null ? 2 * GiB : Math.max(GiB / 2, Math.ceil(coldPeak.peakBytes / (GiB / 2)) * (GiB / 2)));
+  console.error(`# History admission: cold=${coldPeak.admittedBytes}; coldPeakPss=${coldPeak.peakBytes}; warm=${warmPeak.admittedBytes}; warmPeakPss=${warmPeak.peakBytes}; reportingBudget=${warmPeak.budgetBytes}`);
+  if (process.platform === 'linux') {
+    yield* fs.writeFileString(record, '{broken');
+    const broken = yield* run(['--suite=node', file], env, root);
+    assert.equal(broken.code, 1, broken.text);
+    assert.match(broken.text, /GateAdmissionHistoryInvalid/u);
+    assert.doesNotMatch(broken.text, /ok 1 - sampled file/u);
+  }
+}));
 
 // @feature docs/engineering/testing/README.md#检查入口
 runnerTest('all Node layers run source without a package and preserve the shared compile cache', root => Effect.gen(function*() {
@@ -339,19 +375,22 @@ test(${JSON.stringify(name)}, async () => {
   const own = join(${JSON.stringify(active)}, ${JSON.stringify(name)});
   writeFileSync(own, String(process.pid));
   await new Promise(resolve => { const ready = () => { if (existsSync(own + '.release')) { unwatchFile(own + '.release', ready); resolve(); } }; watchFile(own + '.release', {interval:10}, ready); ready(); });
-  try { assert.ok(readdirSync(${JSON.stringify(active)}).filter(name => !name.endsWith('.release')).length <= 3, 'six GiB pool admits at most three two-GiB files'); ${name === 'first' ? "assert.fail('intentional admitted failure');" : ''} }
+  try { assert.ok(readdirSync(${JSON.stringify(active)}).filter(name => !name.endsWith('.release')).length <= 2, 'five GiB pool admits at most two cold two-GiB files'); ${name === 'first' ? "assert.fail('intentional admitted failure');" : ''} }
   finally { rmSync(own); }
 });\n`);
   }
   const running = yield* run(['--suite=node', ...files], { CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3), CONCORD_TEST_CONCURRENCY: '8' }, root).pipe(Effect.forkScoped);
   const waitFor = (name: string) => Effect.gen(function*() { while (!(yield* fs.exists(join(active, name)))) yield* Effect.sleep('10 millis'); }).pipe(Effect.timeout('15 seconds'));
-  for (const name of ['first', 'second', 'third']) yield* waitFor(name);
-  assert.equal(yield* fs.exists(join(active, 'fourth')), false, 'an explicit concurrency of eight must not bypass the six-GiB pool');
+  for (const name of ['first', 'second']) yield* waitFor(name);
+  assert.equal(yield* fs.exists(join(active, 'third')), false, 'cold third file waits for admission');
+  assert.equal(yield* fs.exists(join(active, 'fourth')), false, 'an explicit concurrency of eight must not bypass the five-GiB pool');
   const firstPid = Number(yield* fs.readFileString(join(active, 'first')));
   yield* fs.writeFileString(join(active, 'first.release'), 'release');
-  yield* waitFor('fourth');
+  yield* waitFor('third');
   assert.throws(() => process.kill(firstPid, 0), { code: 'ESRCH' }, 'successor starts only after the failed predecessor exits');
-  for (const name of ['second', 'third', 'fourth']) yield* fs.writeFileString(join(active, `${name}.release`), 'release');
+  for (const name of ['second', 'third']) yield* fs.writeFileString(join(active, `${name}.release`), 'release');
+  yield* waitFor('fourth');
+  yield* fs.writeFileString(join(active, 'fourth.release'), 'release');
   const result = yield* Fiber.join(running);
   assert.equal(result.code, 1, result.text);
   assert.match(result.text, /intentional admitted failure/u);
@@ -391,7 +430,7 @@ test('admitted packaging', async () => { assert.equal(existsSync(${JSON.stringif
   yield* fs.writeFileString(pnpm, `#!/usr/bin/env node
 import assert from 'node:assert/strict'; import {existsSync,writeFileSync,watchFile,unwatchFile} from 'node:fs';
 assert.equal(existsSync(${JSON.stringify(packageStarted)}) && !existsSync(${JSON.stringify(packageStarted + '.done')}), false);
-assert.equal(process.argv[process.argv.indexOf('--workers')+1], '3');
+assert.equal(process.argv[process.argv.indexOf('--workers')+1], '2');
 writeFileSync(${JSON.stringify(browserStarted)}, 'started'); ${waitSource(browserStarted)} writeFileSync(${JSON.stringify(browserStarted + '.done')}, 'done');\n`);
   yield* fs.chmod(pnpm, 0o755);
   const running = yield* run([packaging, browser], {
@@ -403,12 +442,12 @@ writeFileSync(${JSON.stringify(browserStarted)}, 'started'); ${waitSource(browse
   }).pipe(Effect.timeout('15 seconds'));
   const first = yield* waitFor([browserStarted, packageStarted]);
   const second = first === browserStarted ? packageStarted : browserStarted;
-  assert.equal(yield* fs.exists(second), false, 'five plus three two-GiB browser workers cannot enter a six-GiB pool together');
+  assert.equal(yield* fs.exists(second), false, 'five plus two two-GiB browser workers cannot enter a five-GiB pool together');
   yield* fs.writeFileString(first + '.release', 'release');
   yield* waitFor([second]);
   assert.equal(yield* fs.exists(first + '.done'), true);
   yield* fs.writeFileString(second + '.release', 'release');
   const result = yield* Fiber.join(running);
   assert.equal(result.code, 0, result.text);
-  assert.match(result.text, /e2e workers=3/u);
+  assert.match(result.text, /e2e workers=2/u);
 }));

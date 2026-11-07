@@ -33,7 +33,7 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
   const known = new Map<number, string>();
   let peakBytes = 0;
   let samples = 0;
-  let roots = 0;
+  let roots = includeSupervisor && process.platform === 'linux' ? 1 : 0;
   const scan = (): ProcessSample[] => {
     for (const pid of additionalRoots()) {
       if (known.has(pid)) continue;

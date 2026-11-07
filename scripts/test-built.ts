@@ -42,8 +42,9 @@ const main = Effect.scoped(Effect.gen(function* () {
   const selectedFiles = process.env.CONCORD_GATE_TEST_FILES;
   const allFiles = process.env.CONCORD_GATE_ALL_TEST_FILES;
   const packagePreparation = process.env.CONCORD_GATE_PACKAGE_PREPARATION;
+  const ownPreparation = process.env.CONCORD_GATE_PREPARE_PACKAGE;
   const prebuiltPackageRoot = process.env.CONCORD_TEST_PACKAGE_ROOT;
-  yield* Effect.sync(() => { delete process.env.CONCORD_GATE_TEST_OUTPUT; delete process.env.CONCORD_GATE_TEST_FILES; delete process.env.CONCORD_GATE_ALL_TEST_FILES; delete process.env.CONCORD_GATE_PACKAGE_PREPARATION; });
+  yield* Effect.sync(() => { delete process.env.CONCORD_GATE_TEST_OUTPUT; delete process.env.CONCORD_GATE_TEST_FILES; delete process.env.CONCORD_GATE_ALL_TEST_FILES; delete process.env.CONCORD_GATE_PACKAGE_PREPARATION; delete process.env.CONCORD_GATE_PREPARE_PACKAGE; });
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const memoryMaxBytes = currentGateMemoryMax();
@@ -86,16 +87,14 @@ const main = Effect.scoped(Effect.gen(function* () {
   if (values['node-worker']) {
     const output = process.env.CONCORD_NODE_OUTPUT;
     if (output === undefined) return yield* new TestArgumentsInvalid({ detail: 'Node worker requires CONCORD_NODE_OUTPUT' });
-    const workerBytes = nodeFiles.some(file => isPackagingTest(file)) ? gateMemoryBudgets.packaging : gateMemoryBudgets.node;
-    const workerAdmission = yield* makeGateAdmission(gateAdmissionBytes(memoryMaxBytes));
-    if (workerAdmission.capacity < workerBytes) return yield* new GateResourcesInvalid({ detail: `Node worker needs ${workerBytes} bytes; admission pool has ${workerAdmission.capacity}` });
+    // The parent holds packaging admission until this runner and its tree exit.
     const failed = yield* runNodeTests({
       files: nodeFiles.map(file => resolve(file)),
       isolation: 'process', concurrency, shard,
       testNamePatterns: values['test-name-pattern'],
       timeout: Duration.toMillis(Duration.minutes(5)),
       execArgv: ['--conditions=concord-source', '--import', new URL('../test/support/source-runtime.ts', import.meta.url).href],
-    }, output, { admission: workerAdmission, bytes: workerBytes });
+    }, output);
     yield* Effect.sync(() => { process.exitCode = failed ? 1 : 0; });
     return;
   }
@@ -159,19 +158,18 @@ const main = Effect.scoped(Effect.gen(function* () {
   const selectedNode = browserOnly ? [] : shardNodeFiles(nodeFiles, shard);
   const packageFiles = selectedNode.filter(file => isPackagingTest(file));
   const sourceFiles = selectedNode.filter(file => !isPackagingTest(file));
-  const required = packageFiles.length > 0 ? gateMemoryBudgets.packaging : sourceFiles.length > 0 ? gateMemoryBudgets.node : 0;
+  const required = packageFiles.length > 0 ? gateMemoryBudgets.packaging : 0;
   if (capacity < required) return yield* new GateResourcesInvalid({ detail: `Selected Node test file needs ${required} bytes; admission pool has ${capacity}` });
   const split = packageFiles.length > 0 && sourceFiles.length > 0;
   const sourceOutput = split ? join(output, 'node-source') : output;
   const packageOutput = split ? join(output, 'node-package') : output;
   // Direct runner invocations may explicitly accept a prebuilt archive. The gate
   // always supplies its own preparation receipt and retains the cache lease.
-  const directPreparation = packageFiles.length > 0 && packagePreparation === undefined && prebuiltPackageRoot === undefined
-    ? yield* preparePackagingFixture(process.cwd(), join(output, 'archive-preparation.json')).pipe(Effect.forkScoped)
+  const directPreparation = packageFiles.length > 0 && (ownPreparation !== undefined || packagePreparation === undefined && prebuiltPackageRoot === undefined)
+    ? yield* preparePackagingFixture(process.cwd(), ownPreparation ?? join(output, 'archive-preparation.json'), admission).pipe(Effect.forkScoped)
     : undefined;
   const nodeSuite = Effect.fn('test.admittedNodeSuite')(function*(name: string, files: string[], destination: string, bytes: number, packageRoot?: string) {
     if (files.length === 0) return false;
-    if (capacity < bytes) return yield* new GateResourcesInvalid({ detail: `${name} needs ${bytes} bytes; admission pool has ${capacity}` });
     const suiteStarted = performance.now();
     yield* fs.makeDirectory(destination, { recursive: true });
     // Only source engines inherit this process environment. The packaging
@@ -187,7 +185,7 @@ const main = Effect.scoped(Effect.gen(function* () {
     const failed = yield* runNodeTests({ files: files.map(file => resolve(file)), isolation: 'process', concurrency,
       testNamePatterns: values['test-name-pattern'], timeout: Duration.toMillis(Duration.minutes(5)),
       execArgv: ['--conditions=concord-source', '--import', new URL('../test/support/source-runtime.ts', import.meta.url).href],
-    }, destination, { admission, bytes });
+    }, destination, { admission, bytes, history: name === 'Source Node' });
     const elapsed = performance.now() - suiteStarted;
     phases.push({ name, measurement: timingMeasurement(name === 'Packaging Node' ? 'packaging-wallclock' : 'suite-wallclock', [{ duration_ms: elapsed, success: !failed }], 1) });
     yield* Effect.sync(() => console.error(`# ${name} tests: ${(elapsed / 1000).toFixed(3)}s; exit=${failed ? 1 : 0}`));

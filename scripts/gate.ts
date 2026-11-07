@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
-import { Duration, Effect, Fiber, FileSystem, Schema } from 'effect';
+import { Duration, Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join, resolve } from 'node:path';
 import { checkoutRoot } from './build-output.ts';
@@ -9,7 +9,7 @@ import { gateMemoryBudgets, withGateResources } from './gate-resources.ts';
 import { observeTestProcessTree } from './gate-resource-processes.ts';
 import { withGateQueue } from './gate-queue.ts';
 import { selectGateTests } from './gate-selection.ts';
-import { preparePackagingFixture, selectsPackagingTest, writePackagePreparation } from './gate-package.ts';
+import { waitForPackagePreparation, readPackagePreparation, selectsPackagingTest, writePackagePreparation } from './gate-package.ts';
 import { initializeNodeCompileCache } from '../src/base/installation/startup/index.ts';
 import { readTestTimingReport, timingMeasurement, writeTimingReport } from './gate-timings.ts';
 
@@ -58,14 +58,15 @@ const main = Effect.gen(function*() {
   const preparationReport = join(output, 'archive-preparation.json');
   const packageSelected = yield* Effect.try({ try: () => selectsPackagingTest(selected.files, selected.args, checkoutRoot), catch: cause => cause });
   if (packageSelected) yield* writePackagePreparation(preparationReport, { state: 'pending' });
-  const fixedObservation = yield* observeTestProcessTree('fixed-overhead', gateMemoryBudgets.fixed, ['gate:source', 'gate:tests', 'gate:scripts', 'gate:web', 'gate:lint', 'gate:selfhost', 'build'], true);
-  const preparation = packageSelected
-    ? yield* preparePackagingFixture(checkoutRoot, preparationReport).pipe(Effect.forkScoped)
-    : undefined;
+  if (packageSelected) yield* Effect.addFinalizer(() => Effect.gen(function*() {
+    const receipt = yield* readPackagePreparation(preparationReport);
+    if (receipt.state === 'pending') yield* writePackagePreparation(preparationReport, { state: 'failed', code: 1, duration_ms: performance.now() - started, message: 'Gate ended before archive preparation completed' });
+  }).pipe(Effect.orDie));
+  const fixedObservation = yield* observeTestProcessTree('fixed-overhead', gateMemoryBudgets.fixed, ['gate:source', 'gate:tests', 'gate:scripts', 'gate:web', 'gate:lint', 'gate:selfhost'], true);
   const env = { ...process.env,
     CONCORD_TEST_RETAIN_FILE: retainedFile, CONCORD_TEST_EVENT_DIRECTORY: eventDirectory, CONCORD_TEST_RUN_ID: output,
     TMPDIR: fixtureDirectory, TMP: fixtureDirectory, TEMP: fixtureDirectory,
-    CONCORD_GATE_PACKAGE_PREPARATION: packageSelected ? preparationReport : undefined,
+    CONCORD_GATE_PREPARE_PACKAGE: packageSelected ? preparationReport : undefined,
     CONCORD_GATE_TEST_FILES: JSON.stringify(selected.files), CONCORD_GATE_ALL_TEST_FILES: JSON.stringify(selected.allFiles) };
   const names = ['gate:source', 'gate:tests', 'gate:scripts', 'gate:web', 'gate:lint', 'gate:selfhost', 'test:source'];
   // Vite+ dependencies stop on failure; acceptance must finish every sibling.
@@ -76,7 +77,12 @@ const main = Effect.gen(function*() {
     task('test:source', selected.args, env),
   ], { concurrency: 'unbounded' });
   const tasks = [...statics, testsTask];
-  const prepared = preparation === undefined ? undefined : yield* Fiber.join(preparation);
+  // The test scheduler owns the sole admission pool; this gate owns the receipt.
+  if (packageSelected) {
+    const receipt = yield* readPackagePreparation(preparationReport);
+    if (receipt.state === 'pending') yield* writePackagePreparation(preparationReport, { state: 'failed', code: 1, duration_ms: testsTask.duration_ms, message: 'Test scheduler exited before archive preparation completed' });
+  }
+  const prepared = packageSelected ? yield* waitForPackagePreparation(preparationReport) : undefined;
   const fixedMemory = yield* fixedObservation.finish;
   const codes = tasks.map(task => task.code);
   const successful = (prepared?.code ?? 0) === 0 && codes.every(code => code === 0);

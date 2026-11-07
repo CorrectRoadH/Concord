@@ -48,6 +48,7 @@ export default {
       "scripts/build-native.ts",
       "scripts/build-output.ts",
       "scripts/distribution.ts",
+      "scripts/gate-admission-history.ts",
       "scripts/gate-build-cache.ts",
       "scripts/gate-package.ts",
       "scripts/gate-queue.ts",
