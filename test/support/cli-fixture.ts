@@ -23,7 +23,6 @@ import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts
 import { parseDocumentRecord } from "../../src/domain/documents/index.ts";
 import { renderDocument } from "../../src/model/index.ts";
 import { hawdb_native_HAWDB_REVISION as HAWDB_REVISION, openHawdb } from "../../src/base/cache/index.ts";
-import { verifyInstalledNative } from '../../scripts/verify-installed-native.ts';
 import { settleRefreshes } from '../../scripts/perf/process.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
@@ -127,5 +126,4 @@ export { parseDocumentRecord };
 export { renderDocument };
 export { HAWDB_REVISION };
 export { openHawdb };
-export { verifyInstalledNative };
 export { settleRefreshes };

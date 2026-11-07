@@ -23,6 +23,8 @@
 
 同一提交的基线产物在后续测量中复用，构建前后都校验产物身份；保留最近 3 个基线，更早的 clone 直接删除。候选产物可以有未提交改动，记录中 `dirty` 为 true。
 
+测量器按每份产物自身的入口运行扫描：编译归档使用内部角色，携带 Node 的基线使用其随包 Node 与实际扫描模块，源码使用固定 Bun 和 TypeScript 入口。缺少相应入口时报告 `PerfError`；不改写基线，也不借用当前源码替代被测实现。
+
 ## 数据流
 
 ```mermaid
@@ -98,6 +100,10 @@ flowchart TD
 `scripts/bench.ts`、`scripts/profile.ts` 与 `scripts/perf/*.ts` 是严格 TypeScript，由 Node 自带的类型擦除直接执行，副作用通过 Effect 管理；`bench/` 与 `scripts/` 一同纳入 `tsconfig.scripts.json` 的严格类型检查。不新增 JavaScript 脚本或测量依赖。
 
 消费者准备与 cli/view 路径走公开 CLI；刷新测量调用构建产物中的内部 query-scan-worker，并以 `src/query-scan-protocol` 的 Schema 解码其消息。fs 计数模块与 CPU profiler 只在 profile 路径注入，bench 样本不带任何注入。profile 先复制归档到自己的临时目录，再用同一 Bun 编译参数重新生成其中的可执行文件，通过 `--compile-exec-argv` 固定 `--cpu-prof`、输出目录与计数模块。内部子进程复用这个可执行文件，因此一同采样；共享归档与 bench 产物不被改写。记录绑定 profile 专用产物摘要，收尾停止自有服务后读取所有进程证据。
+
+冷启动记录执行场景本身并校验其预期结果；mod、HTTP 与扫描操作不能替换为没有执行该操作的 CLI 调用。准备失败与采样失败均即时输出场景及原因；对照进度包含双方的 p50、最大值和样本有效性。中断前的进度不是完成全部产物与消费者复核后的验收记录。
+
+清理只识别同时匹配刷新角色和完整消费者根参数的进程，覆盖编译内部角色、TypeScript 源码与基线 JavaScript 入口；准备前已有的进程不属于本次测量。等待和超时终止采用同一识别规则，不以根路径子串授权终止其它进程。
 
 ## 测试
 

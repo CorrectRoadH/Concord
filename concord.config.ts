@@ -81,7 +81,6 @@ export default {
       "scripts/test-built.ts",
       "scripts/test-layers.ts",
       "scripts/test-reporter.ts",
-      "scripts/verify-installed-native.ts",
       "test/cli/onboarding-independent-fixture.ts",
       "test/e2e/authoring-fixture.ts",
       "test/e2e/engine.ts",

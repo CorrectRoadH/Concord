@@ -3,15 +3,16 @@
 import { packageBin } from './package-location.ts';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { environment, loadArtifact, verifyArtifact } from './perf/artifact.ts';
 import { loadBudgets, missingOwner } from './perf/budgets.ts';
 import { prepareBaseline } from './perf/baseline.ts';
 import { changedSelection, defaultBase, selectScenarios } from './perf/selection.ts';
-import { executeScenario, loadScenarios, makeContext, prepareServer, runArguments, type BenchContext } from './perf/scenario.ts';
+import { executeScenario, loadScenarios, makeContext, prepareScenario, runArguments, type BenchContext } from './perf/scenario.ts';
 import { io, mustRun, PerfError } from './perf/process.ts';
-import { judge, measurementPass, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.ts';
+import { judge, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.ts';
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.ts';
 import { buildForMeasurement } from './measurement-build.ts';
 import { withGateQueue } from './gate-queue.ts';
@@ -28,6 +29,13 @@ function optionalRevisions(argv: readonly string[]): string[] {
   }
   return result;
 }
+export const reportFailure = (scenario: string, artifact: string, phase: string, reason: string) => io('Report measurement failure', () => {
+  process.stderr.write(`${scenario}: ${artifact} ${phase} FAIL: ${reason}\n`);
+});
+export const reportVerdict = (verdict: GroupVerdict) => io('Report measurement progress', () => {
+  const group = (label: string, stats: GroupStats) => `${label} p50 ${stats.p50.toFixed(1)}ms max ${stats.max.toFixed(1)}ms valid=${stats.valid}`;
+  process.stderr.write(`${verdict.command}: ${group('candidate', verdict.candidate)}${verdict.baseline ? `; ${group('baseline', verdict.baseline)}` : ''} ${verdict.pass ? 'pass' : 'FAIL'}${verdict.reasons.length ? `: ${verdict.reasons.join('; ')}` : ''}\n`);
+});
 const main = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const { values, positionals } = yield* io('Parse bench arguments', () => parseArgs({ args: optionalRevisions(process.argv.slice(2)), allowPositionals: true, options: {
@@ -102,23 +110,12 @@ const main = Effect.gen(function*() {
     for (const phase of ['cold', 'warm'] as const) {
       for (const c of perArtifact) {
         const prepared = yield* Effect.result(Effect.gen(function*() {
-          if (phase === 'warm' && scenario.server === 'running') yield* prepareServer(c);
-          if (phase === 'warm' && scenario.prepare) yield* scenario.prepare(c);
-          if (scenario.state === 'warm') {
-            // Record cold separately, then restore a valid cache before warm measurement.
-            if (phase === 'cold' && scenario.server !== 'running' && !scenario.prepare && !('request' in scenario.run) && !('scan' in scenario.run)) {
-              const clear = yield* c.cli(['cache', 'clear']);
-              if (clear.exitCode !== 0) return yield* new PerfError({ message: `Cache clear failed: ${clear.stderr || clear.stdout}` });
-              const first = yield* c.cli(runArguments(scenario.run));
-              cold.push({ scenario: scenario.id, artifact: c.artifact.label, ms: first.ms, exitCode: first.exitCode });
-              const rebuild = yield* c.cli(['cache', 'rebuild']);
-              if (rebuild.exitCode !== 0) return yield* new PerfError({ message: `Cache rebuild failed: ${rebuild.stderr || rebuild.stdout}` });
-            }
-            if (phase === 'warm') yield* executeScenario(scenario, c, budget.limitKind === 'max' ? budget.limitMs + 5000 : undefined);
-          }
+          const first = yield* prepareScenario(scenario, c, phase, budget.limitKind === 'max' ? budget.limitMs + 5000 : undefined);
+          if (first) cold.push({ scenario: scenario.id, artifact: c.artifact.label, ms: first.ms, exitCode: first.exitCode });
         }));
         if (prepared._tag === 'Failure') {
           const message = String(prepared.failure);
+          yield* reportFailure(scenario.id, c.artifact.label, `${phase} preparation`, message);
           snapshots.push({ scenario: scenario.id, artifact: c.artifact.label, lastError: message });
           verdicts.push({ command: scenario.id, scenario: scenario.id, candidate: { samples: [], p50: 0, max: 0, valid: false }, pass: false, reasons: [message] }); preparationFailed = true;
         }
@@ -131,15 +128,20 @@ const main = Effect.gen(function*() {
       const timings: Record<string, number[]> = Object.fromEntries(artifacts.map(a => [a.label, []])); errors = [];
       for (let i = 0; i < samples; i++) for (const c of perArtifact) {
         const result = yield* Effect.result(executeScenario(scenario, c, budget.limitKind === 'max' ? budget.limitMs + 5000 : undefined));
-        if (result._tag === 'Failure') errors.push(`${c.artifact.label}: ${String(result.failure)}`);
+        if (result._tag === 'Failure') {
+          const reason = String(result.failure);
+          errors.push(`${c.artifact.label}: ${reason}`);
+          yield* reportFailure(scenario.id, c.artifact.label, `sample ${i + 1} attempt ${attempt + 1}`, reason);
+        }
         else timings[c.artifact.label]!.push(result.success.ms);
       }
       groups = Object.fromEntries(Object.entries(timings).map(([label, times]) => [label, times.length ? summarize(times) : { samples: [], p50: 0, max: 0, valid: false }]));
       if (Object.values(groups).every(group => group.valid) || errors.length) break;
     }
     const verdict = judge({ command: scenario.id, candidate: groups.candidate!, ...(groups.baseline ? { baseline: groups.baseline } : {}), limitMs: budget.limitMs, limitKind: budget.limitKind, reference: values.reference });
-    verdicts.push({ ...verdict, scenario: scenario.id, budget: { owner: budget.owner, heading: budget.heading }, pass: verdict.pass && errors.length === 0, reasons: [...verdict.reasons, ...errors] });
-    yield* io('Report measurement progress', () => process.stderr.write(`${scenario.id}: p50 ${verdict.candidate.p50.toFixed(1)}ms ${verdict.pass && !errors.length ? 'pass' : 'FAIL'}\n`));
+    const complete = { ...verdict, scenario: scenario.id, budget: { owner: budget.owner, heading: budget.heading }, pass: verdict.pass && errors.length === 0, reasons: [...verdict.reasons, ...errors] };
+    verdicts.push(complete);
+    yield* reportVerdict(complete);
   }
   for (const artifact of artifacts) {
     yield* verifyArtifact(artifact);
@@ -167,4 +169,6 @@ const main = Effect.gen(function*() {
 }).pipe(Effect.scoped);
 // Absolute measurements share the gate's machine slot; interleaved comparisons
 // retain their independent execution and do not wait for that slot.
-(process.argv.slice(2).includes('--reference') ? withGateQueue(main) : main).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  (process.argv.slice(2).includes('--reference') ? withGateQueue(main) : main).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+}

@@ -1,5 +1,5 @@
 import { packageCommand } from '../package-command.ts';
-import { installationResources, installationRootForBin, packagedRuntimeForApplication } from '../../src/base/installation/index.ts';
+import { installationRootForBin, packagedRuntimeForApplication } from '../../src/base/installation/index.ts';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, FileSystem, Schema } from 'effect';
@@ -101,6 +101,24 @@ const ScanMessage = Schema.Union([
     drift: Schema.Struct({ files: Schema.Array(Schema.String), directories: Schema.Array(Schema.String), publicationChanged: Schema.Boolean }) }),
   Schema.Struct({ format: Schema.Literal('concord.query-scan/v1'), ok: Schema.Literal(false), scannedAt: Schema.Number, code: Schema.String, message: Schema.String, details: Schema.optionalKey(Schema.Json) }),
 ]);
+/** Select the measured installation's implementation, including historical baselines. */
+export const scanCommand = Effect.fn('perf.scanCommand')(function*(entry: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const application = yield* io('Locate scan installation', () => installationRootForBin(entry));
+  const bundled = packagedRuntimeForApplication(application);
+  if (bundled !== undefined) {
+    const node = join(dirname(bundled.concord), '../runtime/node');
+    const worker = join(application, 'dist/entry/server/query-scan-worker.js');
+    if ((yield* fs.exists(node)) || (yield* fs.exists(worker))) {
+      if (!(yield* fs.exists(node)) || !(yield* fs.exists(worker))) return yield* new PerfError({ message: `Incomplete Node scan installation: ${node}; ${worker}` });
+      return [node, worker];
+    }
+    return [bundled.concord, '--concord-internal', 'query-scan-worker'];
+  }
+  const worker = join(application, 'src/entry/server/query-scan-worker.ts');
+  if (!entry.endsWith('.ts') || !(yield* fs.exists(worker))) return yield* new PerfError({ message: `Missing source scan entry: ${worker}` });
+  return packageCommand(worker);
+});
 const executeCliRun = Effect.fn('perf.executeCliRun')(function*(scenario: BenchScenario, context: BenchContext, execute: BenchContext['cli'], timeoutMs?: number) {
   const run = scenario.run;
   if ('mod' in run || 'request' in run || 'scan' in run) return yield* new PerfError({ message: `Scenario ${scenario.id} requires a non-CLI execution driver` });
@@ -185,11 +203,7 @@ const executeFullRun = Effect.fn('perf.executeFullRun')(function*(scenario: Benc
     }
     result = target!;
   } else if ('scan' in run) {
-    const fs = yield* FileSystem.FileSystem;
-    const application = installationRootForBin(context.artifact.entry);
-    const bundled = packagedRuntimeForApplication(application);
-    const scanWorker = installationResources(application).worker('query-scan-worker');
-    const argv = [...(bundled === undefined ? nodeEntry((yield* fs.exists(scanWorker)) ? scanWorker : join(dirname(context.artifact.entry), 'query-scan-worker.js')) : [bundled.concord, '--concord-internal', 'query-scan-worker']), context.consumer.root, JSON.stringify(run.scan)];
+    const argv = [...(yield* scanCommand(context.artifact.entry)), context.consumer.root, JSON.stringify(run.scan)];
     const results = yield* Effect.all(Array.from({ length: 1 }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,
       ...(timeoutMs === undefined ? {} : { timeoutMs }), env: { ...context.env, ...scenario.env } })), { concurrency: 'unbounded' });
     for (const item of results) {
@@ -206,6 +220,24 @@ const executeFullRun = Effect.fn('perf.executeFullRun')(function*(scenario: Benc
 
 export const executeScenario = Effect.fn('perf.executeScenario')(function*(scenario: BenchScenario, context: BenchContext, timeoutMs?: number) {
   return yield* executePreparedScenario(scenario, context, executeFullRun, timeoutMs);
+});
+
+/** Preparation records only real executions, with the same driver and expectations as samples. */
+export const prepareScenario = Effect.fn('perf.prepareScenario')(function*(scenario: BenchScenario, context: BenchContext, phase: 'cold' | 'warm', timeoutMs?: number) {
+  if (phase === 'warm') {
+    if (scenario.server === 'running') yield* prepareServer(context);
+    if (scenario.prepare) yield* scenario.prepare(context);
+    if (scenario.state === 'warm') yield* executeScenario(scenario, context, timeoutMs);
+    return;
+  }
+  if (scenario.state !== 'warm' || scenario.server === 'running' || scenario.prepare || 'request' in scenario.run || 'scan' in scenario.run) return;
+  const clear = yield* context.cli(['cache', 'clear']);
+  if (clear.exitCode !== 0) return yield* new PerfError({ message: `Cache clear failed: ${clear.stderr || clear.stdout}` });
+  // Mod drivers have no public CLI cold equivalent; retain cache preparation only.
+  const first = 'mod' in scenario.run ? undefined : yield* executeScenario(scenario, context, timeoutMs);
+  const rebuild = yield* context.cli(['cache', 'rebuild']);
+  if (rebuild.exitCode !== 0) return yield* new PerfError({ message: `Cache rebuild failed: ${rebuild.stderr || rebuild.stdout}` });
+  return first;
 });
 
 export const executeCliScenario = Effect.fn('perf.executeCliScenario')(function*(scenario: BenchScenario, context: BenchContext, timeoutMs?: number) {
