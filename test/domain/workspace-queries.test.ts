@@ -31,7 +31,7 @@ test('fresh computation requests retain the annotation parser cache owned by the
       const query = () => Effect.gen(function*() {
         const snapshot = yield* owner.snapshot, derived = CacheDerivations.make();
         const reply = yield* Effect.promise(() => Effect.runPromise(Effect.scoped(executeQuery(root, { name: 'test.list', input: {} }).pipe(Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideContext(context))).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
-        yield* owner.mergeDerived(derived.batches());
+        yield* owner.mergeDerived(yield* derived.batches);
         return reply;
       });
       yield* query(); const second = yield* query();

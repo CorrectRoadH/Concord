@@ -1,13 +1,13 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
-import { Context } from 'effect';
+import { Context, Effect } from 'effect';
 import { HawdbFailure, type HawdbEntry, type HawdbNamespace } from './hawdb-native.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
 
 /** Request-local output only. It has neither a database handle nor read authority. */
 export class CacheDerivations extends Context.Service<CacheDerivations, {
   readonly record: (namespace: HawdbNamespace, rows: readonly HawdbEntry[]) => void;
-  readonly batches: () => readonly CacheDerivationBatch[];
+  readonly batches: Effect.Effect<readonly CacheDerivationBatch[], HawdbFailure>;
 }>()('concord/base/cache/CacheDerivations') {
   static make(): CacheDerivations['Service'] {
     const pending = new Map<CacheDerivationBatch['namespace'], Map<string, HawdbEntry>>();
@@ -28,7 +28,7 @@ export class CacheDerivations extends Context.Service<CacheDerivations, {
         for (const row of changes.values()) entries.set(row.key, Object.freeze({ ...row }));
         pending.set(name, entries);
       },
-      batches: () => [...pending].map(([namespace, entries]) => ({ namespace, entries: [...entries.values()] })),
+      batches: Effect.sync(() => [...pending].map(([namespace, entries]) => ({ namespace, entries: [...entries.values()] }))),
     };
   }
 }

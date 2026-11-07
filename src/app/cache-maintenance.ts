@@ -22,11 +22,10 @@ export const maintainCache = Effect.fn('maintainCache')(function*(root: string):
     const privateDir = genericPrivateDirectorySync(root, runtime.env), path = cacheDatabasePath(privateDir);
     if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) || cachePhysicalBytes(privateDir) <= CACHE_MAINTENANCE_THRESHOLD_BYTES) return 'below-threshold';
     const cache = yield* PersistentCache;
-    const deferred = yield* Effect.scoped(Effect.gen(function*() {
-      const database = yield* cache.open(privateDir);
-      if (database === undefined) return true;
-      return yield* Effect.try({ try: () => database.reclaim().deferredForActiveLeases, catch: cause => cause });
-    })).pipe(Effect.catch(() => Effect.succeed(true)));
+    const deferred = yield* cache.reclaim(privateDir).pipe(
+      Effect.map(result => result === undefined || result.deferredForActiveLeases),
+      Effect.catch(() => Effect.succeed(true)),
+    );
     // A failed or budget-limited sweep is a deferral, never permission to clear.
     if (deferred) return 'deferred';
     if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed';

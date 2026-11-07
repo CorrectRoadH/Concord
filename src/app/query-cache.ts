@@ -92,7 +92,7 @@ function decodeForQuery(context: QueryContext, payload: string): QueryCacheEnvel
 export const readQuery = Effect.fn('readQuery')(function*(context: QueryContext): Effect.fn.Return<{ record?: typeof QueryRecord.Type; lastAttempt?: typeof Attempt.Type; error?: typeof RefreshFailure.Type; unavailable?: string; unavailableCode?: string }, never> {
   const cache = yield* Effect.serviceOption(PersistentCache);
   const snapshot = yield* Effect.serviceOption(CacheSnapshot);
-  const rows = Option.isSome(cache) ? cache.value.read(context.privateDir, 'query_cache', [context.key]) : Option.isSome(snapshot) ? Effect.succeed(snapshot.value.entries('query_cache').filter(row => row.key === context.key)) : Effect.fail(new HawdbFailure('HawdbUnavailable', 'No diagnostic snapshot is available'));
+  const rows = Option.isSome(cache) ? cache.value.read(context.privateDir, 'query_cache', [context.key]) : Option.isSome(snapshot) ? snapshot.value.get('query_cache', [context.key]) : Effect.fail(new HawdbFailure('HawdbUnavailable', 'No diagnostic snapshot is available'));
   return yield* rows.pipe(
     Effect.flatMap(rows => Effect.try({ try: () => {
       const payload = rows.find(row => row.key === context.key)?.payload;

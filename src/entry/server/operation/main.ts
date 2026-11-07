@@ -48,7 +48,7 @@ export const runOperationMain = (): void => {
   const derived = CacheDerivations.make();
   const operation = request.kind === 'action' ? executeViewAction(request.root, request.input) : runWorkspaceTest(request.root, request.caseId);
   const value = yield* operation.pipe(Effect.provide(CacheSnapshot.layer(request.snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideContext(context), Effect.provideService(RuntimeEnvironment, runtime), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(runtime.env))));
-  return { ok: true as const, value, derived: derived.batches() };
+  return { ok: true as const, value, derived: yield* derived.batches };
   })).pipe(Effect.catch(cause => { const error = failure(cause); return Effect.succeed({ ok: false as const, code: error.code, message: error.message, details: error.details }); }), Effect.flatMap(reply => Effect.sync(() => { process.stdout.write(JSON.stringify(reply)); })));
   NodeRuntime.runMain(program);
 };

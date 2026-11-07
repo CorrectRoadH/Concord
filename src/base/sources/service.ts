@@ -4,6 +4,7 @@ import { failure, ConcordError } from '../../model/index.ts';
 import { inspectPendingJournals, waitForPublication } from '../publication/index.ts';
 import { readRepositoryBytesSync, readRepositoryFileSync, WorkspaceContext, LocalRepository, type WorkspaceMetadata } from '../workspace/index.ts';
 import { SourceSnapshot } from './source-snapshot.ts';
+import { withOperationCache } from '../cache/operation-cache.ts';
 import { NodeSourceWatch } from './source-watch.ts';
 import { readReportFiles } from './report-files.ts';
 import { untrackedFile } from './untracked-file.ts';
@@ -88,7 +89,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
       for (;;) {
         const identity = SourceSnapshot.of({ workspace });
         const session: Session = { repo, inspections: new Map() };
-        const run = operation.pipe(Effect.provideContext(Context.make(SourceSnapshot, identity).pipe(Context.add(WorkspaceContext, identity.workspace))));
+        const run = withOperationCache(workspace, runtime, operation).pipe(Effect.provideContext(Context.make(SourceSnapshot, identity).pipe(Context.add(WorkspaceContext, identity.workspace))));
         const result = yield* Effect.result(Effect.acquireUseRelease(
           waitForPublication(reclaimDead => Effect.try({ try: () => repo.beginSnapshot(reclaimDead), catch: failure })),
           () => Effect.acquireUseRelease(

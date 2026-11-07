@@ -10,6 +10,7 @@ import { writeCachePayloads } from './cache-query.ts';
 import { mergeFeedbackRows } from './feedback-cache.ts';
 import type { RemoteFeedback } from '../../model/index.ts';
 import { RuntimeEnvironment } from '../environment/index.ts';
+import { openPersistentHandle } from './persistent-handle.ts';
 import { inspectCacheStatus } from './cache-status.ts';
 
 /** One scoped owner, with an explicit close/reopen boundary for maintenance. */
@@ -40,7 +41,7 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     openError = undefined;
     yield* verify;
     scope = yield* Scope.make();
-    database = yield* backend.open(privateDir).pipe(Effect.provideService(Scope.Scope, scope));
+    database = yield* openPersistentHandle(privateDir, runtime).pipe(Effect.provideService(Scope.Scope, scope));
     if (!database) return yield* Effect.fail(new HawdbFailure('HawdbBusy', 'Persistent cache is owned by another command'));
   }).pipe(Effect.tapError(error => Effect.sync(() => { openError = error; })));
   yield* Effect.addFinalizer(() => close);
@@ -50,8 +51,8 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
   }, catch: cause => cause instanceof HawdbFailure || cause instanceof ConcordError ? cause : new HawdbFailure('HawdbUnavailable', String(cause)) })));
   const service: PersistentCacheService = {
     verifyArtifact: backend.verifyArtifact,
+    reclaim: () => use(db => db.reclaim()).pipe(Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', cause.message))),
     attach: () => Effect.fail(new HawdbFailure('HawdbUnavailable', 'The persistent owner cannot execute repository operations')),
-    open: () => Effect.fail(new HawdbFailure('HawdbUnavailable', 'The owner does not transfer database handles')),
     read: (_directory, namespace, keys) => use(db => keys === undefined ? db.scan(namespace) : db.get(namespace, keys)).pipe(Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', cause.message))),
     update: (_directory, namespace, key, update) => use(db => { db.put(namespace, [{ key, payload: update(db.get(namespace, [key])[0]?.payload) }]); snapshots.delete(namespace); }),
   };

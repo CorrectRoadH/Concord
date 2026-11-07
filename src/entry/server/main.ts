@@ -209,7 +209,7 @@ export const runComputeMain = (root: string | undefined): void => {
       const requestContext = yield* Layer.build(computationLayer).pipe(Effect.provideService(RuntimeEnvironment, requestRuntime), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(requestRuntime.env))));
       const context = Context.add(requestContext, RuntimeEnvironment, requestRuntime);
       const value = yield* compute(root, operation).pipe(Effect.provide(CacheSnapshot.layer(operation.kind === 'query' && operation.cache === 'off' ? {} : snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(requestRuntime.env))));
-      return operation.kind === 'read-bytes' ? packets(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT) : jsonPackets({ value, derived: derived.batches() });
+      return operation.kind === 'read-bytes' ? packets(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT) : jsonPackets({ value, derived: yield* derived.batches });
     })).pipe(Effect.mapError(asServerError))),
   });
   const protocol = RpcServer.layerProtocolStdio.pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(NodeServices.layer));

@@ -242,7 +242,7 @@ function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: S
       ...local,
       attach: repo => repo.privateDir === identified.privateDir ? cache.attach(repo).pipe(Effect.provideService(CacheDerivations, derived)) : local.attach(repo),
     }));
-    yield* client.submitDerivations(connection, derived.batches()).pipe(Effect.mapError(workspaceServerFailure), Effect.catch(error => required ? Effect.fail(error) : writeStderr(`${JSON.stringify({ warning: 'CacheUpdateFailed', message: 'The operation completed, but its disposable cache update failed', reason: error.code })}\n`).pipe(Effect.orDie)));
+    yield* client.submitDerivations(connection, yield* derived.batches.pipe(Effect.mapError(failure))).pipe(Effect.mapError(workspaceServerFailure), Effect.catch(error => required ? Effect.fail(error) : writeStderr(`${JSON.stringify({ warning: 'CacheUpdateFailed', message: 'The operation completed, but its disposable cache update failed', reason: error.code })}\n`).pipe(Effect.orDie)));
     return result;
   }));
 }

@@ -19,11 +19,22 @@ test('an unavailable owner snapshot reports persistent data unavailable while co
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const repo = yield* (yield* Workspace).openRead(root, { access: 'read' });
+      const observation = yield* CacheSnapshot;
+      const entries = observation.entries('feedback_cache');
+      const selected = observation.get('query_cache', ['trace-history']);
+      for (const read of [entries, selected]) {
+        const result = yield* Effect.result(read);
+        assert.equal(result._tag, 'Failure');
+        if (result._tag === 'Failure') {
+          assert.equal(result.failure.code, 'HawdbUnavailable');
+          assert.equal(result.failure.message, snapshot.unavailable.message);
+        }
+      }
       const cache = PersistentCache.repository(repo);
       assert.throws(() => cache.scan('feedback_cache'), { code: 'HawdbUnavailable' });
       assert.throws(() => cache.get('query_cache', ['trace-history']), { code: 'HawdbUnavailable' });
       cache.put('annotation_cache', [{ key: 'parser', payload: 'rebuilt' }]);
-      assert.deepEqual(derived.batches(), [{ namespace: 'annotation_cache', entries: [{ key: 'parser', payload: 'rebuilt' }] }]);
+      assert.deepEqual(yield* derived.batches, [{ namespace: 'annotation_cache', entries: [{ key: 'parser', payload: 'rebuilt' }] }]);
       assert.throws(() => cache.get('annotation_cache', ['parser']), { code: 'HawdbUnavailable' });
     })).pipe(Effect.provideService(CacheDerivations, derived), Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }

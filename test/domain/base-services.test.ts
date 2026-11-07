@@ -10,7 +10,7 @@ import { Context, Deferred, Effect, Fiber, Layer, Option } from 'effect';
 import { ChildProcessSpawner } from 'effect/unstable/process';
 import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService } from '../../src/base/process/index.ts';
 import { TestClock } from 'effect/testing';
-import { Workspace } from '../../src/base/workspace/index.ts';
+import { Workspace, WorkspaceContext } from '../../src/base/workspace/index.ts';
 import { renderTypeScriptConfig } from '../../src/base/workspace/index.ts';
 import { Sources } from '../../src/base/sources/index.ts';
 import { createConsumer } from '../support/consumer.ts';
@@ -164,24 +164,115 @@ test('Sources snapshots verify raw bytes and isolate caller mutations', async ()
 // @feature docs/feature/local-data-engine/README.md
 test('memory Cache owns its handle and read-only snapshots retain detached immutable rows', async () => {
   const rows = [{ key: 'a', payload: 'before' }];
-  const live = Layer.merge(Cache.layer, CacheSnapshot.layer({ document_parse: rows }));
+  const root = createConsumer();
+  const live = Layer.mergeAll(Workspace.layer, Cache.layer, CacheSnapshot.layer({ document_parse: rows })).pipe(Layer.provide(NodeServices.layer));
   rows[0]!.payload = 'after';
-  let closed: CacheTypes.HawdbDatabase | undefined;
-  await Effect.runPromise(Effect.gen(function*() {
-    const cache = yield* Cache;
-    const snapshot = yield* CacheSnapshot;
-    assert.deepEqual(snapshot.entries('document_parse'), [{ key: 'a', payload: 'before' }]);
-    const database = yield* cache.memory;
-    closed = database;
-    assert.deepEqual(database.get('document_parse', ['missing']), []);
-    database.put('document_parse', [{ key: 'first', payload: 'one' }]);
-    database.put('document_parse', [{ key: 'second', payload: 'two' }]);
-    assert.deepEqual([...database.get('document_parse', ['second', 'first', 'missing'])].sort((a, b) => a.key.localeCompare(b.key)), [{ key: 'first', payload: 'one' }, { key: 'second', payload: 'two' }]);
-    database.clearNamespace('document_parse');
-    database.put('document_parse', [{ key: 'first', payload: 'new' }]);
-    assert.deepEqual(database.get('document_parse', ['first']), [{ key: 'first', payload: 'new' }]);
-  }).pipe(Effect.scoped, Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
-  assert.throws(() => closed!.get('document_parse', ['missing']), cause => cause instanceof HawdbFailure && cause.code === 'HawdbClosed');
+  let closed: CacheTypes.CacheService | undefined;
+  let metadata: WorkspaceTypes.WorkspaceMetadata | undefined;
+  try {
+    await Effect.runPromise(Effect.gen(function*() {
+      metadata = yield* (yield* Workspace).open(root, { access: 'read', cache: 'use' });
+      const cache = yield* Cache;
+      const snapshot = yield* CacheSnapshot;
+      assert.deepEqual(yield* snapshot.entries('document_parse'), [{ key: 'a', payload: 'before' }]);
+      assert.deepEqual(yield* snapshot.get('document_parse', ['missing', 'a']), [{ key: 'a', payload: 'before' }]);
+      closed = cache;
+      yield* Effect.gen(function*() {
+        assert.deepEqual(yield* cache.get('document_parse', ['missing']), []);
+        yield* cache.put('document_parse', [{ key: 'first', payload: 'one' }]);
+        yield* cache.put('document_parse', [{ key: 'second', payload: 'two' }]);
+        assert.deepEqual([...(yield* cache.get('document_parse', ['second', 'first', 'missing']))].sort((a, b) => a.key.localeCompare(b.key)), [{ key: 'first', payload: 'one' }, { key: 'second', payload: 'two' }]);
+        yield* cache.put('document_parse', [{ key: 'first', payload: 'new' }]);
+        assert.deepEqual(yield* cache.get('document_parse', ['first']), [{ key: 'first', payload: 'new' }]);
+      }).pipe(Effect.provideService(WorkspaceContext, metadata));
+    }).pipe(Effect.scoped, Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+    const result = await Effect.runPromise(Effect.result(closed!.get('document_parse', ['missing'])).pipe(Effect.provideService(WorkspaceContext, metadata!)));
+    assert.equal(result._tag, 'Failure');
+    if (result._tag === 'Failure') assert.equal(result.failure.code, 'HawdbClosed');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/README.md
+test('memory cache separates workspace contexts and survives individual source snapshots', async () => {
+  const roots = [createConsumer(), createConsumer()];
+  const live = Layer.mergeAll(Workspace.layer, Sources.layer, Cache.layer).pipe(Layer.provide(NodeServices.layer));
+  try {
+    await Effect.runPromise(Effect.gen(function*() {
+      const workspace = yield* Workspace, sources = yield* Sources, cache = yield* Cache;
+      const first = yield* workspace.open(roots[0]!, { access: 'read', cache: 'use' });
+      const second = yield* workspace.open(roots[1]!, { access: 'read', cache: 'use' });
+      yield* sources.snapshot(cache.put('document_parse', [{ key: 'same', payload: 'first' }])).pipe(Effect.provideService(WorkspaceContext, first));
+      yield* sources.snapshot(Effect.gen(function*() {
+        assert.deepEqual(yield* cache.get('document_parse', ['same']), []);
+        yield* cache.put('document_parse', [{ key: 'same', payload: 'second' }]);
+      })).pipe(Effect.provideService(WorkspaceContext, second));
+      assert.deepEqual(yield* cache.get('document_parse', ['same']).pipe(Effect.provideService(WorkspaceContext, first)), [{ key: 'same', payload: 'first' }]);
+      assert.deepEqual(yield* cache.get('document_parse', ['same']).pipe(Effect.provideService(WorkspaceContext, second)), [{ key: 'same', payload: 'second' }]);
+      const disabled = { ...first, cache: 'off' as const };
+      yield* cache.put('document_parse', [{ key: 'same', payload: 'disabled' }]).pipe(Effect.provideService(WorkspaceContext, disabled));
+      assert.deepEqual(yield* cache.get('document_parse', ['same']).pipe(Effect.provideService(WorkspaceContext, disabled)), []);
+      assert.deepEqual(yield* cache.get('document_parse', ['same']).pipe(Effect.provideService(WorkspaceContext, first)), [{ key: 'same', payload: 'first' }]);
+    }).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+  } finally { for (const root of roots) rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+test('source snapshot cache closes before publication and cannot reopen within the lease', async () => {
+  const root = createConsumer(), otherRoot = createConsumer();
+  const live = Layer.mergeAll(Workspace.layer, Sources.layer, PersistentCache.layer, publicationLayer).pipe(Layer.provide(NodeServices.layer));
+  try {
+    await Effect.runPromise(Effect.gen(function*() {
+      const workspace = yield* Workspace, sources = yield* Sources, cache = yield* PersistentCache, publication = yield* Publication;
+      const context = yield* workspace.open(root, { access: 'write', cache: 'use' });
+      const other = yield* workspace.open(otherRoot, { access: 'read', cache: 'use' });
+      const path = cacheDatabasePath(context.privateDir);
+      yield* sources.snapshot(Effect.gen(function*() {
+        yield* cache.update(context.privateDir, 'config_cache', 'kept', () => 'value');
+        assert.throws(() => openHawdb(path, { readOnly: false, create: true }, nativeRuntime), cause => cause instanceof HawdbFailure && cause.code === 'HawdbBusy');
+        yield* sources.snapshot(cache.read(context.privateDir, 'config_cache', ['kept']).pipe(Effect.tap(rows => Effect.sync(() => assert.deepEqual(rows, [{ key: 'kept', payload: 'value' }])))));
+        yield* Effect.scoped(Effect.gen(function*() {
+          assert.notEqual(yield* publication.lease(root, 'cache-boundary-test'), undefined);
+          const independent = openHawdb(path, { readOnly: false, create: false }, nativeRuntime);
+          independent.close();
+          const read = yield* Effect.result(cache.read(context.privateDir, 'config_cache', ['kept']));
+          assert.equal(read._tag, 'Failure');
+          if (read._tag === 'Failure') assert.equal(read.failure.code, 'HawdbUnavailable');
+          const write = yield* Effect.result(cache.update(context.privateDir, 'config_cache', 'kept', () => 'forbidden'));
+          assert.equal(write._tag, 'Failure');
+          if (write._tag === 'Failure') assert.equal(write.failure.code, 'HawdbUnavailable');
+          const nested = yield* Effect.result(sources.snapshot(cache.read(other.privateDir, 'config_cache', ['kept'])).pipe(Effect.provideService(WorkspaceContext, other)));
+          assert.equal(nested._tag, 'Failure');
+          if (nested._tag === 'Failure') assert.equal(nested.failure.code, 'HawdbUnavailable');
+        }));
+        assert.deepEqual(yield* cache.read(context.privateDir, 'config_cache', ['kept']), [{ key: 'kept', payload: 'value' }]);
+      })).pipe(Effect.provideService(WorkspaceContext, context));
+      const independent = openHawdb(path, { readOnly: false, create: false }, nativeRuntime);
+      independent.close();
+    }).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+  } finally { for (const directory of [root, otherRoot]) rmSync(directory, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+test('interrupting an operation releases its lazily opened persistent cache handle', async () => {
+  const root = createConsumer();
+  const live = Layer.mergeAll(Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provide(NodeServices.layer));
+  try {
+    await Effect.runPromise(Effect.gen(function*() {
+      const context = yield* (yield* Workspace).open(root, { access: 'read', cache: 'use' });
+      const sources = yield* Sources, cache = yield* PersistentCache;
+      const opened = yield* Deferred.make<void>();
+      const fiber = yield* Effect.forkChild(sources.snapshot(Effect.gen(function*() {
+        yield* cache.update(context.privateDir, 'config_cache', 'cancelled', () => 'retained');
+        yield* Deferred.succeed(opened, undefined);
+        yield* Effect.never;
+      })).pipe(Effect.provideService(WorkspaceContext, context)));
+      yield* Deferred.await(opened);
+      yield* Fiber.interrupt(fiber);
+      const independent = openHawdb(cacheDatabasePath(context.privateDir), { readOnly: false, create: false }, nativeRuntime);
+      try { assert.deepEqual(independent.get('config_cache', ['cancelled']), [{ key: 'cancelled', payload: 'retained' }]); }
+      finally { independent.close(); }
+    }).pipe(Effect.scoped, Effect.provide(live), Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md

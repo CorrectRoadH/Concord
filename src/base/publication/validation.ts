@@ -6,6 +6,7 @@ import { acquireTraceLease, releaseTraceLease, type TraceLease } from './coordin
 import { makePublicationReceiptStore } from './issue-receipts.ts';
 import { inspectExportAncestors, publishExport } from './preview-tree.ts';
 import { scratchDirectory } from './scratch.ts';
+import { OperationCache } from '../cache/operation-cache.ts';
 
 export interface PublicationCatalog {
   readonly operation: string;
@@ -50,6 +51,13 @@ export class Publication extends Context.Service<Publication, {
       inspectExportAncestors: (out, root, privatePaths) => inspectExportAncestors(runtimePath(runtime, out), runtimePath(runtime, root), privatePaths.map(path => runtimePath(runtime, path))),
       publishExport: (out, data, chain) => publishExport(runtimePath(runtime, out), data, chain, runtime),
       lease: Effect.fn('Publication.lease')(function*(root: string, operation: string, create = true, reclaimDead = true) {
+        const cache = yield* Effect.serviceOption(OperationCache);
+        if (cache._tag === 'Some') {
+          yield* Effect.acquireRelease(
+            Effect.try({ try: cache.value.enterPublication, catch: failure }),
+            () => Effect.sync(cache.value.leavePublication),
+          );
+        }
         return yield* Effect.acquireRelease(
           acquireTraceLease(runtimePath(runtime, root), 'exclusive', operation, create, reclaimDead, runtime.env).pipe(Effect.mapError(cause => new ConcordError(cause.message.includes('busy') ? 'RepositoryBusy' : 'CoordinationFailed', cause.message, { operation: cause.operation, path: cause.path, phase: cause.phase }))),
           lease => lease === undefined ? Effect.void : releaseTraceLease(lease, operation).pipe(Effect.orDie),
