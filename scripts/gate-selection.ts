@@ -52,6 +52,12 @@ export function gateSelectionArguments(argv: readonly string[]) {
   return { changed: parsed.values.changed, positionals: parsed.positionals, args: normalized.filter((_, index) => !removed.has(index)) };
 }
 
+/** Only an unfiltered selection covering every current file owns the full-gate slot. */
+export function isFullGateSelection(selected: { readonly files: readonly string[]; readonly allFiles: readonly string[]; readonly args: readonly string[] }): boolean {
+  return selected.files.length === selected.allFiles.length && !selected.args.some(arg =>
+    ['--test-name-pattern', '--test-shard', '--suite'].some(flag => arg === flag || arg.startsWith(`${flag}=`)));
+}
+
 const allTestsDependency = (file: string): boolean => file.startsWith('test/support/') || file.startsWith('scripts/')
   || /(?:^|\/)package\.json$/u.test(file) || /(?:^|\/)(?:pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|Cargo\.lock)$/u.test(file);
 

@@ -72,6 +72,49 @@ withGateQueue(Effect.gen(function*() {
   assert.equal(yield* fs.exists(join(slot, 'publication.lease')), false, 'the final owner releases its slot');
 })).pipe(Effect.provide(NodeServices.layer))));
 
+// @feature docs/engineering/testing/README.md#共享资源与同步
+test('the real gate queues its full selection while file and title selections enter immediately', { timeout: 30_000 }, t => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-targeted-queue-' });
+  const slot = join(root, 'slot'), bin = join(root, 'bin'), marker = join(root, 'task-entered');
+  yield* fs.makeDirectory(bin);
+  // Simulate only the external task executor and systemd boundary. The real
+  // gate still discovers its selection, chooses admission and runs its body.
+  yield* fs.writeFileString(join(bin, 'vp'), `#!${process.execPath}\nimport {appendFileSync} from 'node:fs';\nappendFileSync(process.env.GATE_TEST_MARKER, 'entered\\n');\n`);
+  yield* fs.writeFileString(join(bin, 'systemctl'), `#!${process.execPath}\nprocess.exitCode = 1;\n`);
+  yield* fs.chmod(join(bin, 'vp'), 0o755);
+  yield* fs.chmod(join(bin, 'systemctl'), 0o755);
+  const owned = yield* Deferred.make<void>(), release = yield* Deferred.make<void>();
+  const holder = yield* withGateQueue(Deferred.succeed(owned, undefined).pipe(Effect.andThen(Deferred.await(release))), slot).pipe(Effect.forkScoped);
+  yield* Deferred.await(owned);
+  const env = { ...process.env, CONCORD_GATE_QUEUE_DIRECTORY: slot, CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3),
+    PATH: `${bin}:${process.env.PATH}`, GATE_TEST_MARKER: marker, CONCORD_GATE_SCOPE: undefined };
+  const full = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/gate.ts')], { cwd: root, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
+  const queued = yield* Deferred.make<void>();
+  let fullText = '';
+  const drain = yield* Stream.runForEach(Stream.decodeText(full.all), chunk => Effect.gen(function*() {
+    fullText += chunk;
+    if (fullText.includes('# Gate queued:')) yield* Deferred.succeed(queued, undefined);
+  })).pipe(Effect.forkScoped);
+  yield* Deferred.await(queued).pipe(Effect.timeout('10 seconds'));
+  assert.equal(yield* fs.exists(marker), false, 'a full gate cannot enter its body before its owner releases');
+  yield* full.kill({ killSignal: 'SIGKILL' });
+  yield* full.exitCode.pipe(Effect.ignore);
+  yield* Fiber.join(drain);
+  for (const args of [[resolve('test/model/gate-resources.test.ts')], ['--test-name-pattern=queue-entry-probe']]) {
+    const targeted = yield* spawner.spawn(ChildProcess.make(process.execPath, [resolve('scripts/gate.ts'), ...args], { cwd: root, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
+    const [text] = yield* Effect.all([Stream.mkString(Stream.decodeText(targeted.all)), targeted.exitCode], { concurrency: 'unbounded' });
+    assert.match(text, /# Gate results:/u, text);
+    assert.doesNotMatch(text, /# Gate queued:/u);
+    assert.equal(yield* fs.exists(marker), true, 'targeted gate entered actual task execution while the full-gate slot is held');
+    yield* fs.remove(marker);
+  }
+  yield* Deferred.succeed(release, undefined);
+  yield* Fiber.join(holder);
+  assert.equal(yield* fs.exists(join(slot, 'publication.lease')), false);
+})).pipe(Effect.provide(NodeServices.layer)), { signal: t.signal }));
+
 // @feature docs/engineering/performance/README.md#开发与交付流程
 test('the real reference benchmark waits for the gate slot while comparison arguments proceed', { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;

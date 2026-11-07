@@ -8,7 +8,7 @@ import { checkoutRoot } from './build-output.ts';
 import { gateMemoryBudgets, withGateResources } from './gate-resources.ts';
 import { GateProcessIdentity, observeFixedGateMemory, observeTestProcessTree } from './gate-resource-processes.ts';
 import { withGateQueue } from './gate-queue.ts';
-import { selectGateTests } from './gate-selection.ts';
+import { isFullGateSelection, selectGateTests } from './gate-selection.ts';
 import { waitForPackagePreparation, readPackagePreparation, selectsPackagingTest, writePackagePreparation } from './gate-package.ts';
 import { initializeNodeCompileCache } from '../src/base/installation/startup/index.ts';
 import { readTestTimingReport, timingMeasurement, writeTimingReport } from './gate-timings.ts';
@@ -27,11 +27,10 @@ const task = Effect.fn('gate.task')(function* (name: string, args: readonly stri
   return { name, memory, code: Number(code), duration_ms: performance.now() - started, success: Number(code) === 0 };
 }, Effect.scoped);
 
-const main = Effect.gen(function*() {
+const main = (selected: Effect.Success<ReturnType<typeof selectGateTests>>) => Effect.gen(function*() {
   const started = performance.now();
   const fs = yield* FileSystem.FileSystem;
   if (yield* fs.exists(join(checkoutRoot, 'dist'))) return yield* new DistInCheckout({ message: 'Delete dist/ from the checkout before running pnpm gate. Tests run source; build packages with vp build --outDir <external-directory>.' });
-  const selected = yield* selectGateTests(process.argv.slice(2), checkoutRoot, process.env.CONCORD_GATE_REPORT);
   const compileCache = yield* Effect.sync(initializeNodeCompileCache);
   // Keep fixture fsync traffic off the checkout disk. tmpfs pages are charged
   // to this gate's memory scope, and the same scope owns their removal.
@@ -45,6 +44,7 @@ const main = Effect.gen(function*() {
     process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} --conditions=concord-source`.trim();
   });
   const output = resolve(process.env.CONCORD_GATE_REPORT!);
+  yield* fs.writeFileString(join(output, 'selection.json'), `${JSON.stringify(selected.selection, null, 2)}\n`);
   const retainedFile = join(output, 'retained-consumers.jsonl');
   yield* Effect.addFinalizer(() => Effect.gen(function*() {
     const retained = (yield* fs.exists(retainedFile))
@@ -122,5 +122,9 @@ const main = Effect.gen(function*() {
   });
 });
 
-const guarded = withGateResources(main);
-(process.env.CONCORD_GATE_SCOPE ? guarded : withGateQueue(guarded)).pipe(Effect.scoped, Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+const entry = Effect.gen(function*() {
+  const selected = yield* selectGateTests(process.argv.slice(2), checkoutRoot);
+  const guarded = withGateResources(main(selected));
+  return yield* (process.env.CONCORD_GATE_SCOPE || !isFullGateSelection(selected) ? guarded : withGateQueue(guarded));
+});
+entry.pipe(Effect.scoped, Effect.provide(NodeServices.layer), NodeRuntime.runMain);

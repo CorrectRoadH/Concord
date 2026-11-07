@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { affectedTestContract, gateSelectionArguments } from '../../scripts/gate-selection.ts';
+import { affectedTestContract, gateSelectionArguments, isFullGateSelection } from '../../scripts/gate-selection.ts';
 
 // @feature docs/engineering/testing/cli.md#完整门禁
 test('changed gate matches package ownership and Use Case boundaries without anchor or prefix leakage', () => Effect.runPromise(Effect.sync(() => {
@@ -21,3 +21,14 @@ test('changed gate matches package ownership and Use Case boundaries without anc
   assert.equal(gateSelectionArguments(['--changed=HEAD']).changed, 'HEAD');
   assert.throws(() => gateSelectionArguments(['--changed', '--changed=HEAD']), { _tag: 'GateSelectionInvalid' });
 })));
+
+// @feature docs/engineering/testing/README.md#共享资源与同步
+test('only a complete unfiltered gate selection enters the full-gate queue', () => {
+  const allFiles = ['a.test.ts', 'b.e2e.ts'];
+  assert.equal(isFullGateSelection({ files: allFiles, allFiles, args: [] }), true);
+  assert.equal(isFullGateSelection({ files: ['a.test.ts'], allFiles, args: [] }), false);
+  assert.equal(isFullGateSelection({ files: [], allFiles, args: [] }), false);
+  for (const args of [['--test-name-pattern=selected'], ['--test-name-pattern', 'selected'], ['--test-shard=1/16'], ['--test-shard=package'], ['--suite', 'node']]) {
+    assert.equal(isFullGateSelection({ files: allFiles, allFiles, args }), false, args.join(' '));
+  }
+});
