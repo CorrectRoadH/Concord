@@ -1,4 +1,4 @@
-// Cross-process guarantee: each scan is launched through its own installation's entry.
+// 跨进程保证：外部程序——扫描通过各自安装的真实入口启动子进程，并校验实际参数、输出与退出码。
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import test from 'node:test';
