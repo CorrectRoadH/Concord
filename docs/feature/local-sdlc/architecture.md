@@ -54,7 +54,7 @@ runner 在消费者 cwd 下执行。argv 逐参数替换 `{file}`、`{name}`、`
 3. 从缺陷提交到修复提交之间，测试文件、`runner.sourceFiles` 与测试指向的 Spec 字节不变；严格解码后的项目配置除 `runner.prepare` 外不变，配置文件的空白与格式不参与比较。区间中有 merge 提交时不支持。
 4. 以 detached worktree 分别检出缺陷提交与修复提交。它们位于系统临时目录下属于当前用户、权限 0700 的私有目录中，在仓库目录树之外，不跟随符号链接。放在仓库之外，是因为仓库之下的 worktree 解析依赖时会向上找到主 worktree 的依赖，使构建结果不同于干净的 worktree。
 
-   每个临时 worktree 先依次执行 `runner.prepare` 的命令（例如安装依赖与构建），再运行 runner。`prepare` 只准备环境：两个 worktree 都取核验开始时 HEAD 的配置，重放同样取当时 HEAD 的配置。它不属于第 3 步的冻结输入，因此早于它出现的提交也能核验。
+   每个临时 worktree 先依次执行 `runner.prepare` 的命令（例如安装依赖与构建），再运行回归测试。回归测试所在文件被某个 `testAdapters` 覆盖时，按 `test run --require-native` 的同一条原生选择路径运行，两端都必须是 green 或 red，任一端 invalid 时核验以 `FixUnverifiable` 结束；没有被覆盖时运行 runner。`prepare` 只准备环境：两个 worktree 都取核验开始时 HEAD 的配置，重放同样取当时 HEAD 的配置。它不属于第 3 步的冻结输入，因此早于它出现的提交也能核验。
 
    准备命令以非零码结束、超时或清理未知时，核验报 `FixUnverifiable`，不计为 red。全部命令在 runner 租约与 OwnedProcess 下执行，结束后删除临时 worktree；清理无法确认时按 runner 阻断处理。
 5. 缺陷提交上同一冻结命令以非零码结束，修复提交上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果。零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。

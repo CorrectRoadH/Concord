@@ -362,7 +362,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 ### 超时与预算
 
-`collectTimeoutMs`、`runTimeoutMs` 与 `wallTimeoutMs` 只能缩小默认上限 60000、300000 与 600000 毫秒。`budgets` 可缩小响应、输出、原生项、调用数及报告文件预算，不扩大[协议硬上限](#adapter-协议)。
+`collectTimeoutMs`、`runTimeoutMs` 与 `wallTimeoutMs` 的默认值为 60000、300000 与 600000 毫秒。外部 adapter 可以在配置中调大，硬上限分别是 600000、7200000 与 7200000 毫秒，供打包、安装后再运行的正式 E2E 使用；内置 adapter 只能缩小默认值。超时、取消与进程组回收规则不随上限改变。`budgets` 可缩小响应、输出、原生项、调用数及报告文件预算，不扩大[协议硬上限](#adapter-协议)。
 
 ### adapter 协议
 
@@ -432,5 +432,6 @@ concord schema [<名称>] [--json]
 | `config` | `concord.config.ts` 默认导出的配置对象，编辑器可用它补全与校验 |
 | `test-adapter` | `concord.test-adapter/v1` 的全部请求与响应，见 [adapter 协议](#adapter-协议) |
 | `change-preview` | `concord view export` 产出的 `changes.json`，见 [PR 静态预览导出](../web-workbench/cli.md#pr-静态预览导出) |
+| `model` | `--json` 输出中的文档、关系与错误结构，`show`、`list`、`trace` 与 `test list` 的结果用它严格解码 |
 
 未知名称以 `SchemaNotFound` 退出 1，`details.available` 列出可用名称。

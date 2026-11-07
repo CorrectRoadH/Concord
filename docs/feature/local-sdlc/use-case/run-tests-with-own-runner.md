@@ -65,13 +65,21 @@
 
    Concord 发 `select-plan`，执行器返回只运行选中用例的命令；Concord 执行命令、记录退出码与清理状态，再发 `report-parse` 取得逐项结果。裁决 green、red 或 invalid 由 Concord 作出，执行器的响应不能覆盖命令的退出状态。
 
+   打包候选、隔离安装等准备步骤放在同一个命令里，由执行器的包装脚本先准备、再运行选中的用例，整个过程在 Concord 管理的进程组内。准备失败时执行器不报告任何用例结果，选中的用例缺失，裁决为 invalid，不会被当成测试失败。正式 E2E 需要更长时间时，在 adapter 配置中调大 `runTimeoutMs` 与 `wallTimeoutMs`（[超时与预算](../cli.md#超时与预算)）。
+
 6. 用同一条路径核验修复。 {#verify}
+
+   发现购物车重复加入同一 SKU 时数量被覆盖后，按[核验修复并关闭缺陷](resolve-with-command-evidence.md)的顺序：`concord new issue duplicate-sku` 记录缺陷，给回归用例加上 `@issue duplicate-sku` 标记并单独提交，确认它在这个提交上失败，再紧接着提交修复。然后：
 
    ```sh
    concord issue close duplicate-sku --fixed
    ```
 
-   修复核验在缺陷提交与修复提交上各运行一次这个用例，收据由 Concord 产生和保存（[核验修复并关闭缺陷](resolve-with-command-evidence.md)）。
+   因为回归用例在 adapter 覆盖的 `e2e/` 下，核验在缺陷提交与修复提交的临时 worktree 中，都走第 5 步的原生选择路径各运行一次：缺陷端 red、修复端 green 才通过，任一端 invalid 都以 `FixUnverifiable` 结束。通过后 Issue 被删除，命令输出写进提交说明的核验结论。
+
+7. 在历史提交上查询用例。 {#history}
+
+   需要某个旧提交上的用例与关联时（例如审阅 PR 的基线），在该提交的隔离 checkout 中运行 `concord --json test list`，不自行实现标记解析。
 
 ## 结果
 
@@ -84,6 +92,8 @@
 
 ### 验收方式
 
-- 在临时仓库中用一个最小的外部执行器（非 TypeScript 实现）走完第 2 到第 6 步，`test list` 的 case ID 与 `test run` 的选择一致。
+- 在临时仓库中用一个最小的外部执行器（非 TypeScript 实现）走完第 2 到第 6 步，`test list` 的 case ID 与 `test run` 的选择一致；修复核验的两端都经原生选择运行。
+- 包装脚本的准备步骤失败时，`test run` 与修复核验都为 invalid，不出现 red。
+- adapter 把 `runTimeoutMs` 设为超过默认值、低于硬上限时生效；超过硬上限时配置校验失败。
 - `concord schema test-adapter` 的输出能校验协议的全部请求与响应示例，未知字段被拒绝。
 - 执行器返回不符合 Schema 的响应、或漏报选中的用例时，结果分别为 `AdapterProtocolInvalid` 与 invalid。
