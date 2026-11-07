@@ -100,27 +100,5 @@
       "types": "./dist/base/process/typescript-host.d.ts",
       "default": "./dist/base/process/typescript-host.js"
     }
-  },
-  "exports": {
-    "./config": {
-      "concord-source": "./src/model/config-public.ts",
-      "types": "./dist/model/config-public.d.ts",
-      "default": "./dist/model/config-public.js"
-    },
-    "./model": {
-      "concord-source": "./src/model/index.ts",
-      "types": "./dist/model/index.d.ts",
-      "default": "./dist/model/index.js"
-    },
-    "./test-adapter-protocol": {
-      "concord-source": "./src/model/test-adapter-protocol.ts",
-      "types": "./dist/model/test-adapter-protocol.d.ts",
-      "default": "./dist/model/test-adapter-protocol.js"
-    },
-    "./change-preview": {
-      "concord-source": "./src/model/change-preview.ts",
-      "types": "./dist/model/change-preview.d.ts",
-      "default": "./dist/model/change-preview.js"
-    }
   }
 }

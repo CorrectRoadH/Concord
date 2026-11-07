@@ -66,7 +66,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
   const now = yield* Clock.currentTimeMillis;
   const owned = yield* Effect.acquireRelease(sync(() => repo.snapshot(() => {
       const run = beginRun(repo.root, environment);
-      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000), 600_000), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, reportErrors: [] };
+      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, reportErrors: [] };
       return { run, session };
   })), owned => Effect.gen(function* () {
     const results = yield* service.cleanupResults;

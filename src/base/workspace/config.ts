@@ -68,7 +68,7 @@ export function parseTypeScriptConfig(source: string, path = 'concord.config.ts'
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function renderTypeScriptConfig(config: ProjectConfig): string {
   const valid = decode(ProjectSchema, config, 'configuration');
-  return `import type { ProjectConfig } from 'concord-sdlc/config';\n\nexport default ${JSON.stringify(valid, null, 2)} as const satisfies ProjectConfig;\n`;
+  return `export default ${JSON.stringify(valid, null, 2)} as const;\n`;
 }
 
 // @concord-code

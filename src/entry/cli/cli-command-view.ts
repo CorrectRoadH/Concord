@@ -1,11 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/cli.md
 import { Effect, Option } from "effect";
-import { Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ConcordError } from "../../model/index.ts";
+import { resolve } from 'node:path';
 import { ViewLauncher } from "./launchers.ts";
 
-import { exportChangePreview } from "../../app/index.ts";
+import { exportChangePreview, verifyChangePreview, applicationRuntime } from "../../app/index.ts";
 import { root, optional, emit, sync, viewRoot } from "./cli-base.ts";
 
 const view = Command.make('view', {
@@ -18,6 +19,11 @@ const view = Command.make('view', {
   const launcher = yield* ViewLauncher;
   return yield* launcher.serve({ root: (yield* viewRoot(settings)), host: args.host, port: args.port, inProcess: args.inProcess }, (server) => emit({ operation: 'view', ...server }, settings.json));
 })).pipe(Command.withDescription('Review local changes, or export a static committed comparison.'), Command.withSubcommands([
+  Command.make('verify', { directory: Argument.string('directory') }, args => Effect.gen(function*() {
+    const settings = yield* root;
+    const runtime = yield* applicationRuntime;
+    yield* emit(yield* verifyChangePreview(resolve(runtime.cwd, args.directory)), settings.json);
+  })).pipe(Command.withDescription('Strictly validate an exported preview directory without opening a project.')),
   Command.make('export', {
     base: Flag.string('base'), head: Flag.string('head').pipe(Flag.withDefault('HEAD')),
     baseLabel: Flag.string('base-label').pipe(Flag.optional), out: Flag.string('out'),

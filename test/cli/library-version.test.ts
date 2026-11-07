@@ -8,8 +8,8 @@ import '../support/source-consumer.ts';
 import { runCli } from '../support/cli.ts';
 import { tmpdir } from '../support/temporary.ts';
 
-// @feature docs/feature/local-sdlc/library.md
-test('source CLI doctor reports a library mismatch and keeps its successful exit', () => Effect.runPromise(Effect.promise(async () => {
+// @feature docs/feature/local-sdlc/README.md
+test('doctor ignores project package metadata', () => Effect.runPromise(Effect.promise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-cli-library-version-'));
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -20,7 +20,6 @@ test('source CLI doctor reports a library mismatch and keeps its successful exit
     const diagnosis = JSON.parse(result.stdout);
     assert.equal(diagnosis.ok, true);
     assert.equal(diagnosis.nextSteps[0], 'concord init');
-    assert.equal(diagnosis.findings.filter((finding: { code: string }) => finding.code === 'LibraryVersionMismatch').length, 1);
-    assert.match(diagnosis.nextSteps.at(-1), /^npm install -D https:\/\/github.com\/CorrectRoadH\/Concord\/releases\/download\/v[^/]+\/concord-sdlc-[^/]+\.tgz$/u);
+    assert.equal(diagnosis.findings.filter((finding: { code: string }) => finding.code === 'LibraryVersionMismatch').length, 0);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

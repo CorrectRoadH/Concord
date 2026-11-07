@@ -2,7 +2,7 @@ import { ConcordError, type Repository } from "../model/index.ts";
 import { checkWriting } from "../domain/writing/index.ts";
 import { buildTrace } from "../domain/trace/index.ts";
 import { checkTaste } from "../domain/taste/index.ts";
-import { selectWritingGuide, uninitializedDoctor, withLibraryVersionDiagnostic } from './project-onboarding.ts';
+import { selectWritingGuide, uninitializedDoctor } from './project-onboarding.ts';
 import { inspectWorkflowSkills } from './workflow-skills.ts';
 
 
@@ -29,5 +29,5 @@ export function doctor(repo: Repository, trace?: ReturnType<typeof buildTrace>, 
   const tasteSteps = tasteFindings.some((finding) => finding.code === 'TasteMissing') ? ['Write project taste in docs/taste.md.'] : [];
   const skills = inspectWorkflowSkills(repo);
   if (!skills.installed || skills.advisories.length > 0) tasteSteps.push('Run concord skills install.');
-  return withLibraryVersionDiagnostic({ operation: 'doctor', ok: findings.length === 0 && writingComplete && writingFindings.length === 0, writing: { complete: writingComplete, ok: writingComplete && writingFindings.length === 0 }, root: repo.root, node: repo.runtimeVersion ?? 'unknown', configuration: repo.config, missingTestRoots, missingSourceRoots, codeDeclarations: codeDeclarations.length, documents: documents.length, cases: annotations.cases.length, findings: allFindings, advisories: [...trace.advisories, ...skills.advisories], nextSteps: [...tasteSteps, ...(repo.config.testRoots.length === 0 ? ['Maintain contracts with concord --skill document.', 'Run concord check to validate document integrity; this does not prove test coverage.', `Add testRoots to ${repo.configSnapshot.path} when real tests exist.`] : annotations.cases.length === 0 ? ['Fill in a Feature and Use Case.', 'Use concord test marker to connect an existing test.', `Configure your runner in ${repo.configSnapshot.path}; doctor does not execute it.`] : ['Run concord check to validate all relations.', 'Configure runner to run tests and verify fixes.'])] });
+  return { operation: 'doctor', ok: findings.length === 0 && writingComplete && writingFindings.length === 0, writing: { complete: writingComplete, ok: writingComplete && writingFindings.length === 0 }, root: repo.root, node: repo.runtimeVersion ?? 'unknown', configuration: repo.config, missingTestRoots, missingSourceRoots, codeDeclarations: codeDeclarations.length, documents: documents.length, cases: annotations.cases.length, findings: allFindings, advisories: [...trace.advisories, ...skills.advisories], nextSteps: [...tasteSteps, ...(repo.config.testRoots.length === 0 ? ['Maintain contracts with concord --skill document.', 'Run concord check to validate document integrity; this does not prove test coverage.', `Add testRoots to ${repo.configSnapshot.path} when real tests exist.`] : annotations.cases.length === 0 ? ['Fill in a Feature and Use Case.', 'Use concord test marker to connect an existing test.', `Configure your runner in ${repo.configSnapshot.path}; doctor does not execute it.`] : ['Run concord check to validate all relations.', 'Configure runner to run tests and verify fixes.'])] };
 }

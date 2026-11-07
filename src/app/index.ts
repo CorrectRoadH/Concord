@@ -180,3 +180,5 @@ export { QueryRefreshRequest } from './query-cache.ts';
 export { rebuildCache, computeCacheRebuild, finishCacheRebuild } from './cache-rebuild.ts';
 export { workspaceSourceDigest } from './workspace-source.ts';
 export { manageHerdrMod } from './herdr-mod.ts';
+
+export { verifyChangePreview } from './change-preview-verify.ts';

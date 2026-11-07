@@ -1,9 +1,8 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/library.md#版本
+// @concord-implements docs/feature/cross-platform-release/README.md
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { ConcordError } from '../../model/index.ts';
 import { packageRoot } from './location.ts';
 
 const Version = Schema.fromJsonString(Schema.Struct({ version: Schema.NonEmptyString }));
@@ -13,14 +12,4 @@ function version(path: string): string {
 
 export function installedConcordVersion(): string {
   return version(join(packageRoot, 'package.json'));
-}
-
-/** The optional project library is metadata, never an executable module. */
-export function projectLibraryVersions(root: string): { cli: string; library?: string } {
-  const cli = installedConcordVersion();
-  try { return { cli, library: version(join(root, 'node_modules/concord-sdlc/package.json')) }; }
-  catch (cause) {
-    if (typeof cause === 'object' && cause !== null && 'code' in cause && cause.code === 'ENOENT') return { cli };
-    throw new ConcordError('InvalidData', 'Cannot read the installed concord-sdlc version', cause);
-  }
 }

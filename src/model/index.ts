@@ -398,3 +398,5 @@ export { WritingGuideSchema, InitializationReceiptSchema } from './initializatio
 export type { WritingGuide, InitializationReceipt } from './initialization.ts';
 export { WORKFLOW_SKILL_TOPICS, workflowSkillPaths, isWorkflowSkillPath, isManagedWorkflowSkill, isObsoleteWorkflowSkillRemoval, SkillsInstallReceiptSchema } from './workflow-skills.ts';
 export type { WorkflowSkillTopic } from './workflow-skills.ts';
+
+export { machineSchema, machineSchemaNames } from './machine-schema.ts';

@@ -13,8 +13,6 @@ import { packConcord } from '../../scripts/release-package.ts';
 import { applicationRoot, packageBin } from '../support/installed-package.ts';
 import { builtConcord } from '../support/installed-package.ts';
 import { packageCommand } from '../../scripts/package-command.ts';
-import { packLibrary } from '../../scripts/release-library.ts';
-import { verifyReleaseLibrary } from '../../scripts/assemble-release.ts';
 import { verifyPackageInventory } from '../support/package-inventory.ts';
 import { verifyArchiveContents, verifyArchiveRuntime } from '../support/archive-acceptance.ts';
 import { tmpdir } from '../support/temporary.ts';
@@ -83,7 +81,6 @@ test('one native release archive owns all installed product acceptance', { concu
   yield* fs.copy(installed, startup);
   yield* fs.makeDirectory(join(scratch, 'startup'));
   yield* fs.makeDirectory(join(scratch, 'herdr'));
-  const library = yield* packLibrary(join(scratch, 'library'), app);
   const check = async (action: string, candidate = installed, directory = scratch): Promise<void> => {
     const code = await Effect.runPromise(spawner.exitCode(ChildProcess.make(process.execPath, [
       fileURLToPath(new URL('../support/archive-check.ts', import.meta.url)), action, candidate, directory, archive,
@@ -105,8 +102,6 @@ test('one native release archive owns all installed product acceptance', { concu
     context.test('packaged Herdr installation preserves ownership and host failure receipts', () => check('herdr', installed, join(scratch, 'herdr'))),
     // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md#verify
     context.test('the same-run archive installs and checks without system runtimes', () => check('installer')),
-    // @feature docs/feature/local-sdlc/README.md
-    context.test('standalone library accepts valid configuration, rejects invalid fields and runs all exports', () => Effect.runPromise(verifyReleaseLibrary(library.filename).pipe(Effect.provide(NodeServices.layer)))),
   ]));
-  console.error(`# Release packaging: unpack=${(unpackMs / 1000).toFixed(3)}s; one CLI archive; standalone library consumer`);
+  console.error(`# Release packaging: unpack=${(unpackMs / 1000).toFixed(3)}s; one CLI archive`);
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));

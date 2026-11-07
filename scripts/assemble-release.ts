@@ -7,43 +7,10 @@ import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assembleArchive } from './archive.ts';
 import { buildApplication } from './distribution.ts';
-import { packLibrary } from './release-library.ts';
 import { io, mustRun } from './perf/process.ts';
 import { decodeNativeArtifact } from '../src/base/installation/index.ts';
 
 class ReleaseAssemblyFailed extends Schema.TaggedError<ReleaseAssemblyFailed>()('ReleaseAssemblyFailed', { message: Schema.String }) {}
-
-/** Install the library outside the checkout: resolution cannot borrow development dependencies. */
-export const verifyReleaseLibrary = Effect.fn('release.verifyLibrary')(function*(archive: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-library-consumer-' });
-  const options = { cwd: root, outputDir: root, timeoutMs: 120_000, env: { NODE_PATH: '', NODE_OPTIONS: '' } };
-  yield* fs.writeFileString(join(root, 'package.json'), JSON.stringify({ private: true, type: 'module', dependencies: { 'concord-sdlc': `file:${resolve(archive)}` } }));
-  yield* mustRun(['pnpm', 'install', '--ignore-scripts'], options);
-  const condition = Schema.Struct({ types: Schema.String, import: Schema.String });
-  yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({
-    name: Schema.Literal('concord-sdlc'), version: Schema.String, gitHead: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)), type: Schema.Literal('module'), license: Schema.String,
-    exports: Schema.Struct({ './config': condition, './model': condition, './test-adapter-protocol': condition, './change-preview': condition }),
-    dependencies: Schema.Record(Schema.String, Schema.String),
-  })), { onExcessProperty: 'error' })(yield* fs.readFileString(join(root, 'node_modules/concord-sdlc/package.json')));
-  if (yield* fs.exists(join(root, 'node_modules/.bin/concord'))) return yield* new ReleaseAssemblyFailed({ message: 'Library installation must not expose a concord executable' });
-  yield* fs.writeFileString(join(root, 'concord.config.ts'), "import type { ProjectConfig } from 'concord-sdlc/config';\nexport default { testRoots: ['test'], sourceRoots: ['src'] } satisfies ProjectConfig;\n");
-  yield* mustRun([process.execPath, resolve('node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--skipLibCheck', '--target', 'esnext', '--module', 'nodenext', 'concord.config.ts'], options);
-  yield* fs.writeFileString(join(root, 'invalid-config.ts'), "import type { ProjectConfig } from 'concord-sdlc/config';\nexport default { testRoot: 'test' } satisfies ProjectConfig;\n");
-  const invalid = yield* mustRun([process.execPath, resolve('node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--skipLibCheck', '--target', 'esnext', '--module', 'nodenext', 'invalid-config.ts'], options).pipe(Effect.result);
-  if (invalid._tag !== 'Failure' || !/\btestRoot\b/u.test(invalid.failure.message)) return yield* new ReleaseAssemblyFailed({ message: 'Library types must reject the invalid testRoot field with its diagnostic' });
-  yield* fs.writeFileString(join(root, 'consumer.mjs'), `import assert from 'node:assert/strict';
-import { ref_markdownAnchor } from 'concord-sdlc/model';
-import { protocolJson, protocolDecode, ProcessStatusSchema } from 'concord-sdlc/test-adapter-protocol';
-import { decodeChangePreview } from 'concord-sdlc/change-preview';
-assert.equal(ref_markdownAnchor('# Library Consumer {#library-consumer}'), 'library-consumer');
-const processStatus = { invocationId: 'library-check', exitCode: 0, signal: null, timedOut: false, cancelled: false, outputTruncated: false, cleanup: 'complete' };
-assert.deepEqual(protocolDecode(ProcessStatusSchema, protocolJson(JSON.stringify(processStatus))), processStatus);
-const oid = 'a'.repeat(40);
-assert.equal(decodeChangePreview({ format: 'concord.change-preview/v1', comparison: { base: oid, head: oid, mergeBase: oid, baseLabel: 'main' }, entries: [] }).entries.length, 0);
-`);
-  yield* mustRun([process.execPath, join(root, 'consumer.mjs')], options);
-}, Effect.scoped);
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md#package
 export const assembleRelease = Effect.fn('release.assemble')(function*(destination: string, applicationRoot: string, nativeArtifacts: string) {
@@ -68,9 +35,6 @@ export const assembleRelease = Effect.fn('release.assemble')(function*(destinati
     yield* fs.copyFile(archive.filename, join(output, name));
     assets.push(name);
   }
-  const library = yield* packLibrary(output, application);
-  assets.push(basename(library.filename));
-  yield* verifyReleaseLibrary(library.filename);
   yield* fs.copyFile(resolve('install.sh'), join(output, 'install.sh'));
   assets.push('install.sh');
   const checksums: string[] = [];

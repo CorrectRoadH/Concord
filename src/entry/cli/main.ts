@@ -424,8 +424,8 @@ export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, a
     yield* app.requireInitializedProject(settings.root._tag === 'Some' ? settings.root.value : undefined, fromSubdirectory);
   });
   const commands = command.subcommands.flatMap(group => group.commands.map(child => {
-    if (['init', 'template', 'herdr', 'doctor', 'server'].includes(child.name)) return child;
-    if (child.name === 'view') return child.pipe(Command.withSubcommands(child.subcommands.flatMap(group => group.commands.map(nested => nested.pipe(Command.provideEffectDiscard(guard(true)))))));
+    if (['init', 'template', 'herdr', 'doctor', 'server', 'schema'].includes(child.name)) return child;
+    if (child.name === 'view') return child.pipe(Command.withSubcommands(child.subcommands.flatMap(group => group.commands.map(nested => nested.name === 'verify' ? nested : nested.pipe(Command.provideEffectDiscard(guard(true)))))));
     return child.pipe(Command.provideEffectDiscard(guard()));
   }));
   const guarded = command.pipe(Command.withSubcommands(commands)) as typeof command;

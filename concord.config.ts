@@ -1,5 +1,3 @@
-import { type config_public_ProjectConfig as ProjectConfig } from "./src/model/index.ts";
-
 export default {
   "sourceRoots": [
     "src",
@@ -181,4 +179,4 @@ export default {
     ],
     "timeoutMs": 300000
   }
-} as const satisfies ProjectConfig;
+} as const;

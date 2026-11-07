@@ -25,7 +25,7 @@ const status: ProcessStatus = { invocationId: 'one', exitCode: 0, signal: null, 
 // @name adapter-configuration-c17
 test('adapter config validates path segments, overlap and hard budgets (C17)', () => Effect.runPromise(Effect.sync(() => {
   assert.doesNotThrow(() => protocolDecode(ProjectSchema, { ...config, testAdapters: [adapter] }));
-  for (const testAdapters of [[{ ...adapter, include: ['test/../escape'] }], [{ ...adapter, include: ['test/a'] }, { ...adapter, id: 'other', include: ['test/a/nested'] }], [{ ...adapter, include: ['test/ab'] }, { ...adapter, id: 'other', include: ['test/ab'] }], [{ ...adapter, wallTimeoutMs: 600001 }], [{ ...adapter, budgets: { cases: 100001 } }], [{ ...adapter, builtin: 'go' }]]) assert.throws(() => protocolDecode(ProjectSchema, { ...config, testAdapters }));
+  for (const testAdapters of [[{ ...adapter, include: ['test/../escape'] }], [{ ...adapter, include: ['test/a'] }, { ...adapter, id: 'other', include: ['test/a/nested'] }], [{ ...adapter, include: ['test/ab'] }, { ...adapter, id: 'other', include: ['test/ab'] }], [{ ...adapter, wallTimeoutMs: 7200001 }], [{ ...adapter, budgets: { cases: 100001 } }], [{ ...adapter, builtin: 'go' }]]) assert.throws(() => protocolDecode(ProjectSchema, { ...config, testAdapters }));
   assert.doesNotThrow(() => protocolDecode(ProjectSchema, { ...config, testAdapters: [{ ...adapter, include: ['test/a'] }, { ...adapter, id: 'other', include: ['test/ab'] }] }));
 })));
 

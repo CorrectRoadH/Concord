@@ -30,4 +30,6 @@ import { view } from "./cli-command-view.ts";
 import { server } from './cli-command-server.ts';
 import { herdr } from './cli-command-herdr.ts';
 
-export const fullCommand = root.pipe(Command.withSubcommands([init,skills,newDocument,showDocument,listDocuments,recover,config,taste,...(['use-case','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,herdr]));
+import { schema } from './cli-command-schema.ts';
+
+export const fullCommand = root.pipe(Command.withSubcommands([schema,init,skills,newDocument,showDocument,listDocuments,recover,config,taste,...(['use-case','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,herdr]));

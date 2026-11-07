@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/library.md
+// @concord-implements docs/feature/web-workbench/cli.md#校验产物
 import { Schema } from "effect";
 
 export const PREVIEW_DATA_LIMIT = 8 * 1024 * 1024;
@@ -47,5 +47,5 @@ export const ChangePreviewSchema = Schema.Struct({
 }));
 export type ChangePreview = typeof ChangePreviewSchema.Type;
 export type ChangePreviewEntry = typeof ChangePreviewEntrySchema.Type;
-/** Shared strict boundary for the browser, installed consumers and the exporter. */
+/** Shared strict boundary for the browser, CLI verification and the exporter. */
 export const decodeChangePreview = Schema.decodeUnknownSync(ChangePreviewSchema, { onExcessProperty: 'error' });

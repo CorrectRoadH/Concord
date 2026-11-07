@@ -6,6 +6,7 @@ import { root } from "./cli-base.ts";
 import type { StartupData } from "../../model/index.ts";
 
 const loaders = {
+  schema: () => import('./cli-command-schema.ts').then(m => m.schema),
   new: () => import("./cli-command-documents.ts").then(m => m.newDocument),
   show: () => import("./cli-command-documents.ts").then(m => m.showDocument),
   list: () => import("./cli-command-documents.ts").then(m => m.listDocuments),

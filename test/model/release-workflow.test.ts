@@ -172,7 +172,7 @@ test('publication retry reuses identical assets and refuses a different digest',
     const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-publish-retry-' });
     yield* fs.makeDirectory(join(root, 'bin'));
     yield* fs.makeDirectory(join(root, 'release'));
-    const names = ['concord-0.8.2-linux-x64.tar.gz', 'concord-0.8.2-darwin-arm64.tar.gz', 'concord-sdlc-0.8.2.tgz', 'install.sh'];
+    const names = ['concord-0.8.2-linux-x64.tar.gz', 'concord-0.8.2-darwin-arm64.tar.gz', 'install.sh'];
     const sums: string[] = [], assets: { name: string; digest: string }[] = [];
     for (const name of names) {
       yield* fs.writeFileString(join(root, 'release', name), `immutable ${name} bytes`);
@@ -185,8 +185,8 @@ test('publication retry reuses identical assets and refuses a different digest',
     // Only the GitHub boundary is simulated; run the production workflow shell and hash actual files.
     yield* fs.writeFileString(join(root, 'bin/gh'), '#!/usr/bin/env bash\nif test "$1" = api; then\n  if test "$GH_CASE" = absent; then echo "HTTP 404" >&2; exit 1; fi\n  if test "$GH_CASE" = network; then echo "connection reset" >&2; exit 1; fi\n  cat "$GH_FIXTURE"\nelse\n  printf "%s\\n" "$*" >> "$GH_CALLS"\nfi\n');
     yield* fs.chmod(join(root, 'bin/gh'), 0o755);
-    for (const kind of ['same', 'linux', 'darwin', 'library', 'installer', 'checksums', 'missing', 'tag', 'commit', 'prerelease', 'network', 'absent']) {
-      const fixtureAssets = assets.map((asset, index) => ({ ...asset, digest: ['linux', 'darwin', 'library', 'installer', 'checksums'][index] === kind ? `sha256:${'b'.repeat(64)}` : asset.digest }));
+    for (const kind of ['same', 'linux', 'darwin', 'installer', 'checksums', 'missing', 'tag', 'commit', 'prerelease', 'network', 'absent']) {
+      const fixtureAssets = assets.map((asset, index) => ({ ...asset, digest: ['linux', 'darwin', 'installer', 'checksums'][index] === kind ? `sha256:${'b'.repeat(64)}` : asset.digest }));
       yield* fs.writeFileString(join(root, 'fixture.json'), JSON.stringify({ tag_name: kind === 'tag' ? 'v0.0.0' : 'v0.8.2', target_commitish: kind === 'commit' ? 'b'.repeat(40) : 'a'.repeat(40), draft: false, prerelease: kind === 'prerelease', assets: kind === 'missing' ? fixtureAssets.slice(1) : fixtureAssets }));
       const calls = join(root, `${kind}.calls`);
       const status: number = yield* spawner.exitCode(ChildProcess.make('bash', ['-e', '-c', script], {

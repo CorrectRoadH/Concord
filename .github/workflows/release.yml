@@ -180,13 +180,13 @@ jobs:
           version="${version#v}"
           cd release
           sha256sum --check SHA256SUMS
-          expected=("concord-$version-linux-x64.tar.gz" "concord-$version-darwin-arm64.tar.gz" "concord-sdlc-$version.tgz" install.sh)
-          test "$(wc -l < SHA256SUMS)" -eq 4
+          expected=("concord-$version-linux-x64.tar.gz" "concord-$version-darwin-arm64.tar.gz" install.sh)
+          test "$(wc -l < SHA256SUMS)" -eq 3
           for name in "${expected[@]}"; do
             test "$(awk -v name="$name" '$2 == name && length($1) == 64 { print $1 }' SHA256SUMS | wc -l)" -eq 1
           done
           if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > ../existing-release.json 2> ../release-api-error; then
-            jq -e --arg tag "$RELEASE_TAG" --arg commit "$RELEASE_COMMIT" '.tag_name == $tag and .target_commitish == $commit and (.draft == false) and (.prerelease == false) and (.assets | length == 5)' ../existing-release.json
+            jq -e --arg tag "$RELEASE_TAG" --arg commit "$RELEASE_COMMIT" '.tag_name == $tag and .target_commitish == $commit and (.draft == false) and (.prerelease == false) and (.assets | length == 4)' ../existing-release.json
             for name in "${expected[@]}" SHA256SUMS; do
               digest="$(sha256sum "$name" | cut -d' ' -f1)"
               jq -e --arg name "$name" --arg digest "sha256:$digest" '.assets | any(.name == $name and .digest == $digest)' ../existing-release.json
@@ -197,7 +197,7 @@ jobs:
           if ! grep -q 'HTTP 404' ../release-api-error; then cat ../release-api-error >&2; exit 1; fi
           gh release create "$RELEASE_TAG" "${expected[@]}" SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --verify-tag --target "$RELEASE_COMMIT" --title "Concord $version" \
-            --notes "Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives and the concord-sdlc library. Exact candidate bytes verified on Ubuntu 24.04 and macOS 15; the same tag commit passed the repository gate. Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
+            --notes "Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives. Exact candidate bytes verified on Ubuntu 24.04 and macOS 15; the same tag commit passed the repository gate. Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
       - name: Notify Homebrew tap of the published release
         env:
           GH_TOKEN: ${{ github.token }}
