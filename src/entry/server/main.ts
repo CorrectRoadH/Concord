@@ -17,7 +17,7 @@ import type { ReadonlyCacheSnapshot } from '../../base/cache/index.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
 import type { ChildProcessSpawner } from 'effect/unstable/process';
 import { NodeSocketServer } from '@effect/platform-node';
-import { Cause, Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Semaphore, Stdio, Stream, SubscriptionRef } from 'effect';
+import { Cause, Clock, Deferred, Exit, Fiber, FiberSet, Queue, Schema, Scope, Semaphore, Stdio, Stream, SubscriptionRef } from 'effect';
 import { RpcClient, RpcSerialization, RpcServer } from 'effect/unstable/rpc';
 import { Socket, SocketServer } from 'effect/unstable/socket';
 import { makeOwnedProcessService } from '../../app/index.ts';
@@ -43,6 +43,7 @@ import { FeedbackSessions } from './feedback-session.ts';
 import { DerivationSessions } from './derivation-session.ts';
 import { ServerJobs } from './jobs.ts';
 import { makeHttpLeases } from './http-leases.ts';
+import { makeHttpSubscriptions } from './subscriptions.ts';
 import { startHostedViewServer, type HostedViewPorts } from '../http/index.ts';
 import { FeedbackCacheWriter } from '../../base/cache/index.ts';
 import { mergeLocalFeedbackObservation } from '../../app/index.ts';
@@ -367,7 +368,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       return yield* Effect.try({ try: () => finishCacheRebuild(value, status), catch: failure });
     }));
     const event = SubscriptionRef.changes(service.state.value).pipe(Stream.buffer({ capacity: 1, strategy: 'sliding' }));
-    const httpSubscriptions = new Set<Fiber.Fiber<unknown, unknown>>();
+    const httpSubscriptions = yield* makeHttpSubscriptions(event, service.connect);
     const notify = () => { Effect.runFork(SubscriptionRef.update(service.state.value, value => ({ ...value }))); };
     const runOperation = async (input: Parameters<typeof operations.run>[0], signal?: AbortSignal) => {
       try { return await Effect.runPromise(admission.withSlot(service.operate(operations.run(input))).pipe(Effect.mapError(workspaceServerFailure)), { signal }); }
@@ -403,11 +404,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
           await run(service.request); return value;
         },
         jobs, sse,
-        subscribe: listener => {
-          const fiber = Effect.runFork(Effect.scoped(service.connect.pipe(Effect.andThen(Stream.runForEach(workspaceEvents(event).pipe(Stream.takeUntil(value => value.state === 'stopping')), value => Effect.promise(() => Promise.resolve(listener(value))))))));
-          httpSubscriptions.add(fiber);
-          return () => { httpSubscriptions.delete(fiber); Effect.runFork(Fiber.interrupt(fiber)); };
-        },
+        subscribe: httpSubscriptions.subscribe,
       };
       return startHostedViewServer({ root, host, port }, ports, execution, writeLog);
     }, catch: failure }));
@@ -484,7 +481,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     yield* Deferred.succeed(protocolReady, undefined);
     yield* service.stopped;
     yield* operations.pause;
-    yield* Effect.all([service.drain, operations.drain, ...[...httpSubscriptions].map(Fiber.await)], { concurrency: 'unbounded' }).pipe(Effect.timeout('3 seconds'), Effect.ignore);
+    yield* Effect.all([service.drain, operations.drain, FiberSet.awaitEmpty(httpSubscriptions.fibers)], { concurrency: 'unbounded' }).pipe(Effect.timeout('3 seconds'), Effect.ignore);
     yield* operations.close;
   }));
 });
