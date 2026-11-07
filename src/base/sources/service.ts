@@ -2,17 +2,36 @@ import { RuntimeEnvironment, runtimePath, runtimeTemporaryDirectory } from '../e
 import { Context, Effect, FileSystem, Layer, Path, Result, Stdio, Stream, type Scope } from 'effect';
 import { failure, ConcordError } from '../../model/index.ts';
 import { inspectPendingJournals, waitForPublication } from '../publication/index.ts';
-import { readRepositoryBytesSync, readRepositoryFileSync, type LocalRepository } from '../workspace/index.ts';
+import { readRepositoryBytesSync, readRepositoryFileSync, WorkspaceContext, LocalRepository, type WorkspaceMetadata } from '../workspace/index.ts';
+import { SourceSnapshot } from './source-snapshot.ts';
 import { NodeSourceWatch } from './source-watch.ts';
 import { readReportFiles } from './report-files.ts';
 import { untrackedFile } from './untracked-file.ts';
 export type SourceWatch = Pick<NodeSourceWatch, 'reconcile' | 'close'>;
+export interface SourceInspection {
+  readonly file: boolean;
+  readonly directory: boolean;
+  readonly symbolicLink: boolean;
+  readonly size: number;
+  readonly mode: number;
+  readonly identity: string;
+}
+
+export interface SnapshotOperation {
+  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
+  <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
+}
 
 export interface SourcesService {
   readonly createReportDirectory: (path: string) => Effect.Effect<void, ConcordError>;
-  readonly readBytes: (root: string, path: string) => Effect.Effect<Uint8Array | undefined, ConcordError>;
+  readonly readBytesAt: (root: string, path: string) => Effect.Effect<Uint8Array | undefined, ConcordError>;
+  readonly readBytes: (path: string) => Effect.Effect<Uint8Array | undefined, ConcordError, SourceSnapshot>;
   readonly untrackedFile: typeof untrackedFile;
-  readonly read: (root: string, path: string) => Effect.Effect<string | undefined, ConcordError>;
+  readonly readAt: (root: string, path: string) => Effect.Effect<string | undefined, ConcordError>;
+  readonly read: (path: string) => Effect.Effect<string | undefined, ConcordError, SourceSnapshot>;
+  readonly files: (prefix: string, scope?: 'source') => Effect.Effect<readonly string[], ConcordError, SourceSnapshot>;
+  readonly inspect: (path: string) => Effect.Effect<SourceInspection | undefined, ConcordError, SourceSnapshot>;
+  readonly rootFiles: Effect.Effect<readonly string[], ConcordError, SourceSnapshot>;
   readonly authorBody: (path: string) => Effect.Effect<string, ConcordError>;
   readonly watch: (root: string, changed: () => void, failed: (error: ConcordError) => void) => Effect.Effect<SourceWatch, never, Scope.Scope>;
   readonly watchPrivateHead: (privateDir: string, changed: () => void) => Effect.Effect<void, never, Scope.Scope>;
@@ -21,7 +40,7 @@ export interface SourcesService {
   readonly exists: (path: string) => Effect.Effect<boolean, ConcordError>;
   readonly directoryEntries: (path: string) => Effect.Effect<readonly string[], ConcordError>;
   readonly temporaryDirectory: (prefix: string, cleanupFailed?: (error: ConcordError) => void) => Effect.Effect<string, ConcordError, Scope.Scope>;
-  readonly snapshot: <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>) => Effect.Effect<A, E | ConcordError, R>;
+  readonly snapshot: SnapshotOperation;
 }
 
 /** Observations belong to one operation, including its return-time verification. */
@@ -31,10 +50,77 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const stdio = yield* Stdio.Stdio;
+    const active = new WeakMap<SourceSnapshot['Service'], LocalRepository>();
+    const observed = Effect.fn('Sources.observed')(function*<A>(read: (repo: LocalRepository) => A) {
+      const identity = yield* SourceSnapshot;
+      return yield* Effect.try({ try: () => {
+        const repo = active.get(identity);
+        if (repo === undefined) throw new ConcordError('OperationFailed', 'Source snapshot is no longer active');
+        return read(repo);
+      }, catch: failure });
+    });
+    const runSnapshot = <A, E, R>(repo: LocalRepository, workspace: WorkspaceMetadata, operation: Effect.Effect<A, E, R>, retryLivePublication = false) => Effect.gen(function*() {
+      const parent = yield* Effect.serviceOption(SourceSnapshot);
+      if (parent._tag === 'Some' && active.get(parent.value) === repo) return yield* operation.pipe(Effect.provideContext(Context.make(SourceSnapshot, parent.value).pipe(Context.add(WorkspaceContext, parent.value.workspace))));
+      for (;;) {
+        const identity = SourceSnapshot.of({ workspace });
+        const run = operation.pipe(Effect.provideContext(Context.make(SourceSnapshot, identity).pipe(Context.add(WorkspaceContext, identity.workspace))));
+        const result = yield* Effect.result(Effect.acquireUseRelease(
+          waitForPublication(reclaimDead => Effect.try({ try: () => repo.beginSnapshot(reclaimDead), catch: failure })),
+          () => Effect.acquireUseRelease(
+            Effect.sync(() => { active.set(identity, repo); }),
+            () => run.pipe(Effect.tap(() => Effect.try({ try: () => repo.verifySnapshot(), catch: failure }))),
+            () => Effect.sync(() => { active.delete(identity); }),
+          ),
+          () => Effect.sync(() => repo.endSnapshot()),
+        ));
+        if (Result.isSuccess(result)) return result.success;
+        const error = result.failure;
+        // Only a read snapshot may discard observations and evaluate again
+        // when a publisher entered after acquisition. Never replay a writer.
+        const publishing = error instanceof ConcordError && error.code === 'RepositoryBusy'
+          && typeof error.details === 'object' && error.details !== null
+          && 'livePublication' in error.details && error.details.livePublication === true;
+        if (!retryLivePublication || workspace.access !== 'read' || !publishing) return yield* Effect.fail(error);
+        yield* Effect.sleep('50 millis');
+      }
+    });
+    function snapshot<A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
+    function snapshot<A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
+    function snapshot<A, E, R>(input: LocalRepository | Effect.Effect<A, E, R>, operation?: Effect.Effect<A, E, R>) {
+      if (input instanceof LocalRepository) {
+        const workspace: WorkspaceMetadata = Object.freeze({ root: input.root, privateDir: input.privateDir, configuration: input.configSnapshot, config: input.config, access: input.access, cache: input.persistentCache });
+        return runSnapshot(input, workspace, operation!, true);
+      }
+      return Effect.gen(function*() {
+        const workspace = yield* WorkspaceContext;
+        const parent = yield* Effect.serviceOption(SourceSnapshot);
+        if (parent._tag === 'Some' && parent.value.workspace === workspace && active.has(parent.value)) {
+          return yield* input.pipe(Effect.provideService(SourceSnapshot, parent.value));
+        }
+        // The descriptor adapter supplies no publication capability. Every
+        // independent operation owns its own reader, even for the same root.
+        return yield* Effect.acquireUseRelease(
+          waitForPublication(() => Effect.try({ try: () => new LocalRepository(workspace.root, { access: 'read', optimistic: true, persistentCache: 'off', reclaimPublication: false, runtime }), catch: failure })),
+          repo => Effect.gen(function*() {
+            if (repo.privateDir !== workspace.privateDir || repo.configSnapshot.digest !== workspace.configuration.digest || repo.configSnapshot.source !== workspace.configuration.source) {
+              return yield* Effect.fail(new ConcordError('FileChangedSinceRead', 'Project configuration changed; open a fresh workspace context', 'source-observation'));
+            }
+            return yield* runSnapshot(repo, workspace, input);
+          }),
+          repo => Effect.sync(() => repo.close()),
+        );
+      });
+    }
     return Sources.of({
       untrackedFile: (root, relative, limit) => untrackedFile(runtimePath(runtime, root), relative, limit),
       createReportDirectory: path => fs.makeDirectory(runtimePath(runtime, path), { mode: 0o700 }).pipe(Effect.mapError(failure)),
-      readBytes: (root, relative) => Effect.try({ try: () => readRepositoryBytesSync(runtimePath(runtime, root), relative, runtime), catch: failure }),
+      readBytesAt: (root, relative) => Effect.try({ try: () => readRepositoryBytesSync(runtimePath(runtime, root), relative, runtime), catch: failure }),
+      readBytes: path => observed(repo => repo.readBytes(path)),
+      read: path => observed(repo => repo.read(path)),
+      files: (prefix, scope) => observed(repo => repo.files(prefix, scope)),
+      inspect: path => observed(repo => repo.inspect(path)),
+      rootFiles: observed(repo => repo.rootFiles()),
       temporaryDirectory: Effect.fn('Sources.temporaryDirectory')((prefix: string, cleanupFailed?: (error: ConcordError) => void) => Effect.acquireRelease(
         fs.makeTempDirectory({ prefix, directory: runtimeTemporaryDirectory(runtime) }).pipe(Effect.mapError(failure)),
         directory => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.catch(cause => cleanupFailed === undefined ? Effect.die(failure(cause)) : Effect.sync(() => cleanupFailed(failure(cause))))),
@@ -48,7 +134,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         watcher => Effect.sync(() => watcher.close()),
       )),
       watchPrivateHead: (privateDir, changed) => Effect.forkScoped(Stream.runForEach(fs.watch(path.dirname(runtimePath(runtime, privateDir))), event => Effect.sync(() => { if (path.basename(event.path) === 'HEAD') changed(); })).pipe(Effect.ignore)).pipe(Effect.asVoid),
-      read: Effect.fn('Sources.read')((root: string, relative: string) => Effect.try({ try: () => readRepositoryFileSync(runtimePath(runtime, root), relative), catch: failure })),
+      readAt: Effect.fn('Sources.readAt')((root: string, relative: string) => Effect.try({ try: () => readRepositoryFileSync(runtimePath(runtime, root), relative), catch: failure })),
       authorBody: Effect.fn('Sources.authorBody')(function*(path: string) {
         if (path !== '-') {
           const source = yield* fs.readFileString(runtimePath(runtime, path)).pipe(Effect.mapError(failure));
@@ -64,24 +150,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         }).pipe(Effect.mapError(failure));
         return Buffer.concat(chunks).toString('utf8');
       }),
-      snapshot: <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>) => Effect.gen(function*() {
-        for (;;) {
-          const result = yield* Effect.result(Effect.acquireUseRelease(
-            waitForPublication(reclaimDead => Effect.try({ try: () => repo.beginSnapshot(reclaimDead), catch: failure })),
-            () => operation.pipe(Effect.tap(() => Effect.try({ try: () => repo.verifySnapshot(), catch: failure }))),
-            () => Effect.sync(() => repo.endSnapshot()),
-          ));
-          if (Result.isSuccess(result)) return result.success;
-          const error = result.failure;
-          // Only a read snapshot may discard observations and evaluate again
-          // when a publisher entered after acquisition. Never replay a writer.
-          const publishing = error instanceof ConcordError && error.code === 'RepositoryBusy'
-            && typeof error.details === 'object' && error.details !== null
-            && 'livePublication' in error.details && error.details.livePublication === true;
-          if (repo.access !== 'read' || !publishing) return yield* Effect.fail(error);
-          yield* Effect.sleep('50 millis');
-        }
-      }),
+      snapshot,
     });
   }));
 }

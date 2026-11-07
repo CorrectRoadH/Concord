@@ -5,6 +5,17 @@ import { CacheSnapshot, PersistentCache } from '../cache/index.ts';
 import { Publication } from '../publication/index.ts';
 import { failure } from '../../model/index.ts';
 import { LocalRepository, type ReadRepositoryOptions, type RepositoryOptions } from './storage.ts';
+import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
+import type { WorkspaceMetadata, WorkspaceOpenOptions } from './context.ts';
+
+export const openMetadata = Effect.fn('Workspace.open')((root: string | undefined, options: WorkspaceOpenOptions, runtime: RuntimeEnvironmentSnapshot) => Effect.try({
+  try: (): WorkspaceMetadata => {
+    const reader = new LocalRepository(root, { access: 'read', optimistic: true, persistentCache: 'off', reclaimPublication: false, runtime });
+    try {
+      return Object.freeze({ root: reader.root, privateDir: reader.privateDir, configuration: reader.configSnapshot, config: reader.config, access: options.access, cache: options.cache });
+    } finally { reader.close(); }
+  }, catch: failure,
+}));
 
 const attachCache = Effect.fn('Workspace.attachCache')(function*(repo: LocalRepository) {
   const persistent = yield* Effect.serviceOption(PersistentCache);

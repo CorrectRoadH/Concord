@@ -23,6 +23,8 @@ export type { RepositoryOptions, ReadRepositoryOptions } from './storage.ts';
 export { openReadRepository, openWriteRepository } from './open.ts';
 export { Workspace } from './service.ts';
 export type { WorkspaceService } from './service.ts';
+export { WorkspaceContext } from './context.ts';
+export type { WorkspaceMetadata, WorkspaceOpenOptions } from './context.ts';
 
 export { readRepositoryBytesSync } from './storage.ts';
 

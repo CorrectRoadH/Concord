@@ -99,11 +99,11 @@ const inWorktree = <A>(repo: LocalRepository, commit: string, cleanupUnknown: ()
 
 const assertFrozenRoot = Effect.fn('fixVerification.assertFrozenRoot')(function*(root: string, inputs: ReturnType<typeof frozenInputs>, code: string) {
   const sources = yield* Sources;
-  const config = yield* sources.read(root, inputs.configuration).pipe(Effect.mapError(error => new ConcordError(code, error.message)));
+  const config = yield* sources.readAt(root, inputs.configuration).pipe(Effect.mapError(error => new ConcordError(code, error.message)));
   const configDigest = yield* sync(() => objectDigest(configurationWithoutPreparation(config === undefined ? {} : parseTypeScriptConfig(config, inputs.configuration))));
   if (configDigest !== inputs.runner) return yield* Effect.fail(new ConcordError(code, `Materialized project configuration changed: ${inputs.configuration}`));
   for (const file of inputs.files) {
-    const bytes = yield* sources.readBytes(root, file.path).pipe(Effect.mapError(error => new ConcordError(code, error.message.includes('Symbolic') ? `Frozen input became a symbolic link: ${file.path}` : `Materialized frozen input is unavailable: ${file.path}`)));
+    const bytes = yield* sources.readBytesAt(root, file.path).pipe(Effect.mapError(error => new ConcordError(code, error.message.includes('Symbolic') ? `Frozen input became a symbolic link: ${file.path}` : `Materialized frozen input is unavailable: ${file.path}`)));
     if (bytes === undefined || digest(bytes) !== file.digest) return yield* Effect.fail(new ConcordError(code, `Materialized frozen input changed: ${file.path}`));
   }
 });
