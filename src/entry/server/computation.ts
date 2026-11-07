@@ -10,6 +10,7 @@ export { Snapshot } from './operation-protocol.ts';
 export const ComputationReply = strict(Schema.Struct({ value: Schema.Json, derived: Schema.Array(CacheDerivationBatch) }));
 export const Computation = Schema.Union([
   strict(Schema.Struct({ kind: Schema.Literal('scan') })),
+  strict(Schema.Struct({ kind: Schema.Literal('source-digest') })),
   strict(Schema.Struct({ kind: Schema.Literal('cache-rebuild') })),
   strict(Schema.Struct({ kind: Schema.Literal('query'), request: QueryRequest, cwd: CallerCwd, environment: QueryEnvironment, cache: Schema.optional(Schema.Literals(['use', 'off'])) })),
   strict(Schema.Struct({ kind: Schema.Literal('read'), path: Schema.String })),

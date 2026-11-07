@@ -169,6 +169,7 @@ export const computationLayer = Layer.mergeAll(Installation.layer, Workspace.lay
 const compute = Effect.fn('workspace.compute')(function*(root: string, operation: Computation) {
   switch (operation.kind) {
     case 'cache-rebuild': return yield* computeCacheRebuild(root);
+    case 'source-digest': return yield* workspaceSourceDigest(root);
     case 'query': return yield* executeQuery(root, operation.request, operation.cache);
     case 'scan': {
       const builtFrom = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -335,7 +336,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       verify: runtime.verify,
       health: cache.verify,
       context,
-      sourceDigest: workspaceSourceDigest(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(RuntimeEnvironment, execution)),
+      sourceDigest: backgroundComputation.run({ kind: 'source-digest' }).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(Schema.String)(value)), Effect.mapError(failure)),
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources), Effect.provideService(RuntimeEnvironment, execution)),
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } })), Effect.provideService(RuntimeEnvironment, execution)),
       persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt)).pipe(Effect.provideService(RuntimeEnvironment, execution)),
