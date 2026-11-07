@@ -4,12 +4,22 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test, { after } from 'node:test';
 import { Schema } from 'effect';
-import { createConsumer } from '../support/consumer.ts';
+import { beforeConsumerCleanup, createConsumer, retainConsumer } from '../support/consumer.ts';
+import { stopCliWorkspace } from '../support/cli-complex-fixture.ts';
 import { createDocument } from '../support/operations.ts';
 import { LocalRepository } from '../support/repository.ts';
 import { readProjectConfig } from '../support/support.ts';
 import { runCli } from '../support/cli.ts';
 import { tmpdir } from '../support/temporary.ts';
+
+async function consumer(): Promise<string> {
+  const root = await createConsumer();
+  beforeConsumerCleanup(async () => {
+    try { await stopCliWorkspace(root); }
+    catch (cause) { retainConsumer(root); throw cause; }
+  });
+  return root;
+}
 
 async function call<A>(root: string, argv: readonly string[], schema: Schema.ConstraintDecoder<A, never>, status = 0, stdin?: string): Promise<A> {
   const result = await runCli({ argv: ['--root', root, '--json', '--fresh', ...argv], cwd: process.cwd(), env: process.env, stdin });
@@ -19,7 +29,7 @@ async function call<A>(root: string, argv: readonly string[], schema: Schema.Con
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md
 test('feedback commands map provider, query and action arguments to JSON and named errors', async () => {
-  const root = (await createConsumer());
+  const root = await consumer();
   const repo = (await LocalRepository.open(root));
   try { (await createDocument(repo, 'issue', { id: 'observation', title: 'Local observation' })); }
   finally { repo.close(); }
@@ -44,7 +54,7 @@ after(() => rmSync(scratch, { recursive: true, force: true }));
 
 // @use-case docs/feature/web-workbench/use-case/review-pull-request.md
 test('view export maps revision and output arguments to its JSON receipt and error', async () => {
-  const root = (await createConsumer());
+  const root = await consumer();
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
   git('config', 'user.name', 'Fixture');
   git('config', 'user.email', 'fixture@example.invalid');

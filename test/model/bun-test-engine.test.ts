@@ -74,13 +74,12 @@ test('Bun engine requires fresh completion receipts and reports empty and filter
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-bun-completion-' });
-  const files = [join(root, 'pass.test.ts'), join(root, 'empty.test.ts'), join(root, 'exit.test.ts'), join(root, 'import.test.ts')];
+  const files = [join(root, 'pass.test.ts'), join(root, 'empty.test.ts'), join(root, 'import.test.ts')];
   yield* fs.writeFileString(files[0]!, `import test from 'node:test'; test('real case',()=>{});`);
   yield* fs.writeFileString(files[1]!, 'export {};');
-  yield* fs.writeFileString(files[2]!, `import test from 'node:test'; test('early zero',()=>process.exit(0));`);
-  yield* fs.writeFileString(files[3]!, `throw Error('IMPORT_FAILURE');`);
-  const run = (file: string, args: string[] = []) => Effect.scoped(Effect.gen(function*() {
-    const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), '--suite=node', ...args, file], {
+  yield* fs.writeFileString(files[2]!, `throw Error('IMPORT_FAILURE');`);
+  const run = (selected: readonly string[], args: string[] = []) => Effect.scoped(Effect.gen(function*() {
+    const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/test-built.ts'), '--suite=node', ...args, ...selected], {
       cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
       env: { ...process.env, GITHUB_ACTIONS: 'true', GITHUB_RUN_ID: 'fixture', GITHUB_REPOSITORY: 'example/fixture', GITHUB_SHA: 'fixture', CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_FILE_ID: undefined, CONCORD_TEST_EVENT_DIRECTORY: undefined, CONCORD_TEST_RUN_ID: undefined },
     }));
@@ -89,8 +88,12 @@ test('Bun engine requires fresh completion receipts and reports empty and filter
     assert.ok(output, text);
     return { code: Number(code), text, output };
   }));
-  const passed = yield* run(files[0]!);
+  const passed = yield* run(files.slice(0, 2));
   assert.equal(passed.code, 0, passed.text);
+  const timings = (output: string) => fs.readFileString(join(output, 'file-timings.json')).pipe(Effect.map(text => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String, success: Schema.Boolean, cases: Schema.optional(Schema.Number) }))))(text)));
+  const initial = new Map((yield* timings(passed.output)).map(row => [row.file, row.cases]));
+  assert.equal(initial.get(files[0]!), 1);
+  assert.equal(initial.get(files[1]!), 0);
   const context = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ run: Schema.String, directory: Schema.String })))(yield* fs.readFileString(join(passed.output, 'process-event-run.json')));
   const events = (yield* Effect.forEach(yield* fs.readDirectory(context.directory), name => fs.readFileString(join(context.directory, name))))
     .flatMap(text => text.trim().split('\n').filter(Boolean).map(line => Schema.decodeUnknownSync(Schema.fromJsonString(ProcessEvent))(line)))
@@ -100,16 +103,14 @@ test('Bun engine requires fresh completion receipts and reports empty and filter
   assert.ok(events.some(row => row.kind === 'unknown' && row.file === files[0]));
   // A previous successful file must not authorize the same path's early zero exit.
   yield* fs.writeFileString(files[0]!, `import test from 'node:test'; test('early zero',()=>process.exit(0));`);
-  const early = yield* run(files[0]!);
+  const early = yield* run([files[0]!, files[2]!]);
   assert.equal(early.code, 1, early.text);
   assert.match(early.text, /timings\.json/u);
-  for (const file of files.slice(2)) assert.equal((yield* run(file)).code, 1);
-  for (const [file, args] of [[files[1]!, []], [files[0]!, ['--test-name-pattern=does-not-match']]] as const) {
-    const result = yield* run(file, [...args]);
-    assert.equal(result.code, 0, result.text);
-    const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ cases: Schema.Number }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
-    assert.deepEqual(timings.map(row => row.cases), [0]);
-  }
+  assert.match(early.text, /IMPORT_FAILURE/u);
+  assert.deepEqual((yield* timings(early.output)).map(row => row.success), [false, false]);
+  const filtered = yield* run([files[0]!], ['--test-name-pattern=does-not-match']);
+  assert.equal(filtered.code, 0, filtered.text);
+  assert.deepEqual((yield* timings(filtered.output)).map(row => row.cases), [0]);
 })).pipe(Effect.provide(NodeServices.layer))));
 
 // @feature docs/engineering/testing/architecture.md#bun-测试引擎
