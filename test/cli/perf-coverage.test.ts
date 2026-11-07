@@ -5,7 +5,7 @@ import { Effect } from 'effect';
 import { benchmarkCliSmoke } from '../support/benchmark-cli-smoke.ts';
 
 // Each case still executes its original frozen scenarios and expectations.
-describe('ordinary CLI benchmark smoke', { concurrency: 2 }, () => {
+describe('ordinary CLI benchmark smoke', { concurrency: 1 }, () => {
   // @feature docs/feature/documentation-quality/README.md
   test('documentation-quality ordinary benchmark scenarios execute on minimal frozen consumers without timing verdicts', { timeout: 180_000 }, t =>
     Effect.runPromise(benchmarkCliSmoke('documentation-quality').pipe(Effect.scoped, Effect.provide(NodeServices.layer)), { signal: t.signal }));
