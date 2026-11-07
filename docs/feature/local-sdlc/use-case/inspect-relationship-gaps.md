@@ -27,7 +27,7 @@
    }
    ```
 
-   不加 `--fresh` 且尚无快照时返回 `QueryPending`。
+   不加 `--fresh` 且尚无快照时，先等待后台刷新建成快照再输出（[首次运行](../../local-data-engine/use-case/query-asynchronous-projections.md#first-run)）。
 
 2. 对 `contracts` 中的条目，补实现标记（`missing` 含 `code`）或测试标记（`missing` 含 `test`）。 {#fill-contracts}
 

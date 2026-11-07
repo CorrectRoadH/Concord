@@ -25,7 +25,7 @@ pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<
 | 文档包内其它页面（README、cli、architecture 等） | 标记指向该 Feature 或 Engineering，或指向其中任一页面的测试 |
 | 文档包外的项目规则与普通文档 | 不因此选中测试；`concord check` 仍完整执行 |
 
-退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Node 测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
+同一台机器上的门禁排队执行（[负载](README.md#共享资源与同步)）。退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Node 测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
 
 本地交付运行 `pnpm gate --changed`。推送到 master 后，CI 的四个分片各运行 `pnpm gate --test-shard=<序号>/4`，并集是完整集合；失败由引入它的人立即修复。
 

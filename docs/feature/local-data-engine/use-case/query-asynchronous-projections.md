@@ -18,16 +18,30 @@
    ```
 
    ```text
-   ok: false
-   error: QueryPending
-   message: No readable diagnostic snapshot; background refresh requested. Use --fresh to wait for current sources.
-   details:
-     refresh: requested
+   Building diagnostic snapshot…
+   Diagnostic snapshot: 2026-11-06T07:14:40.112Z (historical; refresh requested)
+   trace gaps
+   semantics: missing-explicit-relationships-not-coverage
+   …
    ```
 
-   命令退出 1。`QueryPending` 只表示还没有投影，不表示没有问题。CLI 已请求后台刷新；终端退出后刷新进程继续完成，不持有文档发布租约。
+   还没有投影时，CLI 请求后台刷新并等待这次刷新结束，再读取它发布的投影，按第 2 步的格式输出，退出码与已有投影时相同。查询进程本身不扫描；等待受[刷新上限](../performance.md#刷新上限)约束。人读模式在等待期间向 stderr 打印 `Building diagnostic snapshot…`，`--json` 的 stdout 只有最终结果。中断命令不取消刷新，刷新进程继续完成，不持有文档发布租约。`--dry-run` 不启动刷新，也不等待。
 
-2. 刷新完成后再运行。 {#historical}
+   等待结束仍没有可读投影时（刷新失败、超时，或 `--dry-run`），命令返回 `QueryPending` 并退出 1：
+
+   ```text
+   ok: false
+   error: QueryPending
+   message: No readable diagnostic snapshot. Use --fresh to wait for current sources.
+   details:
+     refresh:
+       code: QueryRefreshTimedOut
+       …
+   ```
+
+   `QueryPending` 只表示没有可读投影，不表示没有问题。
+
+2. 再次运行。 {#historical}
 
    ```sh
    concord trace gaps
@@ -159,7 +173,7 @@
 
 验收使用打包后安装到隔离 Git 仓库的 CLI，覆盖：
 
-- 首次构建返回 `QueryPending`，退出后刷新完成；历史命中、刷新失败保留结果、`--fresh`、`check` 使用当前来源、并发文档写入不被扫描阻塞、进程超时和缓存清理。
+- 首次运行等待后台刷新并输出它发布的投影，退出 0；首次刷新失败或超时返回 `QueryPending`，`details.refresh` 为同一失败对象；`--dry-run` 首次立即返回 `QueryPending`；首次运行被中断后刷新仍完成；历史命中、刷新失败保留结果、`--fresh`、`check` 使用当前来源、并发文档写入不被扫描阻塞、进程超时和缓存清理。
 - 冷缓存仓库中，后台写者在整个刷新扫描期间每隔几毫秒改写一个已观察的 docs、测试或代码文件：`trace gaps --json` 退出 0，`consistent` 为 false，`changedPaths` 含该文件，`unknownRelations` 为 true。
 - 上一条的代码文件情形 `unknown` 为 `["code"]`，人读输出带不完整提示。
 - 已有一致投影时下一次刷新被编辑：继续服务原投影，`lastAttempt` 记录时间、不完整与变化路径，不写 `lastError`。

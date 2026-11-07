@@ -44,7 +44,7 @@
 - `--root <worktree>` 指定接入项目。省略时取 cwd 所在 Git worktree 的顶层；`concord.config.ts` 可以不存在。
 - CLI 查询默认使用 `--server=shared`，自动启动或复用项目后台；`--server=command` 使用随查询回收的后台。作用域、环境隔离与失败语义见[CLI 查询](../local-data-engine/architecture.md#cli-查询)。
 - `--dry-run` 放在子命令之前，校验并预览写入，不改文件。人读输出以 `Would apply` 开头。
-- 诊断类读取默认返回后台刷新的快照。尚无快照时返回 `QueryPending`，`details.refresh` 为 `requested`。加 `--fresh` 等待当前来源。
+- 诊断类读取默认返回后台刷新的快照。尚无快照时等待后台刷新建成快照再输出，刷新失败或超时返回 `QueryPending`（[首次运行](../local-data-engine/use-case/query-asynchronous-projections.md#first-run)）。加 `--fresh` 等待当前来源。
 
 ## 接入
 
@@ -243,7 +243,7 @@ codeDeclarations: 1
 
 ## 追踪关系
 
-`concord trace show --fresh <path>` 返回一份 Spec 的正文、关系、测试与代码声明。`subject` 的 `kind`、`title` 与 `feature` 由路径和一级标题推导，以下为预期输出。不加 `--fresh` 且尚无快照时返回 `QueryPending`。`--json` 的顶层字段为 `operation`、`subject`、`relatedPaths`、`incoming`、`outgoing`、`tests`、`codeDeclarations`、`stepGroups`、`cache` 与 `analysis`：
+`concord trace show --fresh <path>` 返回一份 Spec 的正文、关系、测试与代码声明。`subject` 的 `kind`、`title` 与 `feature` 由路径和一级标题推导，以下为预期输出。不加 `--fresh` 且尚无快照时，先等待后台刷新建成快照。`--json` 的顶层字段为 `operation`、`subject`、`relatedPaths`、`incoming`、`outgoing`、`tests`、`codeDeclarations`、`stepGroups`、`cache` 与 `analysis`：
 
 ```json
 {

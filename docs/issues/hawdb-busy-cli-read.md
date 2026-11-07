@@ -1,7 +1,15 @@
-# CLI 读命令把短暂的 HawdbBusy 直接返回给调用者
+---
+relations:
+  - role: spec
+    target: docs/feature/local-data-engine/use-case/use-unified-cache.md
+---
 
-多个 agent 在同一 worktree 并行运行 Concord 时，只读命令可能直接以 `HawdbBusy` 失败。2026-10-29 实测：`pnpm concord trace show` 第一次返回 HawdbBusy，立即重试通过。
+# CLI 读命令把 HawdbBusy 直接返回给调用者
 
-现状对照：Web 工作台的 HTTP 缓存读取遇到 HawdbBusy 时有界重试 500 ms，`src/application.ts` 的文件读取也循环重试；后台刷新进程在期限内重试（`src/query-refresh-worker.ts`）。CLI 只读命令没有对应的有界等待，也没有 Spec 说明调用者应如何处理。
+## 现象
 
-待决定：CLI 只读命令是否像 HTTP 读取一样在短期限内自动重试，或在 CLI Spec 中声明 HawdbBusy 为可重试错误并在 skill 中给出处理方式。相关方案：CLI 热路径 的 G5。
+多个 agent 在同一 worktree 并行运行 Concord 时，只读命令曾直接以 `HawdbBusy` 失败（2026-10-29：`pnpm concord trace show` 第一次返回 HawdbBusy，立即重试通过）。之后加入了工作区服务，尚未在现行代码上复核。
+
+## 期望
+
+数据库被其他进程占用时，源码解析改用本进程的内存缓存照常完成，缓存状态报告 `HawdbBusy`，命令不以它失败（[统一缓存](../feature/local-data-engine/use-case/use-unified-cache.md)、[架构](../feature/local-data-engine/architecture.md)）。先在没有工作区服务、另一进程持有数据库的条件下写失败回归；复现则按 `--fixed` 修复，现行代码已满足则以 `--reason` 写明覆盖它的测试后关闭。

@@ -21,4 +21,6 @@ concord review
 
 ## Diagnostic freshness
 
-`trace show`, `trace gaps` and `review` read completed historical projections and request background refresh. Their output includes the snapshot time and refresh status. A cold cache reports `QueryPending`; use `--fresh` to wait for current sources. Use `check` or `trace check` for current validation. Historical projections cannot authorize writes or fix verification.
+`trace show`, `trace gaps` and `review` read completed historical projections and request background refresh. Their output includes the snapshot time and refresh status.
+
+With no projection yet, the first run waits for the background refresh and prints the projection it publishes; `QueryPending` means that refresh failed or timed out. Use `--fresh` to wait for current sources. Use `check` or `trace check` for current validation. Historical projections cannot authorize writes or fix verification.

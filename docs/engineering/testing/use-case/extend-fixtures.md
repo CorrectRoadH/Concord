@@ -98,7 +98,7 @@
    pnpm gate --changed
    ```
 
-   改动了 `test/support/` 时，`--changed` 选中全部测试（[完整门禁](../cli.md#完整门禁)）。这是一次完整门禁，同一台机器同时只运行一次。
+   改动了 `test/support/` 时，`--changed` 选中全部测试（[完整门禁](../cli.md#完整门禁)）。这是一次完整门禁，与同一台机器上的其它门禁排队执行。
 
    被修复核验冻结的支持文件列在 `concord.config.ts` 的 `runner.sourceFiles`，见 [Runner 适配](../architecture.md#runner-适配)。
 

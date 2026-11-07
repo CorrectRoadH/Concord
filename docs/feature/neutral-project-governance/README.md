@@ -65,7 +65,7 @@ Arguments: ["node","--test","spec/add.test.mjs"]
 ## 细节
 
 - [命令](cli.md)：`docs work` 与 `issue remote` 的调用、配置、输出与错误码。
-- [治理边界](architecture.md)：所有权、离线切换、写入计划存储与 Docs Work 状态文件。
+- [治理边界](architecture.md)：所有权、升级、写入计划存储与 Docs Work 状态文件。
 
 ## 依据的品味
 
