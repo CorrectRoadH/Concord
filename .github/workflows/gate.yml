@@ -9,7 +9,59 @@ on:
         required: true
         type: string
 jobs:
+  prepare-native:
+    timeout-minutes: 15
+    runs-on: instabox-medium
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - id: identity
+        run: node scripts/ci-native-cache.ts
+      - uses: actions/cache/restore@v4
+        id: native-cache
+        with:
+          path: ${{ steps.identity.outputs.directory }}
+          key: ${{ steps.identity.outputs.key }}
+      - name: Validate and export cached production artifact
+        id: validated
+        continue-on-error: true
+        env:
+          NATIVE_CACHE: ${{ steps.identity.outputs.directory }}
+        run: node scripts/build-native.ts --prebuilt "$NATIVE_CACHE" --output "$RUNNER_TEMP/gate-native"
+      - uses: ./.github/actions/setup-native
+        if: steps.validated.outcome != 'success'
+        with:
+          platform: ubuntu-24.04-linux-x64-glibc
+      - name: Prepare production artifact once
+        if: steps.validated.outcome != 'success'
+        run: node scripts/build-native.ts --reuse --output "$RUNNER_TEMP/gate-native"
+      - uses: actions/cache/save@v4
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.identity.outputs.directory }}
+          key: ${{ steps.identity.outputs.key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gate-native
+          path: ${{ runner.temp }}/gate-native/
+          if-no-files-found: error
+          retention-days: 1
+
   gate:
+    needs: prepare-native
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -19,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ needs.prepare-native.outputs.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.18.0
@@ -40,19 +92,15 @@ jobs:
           version: '0.12.5'
       - name: Prepare the pinned offline pytest adapter
         run: uv run --no-project --with pytest==9.1.1 pytest --version
-      - uses: ./.github/actions/setup-native
-        with:
-          platform: ubuntu-24.04-linux-x64-glibc
-      - name: Verify native transaction failure and crash recovery
-        if: matrix.shard == '1/16'
-        run: |
-          export XDG_CACHE_HOME="$RUNNER_TEMP/hawdb-hooks-cache"
-          export CONCORD_NATIVE_TEST_HOOKS=1
-          node scripts/build-native.ts --test-hooks
-          bun test --no-env-file --config=/dev/null --timeout=300000 ./test/process/hawdb-native.test.ts
       - run: sudo apt-get update && sudo apt-get install -y ripgrep patchelf binutils
       - run: pnpm exec vp exec playwright install --with-deps chromium
-      - run: pnpm exec vp run build:native
+        if: matrix.shard != 'package'
+      - uses: actions/download-artifact@v4
+        with:
+          name: gate-native
+          path: ${{ runner.temp }}/gate-native
+      - name: Validate and install production artifact
+        run: node scripts/build-native.ts --prebuilt "$RUNNER_TEMP/gate-native"
       - name: Run the complete gate for this shard
         run: pnpm gate --test-shard=${{ matrix.shard }}
       - name: Preserve test failure diagnostics
@@ -60,6 +108,47 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-diagnostics-${{ strategy.job-index }}
+          path: .test-results/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+  native-hooks:
+    needs: prepare-native
+    timeout-minutes: 15
+    runs-on: instabox-medium
+    env:
+      CONCORD_NATIVE_TEST_HOOKS: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-native.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: ./.github/actions/setup-native
+        with:
+          platform: ubuntu-24.04-linux-x64-glibc
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Select private fault-injection cache
+        run: echo "XDG_CACHE_HOME=$RUNNER_TEMP/hawdb-hooks-cache" >> "$GITHUB_ENV"
+      - name: Compile private fault-injection artifact
+        run: node scripts/build-native.ts --test-hooks
+      - name: Verify native transaction failure and crash recovery
+        run: pnpm gate test/process/hawdb-native.test.ts
+      - name: Preserve fault-injection diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-diagnostics-native-hooks
           path: .test-results/
           include-hidden-files: true
           if-no-files-found: ignore

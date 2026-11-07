@@ -229,6 +229,7 @@ const program = Effect.gen(function*() {
     const targets = args.requirePortable ? HAWDB_TARGETS : (yield* fs.readDirectory(input)).filter(value => (HAWDB_TARGETS as readonly string[]).includes(value));
     if (targets.length === 0) return yield* new NativeBuildFailed({ detail: 'no native artifacts supplied' });
     const verified = yield* Effect.all(targets.map(target => validateArtifact(join(input, target), target, args.requirePortable)));
+    if (verified.some(artifact => artifact.testHooks)) return yield* new NativeBuildFailed({ detail: 'test-hook native artifact cannot be reused' });
     if (args.requirePortable && verified.length !== HAWDB_TARGETS.length) return yield* new NativeBuildFailed({ detail: 'both release targets required' });
     for (const target of targets) yield* installArtifact(join(input, target), join(output, target));
     return;

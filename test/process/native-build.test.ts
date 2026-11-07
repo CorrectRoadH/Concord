@@ -32,6 +32,34 @@ const setup = () => {
 };
 const env = (root: string) => ({ ...process.env, MACOSX_DEPLOYMENT_TARGET: HAWDB_MACOS_DEPLOYMENT_TARGET, CONCORD_NATIVE_OFFLINE: '1', XDG_CACHE_HOME: join(root, 'cache'), PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` });
 
+// @feature docs/engineering/build/README.md
+test('CI prebuilt transfer loads in a fresh cache without Cargo and rejects corrupted or test-hook artifacts', () => Effect.runPromise(Effect.sync(() => {
+  const root = setup();
+  try {
+    const incoming = join(root, 'incoming', target);
+    cpSync(original, incoming, { recursive: true });
+    const transfer = () => spawnSync(process.execPath, ['scripts/build-native.ts', '--prebuilt', join(root, 'incoming')], { env: env(root), encoding: 'utf8' });
+    const installed = transfer();
+    assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+    assert.doesNotMatch(installed.stderr, /cargo-fallback-invoked|Native download/u);
+    const loaded = spawnSync(process.execPath, ['--input-type=module', '-e', `import { createRequire } from 'node:module'; const native = createRequire(import.meta.url)(process.argv[1]); if (typeof native.CacheBridge !== 'function') throw new Error('Native bridge missing');` , join(cachePath(root), 'hawdb.node')], { encoding: 'utf8', env: env(root) });
+    assert.equal(loaded.status, 0, loaded.stdout + loaded.stderr);
+    for (const mutation of [{ binarySha256: '0'.repeat(64) }, { sourceDigest: '0'.repeat(64) }, { testHooks: true }]) {
+      writeFileSync(join(incoming, 'artifact.json'), JSON.stringify({ ...identity, ...mutation }));
+      const rejected = transfer();
+      assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+      assert.doesNotMatch(rejected.stderr, /cargo-fallback-invoked|Native download/u);
+      assert.deepEqual(decodeNativeArtifact(JSON.parse(readFileSync(join(cachePath(root), 'artifact.json'), 'utf8'))), identity);
+    }
+    const outputs = join(root, 'outputs');
+    const identified = spawnSync(process.execPath, ['scripts/ci-native-cache.ts'], { env: { ...env(root), GITHUB_OUTPUT: outputs }, encoding: 'utf8' });
+    assert.equal(identified.status, 0, identified.stdout + identified.stderr);
+    const values = Object.fromEntries(readFileSync(outputs, 'utf8').trim().split('\n').map(line => { const at = line.indexOf('='); return [line.slice(0, at), line.slice(at + 1)]; }));
+    assert.equal(values.directory, join(root, 'cache/concord/native', `${identity.sourceDigest}-${identity.cargoLockDigest}`));
+    assert.ok(values.key?.includes(`${identity.sourceDigest}-${identity.cargoLockDigest}`));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
 test('native cache validates the complete identity and skips all network/compiler work on a hit', () => Effect.runPromise(Effect.sync(() => {
   const root = setup();
   try {
