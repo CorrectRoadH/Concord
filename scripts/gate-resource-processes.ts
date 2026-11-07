@@ -3,33 +3,43 @@
 import { Effect, Schema } from 'effect';
 import { channel } from 'node:diagnostics_channel';
 import type { ChildProcess } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 export class GateProcessCleanupFailed extends Schema.TaggedError<GateProcessCleanupFailed>()('GateProcessCleanupFailed', {
   file: Schema.String, pids: Schema.Array(Schema.Number), message: Schema.String,
+}) {}
+export class GateProcessMeasurementFailed extends Schema.TaggedError<GateProcessMeasurementFailed>()('GateProcessMeasurementFailed', {
+  pid: Schema.Number, message: Schema.String,
 }) {}
 interface ProcessSample { readonly pid: number; readonly birth: string; readonly bytes: number; readonly running: boolean }
 const sample = (pid: number): ProcessSample | undefined => {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-    const status = readFileSync(`/proc/${pid}/status`, 'utf8');
-    const swap = /^VmSwap:\s+(\d+) kB$/mu.exec(status);
-    const resident = /^VmRSS:\s+(\d+) kB$/mu.exec(status);
-    return { pid, birth: fields[19]!, bytes: Number(resident?.[1] ?? 0) * 1024 + Number(swap?.[1] ?? 0) * 1024, running: fields[0] !== 'Z' && fields[0] !== 'X' };
+    const running = fields[0] !== 'Z' && fields[0] !== 'X';
+    const rollup = running ? readFileSync(`/proc/${pid}/smaps_rollup`, 'utf8') : '';
+    const proportional = /^Pss:\s+(\d+) kB$/mu.exec(rollup);
+    if (running && proportional === null) throw new GateProcessMeasurementFailed({ pid, message: 'Process PSS measurement is unavailable' });
+    return { pid, birth: fields[19]!, bytes: Number(proportional?.[1] ?? 0) * 1024, running };
   } catch (cause) {
     if (cause instanceof Error && 'code' in cause && ['ENOENT', 'ESRCH'].includes(String(cause.code))) return undefined;
     throw cause;
   }
 };
 
-/** RSS+swap may double-count shared pages and 100ms sampling may miss short peaks. */
-export const observeTestProcessTree = (file: string, budgetBytes: number) => {
+/** PSS apportions shared resident pages; 100ms sampling may miss short peaks. */
+export const observeTestProcessTree = (file: string, budgetBytes: number, rootArguments: readonly string[] = [file], includeSupervisor = false, additionalRoots: () => readonly number[] = () => []) => {
   const known = new Map<number, string>();
   let peakBytes = 0;
   let samples = 0;
   let roots = 0;
   const scan = (): ProcessSample[] => {
+    for (const pid of additionalRoots()) {
+      if (known.has(pid)) continue;
+      const current = sample(pid);
+      if (current) { known.set(pid, current.birth); roots++; }
+    }
     const living: ProcessSample[] = [];
     const visit = (pid: number) => {
       if (living.some(row => row.pid === pid)) return;
@@ -39,7 +49,13 @@ export const observeTestProcessTree = (file: string, budgetBytes: number) => {
       if (!current.running) return;
       living.push(current);
       let children: string;
-      try { children = readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8'); }
+      try { children = readdirSync(`/proc/${pid}/task`).map(thread => {
+        try { return readFileSync(`/proc/${pid}/task/${thread}/children`, 'utf8'); }
+        catch (cause) {
+          if (cause instanceof Error && 'code' in cause && ['ENOENT', 'ESRCH'].includes(String(cause.code))) return '';
+          throw cause;
+        }
+      }).join(' '); }
       catch (cause) {
         if (cause instanceof Error && 'code' in cause && ['ENOENT', 'ESRCH'].includes(String(cause.code))) return;
         throw cause;
@@ -48,7 +64,7 @@ export const observeTestProcessTree = (file: string, budgetBytes: number) => {
     };
     for (const pid of known.keys()) visit(pid);
     samples++;
-    peakBytes = Math.max(peakBytes, living.reduce((sum, row) => sum + row.bytes, 0));
+    peakBytes = Math.max(peakBytes, living.reduce((sum, row) => sum + row.bytes, includeSupervisor ? sample(process.pid)?.bytes ?? 0 : 0));
     return living;
   };
   const events = channel('child_process');
@@ -56,7 +72,7 @@ export const observeTestProcessTree = (file: string, budgetBytes: number) => {
     // Node's documented channel publishes the ChildProcess before spawn completes.
     const child = (message as { process: ChildProcess }).process;
     child.once('spawn', () => {
-      if (child.spawnargs?.includes(file) && child.pid !== undefined && process.platform === 'linux') {
+      if (rootArguments.some(argument => child.spawnargs?.includes(argument)) && child.pid !== undefined && process.platform === 'linux') {
         const current = sample(child.pid);
         if (current) { known.set(child.pid, current.birth); roots++; scan(); }
       }
@@ -67,7 +83,7 @@ export const observeTestProcessTree = (file: string, budgetBytes: number) => {
     if (process.platform === 'linux') yield* Effect.gen(function*() { for (;;) { yield* Effect.sync(scan); yield* Effect.sleep('100 millis'); } }).pipe(Effect.forkScoped);
     return {
       finish: Effect.gen(function*() {
-        if (process.platform !== 'linux') return { file, budgetBytes, metric: 'sampled-process-tree-rss-plus-swap' as const, state: 'unavailable' as const, peakBytes: null, exceeded: null, samples: 0 };
+        if (process.platform !== 'linux') return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, exceeded: null, samples: 0 };
         let living = yield* Effect.sync(scan);
         // The final TestsStream event can precede child exit and descriptor close.
         // Keep admission while normal shutdown drains; only then classify a leak.
@@ -88,9 +104,44 @@ export const observeTestProcessTree = (file: string, budgetBytes: number) => {
           if (remaining.length > 0) return yield* new GateProcessCleanupFailed({ file, pids: remaining.map(row => row.pid), message: `${file}: process exit remains unconfirmed after SIGKILL: ${remaining.map(row => row.pid).join(', ')}` });
           return yield* new GateProcessCleanupFailed({ file, pids: living.map(row => row.pid), message: `${file}: descendants survived normal runner shutdown and required SIGKILL: ${living.map(row => row.pid).join(', ')}` });
         }
-        return { file, budgetBytes, metric: 'sampled-process-tree-rss-plus-swap' as const, state: roots > 0 ? 'observed' as const : 'unknown' as const,
+        return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: roots > 0 ? 'observed' as const : 'unknown' as const,
           peakBytes: roots > 0 ? peakBytes : null, exceeded: roots > 0 ? peakBytes > budgetBytes : null, samples };
       }),
     };
   });
 };
+
+/** Chromium is leased by the runner, a sibling of its worker. Join both roots
+ * using their published worker identity rather than charging every browser to
+ * each worker. Receipts are atomic; missing startup receipts remain unknown. */
+export const observeBrowserProcessTrees = Effect.fn('gate.observeBrowserProcessTrees')(function*(output: string, budgetBytes: number) {
+  const Receipt = Schema.Struct({ workerID: Schema.NullOr(Schema.String), pid: Schema.Number, phase: Schema.optional(Schema.String), worker: Schema.optional(Schema.Number) });
+  const roots = new Map<string, Set<number>>();
+  const observations = new Map<string, Effect.Success<ReturnType<typeof observeTestProcessTree>>>();
+  const discover = Effect.gen(function*() {
+    for (const directory of ['lifecycle-timings', 'browser-processes']) {
+      let files: string[];
+      try { files = readdirSync(join(output, directory)); }
+      catch (cause) {
+        if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') continue;
+        throw cause;
+      }
+      for (const file of files.filter(file => file.endsWith('.json'))) {
+        const row = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt), { onExcessProperty: 'ignore' })(readFileSync(join(output, directory, file), 'utf8'));
+        if (row.workerID === null) continue;
+        if (directory === 'lifecycle-timings' && row.phase !== 'worker-start') continue;
+        const pids = roots.get(row.workerID) ?? new Set<number>();
+        pids.add(directory === 'lifecycle-timings' ? row.worker ?? row.pid : row.pid);
+        roots.set(row.workerID, pids);
+        const identity = row.workerID;
+        if (!observations.has(identity)) observations.set(identity,
+          yield* observeTestProcessTree(identity, budgetBytes, [], false, () => [...roots.get(identity)!]));
+      }
+    }
+  });
+  yield* Effect.gen(function*() { for (;;) { yield* discover; yield* Effect.sleep('100 millis'); } }).pipe(Effect.forkScoped);
+  return { finish: Effect.gen(function*() {
+    yield* discover;
+    return yield* Effect.forEach([...observations.values()], observation => observation.finish);
+  }) };
+});

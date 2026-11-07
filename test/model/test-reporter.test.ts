@@ -77,7 +77,6 @@ runnerTest('archive preparation gates only packaging and preserves official shar
   const source = join(root, 'test/model/source.test.ts'), packaging = join(root, 'test/process/release-package.test.ts');
   const receipt = join(root, 'preparation.json'), sourceDone = join(root, 'source-done'), packageDone = join(root, 'package-done');
   const sourceStarted = join(root, 'source-started'), sourceRelease = join(root, 'source-release');
-  const packagingWaiting = yield* Deferred.make<void>();
   yield* fs.makeDirectory(join(root, 'test/model'), { recursive: true });
   yield* fs.makeDirectory(join(root, 'test/process'), { recursive: true });
   yield* fs.writeFileString(receipt, JSON.stringify({ state: 'pending' }));
@@ -92,16 +91,16 @@ test('ordinary source starts before archive readiness', async () => {
   writeFileSync(${JSON.stringify(sourceDone)}, 'done');
 });\n`);
   yield* fs.writeFileString(packaging, `import test from 'node:test'; import assert from 'node:assert/strict'; import {existsSync,writeFileSync} from 'node:fs';
-test('packaging receives ready archive only', () => { assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, ${JSON.stringify(join(root, 'archive'))}); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined); assert.ok(existsSync(${JSON.stringify(sourceDone)})); writeFileSync(${JSON.stringify(packageDone)}, 'done'); });\n`);
+test('packaging receives ready archive only', () => { assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, ${JSON.stringify(join(root, 'archive'))}); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined); assert.equal(existsSync(${JSON.stringify(sourceDone)}), false); writeFileSync(${JSON.stringify(packageDone)}, 'done'); });\n`);
   assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=1/2'], root), false);
-  assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=2/2'], root), true);
+  assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=2/2'], root), false);
+  assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=package'], root), true);
   assert.equal(selectsPackagingTest([source, packaging], ['--suite=e2e'], root), false);
   let observed = '';
   const running = yield* run(['--suite=node', source, packaging], {
     CONCORD_GATE_PACKAGE_PREPARATION: receipt, CONCORD_TEST_PACKAGE_ROOT: undefined, CONCORD_TEST_CONCURRENCY: '2',
   }, root, chunk => {
     observed += chunk;
-    if (observed.includes('# Packaging waits for Source Node completion')) Deferred.doneUnsafe(packagingWaiting, Effect.void);
   }).pipe(Effect.forkScoped);
   yield* Effect.gen(function*() {
     while (!(yield* fs.exists(sourceStarted))) yield* Effect.sleep('10 millis');
@@ -110,11 +109,10 @@ test('packaging receives ready archive only', () => { assert.equal(process.env.C
   const temporary = `${receipt}.ready`;
   yield* fs.writeFileString(temporary, JSON.stringify({ state: 'ready', code: 0, packageRoot: join(root, 'archive'), duration_ms: 12_345, digest: 'fixture', cache: 'hit' }));
   yield* fs.rename(temporary, receipt);
-  yield* Deferred.await(packagingWaiting).pipe(Effect.timeoutOrElse({
-    duration: '15 seconds', orElse: () => Effect.sync(() => assert.fail(`Packaging did not wait for active source work:\n${observed}`)),
-  }));
-  assert.equal(yield* fs.exists(sourceDone), false, 'source work remains active when the archive becomes ready');
-  assert.equal(yield* fs.exists(packageDone), false, 'ready archive must wait for the source group to release its memory');
+  yield* Effect.gen(function*() {
+    while (!(yield* fs.exists(packageDone))) yield* Effect.sleep('10 millis');
+  }).pipe(Effect.timeoutOrElse({ duration: '15 seconds', orElse: () => Effect.sync(() => assert.fail(`Ready packaging did not start beside active source work:\n${observed}`)) }));
+  assert.equal(yield* fs.exists(sourceDone), false, 'source work remains active while ready packaging runs');
   yield* fs.writeFileString(sourceRelease, 'release');
   const result = yield* Fiber.join(running);
   assert.equal(result.code, 0, result.text);
@@ -135,13 +133,14 @@ runnerTest('cancelling gate reaps static task groups and fixture scratch while p
   yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env node
 import { writeFileSync, readFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
-const task = process.argv[4] === 'build' ? 'build' : process.argv[5];
+const task = process.argv.find(value => /^(?:gate:|test:)/.test(value)) ?? 'build';
 writeFileSync(${JSON.stringify(root)} + '/' + task + '.json', JSON.stringify({task, pid: process.pid, cache: process.env.CONCORD_TEST_COMPILE_CACHE, packageRoot: process.env.CONCORD_TEST_PACKAGE_ROOT, fixtureRoot: process.env.TMPDIR, cgroup: process.platform === 'linux' ? readFileSync('/proc/self/cgroup', 'utf8') : ''}));
 console.log('TASK_READY');
 setInterval(() => {}, 1000);
 `);
   yield* fs.chmod(fakePnpm, 0o755);
   yield* fs.symlink(fakePnpm, join(root, 'pnpm'));
+  yield* fs.symlink(fakePnpm, join(root, 'vp'));
   // Keep a failed cleanup regression from leaking the deliberately stubborn boundary.
   yield* Effect.addFinalizer(() => Effect.gen(function*() {
     for (const file of (yield* fs.readDirectory(root)).filter(file => file.endsWith('.json'))) {
@@ -158,11 +157,11 @@ setInterval(() => {}, 1000);
   let output = '';
   const drain = yield* Stream.runForEach(Stream.decodeText(child.all), text => Effect.gen(function*() {
     output += text;
-    if (output.split('TASK_READY').length === 8) yield* Deferred.succeed(ready, undefined);
+    if (output.split('TASK_READY').length === 4) yield* Deferred.succeed(ready, undefined);
   })).pipe(Effect.forkScoped);
   yield* Deferred.await(ready).pipe(Effect.timeout(Duration.seconds(20)), Effect.catch(() => Effect.sync(() => assert.fail(`Gate tasks did not become ready:\n${output}`))));
   const processes = yield* Effect.forEach((yield* fs.readDirectory(root)).filter(file => file.endsWith('.json')), file => fs.readFileString(join(root, file)).pipe(Effect.map(Schema.decodeUnknownSync(record))));
-  assert.equal(processes.length, 7);
+  assert.equal(processes.length, 3);
   assert.equal(processes.filter(process => process.task === 'build').length, 0);
   for (const process of processes) assert.equal(process.packageRoot, undefined);
   const resourcePath = /# Gate resource report: ([^\n]+)/u.exec(output)?.[1];
@@ -279,6 +278,7 @@ runnerTest('Node and browser failures leave the other suite running and retain o
   yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env node\nimport { writeFileSync } from 'node:fs';\nsetTimeout(() => { writeFileSync(${JSON.stringify(browserArgs)}, JSON.stringify(process.argv.slice(2))); console.log('BROWSER_EXECUTED'); process.exitCode = Number(process.env.BROWSER_EXIT); }, 150);\n`);
   yield* fs.chmod(fakePnpm, 0o755);
   yield* fs.symlink(fakePnpm, join(root, 'pnpm'));
+  yield* fs.symlink(fakePnpm, join(root, 'vp'));
   const env = { PATH: `${root}:${process.env.PATH}`, CONCORD_E2E_WORKERS: '2', CONCORD_TEST_PACKAGE_ROOT: root };
   yield* fs.writeFileString(node, `import test from 'node:test';\ntest('selected', () => { throw new Error('NODE_EXPECTED_FAILURE'); });\n`);
   const nodeFailed = yield* run(['--test-name-pattern=selected', '--test-shard=1/1', node, browser], { ...env, BROWSER_EXIT: '0' });
@@ -390,7 +390,7 @@ test('admitted packaging', async () => { assert.equal(existsSync(${JSON.stringif
   yield* fs.writeFileString(pnpm, `#!/usr/bin/env node
 import assert from 'node:assert/strict'; import {existsSync,writeFileSync,watchFile,unwatchFile} from 'node:fs';
 assert.equal(existsSync(${JSON.stringify(packageStarted)}) && !existsSync(${JSON.stringify(packageStarted + '.done')}), false);
-assert.equal(process.argv[process.argv.indexOf('--workers')+1], '1');
+assert.equal(process.argv[process.argv.indexOf('--workers')+1], '3');
 writeFileSync(${JSON.stringify(browserStarted)}, 'started'); ${waitSource(browserStarted)} writeFileSync(${JSON.stringify(browserStarted + '.done')}, 'done');\n`);
   yield* fs.chmod(pnpm, 0o755);
   const running = yield* run([packaging, browser], {
@@ -402,12 +402,12 @@ writeFileSync(${JSON.stringify(browserStarted)}, 'started'); ${waitSource(browse
   }).pipe(Effect.timeout('15 seconds'));
   const first = yield* waitFor([browserStarted, packageStarted]);
   const second = first === browserStarted ? packageStarted : browserStarted;
-  assert.equal(yield* fs.exists(second), false, 'five plus four GiB cannot enter a six-GiB pool together');
+  assert.equal(yield* fs.exists(second), false, 'five plus three two-GiB browser workers cannot enter a six-GiB pool together');
   yield* fs.writeFileString(first + '.release', 'release');
   yield* waitFor([second]);
   assert.equal(yield* fs.exists(first + '.done'), true);
   yield* fs.writeFileString(second + '.release', 'release');
   const result = yield* Fiber.join(running);
   assert.equal(result.code, 0, result.text);
-  assert.match(result.text, /e2e workers=1/u);
+  assert.match(result.text, /e2e workers=3/u);
 }));

@@ -8,15 +8,23 @@ import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 
 export const GiB = 1024 ** 3;
-// Conservative full-tree RSS estimates; shared pages can be counted twice.
-export const gateMemoryBudgets = { fixed: GiB, browser: 4 * GiB, packaging: 5 * GiB, node: 2 * GiB } as const;
+// Category reservations and observed process-tree peaks use proportional memory.
+export const gateMemoryBudgets = { fixed: GiB, browser: 2 * GiB, packaging: 5 * GiB, node: 2 * GiB } as const;
 export const gateAdmissionBytes = (memoryMaxBytes: number): number => Math.max(0, memoryMaxBytes - gateMemoryBudgets.fixed);
 export const gateAdmittedBrowserWorkers = (memoryMaxBytes: number, upperLimit: number): number => Math.min(upperLimit, Math.floor(gateAdmissionBytes(memoryMaxBytes) / gateMemoryBudgets.browser));
-export const makeGateAdmission = (capacity: number) => Effect.map(Semaphore.make(capacity), pool => ({ pool, capacity, failed: false }));
+export interface AdmissionTiming { readonly category: string; readonly bytes: number; readonly wait_ms: number; readonly run_ms: number }
+export const makeGateAdmission = (capacity: number) => Effect.map(Semaphore.make(capacity), pool => ({ pool, capacity, failed: false, timings: [] as AdmissionTiming[] }));
 export type GateAdmission = Effect.Success<ReturnType<typeof makeGateAdmission>>;
-export const withGateAdmission = (admission: GateAdmission, bytes: number) => <A, E, R>(body: Effect.Effect<A, E, R>) =>
-  admission.pool.withPermits(bytes)(Effect.suspend<A, E | GateResourcesInvalid, R>(() => admission.failed
-    ? Effect.fail(new GateResourcesInvalid({ detail: 'Admission stopped because a test process tree could not be released safely' })) : body));
+export const withGateAdmission = (admission: GateAdmission, bytes: number, category = 'node') => <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.suspend(() => {
+  const requested = performance.now();
+  return admission.pool.withPermits(bytes)(Effect.suspend<A, E | GateResourcesInvalid, R>(() => {
+    if (admission.failed) return Effect.fail(new GateResourcesInvalid({ detail: 'Admission stopped because a test process tree could not be released safely' }));
+    const admitted = performance.now();
+    return body.pipe(Effect.ensuring(Effect.sync(() => {
+      admission.timings.push({ category, bytes, wait_ms: admitted - requested, run_ms: performance.now() - admitted });
+    })));
+  }));
+});
 
 const PositiveInteger = Schema.NumberFromString.pipe(
   Schema.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),

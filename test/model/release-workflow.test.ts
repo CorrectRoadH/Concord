@@ -22,7 +22,7 @@ const Job = Schema.Struct({
   needs: Schema.optional(Schema.Union([Schema.String, Schema.Array(Schema.String)])),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   strategy: Schema.optional(Schema.Struct({ matrix: Schema.Struct({
-    shard: Schema.optional(Schema.Array(Schema.Number)),
+    shard: Schema.optional(Schema.Array(Schema.String)),
     include: Schema.optional(Schema.Array(Schema.Struct({
       os: Schema.String, target: Schema.optional(Schema.String), full: Schema.optional(Schema.Boolean),
     }))),
@@ -154,8 +154,8 @@ test('release builds two native targets and gates publication on the same commit
     );
     assert.deepEqual(Object.keys(gate.on), ['push', 'workflow_dispatch', 'workflow_call']);
     assert.deepEqual(gate.on.push, { branches: ['master'] });
-    assert.deepEqual(gate.jobs.gate.strategy?.matrix.shard, [1, 2, 3, 4]);
-    assert.ok(gate.jobs.gate.steps.some(step => step.run?.includes('pnpm gate --test-shard=${{ matrix.shard }}/4')));
+    assert.deepEqual(gate.jobs.gate.strategy?.matrix.shard, ['1/8', '2/8', '3/8', '4/8', '5/8', '6/8', '7/8', '8/8', 'package']);
+    assert.ok(gate.jobs.gate.steps.some(step => step.run?.includes('pnpm gate --test-shard=${{ matrix.shard }}')));
   }).pipe(Effect.provide(NodeServices.layer)));
 });
 
