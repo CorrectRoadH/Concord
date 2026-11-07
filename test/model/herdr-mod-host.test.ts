@@ -336,7 +336,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-    // @issue docs/issues/herdr-sidebar-tab.md
     await t.test('layout sidebar follows selected tabs and machines after an earlier CLI error', async () => {
       for (const machine of [null, 'vps']) {
         host = new Boundary();
@@ -356,7 +355,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-    // @issue docs/issues/herdr-sidebar-tab.md
     await t.test('layout sidebar refreshes the same repository on tab changes and remembers each terminal', async () => {
       const b = await start();
       try {
@@ -381,7 +379,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-    // @issue docs/issues/herdr-sidebar-tab.md
     await t.test('layout sidebar ignores delayed root resolution from an earlier tab', async () => {
       const b = await start();
       const entered = pending<void>(), release = pending<void>();
@@ -509,7 +506,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-    // @issue docs/issues/herdr-sidebar-tab.md
     await t.test('layout sidebar retains drafts through tab switches and uses the latest destination', async () => {
       for (const action of ['save', 'discard']) {
         const b = await start();
