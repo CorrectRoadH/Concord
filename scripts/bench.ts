@@ -1,3 +1,5 @@
+// @concord-file
+// @concord-implements docs/engineering/performance/README.md#开发与交付流程
 import { packageBin } from './package-location.ts';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -12,6 +14,7 @@ import { io, mustRun, PerfError } from './perf/process.ts';
 import { judge, measurementPass, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.ts';
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.ts';
 import { buildForMeasurement } from './measurement-build.ts';
+import { withGateQueue } from './gate-queue.ts';
 
 /** Normalize flags with optional values without consuming the following selection. */
 function optionalRevisions(argv: readonly string[]): string[] {
@@ -162,4 +165,6 @@ const main = Effect.gen(function*() {
   if (values.out) yield* fs.writeFileString(resolve(values.out), text);
   yield* io('Write bench record', () => { process.stdout.write(text); if (!pass) process.exitCode = 1; });
 }).pipe(Effect.scoped);
-main.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+// Absolute measurements share the gate's machine slot; interleaved comparisons
+// retain their independent execution and do not wait for that slot.
+(process.argv.slice(2).includes('--reference') ? withGateQueue(main) : main).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);

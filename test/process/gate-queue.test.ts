@@ -7,6 +7,7 @@ import { NodeServices } from '@effect/platform-node';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { Deferred, Effect, Fiber, FileSystem, Stream } from 'effect';
 import { tmpdir } from '../support/temporary.ts';
+import { withGateQueue } from '../../scripts/gate-queue.ts';
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
 test('machine gate queue reports its owner, waits for completion and recovers a killed owner', { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -69,4 +70,44 @@ withGateQueue(Effect.gen(function*() {
   yield* fs.writeFileString(successor.marker + '.release', 'release');
   yield* successor.finish;
   assert.equal(yield* fs.exists(join(slot, 'publication.lease')), false, 'the final owner releases its slot');
+})).pipe(Effect.provide(NodeServices.layer))));
+
+// @feature docs/engineering/performance/README.md#开发与交付流程
+test('the real reference benchmark waits for the gate slot while comparison arguments proceed', { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-reference-queue-' });
+  const slot = join(root, 'slot');
+  const owned = yield* Deferred.make<void>(), release = yield* Deferred.make<void>();
+  const holder = yield* withGateQueue(Effect.gen(function*() {
+    yield* Deferred.succeed(owned, undefined);
+    yield* Deferred.await(release);
+  }), slot).pipe(Effect.forkScoped);
+  yield* Deferred.await(owned);
+  const reference = yield* spawner.spawn(ChildProcess.make(process.execPath, ['scripts/bench.ts', '--reference', '--samples=0'], {
+    env: { ...process.env, CONCORD_GATE_QUEUE_DIRECTORY: slot }, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+  }));
+  const queued = yield* Deferred.make<void>();
+  let referenceText = '';
+  const drain = yield* Stream.runForEach(Stream.decodeText(reference.all), chunk => Effect.gen(function*() {
+    referenceText += chunk;
+    if (referenceText.includes('# Gate queued:')) yield* Deferred.succeed(queued, undefined);
+  })).pipe(Effect.forkScoped);
+  yield* Deferred.await(queued).pipe(Effect.timeout('10 seconds'));
+  assert.doesNotMatch(referenceText, /Decode sample count/u, 'reference arguments are not executed while a gate owns the slot');
+  const comparison = yield* spawner.spawn(ChildProcess.make(process.execPath, ['scripts/bench.ts', '--compare=HEAD', '--samples=0'], {
+    env: { ...process.env, CONCORD_GATE_QUEUE_DIRECTORY: slot }, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+  }));
+  const [comparisonText, comparisonCode] = yield* Effect.all([
+    Stream.mkString(Stream.decodeText(comparison.all)), comparison.exitCode,
+  ], { concurrency: 'unbounded' });
+  assert.equal(Number(comparisonCode), 1);
+  assert.match(comparisonText, /Decode sample count/u);
+  assert.doesNotMatch(comparisonText, /# Gate queued:/u);
+  yield* Deferred.succeed(release, undefined);
+  yield* Fiber.join(holder);
+  assert.equal(Number(yield* reference.exitCode), 1);
+  yield* Fiber.join(drain);
+  assert.match(referenceText, /Decode sample count/u);
+  assert.equal(yield* fs.exists(join(slot, 'publication.lease')), false);
 })).pipe(Effect.provide(NodeServices.layer))));
