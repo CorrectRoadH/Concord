@@ -54,11 +54,21 @@ export const withOperationCache = <A, E, R>(workspace: WorkspaceMetadata, runtim
         service: OperationCache.of({
           privateDir: workspace.privateDir,
           read: (namespace, keys) => {
-            const handle = open(false);
+            let handle: HawdbDatabase | undefined;
+            try { handle = open(false); }
+            catch (cause) {
+              if (cause instanceof HawdbFailure && cause.code === 'HawdbBusy' && ['annotation_cache', 'code_cache', 'config_cache'].includes(namespace)) return [];
+              throw cause;
+            }
             return handle === undefined ? [] : keys === undefined ? handle.scan(namespace) : handle.get(namespace, keys);
           },
           update: (namespace, key, update) => {
-            const handle = open(true)!;
+            let handle: HawdbDatabase;
+            try { handle = open(true)!; }
+            catch (cause) {
+              if (cause instanceof HawdbFailure && cause.code === 'HawdbBusy' && ['annotation_cache', 'code_cache', 'config_cache'].includes(namespace)) return;
+              throw cause;
+            }
             handle.put(namespace, [{ key, payload: update(handle.get(namespace, [key])[0]?.payload) }]);
           },
           reclaim: () => open(true)!.reclaim(),

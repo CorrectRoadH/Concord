@@ -1,13 +1,14 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import type * as HawdbNativeTypes from './hawdb-native.ts';
-import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly, inspectCacheClear, deleteInspectedCache } from "./cache-file.ts";
-import { HawdbFailure, openHawdb, acquireHawdbClearGuard, type HawdbDatabase } from "./hawdb-native.ts";
+import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "./cache-file.ts";
+import { HawdbFailure, type HawdbDatabase } from "./hawdb-native.ts";
 import type { Repository } from "../../model/index.ts";
 import { ensureGenericPrivateDirectorySync } from "../publication/index.ts";
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { packageRoot } from '../installation/index.ts';
 import { requestCacheMaintenance } from "./cache-maintenance.ts";
+import { openCurrentPersistentCache } from './persistent-handle.ts';
 
 const scopes = new WeakMap<Repository, { database: HawdbDatabase; writable: boolean; runtime: RuntimeEnvironmentSnapshot }>();
 export function closeRepositoryCache(repo: Repository): void {
@@ -33,15 +34,7 @@ function withPersistentCache<A>(repo: Repository, writable: boolean, use: (datab
   if (scope !== undefined && writable && !scope.writable) { closeRepositoryCache(repo); scope = undefined; }
   if (scope === undefined) {
     if (create) ensureGenericPrivateDirectorySync(repo.root, repo.privateDir, runtime.env);
-    let database: HawdbDatabase;
-    try { database = openHawdb(path, { readOnly: !writable, create }, runtime); }
-    catch (cause) {
-      if (!create || !(cause instanceof HawdbFailure) || cause.code !== 'HawdbIncompatible') throw cause;
-      const guard = acquireHawdbClearGuard(path, runtime);
-      try { deleteInspectedCache(inspectCacheClear(repo.privateDir), () => guard.verify()); }
-      finally { guard.close(); }
-      database = openHawdb(path, { readOnly: false, create: true }, runtime);
-    }
+    const database = openCurrentPersistentCache(repo.privateDir, writable, runtime);
     scope = { database, writable, runtime };
     scopes.set(repo, scope);
   }
@@ -85,7 +78,13 @@ export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase, ru
   };
   return {
     diagnostic: () => diagnostic,
-    prepareWrite: options => withPersistentCache(repo, true, database => { if (!database) throw missing(); }, options?.create, runtime),
+    prepareWrite: options => {
+      try { withPersistentCache(repo, true, database => { if (!database) throw missing(); }, options?.create, runtime); }
+      catch (cause) {
+        if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy') throw cause;
+        diagnostic = `HawdbBusy: ${cause.message}`;
+      }
+    },
     get: (namespace, keys) => use(namespace, keys, false, database => database?.get(namespace, keys) ?? []),
     scan: namespace => use(namespace, undefined, false, database => database?.scan(namespace) ?? []),
     put: (namespace, rows) => use(namespace, rows.map(row => row.key), true, database => { if (!database) throw missing(); database.put(namespace, rows); }),

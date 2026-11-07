@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { Clock, Effect, Schema } from "effect";
-import { closeRepositoryCache, PersistentCache } from "../../base/cache/index.ts";
+import { Clock, Effect, Schema, Stdio, Stream } from "effect";
+import { closeRepositoryCache, PersistentCache, HawdbFailure } from "../../base/cache/index.ts";
 import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
 import { hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
 import { observation, observationSchema, type Observation } from "../../model/index.ts";
@@ -229,7 +229,12 @@ function publishObservations(repo: LocalRepository, results: readonly { adapter:
       const value = observation(item.manifest, item.before.inputs, item.manifest.completeness.gaps, true, new Date().toISOString());
       return { adapterId: item.adapter.id, observation: { ...value, complete: item.manifest.completeness.complete }, inputScope: { ...item.before, versions: item.versions } };
     });
-    PersistentCache.repository(repo).put('annotation_cache', values.flatMap(value => [{ key: `${CACHE_PREFIX}${value.adapterId}`, payload: canonical(value.observation) }, { key: `${INPUT_PREFIX}${value.adapterId}`, payload: canonical(value.inputScope) }]));
+    try {
+      PersistentCache.repository(repo).put('annotation_cache', values.flatMap(value => [{ key: `${CACHE_PREFIX}${value.adapterId}`, payload: canonical(value.observation) }, { key: `${INPUT_PREFIX}${value.adapterId}`, payload: canonical(value.inputScope) }]));
+    } catch (cause) {
+      if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy') throw cause;
+      throw new ConcordError('CacheUpdateFailed', 'Native observations could not be saved', { reason: { code: cause.code, message: cause.message } });
+    }
     closeRepositoryCache(repo);
     return values;
   });
@@ -265,7 +270,8 @@ export const executeNativeCase = Effect.fn('executeNativeCase')(function* (repo:
     PersistentCache.repository(repo).prepareWrite({ create: true });
     closeRepositoryCache(repo);
   });
-  return yield* withSession(repo, [adapter], session => Effect.gen(function* () {
+  let cacheWarning: ConcordError | undefined;
+  const result = yield* withSession(repo, [adapter], session => Effect.gen(function* () {
     const collection = yield* collectOne(repo, adapter, [marker.file], session);
     const requested = yield* sync(() => repo.snapshot(() => bindNative(repo, marker, collection.manifest)));
     const caps = collection.manifest.capabilities;
@@ -291,9 +297,18 @@ export const executeNativeCase = Effect.fn('executeNativeCase')(function* (repo:
   }), execution => {
     if (execution) {
       if (adapterInputSnapshot(repo, adapter).inputs !== execution.inputs) throw new ConcordError('InputChanged', 'Inputs changed before native evidence publication');
-      publishObservations(repo, [{ adapter, manifest: execution.manifest, before: execution.inputScope, versions: execution.versions }]);
+      try { publishObservations(repo, [{ adapter, manifest: execution.manifest, before: execution.inputScope, versions: execution.versions }]); }
+      catch (cause) {
+        if (!(cause instanceof ConcordError) || cause.code !== 'CacheUpdateFailed') throw cause;
+        cacheWarning = cause;
+      }
       publish?.(execution);
     }
   });
+  if (cacheWarning) {
+    const stdio = yield* Effect.serviceOption(Stdio.Stdio);
+    if (stdio._tag === 'Some') yield* Stream.run(Stream.succeed(`${JSON.stringify({ warning: cacheWarning.code, message: cacheWarning.message, details: cacheWarning.details })}\n`), stdio.value.stderr({ endOnDone: false })).pipe(Effect.ignore);
+  }
+  return result;
 });
 // @concord-end
