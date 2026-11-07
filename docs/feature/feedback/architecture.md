@@ -63,6 +63,20 @@ Web 关闭 Issue 与 `issue close` 相同：仍有链接指向它时拒绝，否
 
 来源摘录与本地笔记分开；用户对标题和正文的编辑不会被重复同步覆盖。远端移出列表、连接删除、缓存清空都不删除本地观察。多个反馈可指向同一个 Memory 或 Spec，无需按相似标题自动合并。
 
+## 适配器
+
+`feedback-schema.ts` 拥有浏览器与服务端共享的连接、来源与远端观察 Schema。`feedback-providers.ts` 负责 GitHub / Linear 协议、身份解析、范围校验和有界分页。`feedback.ts` 负责本地观察与幂等导入，`feedback-cache.ts` 负责可重建远端投影。
+
+适配器的 `fetchFeedback(connection, options)` 返回 Effect，结果包含绑定后的连接、规范化条目及读取时间。可注入 transport 以模拟 HTTP 边界；该接口不会赋予 provider 修改项目文档的权限，也不持有[发布租约](../portable-coordination/concepts.md#publication-lease)。
+
+连接 Schema 区分 API 与 GitHub gh：API 分支的 `transport` 省略或为 `api`，必须包含 `credentialEnv`；gh 分支必须显式指定 `transport: gh`，并拒绝 `credentialEnv`。transport 不进入远端对象去重键，适配器返回值不能自行修改连接的读取方式或目标范围。
+
+显式 action `feedback.check` 接受已保存的连接 ID，仅支持 gh 连接；返回 `connectionId`、`provider: github`、`transport: gh`、`target` 与 `checkedAt`。检测不返回密钥、原始命令输出或账号清单，不发布远端绑定或缓存。Web 先完成当前设置草稿保存，再调用检测；旧结果不能回写新配置。
+
+CLI 进程入口受 Scope 和服务进程的单槽约束，取消与关闭必须等待确定的清理结果。测试可替换外部进程边界，但不得替换 Concord 的资源所有权、响应规范化或本地发布来声称生命周期验收通过。详细预算及模式保证见 [gh 读取适配](#gh-读取适配)。
+
+调用方只有在整个遍历成功后才能发布结果，不能把分页器返回的一部分条目当作完整同步。新增 provider 需给出稳定身份、范围绑定、凭据类型、限流与错误语义，并通过同样的幂等、失败与缓存验收。
+
 ## gh 读取适配
 
 GitHub 连接可显式委托 gh 处理认证与网络，与 API 模式并列；Linear 只使用 API 连接。项目配置拥有启用来源及目标范围，gh 拥有个人认证状态；浏览器的登录环境不被当作服务进程的登录环境。用法与模式保证见 [CLI 与 Web 用法](cli.md#读取方式与保证)。
@@ -99,6 +113,7 @@ API 模式继续验收拒绝重定向和网络响应预算；CLI 模式不声称
 
 ### 参考
 
+- [GitHub REST issues](https://docs.github.com/en/rest/issues/issues)、[Linear GraphQL](https://linear.app/developers/graphql)、[Linear pagination](https://linear.app/developers/pagination) 与 [Linear rate limits](https://linear.app/developers/rate-limiting)：API 模式的协议依据。
 - [GitHub CLI API](https://cli.github.com/manual/gh_api) 与 [认证状态](https://cli.github.com/manual/gh_auth_status)。
 - [schpet/linear-cli 认证](https://github.com/schpet/linear-cli/blob/main/docs/authentication.md)：workspace、系统凭据存储和环境变量优先级。
 - [Linear CLI 发版记录](https://github.com/schpet/linear-cli/releases)：v2 调整列表与 JSON 形状，并建议脚本使用原生 API 入口。

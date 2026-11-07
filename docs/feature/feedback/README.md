@@ -124,7 +124,6 @@ Web 从侧栏「反馈」进入：左侧是常驻的反馈列表与筛选，右�
 
 - [CLI 与 Web 用法](cli.md)
 - [身份、存储与接入边界](architecture.md)
-- [适配器接口](library.md)
 - [来源与工程知识术语](concepts.md)
 - [性能预算](performance.md)
 
