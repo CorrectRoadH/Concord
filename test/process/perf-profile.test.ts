@@ -9,7 +9,6 @@ import { mustRun } from '../../scripts/perf/process.ts';
 import { workDirectory } from '../../scripts/perf/workspace.ts';
 
 // @feature docs/engineering/performance/cli.md
-// @issue docs/issues/compiled-profile-preload.md
 test('compiled profile loads its preload and writes CPU evidence to the requested directory', () => Effect.runPromise(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* workDirectory('concord-profile-test-', false);
