@@ -23,10 +23,10 @@ const fixture = () => {
   return root;
 };
 const environment = Object.fromEntries(Object.entries(process.env).filter((item): item is [string, string] => item[1] !== undefined));
-const workerPid = (root: string) => pollUntil(async () => {
+const workerPid = (root: string, role = 'foreground') => pollUntil(async () => {
   for (const line of execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' }).split('\n')) {
     const row = /^\s*(\d+)\s+(\d+)\s+(.+)$/u.exec(line);
-    if (row && Number(row[2]) === record(root).pid && /\/entry\/server\/compute-worker\.ts(?:\s|$)/u.test(row[3]!) && row[3]!.includes(root)) return Number(row[1]);
+    if (row && Number(row[2]) === record(root).pid && /\/entry\/server\/compute-worker\.ts(?:\s|$)/u.test(row[3]!) && row[3]!.includes(root) && row[3]!.endsWith(` ${role}`)) return Number(row[1]);
   }
   return undefined;
 }, { description: 'installed service owns a real computation process', timeoutMs: 10_000 });
@@ -102,14 +102,14 @@ test('later computation generations reuse the idle process but never reuse a com
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
       const first = yield* Effect.promise(() => projection(rpc, connection));
-      const pid = yield* Effect.promise(() => workerPid(root));
+      const pid = yield* Effect.promise(() => workerPid(root, 'background'));
       const changed = 'export const changed = true;\n';
       writeFileSync(join(root, 'src/0.ts'), changed);
       const next = yield* Effect.promise(() => pollUntil(async () => {
         const value = await projection(rpc, connection);
         return value.snapshot.sources.find(source => source.path === 'src/0.ts')?.digest === digest(changed) ? value : undefined;
       }, { description: 'watch refresh accepts the changed source as a new generation', timeoutMs: 10_000 }));
-      assert.equal(yield* Effect.promise(() => workerPid(root)), pid);
+      assert.equal(yield* Effect.promise(() => workerPid(root, 'background')), pid);
       assert.notEqual(first.snapshot.sources.find(source => source.path === 'src/0.ts')?.digest, next.snapshot.sources.find(source => source.path === 'src/0.ts')?.digest);
       assert.equal(next.snapshot.sources.find(source => source.path === 'src/0.ts')?.digest, digest(changed));
     })));
@@ -132,6 +132,39 @@ test('a named read failure keeps the computation process available for the next 
       const next = yield* rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, cwd: root, environment, cache: 'use' });
       assert.equal(Schema.decodeUnknownSync(Schema.Struct({ exitCode: Schema.Int }))(next).exitCode, 0);
       assert.equal(yield* Effect.promise(() => workerPid(root)), pid);
+    })));
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/architecture.md#刷新与推送
+test('a crashed background worker retains the accepted projection and the next refresh starts a new worker', { skip: process.platform === 'win32', timeout: 30_000 }, async () => {
+  const root = fixture();
+  try {
+    const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
+    const running = record(root), rpc = await rpcModule();
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
+      const first = yield* Effect.promise(() => projection(rpc, connection));
+      const foreground = yield* Effect.promise(() => workerPid(root));
+      const background = yield* Effect.promise(() => workerPid(root, 'background'));
+      assert.notEqual(background, foreground);
+      process.kill(background, 'SIGKILL');
+      yield* rpc.requestWorkspace(connection, 'refresh', {});
+      const failed = yield* Effect.promise(() => pollUntil(async () => {
+        const value = await projection(rpc, connection);
+        return value.projection.lastError ? value : undefined;
+      }, { description: 'background transport failure is recorded without replacing accepted sources', timeoutMs: 10_000 }));
+      assert.deepEqual(failed.snapshot, first.snapshot);
+      assert.equal(failed.projection.builtAt, first.projection.builtAt);
+      const nextRead = yield* rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, cwd: root, environment, cache: 'use' });
+      assert.equal(Schema.decodeUnknownSync(Schema.Struct({ exitCode: Schema.Int }))(nextRead).exitCode, 0);
+      assert.equal(yield* Effect.promise(() => workerPid(root)), foreground);
+      yield* rpc.requestWorkspace(connection, 'refresh', {});
+      yield* Effect.promise(() => pollUntil(async () => {
+        const value = await projection(rpc, connection);
+        return !value.projection.lastError && value.projection.builtAt !== first.projection.builtAt ? value : undefined;
+      }, { description: 'next refresh publishes from a replacement background worker', timeoutMs: 10_000 }));
+      assert.notEqual(yield* Effect.promise(() => workerPid(root, 'background')), background);
     })));
   } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
 });

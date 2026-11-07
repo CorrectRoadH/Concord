@@ -216,7 +216,7 @@ export const runComputeMain = (root: string | undefined): void => {
   NodeRuntime.runMain(program.pipe(Effect.provide(startupEnvironment())));
 };
 
-export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown> = () => Effect.void) {
+export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown> = () => Effect.void, role: 'foreground' | 'background' = 'foreground') {
   const installation = yield* Installation;
   const execution = yield* RuntimeEnvironment;
   const mutex = yield* Semaphore.make(1);
@@ -236,7 +236,7 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
     const ready = yield* Deferred.make<(bytes: string | Uint8Array) => void, WorkspaceServerError>();
     const opened = yield* Deferred.make<void, WorkspaceServerError>();
     const output = yield* Queue.unbounded<Uint8Array, WorkspaceServerError>();
-    yield* Effect.forkIn(owner.run([process.execPath, ...installation.worker('compute-worker'), root], {
+    yield* Effect.forkIn(owner.run([process.execPath, ...installation.worker('compute-worker'), root, role], {
       cwd: execution.cwd, outputLimitBytes: 128 * 1024 * 1024,
       stream: { ready: write => { Deferred.doneUnsafe(ready, Effect.succeed(write)); }, stdout: chunk => { Queue.offerUnsafe(output, chunk); } },
     }).pipe(Effect.scoped, Effect.ensuring(Effect.gen(function*() {
@@ -256,7 +256,7 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
     return active;
   });
   yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
-  return { close, run: (operation: Computation, snapshot: Parameters<typeof CacheSnapshot.layer>[0] = {}) => mutex.withPermit(Effect.gen(function*() {
+  return { close, open: mutex.withPermit(Effect.suspend(() => active ? Effect.void : start.pipe(Effect.asVoid))), run: (operation: Computation, snapshot: Parameters<typeof CacheSnapshot.layer>[0] = {}) => mutex.withPermit(Effect.gen(function*() {
     const worker = active ?? (yield* start);
     const acquired = channel('concord.workspace.computation');
     if (acquired.hasSubscribers) acquired.publish({ root, kind: operation.kind });
@@ -329,6 +329,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     }));
     const operations = yield* makeOperationOwner(root, cacheSnapshot, acceptDerived);
     const computation = yield* makeComputationOwner(root, acceptDerived);
+    const backgroundComputation = yield* makeComputationOwner(root, acceptDerived, 'background');
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
       health: cache.verify,
@@ -337,10 +338,10 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources), Effect.provideService(RuntimeEnvironment, execution)),
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } })), Effect.provideService(RuntimeEnvironment, execution)),
       persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt)).pipe(Effect.provideService(RuntimeEnvironment, execution)),
-      compute: operation => cacheSnapshot.pipe(Effect.flatMap(snapshot => computation.run(operation, snapshot))),
-      open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open)),
+      compute: operation => cacheSnapshot.pipe(Effect.flatMap(snapshot => (operation.kind === 'scan' ? backgroundComputation : computation).run(operation, snapshot))),
+      open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open), Effect.andThen(computation.open), Effect.andThen(backgroundComputation.open)),
       close: SubscriptionRef.get(Context.get(stateContext, WorkspaceState).value).pipe(Effect.flatMap(value => value.state === 'stopping'
-        ? operations.close : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(cache.close)),
+        ? operations.close : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(backgroundComputation.close), Effect.andThen(cache.close)),
       clear: clearWorkspaceCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))), Effect.provideService(RuntimeEnvironment, execution)),
       maintenance: {
         needed: cacheMaintenanceNeeded(privateDir).pipe(Effect.provideService(RuntimeEnvironment, execution)),
