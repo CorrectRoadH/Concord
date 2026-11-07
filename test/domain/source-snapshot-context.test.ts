@@ -11,6 +11,62 @@ import { createConsumer } from '../support/consumer.ts';
 
 const live = Layer.merge(Workspace.layer, Sources.layer).pipe(Layer.provide(NodeServices.layer));
 
+// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+test('Effect projection observations retain an asynchronous candidate and collect drift before revoking its scope', async () => {
+  const root = createConsumer();
+  writeFileSync(join(root, 'docs/README.md'), '# Captured\n');
+  try {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const sources = yield* Sources;
+      const context = yield* (yield* Workspace).open(root, { access: 'read', cache: 'off' });
+      const read = yield* Deferred.make<void>(), proceed = yield* Deferred.make<void>();
+      let identity: SourceSnapshot['Service'] | undefined;
+      const fiber = yield* Effect.forkChild(sources.observeProjection(Effect.gen(function*() {
+        identity = yield* SourceSnapshot;
+        const source = yield* sources.snapshot(sources.read('docs/README.md'));
+        yield* sources.inspect('docs/README.md');
+        yield* sources.inspect('docs/added.md');
+        yield* sources.files('docs');
+        yield* sources.rootFiles;
+        yield* Deferred.succeed(read, undefined);
+        yield* Deferred.await(proceed);
+        return source;
+      })).pipe(Effect.provideService(WorkspaceContext, context)));
+      yield* Deferred.await(read);
+      writeFileSync(join(root, 'docs/README.md'), '# Changed candidate input\n');
+      chmodSync(join(root, 'docs/README.md'), 0o600);
+      writeFileSync(join(root, 'docs/added.md'), '# Added\n');
+      writeFileSync(join(root, 'added.txt'), 'root membership changed\n');
+      yield* Deferred.succeed(proceed, undefined);
+      const result = yield* Fiber.join(fiber);
+      assert.equal(result.value, '# Captured\n');
+      assert(result.drift.files.includes('docs/README.md'));
+      assert(result.drift.files.includes('docs/added.md'));
+      assert(result.drift.directories.includes('docs'));
+      assert(result.drift.directories.includes('.'));
+      const closed = yield* Effect.result(sources.read('docs/README.md').pipe(Effect.provideService(SourceSnapshot, identity!)));
+      assert.equal(closed._tag, 'Failure');
+      if (closed._tag === 'Failure') assert.equal(closed.failure.code, 'OperationFailed');
+    })).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(root, process.env))));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+test('projection observations preserve the independent snapshot requirement', async () => {
+  const root = createConsumer();
+  try {
+    await Effect.runPromise(Effect.gen(function*() {
+      const sources = yield* Sources;
+      const context = yield* (yield* Workspace).open(root, { access: 'read', cache: 'off' });
+      let evaluated = false;
+      const result = yield* sources.snapshot(Effect.result(sources.observeProjection(Effect.sync(() => { evaluated = true; })))).pipe(Effect.provideService(WorkspaceContext, context));
+      assert.equal(result._tag, 'Failure');
+      if (result._tag === 'Failure') assert.equal(result.failure.code, 'InvalidProjectionRead');
+      assert.equal(evaluated, false);
+    }).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(root, process.env))));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 // @feature docs/feature/local-data-engine/README.md
 test('Sources shares nested observations and revokes snapshot reads after success and failure', async () => {
   const root = createConsumer();

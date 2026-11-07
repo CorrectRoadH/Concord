@@ -210,7 +210,13 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
     });
     const snapshot = yield* observe === undefined
       ? snapshotSync(repo, timing, 'view.compileWorkspace', compile)
-      : sync('view.observeProjection', () => { const result = repo.observeProjection(compile); observe(result.drift); return result.value; });
+      : Effect.gen(function*() {
+        const sources = yield* Sources;
+        const operation = sources.observeProjection(repo, sync('view.compileProjection', compile));
+        const result = yield* (timing === undefined ? operation : timing.effect('view.observeProjection', operation));
+        observe(result.drift);
+        return result.value;
+      });
     return { ...snapshot };
   }), { access: 'read', persistentCache: cache }, timing);
 });

@@ -22,6 +22,15 @@ export interface SnapshotOperation {
   <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
   <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
 }
+export interface SourceDrift {
+  readonly files: string[];
+  readonly directories: string[];
+  readonly publicationChanged: boolean;
+}
+export interface ProjectionOperation {
+  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
+  <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
+}
 
 export interface SourcesService {
   readonly createReportDirectory: (path: string) => Effect.Effect<void, ConcordError>;
@@ -43,6 +52,7 @@ export interface SourcesService {
   readonly directoryEntries: (path: string) => Effect.Effect<readonly string[], ConcordError>;
   readonly temporaryDirectory: (prefix: string, cleanupFailed?: (error: ConcordError) => void) => Effect.Effect<string, ConcordError, Scope.Scope>;
   readonly snapshot: SnapshotOperation;
+  readonly observeProjection: ProjectionOperation;
 }
 
 /** Observations belong to one operation, including its return-time verification. */
@@ -83,18 +93,21 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         if (JSON.stringify(current) !== JSON.stringify(before)) throw new ConcordError('SourceChanged', `Source metadata changed during the snapshot: ${path}`, 'source-observation');
       }
     }, catch: failure });
-    const runSnapshot = <A, E, R>(repo: LocalRepository, workspace: WorkspaceMetadata, operation: Effect.Effect<A, E, R>, retryLivePublication = false) => Effect.gen(function*() {
+    const runSnapshot = <A, E, R>(repo: LocalRepository, workspace: WorkspaceMetadata, operation: Effect.Effect<A, E, R>, retryLivePublication = false, complete = verify, projection = false) => Effect.gen(function*() {
       const parent = yield* Effect.serviceOption(SourceSnapshot);
+      if (projection && parent._tag === 'Some' && active.get(parent.value)?.repo === repo) return yield* Effect.fail(new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot'));
       if (parent._tag === 'Some' && active.get(parent.value)?.repo === repo) return yield* operation.pipe(Effect.provideContext(Context.make(SourceSnapshot, parent.value).pipe(Context.add(WorkspaceContext, parent.value.workspace))));
       for (;;) {
         const identity = SourceSnapshot.of({ workspace });
         const session: Session = { repo, inspections: new Map() };
         const run = withOperationCache(workspace, runtime, operation).pipe(Effect.provideContext(Context.make(SourceSnapshot, identity).pipe(Context.add(WorkspaceContext, identity.workspace))));
         const result = yield* Effect.result(Effect.acquireUseRelease(
-          waitForPublication(reclaimDead => Effect.try({ try: () => repo.beginSnapshot(reclaimDead), catch: failure })),
+          projection
+            ? Effect.try({ try: () => repo.beginProjection(), catch: failure })
+            : waitForPublication(reclaimDead => Effect.try({ try: () => repo.beginSnapshot(reclaimDead), catch: failure })),
           () => Effect.acquireUseRelease(
             Effect.sync(() => { active.set(identity, session); }),
-            () => run.pipe(Effect.tap(() => verify(session))),
+            () => run.pipe(Effect.tap(() => complete(session))),
             () => Effect.sync(() => { active.delete(identity); }),
           ),
           () => Effect.sync(() => repo.endSnapshot()),
@@ -113,14 +126,18 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
     function snapshot<A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
     function snapshot<A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
     function snapshot<A, E, R>(input: LocalRepository | Effect.Effect<A, E, R>, operation?: Effect.Effect<A, E, R>) {
+      return capture(input, operation);
+    }
+    function capture<A, E, R>(input: LocalRepository | Effect.Effect<A, E, R>, operation?: Effect.Effect<A, E, R>, complete = verify, projection = false) {
       if (input instanceof LocalRepository) {
         const workspace: WorkspaceMetadata = Object.freeze({ root: input.root, privateDir: input.privateDir, configuration: input.configSnapshot, config: input.config, access: input.access, cache: input.persistentCache });
-        return runSnapshot(input, workspace, operation!, true);
+        return runSnapshot(input, workspace, operation!, !projection, complete, projection);
       }
       return Effect.gen(function*() {
         const workspace = yield* WorkspaceContext;
         const parent = yield* Effect.serviceOption(SourceSnapshot);
         if (parent._tag === 'Some' && parent.value.workspace === workspace && active.has(parent.value)) {
+          if (projection) return yield* Effect.fail(new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot'));
           return yield* input.pipe(Effect.provideService(SourceSnapshot, parent.value));
         }
         // The descriptor adapter supplies no publication capability. Every
@@ -131,11 +148,26 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
             if (repo.privateDir !== workspace.privateDir || repo.configSnapshot.digest !== workspace.configuration.digest || repo.configSnapshot.source !== workspace.configuration.source) {
               return yield* Effect.fail(new ConcordError('FileChangedSinceRead', 'Project configuration changed; open a fresh workspace context', 'source-observation'));
             }
-            return yield* runSnapshot(repo, workspace, input);
+            return yield* runSnapshot(repo, workspace, input, false, complete, projection);
           }),
           repo => Effect.sync(() => repo.close()),
         );
       });
+    }
+    function observeProjection<A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, WorkspaceContext | Exclude<R, SourceSnapshot>>;
+    function observeProjection<A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>): Effect.Effect<{ readonly value: A; readonly drift: SourceDrift }, E | ConcordError, Exclude<R, SourceSnapshot | WorkspaceContext>>;
+    function observeProjection<A, E, R>(input: LocalRepository | Effect.Effect<A, E, R>, operation?: Effect.Effect<A, E, R>) {
+      let drift: SourceDrift = { files: [], directories: [], publicationChanged: false };
+      const collect = (session: Session) => Effect.try({ try: () => {
+        const observed = session.repo.projectionDrift();
+        const files = new Set(observed.files), directories = new Set(observed.directories);
+        for (const [path, before] of session.inspections) {
+          const current = session.repo.inspect(path);
+          if (JSON.stringify(current) !== JSON.stringify(before)) (before?.directory || current?.directory ? directories : files).add(path);
+        }
+        drift = { files: [...files].sort(), directories: [...directories].sort(), publicationChanged: observed.publicationChanged };
+      }, catch: failure });
+      return capture(input, operation, collect, true).pipe(Effect.map(value => ({ value, drift })));
     }
     return Sources.of({
       untrackedFile: (root, relative, limit) => untrackedFile(runtimePath(runtime, root), relative, limit),
@@ -177,6 +209,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         return Buffer.concat(chunks).toString('utf8');
       }),
       snapshot,
+      observeProjection,
     });
   }));
 }

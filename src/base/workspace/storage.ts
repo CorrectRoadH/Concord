@@ -517,18 +517,23 @@ export class LocalRepository implements Repository {
   // @concord-code
   // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
   observeProjection<A>(read: () => A): { value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } } {
-    if (this.snapshotDepth !== 0 || !this.optimistic) throw new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot');
-    this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear();
-    this.beginSnapshot();
+    this.beginProjection();
     try {
       const value = read();
-      // The candidate owns decoded values now; drift collection needs no cache handle.
-      closeRepositoryCache(this);
-      const { files, directories } = this.verifyObservations(true);
-      this.assertNoPendingPublication();
-      const publicationChanged = false;
-      return { value, drift: { files, directories, publicationChanged } };
+      return { value, drift: this.projectionDrift() };
     } finally { this.endSnapshot(); }
+  }
+  beginProjection(reclaimDead = true): void {
+    if (this.snapshotDepth !== 0 || !this.optimistic) throw new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot');
+    this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear();
+    this.beginSnapshot(reclaimDead);
+  }
+  projectionDrift(): { files: string[]; directories: string[]; publicationChanged: boolean } {
+    // The candidate owns decoded values now; drift collection needs no cache handle.
+    closeRepositoryCache(this);
+    const { files, directories } = this.verifyObservations(true);
+    this.assertNoPendingPublication();
+    return { files, directories, publicationChanged: false };
   }
   private underLease<A>(read: () => A): A {
     this.beginSnapshot();
