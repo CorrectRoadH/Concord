@@ -9,7 +9,7 @@ import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./la
 import { Publication } from "../../base/publication/index.ts";
 import type { Queries } from "../../app/index.ts";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
-import { type Cause, Clock, ConfigProvider, Console, Context, Effect, Fiber, Layer, Option, Queue, Schema, Stdio, Stream, type Terminal } from "effect";
+import { Cause, Clock, ConfigProvider, Console, Context, Effect, Fiber, Layer, Option, Queue, Schema, Stdio, Stream, type Terminal } from "effect";
 import type { Command } from "effect/unstable/cli";
 import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.ts";
 import { humanOutput } from "./presentation.ts";
@@ -242,7 +242,15 @@ function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: S
       ...local,
       attach: repo => repo.privateDir === identified.privateDir ? cache.attach(repo).pipe(Effect.provideService(CacheDerivations, derived)) : local.attach(repo),
     }));
-    yield* client.submitDerivations(connection, yield* derived.batches.pipe(Effect.mapError(failure))).pipe(Effect.mapError(workspaceServerFailure), Effect.catch(error => required ? Effect.fail(error) : writeStderr(`${JSON.stringify({ warning: 'CacheUpdateFailed', message: 'The operation completed, but its disposable cache update failed', reason: error.code })}\n`).pipe(Effect.orDie)));
+    yield* Effect.gen(function*() {
+      yield* client.submitDerivations(connection, yield* derived.batches);
+    }).pipe(Effect.catchCause(cause => {
+      if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
+      const reason = workspaceServerFailure(Cause.squash(cause));
+      const details = { reason: { code: reason.code, message: reason.message, ...(reason.details === undefined ? {} : { details: reason.details }) } };
+      const message = 'The operation completed, but its disposable cache update failed';
+      return required ? Effect.fail(new ConcordError('CacheUpdateFailed', message, details)) : writeStderr(`${JSON.stringify({ warning: 'CacheUpdateFailed', message, reason: reason.code, details })}\n`).pipe(Effect.orDie);
+    }));
     return result;
   }));
 }

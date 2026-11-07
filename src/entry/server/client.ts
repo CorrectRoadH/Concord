@@ -3,9 +3,9 @@
 import { channel } from 'node:diagnostics_channel';
 import type * as ClientTypes from './client.ts';
 import { NodeSocket } from '@effect/platform-node';
-import { Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
+import { Cause, Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
 import * as RpcClient from 'effect/unstable/rpc/RpcClient';
-import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
+import { RpcClientDefect, RpcClientError } from 'effect/unstable/rpc/RpcClientError';
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization';
 import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.ts';
 import { collectPackets, collectBytes } from './protocol.ts';
@@ -21,7 +21,20 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
     Layer.provide(NodeSocket.layerNet({ path })),
     Layer.provide(Layer.succeed(RpcClient.ConnectionHooks, { onConnect: Deferred.succeed(opened, undefined).pipe(Effect.asVoid), onDisconnect: Deferred.fail(opened, new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Socket closed before opening' })).pipe(Effect.asVoid) })),
   );
-  const context = yield* Layer.build(protocol);
+  // The socket protocol promotes write errors to defects. Restore the typed
+  // transport boundary before the generated client can log or propagate them.
+  const safeProtocol = Layer.effect(RpcClient.Protocol, Effect.gen(function*() {
+    const transport = yield* RpcClient.Protocol;
+    return {
+      ...transport,
+      send: (...args: Parameters<typeof transport.send>) => Effect.suspend(() => transport.send(...args)).pipe(Effect.catchCause(cause => {
+        if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
+        const error = Cause.squash(cause);
+        return Effect.fail(error instanceof RpcClientError ? error : new RpcClientError({ reason: new RpcClientDefect({ message: `Workspace socket write failed: ${error instanceof Error ? error.message : String(error)}`, cause: error }) }));
+      })),
+    };
+  })).pipe(Layer.provide(protocol));
+  const context = yield* Layer.build(safeProtocol);
   const client = yield* RpcClient.make(WorkspaceRpcs).pipe(Effect.provideContext(context));
   yield* Deferred.await(opened);
   const hello = yield* client.hello({ installation, protocol: PROTOCOL, ...(scope === undefined ? {} : { scope }) });
@@ -39,7 +52,7 @@ export const requestWorkspace = <N extends Exclude<keyof WorkspaceClient, 'hello
   const stream = call({ ...(name === 'query' ? JSON.parse(JSON.stringify(input)) : input), ...connection.identity() });
   const result = name === 'read' ? collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes)), Effect.map(decodeWorkspaceRead)) : collectPackets(stream);
   return result.pipe(Effect.mapError(cause => cause instanceof RpcClientError
-    ? new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Workspace service transport is unavailable' }) : cause));
+    ? new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: `Workspace service transport is unavailable: ${cause.message}` }) : cause));
 };
 
 export const subscribeWorkspace = (connection: WorkspaceConnection) => Stream.callback<unknown, unknown>(queue => Effect.gen(function*() {
