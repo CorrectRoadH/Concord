@@ -168,8 +168,8 @@ test('recovery preserves a new dead owner between dispatch and either recovery e
     const publicationPath = join(tracePrivateDirectorySync(root), 'publication.lease');
     const original = fs.rmdirSync;
     let token = '';
-    fs.rmdirSync = (path, options) => {
-      original(path, options);
+    fs.rmdirSync = (path) => {
+      original(path);
       if (path === publicationPath && token === '') {
         token = 'starting';
         // The dispatcher has released its owner. A real process acquires the

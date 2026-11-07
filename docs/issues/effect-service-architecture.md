@@ -7,6 +7,6 @@
 ## 差距
 
 - 领域模块按服务迁移，删除同步入口，不保留双轨。
-- 工作区服务协议用 `unstable/rpc` 与 `unstable/socket` 实现；Queries 提供 Local 与 Remote 两层。
+- 工作区服务协议用 `effect/rpc` 与 `effect/socket` 实现；Queries 提供 Local 与 Remote 两层。
 - 订阅、合并刷新与唯一刷新者分别使用 SubscriptionRef、Schedule 与 Semaphore；RPC 的在途请求由 `RpcServer` 自身管理，Concord 自己拥有的长期任务集合（如 HTTP 订阅）用 FiberSet 或 FiberMap，不为 RPC 再包一层请求管理。
 - 测试中的时间用 TestClock，RPC 用 RpcTest。

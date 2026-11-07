@@ -1,7 +1,7 @@
 // 跨进程保证：运行环境——轻量CLI loader在独立源码进程按内部协议加载skills命令并发布缺失指南。
 import assert from 'node:assert/strict';
 import { NodeServices } from '@effect/platform-node';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';

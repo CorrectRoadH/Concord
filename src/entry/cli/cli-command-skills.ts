@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
 import { Effect, Option } from 'effect';
-import { Command } from 'effect/unstable/cli';
+import { Command } from 'effect/cli';
 import { installWorkflowSkills, openWriteRepository } from '../../app/index.ts';
 import { emit, root } from './cli-base.ts';
 

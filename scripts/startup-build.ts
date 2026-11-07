@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Console, Effect, FileSystem, Schema, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { build } from 'esbuild';
 import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';

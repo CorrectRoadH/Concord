@@ -27,6 +27,6 @@ const schemas = { config: ProjectSchema, 'test-adapter': adapter, 'change-previe
 export const machineSchemaNames = Object.keys(schemas);
 export function machineSchema(name: string) {
   if (!Object.hasOwn(schemas, name)) throw new ConcordError('SchemaNotFound', `Unknown schema: ${name}`, { available: machineSchemaNames });
-  const document = Schema.toJsonSchemaDocument(schemas[name as keyof typeof schemas], { additionalProperties: false });
+  const document = Schema.toJsonSchemaDocument(schemas[name as keyof typeof schemas], { onExcessProperty: 'error' });
   return { $schema: 'https://json-schema.org/draft/2020-12/schema', ...document.schema, ...(Object.keys(document.definitions).length ? { $defs: document.definitions } : {}) };
 }

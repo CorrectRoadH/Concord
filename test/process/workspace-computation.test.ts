@@ -88,7 +88,7 @@ test('cancelling a queued computation preserves the active child and cancelling 
     releaseTraceLeaseSync(lease, 'unrelated-computation-reader');
     rmSync(root, { recursive: true, force: true });
     assert.equal(serverFailure, undefined);
-    assert.equal(result?.exitCode, 0, result?.stderr);
+    assert.equal(result?.exitCode, 0, result?.stderr ?? '');
   }
 });
 

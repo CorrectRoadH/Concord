@@ -4,7 +4,7 @@ import { checkWriting } from "../../app/index.ts";
 import { showWriting, writingIndex } from "../../app/index.ts";
 import { readWritingPolicy } from "../../app/index.ts";
 import { Effect, Option } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { text, optional, body, sync, expected } from "./cli-base.ts";
 import { withRepo, withQuery } from "./cli-repository.ts";
 import { setExitCode } from './invocation.ts';

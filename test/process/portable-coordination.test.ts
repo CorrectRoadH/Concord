@@ -70,8 +70,8 @@ test('acquisition waiting does not reclaim an owner that arrived after its first
   const path = join(tracePrivateDirectorySync(root), 'publication.lease');
   const original = fs.rmdirSync;
   let token = '';
-  fs.rmdirSync = (target, options) => {
-    original(target, options);
+  fs.rmdirSync = (target) => {
+    original(target);
     if (target === path && token === '') {
       token = 'starting';
       const child = spawnSync(process.execPath, ['--input-type=module', '-e', `

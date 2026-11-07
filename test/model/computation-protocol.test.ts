@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Deferred, Effect, Exit, Fiber, Queue, Schema, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
-import { Rpc, RpcClient, RpcGroup, RpcMessage, RpcSerialization } from 'effect/unstable/rpc';
-import { Socket } from 'effect/unstable/socket';
+import { Rpc, RpcClient, RpcGroup, RpcMessage, RpcSerialization } from 'effect/rpc';
+import { Socket } from 'effect/socket';
 import { makeComputationProtocol } from '../../src/entry/server/computation-protocol.ts';
 
 const work = Rpc.make('work', { success: Schema.Int });
@@ -12,8 +12,14 @@ const transport = Effect.gen(function*() {
   const requests = yield* Queue.unbounded<string | Uint8Array>();
   const responses = yield* Queue.unbounded<Uint8Array, Socket.SocketError>();
   const socket = Socket.make({
-    runRaw: (handle, options) => (options?.onOpen ?? Effect.void).pipe(Effect.andThen(Stream.runForEach(Stream.fromQueue(responses), chunk => handle(chunk) ?? Effect.void))),
-    writer: Effect.succeed(chunk => chunk instanceof Socket.CloseEvent ? Effect.void : Queue.offer(requests, chunk).pipe(Effect.asVoid)),
+    reader: Effect.succeed({
+      pull: Queue.takeAll(responses),
+      upgrade: () => Effect.fail(new Socket.SocketError({ reason: new Socket.SocketUpgradeError({ cause: 'Test pipes do not support TLS' }) })),
+    }),
+    writer: Effect.succeed({
+      write: chunk => chunk instanceof Socket.CloseEvent ? Effect.void : Queue.offer(requests, chunk).pipe(Effect.asVoid),
+      writeAll: chunks => Effect.forEach(chunks, chunk => Queue.offer(requests, chunk), { discard: true }),
+    }),
   });
   const protocol = yield* makeComputationProtocol(socket);
   const client = yield* RpcClient.make(Work).pipe(Effect.provideService(RpcClient.Protocol, protocol));

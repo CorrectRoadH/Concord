@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { packConcord } from '../../scripts/release-package.ts';
 import { applicationRoot, packageBin } from '../support/installed-package.ts';
 import { builtConcord } from '../support/installed-package.ts';

@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import { processEventEnvironment, recordProcessSpawn } from './process-events.ts';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { failure } from '../../model/index.ts';
 import { workerEntryArgv } from '../installation/index.ts';
 import { RuntimeEnvironment } from '../environment/index.ts';

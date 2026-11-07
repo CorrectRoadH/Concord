@@ -9,7 +9,7 @@ async function analyze<A>(root: string, schema: Schema.ConstraintDecoder<A, neve
   const repo = new LocalRepository(root, { optimistic: true });
   try {
     const result = await runApplication(analyzeCode(repo).pipe(Effect.result));
-    assert.equal(result._tag, status === 0 ? 'Success' : 'Failure', result._tag === 'Failure' ? String(result.failure) + '\n' + result.failure.stack : undefined);
+    assert.equal(result._tag, status === 0 ? 'Success' : 'Failure', result._tag === 'Failure' ? String(result.failure) + '\n' + result.failure.stack : '');
     const value = result._tag === 'Success' ? result.success : (() => {
       const error = applicationFailure(result.failure);
       return { error: error.code, message: error.message };

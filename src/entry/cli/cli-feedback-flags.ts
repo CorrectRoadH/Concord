@@ -1,12 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 import { Option } from "effect";
-import { Flag } from "effect/unstable/cli";
+import { Flag } from "effect/cli";
 import { optional } from "./cli-base.ts";
 
 const feedbackFilters = {
-  provider: Flag.choice('provider', ['local', 'github', 'linear']).pipe(Flag.optional),
-  triage: Flag.choice('triage', ['pending', 'linked']).pipe(Flag.optional),
+  provider: Flag.Literals('provider', ['local', 'github', 'linear']).pipe(Flag.optional),
+  triage: Flag.Literals('triage', ['pending', 'linked']).pipe(Flag.optional),
   query: optional('query'),
 };
 

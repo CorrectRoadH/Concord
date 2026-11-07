@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { parse, stringify } from 'yaml';
 import { HAWDB_MACOS_DEPLOYMENT_TARGET } from "../../src/base/installation/index.ts";
 

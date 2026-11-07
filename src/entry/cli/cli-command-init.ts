@@ -5,7 +5,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 import { openWriteRepository } from "../../app/index.ts";
 import { Effect, Option, Stdio } from "effect";
-import { Command, Flag, Prompt } from "effect/unstable/cli";
+import { Command, Flag, Prompt } from "effect/cli";
 
 import { initialize } from "../../app/index.ts";
 import { ConcordError, RunnerSchema } from "../../model/index.ts";
@@ -13,8 +13,8 @@ import { root, optional, many, body, jsonBody, emit, sync } from "./cli-base.ts"
 import { withRepo } from "./cli-repository.ts";
 
 const init = Command.make('init', {
-  testRoot: many('test-root'), sourceRoot: many('source-root'), docsOnly: Flag.boolean('docs-only').pipe(Flag.withDefault(false)), runnerConfig: optional('runner-config'),
-  yes: Flag.boolean('yes').pipe(Flag.withDefault(false)),
+  testRoot: many('test-root'), sourceRoot: many('source-root'), docsOnly: Flag.Boolean('docs-only').pipe(Flag.withDefault(false)), runnerConfig: optional('runner-config'),
+  yes: Flag.Boolean('yes').pipe(Flag.withDefault(false)),
 }, args => withRepo((repo, s) => Effect.gen(function*() {
   if (args.docsOnly && args.testRoot.length) return yield* Effect.fail(new ConcordError('ConflictingOptions', '--docs-only cannot be combined with --test-root'));
   const configFile = Option.getOrUndefined(args.runnerConfig);
@@ -30,7 +30,7 @@ const init = Command.make('init', {
   }));
   if (s.dryRun) return preview;
   if (interactive) yield* emit({ operation: 'init-preview', configuration: preview.config, create: preview.createdPaths, preserve: preview.preservedPaths }, s.json);
-  const confirmed = args.yes || !interactive || (yield* Prompt.run(Prompt.confirm({ message: `Create ${preview.changedPaths.length} files?`, initial: true })));
+  const confirmed = args.yes || !interactive || (yield* Prompt.run(Prompt.Confirm({ message: `Create ${preview.changedPaths.length} files?`, initial: true })));
   if (!confirmed) return { operation: 'init-cancelled', cancelled: true, dryRun: true, changedPaths: [], plannedPaths: preview.changedPaths };
   yield* sync(() => repo.close());
   const writer = yield* Effect.acquireRelease(openWriteRepository(repo.root, { initialize: true }), (opened) => Effect.sync(() => opened.close()));

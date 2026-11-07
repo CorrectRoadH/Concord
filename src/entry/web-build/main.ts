@@ -18,5 +18,5 @@ NodeRuntime.runMain(Effect.gen(function*() {
   }).pipe(Effect.provide(SourceWebBuilderLive.pipe(Layer.provide(NodeServices.layer))), Effect.provide(RuntimeEnvironment.layer(runtime)), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(runtime.env))));
 }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => {
   process.off('disconnect', stop);
-  if (process.connected) process.disconnect();
+  if (process.connected) process.disconnect?.();
 }))));

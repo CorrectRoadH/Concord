@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
 import { Effect, Option } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { recoverLocalState } from "../../app/index.ts";
 import { ConcordError } from "../../model/index.ts";
 import { root, emit, sync } from "./cli-base.ts";

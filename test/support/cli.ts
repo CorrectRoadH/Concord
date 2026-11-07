@@ -2,7 +2,7 @@
 // @concord-implements docs/engineering/testing/architecture.md#进程内-cli
 import { Console as NodeConsole } from 'node:console';
 import { Writable } from 'node:stream';
-import { ConfigProvider, Console, Effect, Layer, Sink, Stdio, Stream, Terminal } from 'effect';
+import { type Cause, ConfigProvider, Console, Effect, Layer, Queue, Sink, Stdio, Stream, Terminal } from 'effect';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { fullProgram } from '../../src/entry/cli/entry-full.ts';
 import { cliPlatformLayer } from '../../src/entry/cli/main.ts';
@@ -30,7 +30,7 @@ export async function runCli(input: CliInput): Promise<CliResult> {
     stdout: () => sink(stdout), stderr: () => sink(stderr),
   });
   const terminal = Terminal.make({
-    columns: Effect.succeed(80), rows: Effect.succeed(24),
+    size: Effect.acquireRelease(Queue.unbounded<Terminal.Size, Cause.Done>().pipe(Effect.tap(queue => Queue.offer(queue, { columns: 80, rows: 24 }))), queue => Queue.end(queue)), columns: Effect.succeed(80), rows: Effect.succeed(24),
     readInput: Effect.die('Captured non-TTY CLI cannot request interactive terminal input'),
     readLine: Effect.fail(new Terminal.QuitError()),
     display: text => Effect.sync(() => { stdout.push(Buffer.from(text, 'utf8')); }),

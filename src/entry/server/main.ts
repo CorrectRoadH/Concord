@@ -1,9 +1,9 @@
 import { RuntimeEnvironment, makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
 import type * as CacheTypes from '../../base/cache/index.ts';
 import type * as ProcessTypes from '../../base/process/index.ts';
-import type * as RpcGroupTypes from 'effect/unstable/rpc/RpcGroup';
-import type * as RpcClientErrorTypes from 'effect/unstable/rpc/RpcClientError';
-import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
+import type * as RpcGroupTypes from 'effect/rpc/RpcGroup';
+import type * as RpcClientErrorTypes from 'effect/rpc/RpcClientError';
+import { RpcClientError } from 'effect/rpc/RpcClientError';
 import type * as ModelTypes from '../../model/index.ts';
 import type * as AppTypes from '../../app/index.ts';
 import { Installation } from '../../base/installation/index.ts';
@@ -16,11 +16,11 @@ import { Sources, type SourceWatch } from '../../base/sources/index.ts';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../base/cache/index.ts';
 import type { ReadonlyCacheSnapshot } from '../../base/cache/index.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
-import type { ChildProcessSpawner } from 'effect/unstable/process';
+import type { ChildProcessSpawner } from 'effect/process';
 import { NodeSocketServer } from '@effect/platform-node';
 import { Cause, Clock, Deferred, Exit, Fiber, FiberSet, Queue, Schema, Scope, Semaphore, Stdio, Stream, SubscriptionRef } from 'effect';
-import { RpcClient, RpcSerialization, RpcServer } from 'effect/unstable/rpc';
-import { Socket, SocketServer } from 'effect/unstable/socket';
+import { RpcClient, RpcSerialization, RpcServer } from 'effect/rpc';
+import { Socket, SocketServer } from 'effect/socket';
 import { makeOwnedProcessService } from '../../app/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { Git } from '../../base/git/index.ts';
@@ -250,8 +250,14 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
       yield* Deferred.fail(ready, error); yield* Queue.fail(output, error);
     })), Effect.ignore), scope);
     const socket = Socket.make({
-      runRaw: (handler, options) => Deferred.await(ready).pipe(Effect.andThen(options?.onOpen ?? Effect.void), Effect.andThen(Stream.runForEach(Stream.fromQueue(output), chunk => handler(chunk) ?? Effect.void)), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketReadError({ cause: error }) }))),
-      writer: Effect.succeed(chunk => Deferred.await(ready).pipe(Effect.flatMap(write => Effect.sync(() => { if (!(chunk instanceof Socket.CloseEvent)) write(chunk); })), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketWriteError({ cause: error }) })))),
+      reader: Deferred.await(ready).pipe(Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketReadError({ cause: error }) })), Effect.as({
+        pull: Queue.takeAll(output).pipe(Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketReadError({ cause: error }) }))),
+        upgrade: () => Effect.fail(new Socket.SocketError({ reason: new Socket.SocketUpgradeError({ cause: 'Owned computation pipes do not support TLS' }) })),
+      })),
+      writer: Effect.succeed({
+        write: chunk => Deferred.await(ready).pipe(Effect.flatMap(write => Effect.sync(() => { if (!(chunk instanceof Socket.CloseEvent)) write(chunk); })), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketWriteError({ cause: error }) }))),
+        writeAll: chunks => Deferred.await(ready).pipe(Effect.flatMap(write => Effect.sync(() => { for (const chunk of chunks) write(chunk); })), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketWriteError({ cause: error }) }))),
+      }),
     });
     const protocol = Layer.effect(RpcClient.Protocol, makeComputationProtocol(socket)).pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(Layer.succeed(RpcClient.ConnectionHooks, { onConnect: Deferred.succeed(opened, undefined).pipe(Effect.asVoid), onDisconnect: Deferred.fail(opened, new WorkspaceServerError({ code: 'WorkspaceComputeExited', message: 'Computation transport closed' })).pipe(Effect.asVoid) })));
     const protocolContext = yield* Layer.build(protocol).pipe(Effect.provideService(Scope.Scope, scope));

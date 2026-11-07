@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/neutral-project-governance/cli.md
 import { Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import type { TerminalDeliverySink } from "./delivery.ts";
 import { readJson } from "./input.ts";
 import { problem } from "../../model/index.ts";
@@ -10,10 +10,10 @@ import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from "
 export interface WorkSettings { readonly root?: string | undefined; readonly json: boolean; readonly dryRun?: boolean }
 export function makeDocsWorkCommand<SettingsR = never, DeliveryE = never, DeliveryR = never>(deliver: TerminalDeliverySink<DeliveryE, DeliveryR>, settings?: Effect.Effect<WorkSettings, never, SettingsR>) {
   const group = Command.make('work').pipe(Command.withDescription('Partition documentation write sets, re-run checks and finalize verified work.'), Command.withSharedFlags({
-    root: Flag.string('root').pipe(Flag.optional), json: Flag.boolean('json').pipe(Flag.withDefault(false)),
+    root: Flag.String('root').pipe(Flag.optional), json: Flag.Boolean('json').pipe(Flag.withDefault(false)),
   }));
-  const option = (name: string) => Flag.string(name).pipe(Flag.optional);
-  const runId = Argument.string('run-id');
+  const option = (name: string) => Flag.String(name).pipe(Flag.optional);
+  const runId = Argument.String('run-id');
   const invoke = <A, E, R>(operation: (settings: WorkSettings) => Effect.Effect<A, E, R>) => Effect.gen(function*() {
     const local = yield* group;
     const inherited: WorkSettings = settings ? yield* settings : { json: false };
@@ -34,12 +34,12 @@ export function makeDocsWorkCommand<SettingsR = never, DeliveryE = never, Delive
     }));
   });
   return group.pipe(Command.withSubcommands([
-    Command.make('prepare', { scope: Flag.string('scope').pipe(Flag.atLeast(0)), plan: option('plan'), base: option('base'), runId: option('run-id') }, args => invoke(s => Effect.gen(function*() {
+    Command.make('prepare', { scope: Flag.String('scope').pipe(Flag.atLeast(0)), plan: option('plan'), base: option('base'), runId: option('run-id') }, args => invoke(s => Effect.gen(function*() {
       const path = Option.getOrUndefined(args.plan);
       return yield* prepareDocsWork({ root: s.root, scopes: args.scope, base: Option.getOrUndefined(args.base), runId: Option.getOrUndefined(args.runId), ...(path === undefined ? {} : { plan: yield* readJson(path).pipe(Effect.mapError(() => problem('Invalid plan JSON', [{ code: 'UnsafePath', message: 'Cannot read plan JSON' }]))) }) });
     }))),
     Command.make('show', { runId }, args => invoke(s => showDocsWork(args.runId, s.root))),
-    Command.make('check', { runId, itemId: Argument.string('item-id'), report: Flag.boolean('report').pipe(Flag.withDefault(false)), verify: option('verify') }, args => invoke(s => checkDocsWork(args.runId, args.itemId, { report: args.report, verify: Option.getOrUndefined(args.verify) }, s.root))),
+    Command.make('check', { runId, itemId: Argument.String('item-id'), report: Flag.Boolean('report').pipe(Flag.withDefault(false)), verify: option('verify') }, args => invoke(s => checkDocsWork(args.runId, args.itemId, { report: args.report, verify: Option.getOrUndefined(args.verify) }, s.root))),
     Command.make('finalize', { runId }, args => invoke(s => finalizeDocsWork(args.runId, s.root))),
   ]));
 }

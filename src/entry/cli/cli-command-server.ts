@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#启动与裁决
 import { Effect } from 'effect';
-import { Command } from 'effect/unstable/cli';
+import { Command } from 'effect/cli';
 import { ConcordError } from '../../model/index.ts';
 import { ServerLauncher } from './launchers.ts';
 import { root, viewRoot, emit } from './cli-base.ts';

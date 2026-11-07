@@ -3,7 +3,7 @@
 import { checkWriting } from "../../app/index.ts";
 
 import { Effect, Option } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { root, optional, sync } from "./cli-base.ts";
 import { withRepo, withQuery } from "./cli-repository.ts";
 

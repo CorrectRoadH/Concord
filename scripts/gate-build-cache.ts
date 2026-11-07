@@ -5,7 +5,7 @@ import { lstat, readlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { acquireRecoverablePublicationLease, CoordinationError, ownerIsAlive, readLeaseOwner, releaseFileLease, type FileLease } from '../src/base/publication/file-lease.ts';
 import { decodeNativeArtifact, HAWDB_ABI, HAWDB_REVISION } from '../src/base/installation/hawdb-native-contract.ts';
 import { nativeSourceFiles } from '../src/base/installation/native-artifact.ts';

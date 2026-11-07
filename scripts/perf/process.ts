@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, FileSystem, Schema, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 export class PerfError extends Schema.TaggedError<PerfError>()('PerfError', { message: Schema.String }) {}
 

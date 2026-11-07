@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 // @concord-implements docs/engineering/testing/architecture.md#进程内-cli
 import { Effect, Option, Schema } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { ConcordError, decode, failure } from "../../model/index.ts";
 import { locateProjectRoot } from "../../app/index.ts";
 import { humanOutput } from "./presentation.ts";
@@ -10,20 +10,20 @@ import { readText } from './input.ts';
 import { writeStdout } from './invocation.ts';
 
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
-  root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise use the Git worktree containing cwd; configuration is optional.')),
-  json: Flag.boolean('json').pipe(Flag.withDefault(false)),
-  server: Flag.choice('server', ['shared', 'command']).pipe(Flag.withDefault('shared'), Flag.withDescription('Query through a shared service or a service owned by this command.')),
-  fresh: Flag.boolean('fresh').pipe(Flag.withDefault(false), Flag.withDescription('Wait for current diagnostic sources instead of reading an asynchronously refreshed snapshot.')),
-  dryRun: Flag.boolean('dry-run').pipe(Flag.withDefault(false), Flag.withDescription('Validate a document mutation without writing.')),
+  root: Flag.String('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise use the Git worktree containing cwd; configuration is optional.')),
+  json: Flag.Boolean('json').pipe(Flag.withDefault(false)),
+  server: Flag.Literals('server', ['shared', 'command']).pipe(Flag.withDefault('shared'), Flag.withDescription('Query through a shared service or a service owned by this command.')),
+  fresh: Flag.Boolean('fresh').pipe(Flag.withDefault(false), Flag.withDescription('Wait for current diagnostic sources instead of reading an asynchronously refreshed snapshot.')),
+  dryRun: Flag.Boolean('dry-run').pipe(Flag.withDefault(false), Flag.withDescription('Validate a document mutation without writing.')),
 }));
 
-const text = (name: string) => Flag.string(name);
+const text = (name: string) => Flag.String(name);
 
 const optional = (name: string) => text(name).pipe(Flag.optional);
 
 const many = (name: string) => text(name).pipe(Flag.atLeast(0));
 
-const id = Argument.string('id');
+const id = Argument.String('id');
 
 const body = Effect.fn('CliInput.body')(function*(path: string) {
   const source = yield* readText(path).pipe(Effect.mapError(cause => new ConcordError('InvalidBody', `Cannot read ${path}: ${cause.message}`)));

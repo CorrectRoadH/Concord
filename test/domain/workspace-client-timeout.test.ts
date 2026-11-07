@@ -3,9 +3,9 @@ import { Socket } from 'node:net';
 import test from 'node:test';
 import { Deferred, Effect, Fiber } from 'effect';
 import { TestClock } from 'effect/testing';
-import * as RpcClient from 'effect/unstable/rpc/RpcClient';
-import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
-import { SocketOpenError } from 'effect/unstable/socket/Socket';
+import * as RpcClient from 'effect/rpc/RpcClient';
+import { RpcClientError } from 'effect/rpc/RpcClientError';
+import { SocketOpenError } from 'effect/socket/Socket';
 import { connectWorkspaceSocket, requestWorkspace, WorkspaceRpcs, WorkspaceServerError, PROTOCOL } from '../../src/entry/server/index.ts';
 
 // @feature docs/feature/local-data-engine/README.md

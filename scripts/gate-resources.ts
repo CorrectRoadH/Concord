@@ -2,7 +2,7 @@
 // @concord-implements docs/engineering/testing/README.md#共享资源与同步
 // @concord-implements docs/engineering/testing/cli.md#并发
 import { Duration, Effect, Exit, FileSystem, Schema, Semaphore } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { availableParallelism, totalmem } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';

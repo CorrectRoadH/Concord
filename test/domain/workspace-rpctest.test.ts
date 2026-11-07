@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Deferred, Effect, Fiber, Stream } from 'effect';
-import * as RpcTest from 'effect/unstable/rpc/RpcTest';
+import * as RpcTest from 'effect/rpc/RpcTest';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, collectPackets } from '../../src/entry/server/index.ts';
 import { makeOutputAdmission, packets } from '../../src/entry/server/protocol.ts';
 

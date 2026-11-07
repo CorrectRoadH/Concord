@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#结果
 // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { doctor, projectInitializationRequired, uninitializedDoctor } from "../../app/index.ts";
 import { Effect, Option } from 'effect';
 import { root, emit, sync } from "./cli-base.ts";

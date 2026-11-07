@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { Effect } from 'effect';
 import { setConfig, showConfig } from "../../app/index.ts";
 import { ProjectSchema, decode } from "../../model/index.ts";

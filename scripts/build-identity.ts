@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 export const BuildIdentity = Schema.Struct({
   format: Schema.Literal('concord.build-source/v1'),

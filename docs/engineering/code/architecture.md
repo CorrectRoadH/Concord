@@ -10,7 +10,7 @@
 
 | 层 | 内容 | 依赖 |
 | --- | --- | --- |
-| 入口 | CLI 命令（`effect/unstable/cli`）、HTTP 路由（`unstable/http`）、RPC 处理（`unstable/rpc`）、Concord mod | 应用端口 |
+| 入口 | CLI 命令（`effect/cli`）、HTTP 路由（`effect/http`）、RPC 处理（`effect/rpc`）、Concord mod | 应用端口 |
 | 应用 | 每个用户操作一个 `Effect.fn`，CLI、HTTP、action 与 RPC 调用同一个操作 | 领域服务与基础服务 |
 | 领域服务 | Documents、Trace、Writing、Concepts、Issues、Memory、Designs、Tests、Code、Feedback | 领域服务、基础服务与模型 |
 | 基础服务 | Workspace、Sources、Publication、Cache、Git、OwnedProcess，以及 `effect` 的 FileSystem、Path 与 Clock | 平台 |
@@ -166,7 +166,7 @@ Concord 只以 CLI 交付，全部模块都是内部实现，不作为包导出�
 
 计算进程另有 `CacheDerivations`：只在请求内收集新产生的派生行，随结果交回主进程写入；它不持有句柄或写入能力。
 
-**OwnedProcess** 让子进程使用当前 RuntimeEnvironment 的环境，用 `unstable/process` 的 ChildProcess 启动与发送信号。Concord 补齐后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出时也核对后代。
+**OwnedProcess** 让子进程使用当前 RuntimeEnvironment 的环境，用 `effect/process` 的 ChildProcess 启动与发送信号。Concord 补齐后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出时也核对后代。
 
 ## 应用端口 Queries
 
@@ -228,7 +228,7 @@ Remote 在适配层区分可重试的传输失败与领域错误，不在客户�
 | 需要 | Effect 能力 | Concord 补齐 |
 | --- | --- | --- |
 | 资源生命周期 | Scope、`Effect.acquireRelease`、`Layer.effect` | — |
-| 工作区服务协议 | `unstable/rpc`（请求关联、具名错误、取消、结果流）经 `unstable/socket` | 二进制序列化与传输准入，见[协议](../../feature/local-data-engine/architecture.md#协议) |
+| 工作区服务协议 | `effect/rpc`（请求关联、具名错误、取消、结果流）经 `effect/socket` | 二进制序列化与传输准入，见[协议](../../feature/local-data-engine/architecture.md#协议) |
 | 当前状态与订阅 | SubscriptionRef | 每个订阅只保留最新状态；慢订阅的旧状态被替换，计入发送预算 |
 | 合并监听事件与补偿刷新 | Stream 与 Schedule | 去抖最长等待两秒，扫描期间只合并一次后续刷新 |
 | 串行维护 | Semaphore | 只在进程内互斥；服务锁、publication 与超时各自裁决 |
@@ -236,6 +236,6 @@ Remote 在适配层区分可重试的传输失败与领域错误，不在客户�
 | 启动就绪 | Deferred | — |
 | HTTP 与静态资源 | HttpRouter、HttpStaticServer | Host/Origin 校验，见[Web 工作台架构](../../feature/web-workbench/architecture.md) |
 | 测试中的时间与协议 | TestClock；RpcTest | 见下文 |
-| 性能剖析 | `Effect.fn` 的 span，按需经 `unstable/observability` 导出 | — |
+| 性能剖析 | `Effect.fn` 的 span，按需经 `effect/observability` 导出 | — |
 
 服务的状态机与计时在测试进程内以 Layer 加 TestClock 验证。TestClock 不抢占同步计算，也不产生文件或进程事件；计算与操作进程、服务锁、进程退出与清理确认用真实进程验证。RpcTest 只验证逻辑，公开输出等价用真实序列化验收。

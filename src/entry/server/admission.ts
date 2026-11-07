@@ -2,8 +2,8 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import type { Scope } from 'effect';
 import { Effect } from 'effect';
-import { RpcServer } from 'effect/unstable/rpc';
-import { Socket, SocketServer } from 'effect/unstable/socket';
+import { RpcServer } from 'effect/rpc';
+import { Socket, SocketServer } from 'effect/socket';
 import { makeRequestAdmission, type RequestAdmission } from './request-admission.ts';
 
 /** Connection and request admission surrounds the actual Effect RPC protocol. */
@@ -12,19 +12,20 @@ export const makeAdmittedProtocol = Effect.fn('makeAdmittedProtocol')(function*(
   const close = new Map<number, Effect.Effect<void>>();
   let connections = 0, nextId = 0, sending = 0;
   const sockets: SocketServer.SocketServer['Service'] = { ...server, run: handler => server.run(socket => Effect.scoped(Effect.gen(function*() {
-    const write = yield* socket.writer;
-    const busy = write(new Socket.CloseEvent(1013, 'WorkspaceServerBusy')).pipe(Effect.ignore);
+    const writer = yield* socket.writer;
+    const write: Socket.Writer['write'] = chunk => Effect.suspend(() => {
+      const size = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk instanceof Socket.CloseEvent ? 0 : chunk.byteLength;
+      if (sending + size > 64 * 1024 * 1024) return busy;
+      sending += size;
+      return writer.write(chunk).pipe(Effect.ensuring(Effect.sync(() => { sending -= size; })));
+    });
+    const busy = writer.write(new Socket.CloseEvent(1013, 'WorkspaceServerBusy')).pipe(Effect.ignore);
     if (connections >= 64) { yield* busy; return; }
     const id = nextId++; connections++; close.set(id, busy);
     yield* Effect.addFinalizer(() => Effect.sync(() => { connections--; close.delete(id); for (const release of requests.get(id)?.values() ?? []) release(); requests.delete(id); disconnected(id); }));
     yield* connected;
     const bounded = Socket.make({ ...socket,
-      writer: Effect.succeed(chunk => Effect.suspend(() => {
-        const size = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk instanceof Socket.CloseEvent ? 0 : chunk.byteLength;
-        if (sending + size > 64 * 1024 * 1024) return busy;
-        sending += size;
-        return write(chunk).pipe(Effect.ensuring(Effect.sync(() => { sending -= size; })));
-      })),
+      writer: Effect.succeed({ write, writeAll: chunks => Effect.forEach(chunks, write, { discard: true }) }),
     });
     yield* handler(bounded);
   }))) };

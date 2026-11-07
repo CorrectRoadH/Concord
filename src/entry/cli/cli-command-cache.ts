@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 // @concord-implements docs/feature/local-data-engine/cli.md#缓存状态
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { Effect } from 'effect';
 import { ServerLauncher } from './launchers.ts';
 import { rebuildCache } from '../../app/index.ts';

@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/engineering/testing/cli.md#完整门禁
 import { Effect, FileSystem, Schema, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { relative, resolve, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { parseTestDeclarations } from '../src/domain/tests/index.ts';

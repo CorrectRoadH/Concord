@@ -6,7 +6,7 @@ import { CliInvocation, setExitCode, writeStderr } from './invocation.ts';
 import { humanOutput } from './presentation.ts';
 
 export const cliFailure = Effect.fn('cliFailure')(function*(cause: unknown) {
-  const CliError = yield* Effect.tryPromise(() => import('effect/unstable/cli/CliError'));
+  const CliError = yield* Effect.tryPromise(() => import('effect/cli/CliError'));
   const error = CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))
     : failure(cause);

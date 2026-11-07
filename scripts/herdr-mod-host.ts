@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Duration, Effect, Fiber, FileSystem, Schema, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { installationResources, installationRootForBin } from '../src/base/installation/index.ts';
 
 type Callback = (event: unknown, cx: HostContext) => void;

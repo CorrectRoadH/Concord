@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { NodeServices } from '@effect/platform-node';
 import type { Scope} from 'effect';
 import { Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
@@ -77,7 +77,7 @@ cpSync(${JSON.stringify(seedRoot)}, process.argv[2], { recursive: true });
   const harness = join(root, 'gate-process.ts');
   yield* fs.writeFileString(harness, `import { NodeRuntime, NodeServices } from ${JSON.stringify(import.meta.resolve('@effect/platform-node'))};
 import { Effect, FileSystem } from ${JSON.stringify(import.meta.resolve('effect'))};
-import { ChildProcess, ChildProcessSpawner } from ${JSON.stringify(import.meta.resolve('effect/unstable/process'))};
+import { ChildProcess, ChildProcessSpawner } from ${JSON.stringify(import.meta.resolve('effect/process'))};
 import { prepareGateBuildCache } from ${JSON.stringify(pathToFileURL(resolve('scripts/gate-build-cache.ts')).href)};
 Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem, spawner = yield* ChildProcessSpawner.ChildProcessSpawner;

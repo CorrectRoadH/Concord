@@ -9,8 +9,8 @@ import { Context, Deferred, Effect, Fiber, Layer, Option, Queue, Result, Stream 
 import { NodeServices } from '@effect/platform-node';
 import { launchDetachedWorker } from './worker.ts';
 import { processEventEnvironment, recordProcessSpawn } from './process-events.ts';
-import { ChildProcess as ProcessCommand, ChildProcessSpawner } from 'effect/unstable/process';
-import type { ChildProcessHandle } from 'effect/unstable/process/ChildProcessSpawner';
+import { ChildProcess as ProcessCommand, ChildProcessSpawner } from 'effect/process';
+import type { ChildProcessHandle } from 'effect/process/ChildProcessSpawner';
 import { resolveTrustedExecutable } from './trusted-executable.ts';
 import { OwnedProcessError } from './owned-process-error.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';

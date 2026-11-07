@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GiB } from '../../scripts/gate-resources.ts';

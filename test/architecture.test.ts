@@ -105,8 +105,8 @@ test('synthetic layout guard follows called helpers and reexports to a CLI launc
 // @feature docs/engineering/testing/architecture.md#架构守护
 test('synthetic layout guard observes Effect spawners and rejects unknown actual Node targets', () => Effect.runSync(Effect.sync(() => {
   const violations = inspectTestLayout(root, new Map([
-    ['test/cli/example.test.ts', `import test from 'node:test'; import { Effect } from 'effect'; import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-      import * as E from 'effect/Effect'; import * as CP from 'effect/unstable/process/ChildProcess';
+    ['test/cli/example.test.ts', `import test from 'node:test'; import { Effect } from 'effect'; import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+      import * as E from 'effect/Effect'; import * as CP from 'effect/process/ChildProcess';
       import { execFile, fork } from 'node:child_process';
       test('command', () => Effect.runPromise(Effect.gen(function* () {
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -212,7 +212,7 @@ test('synthetic layout guard propagates executor choices through Effect function
       const cli = (...argv) => executeCli ? executeCli({ argv }) : launch(process.execPath, entry, ...argv);
       yield* cli('check');
     });`);
-  sources.set('scripts/perf/launcher.ts', `import { Effect } from 'effect'; import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+  sources.set('scripts/perf/launcher.ts', `import { Effect } from 'effect'; import { ChildProcess, ChildProcessSpawner } from 'effect/process';
     export const launch = Effect.fn('launch')(function* (...argv) {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       yield* spawner.spawn(ChildProcess.make(argv[0], argv.slice(1)));

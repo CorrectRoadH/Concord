@@ -2,7 +2,7 @@
 // @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Duration, Effect, FileSystem, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { join, resolve } from 'node:path';
 import { checkoutRoot } from './build-output.ts';
 import { gateMemoryBudgets, withGateResources } from './gate-resources.ts';

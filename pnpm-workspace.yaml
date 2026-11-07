@@ -26,4 +26,5 @@ minimumReleaseAgeExclude:
   - '@typescript/typescript-win32-x64@7.1.0-beta'
   - typescript@7.1.0-beta
 overrides:
-  '@effect/platform-node-shared': 4.0.0-rc.112
+  '@effect/platform-node-shared': 4.1.2
+  playwright-core: 1.65.0

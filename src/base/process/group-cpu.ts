@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { readdirSync, readFileSync } from 'node:fs';
 import { Effect, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { OwnedProcessError } from './owned-process-error.ts';
 
 const Counter = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));

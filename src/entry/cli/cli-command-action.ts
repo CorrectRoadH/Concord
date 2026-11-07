@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 import { Effect } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { ConcordError } from "../../model/index.ts";
 import { applyViewDryRun, executeViewAction } from "../../app/index.ts";
 import { root, text, body, emit, sync, viewRoot } from "./cli-base.ts";

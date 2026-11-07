@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/cli.md#安装与卸载
 import { Effect } from 'effect';
-import { Command } from 'effect/unstable/cli';
+import { Command } from 'effect/cli';
 import { manageHerdrMod } from '../../app/index.ts';
 import { root, emit } from './cli-base.ts';
 

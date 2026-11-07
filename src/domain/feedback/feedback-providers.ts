@@ -566,7 +566,7 @@ const fetchFeedbackInternal = Effect.fn('feedback.fetchFeedback')(function*(
 ): Effect.fn.Return<FeedbackFetch, ConcordError> {
   const fetchStartedAt = DateTime.formatIso(yield* DateTime.now);
   const configured = options.credential === undefined && !(connection.provider === 'github' && connection.transport === 'gh')
-    ? Option.getOrUndefined(yield* Config.option(Config.string(connection.credentialEnv)).pipe(Effect.mapError(() => providerError('CredentialMissing', `Credential environment variable ${connection.credentialEnv} is not set`))))
+    ? Option.getOrUndefined(yield* Config.option(Config.String(connection.credentialEnv)).pipe(Effect.mapError(() => providerError('CredentialMissing', `Credential environment variable ${connection.credentialEnv} is not set`))))
     : options.credential;
   const credential = credentialFor(connection, configured);
   const transport = options.transport ?? defaultTransport;

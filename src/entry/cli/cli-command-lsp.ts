@@ -3,7 +3,7 @@
 import { setExitCode } from './invocation.ts';
 import { LspLauncher } from "./launchers.ts";
 import { Effect, Option } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { root } from "./cli-base.ts";
 
 const lsp = Command.make('lsp', {}, () => Effect.gen(function*() {

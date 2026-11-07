@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { NodeServices } from '@effect/platform-node';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import type { Scope} from 'effect';
 import { Effect, FileSystem, Schema } from 'effect';
 import { dirname, join, resolve } from 'node:path';

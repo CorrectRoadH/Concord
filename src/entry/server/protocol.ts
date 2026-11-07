@@ -1,11 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
-import type * as RpcClientTypes from 'effect/unstable/rpc/RpcClient';
-import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
+import type * as RpcClientTypes from 'effect/rpc/RpcClient';
+import type { RpcClientError } from 'effect/rpc/RpcClientError';
 import { Effect, Schema, Stream } from 'effect';
-import * as Rpc from 'effect/unstable/rpc/Rpc';
-import * as RpcGroup from 'effect/unstable/rpc/RpcGroup';
-import * as SchemaBinary from 'effect/unstable/encoding/SchemaBinary';
+import * as Rpc from 'effect/rpc/Rpc';
+import * as RpcGroup from 'effect/rpc/RpcGroup';
+import * as SchemaBinary from 'effect/encoding/SchemaBinary';
 import { WorkspaceRead } from '../../model/index.ts';
 import { isAbsolute } from 'node:path';
 

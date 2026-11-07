@@ -19,7 +19,7 @@ export const withPublication = <A, E, R>(operation: Effect.Effect<A, E, R | Publ
 
 /** Test composition root: real validation and the real workspace implementation. */
 export class LocalRepository extends RepositoryBase {
-  private cacheScope?: Scope.Scope;
+  private cacheScope?: Scope.Closeable;
   constructor(root?: string, options: RepositoryOptions = {}) {
     const captured = options.runtime ?? captureRuntime();
     const runtime = makeRuntimeEnvironment(captured.cwd, options.environment ?? captured.env);

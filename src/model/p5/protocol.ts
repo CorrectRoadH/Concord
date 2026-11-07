@@ -15,7 +15,7 @@ export const P5OptionsSchema = Schema.Struct({
 });
 export const P5_LIBRARIES = {
   'p5.sound': { version: '0.4.1', file: 'p5.sound.js', source: 'node_modules/p5.sound/dist/p5.sound.js', license: 'node_modules/p5.sound/LICENSE' },
-  'p5.brush': { version: '2.2.3', file: 'p5.brush.js', source: 'node_modules/p5.brush/dist/p5.brush.js', license: 'node_modules/p5.brush/LICENSE.md' },
+  'p5.brush': { version: '3.0.0', file: 'p5.brush.js', source: 'node_modules/p5.brush/dist/p5.brush.js', license: 'node_modules/p5.brush/LICENSE.md' },
 } as const;
 export function parseP5Options(meta: string): typeof P5OptionsSchema.Type {
   const values: Record<string, string> = {};

@@ -3,7 +3,7 @@
 import { relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Effect, FileSystem, Schema, Scope } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { observeTestProcessTree } from './gate-resource-processes.ts';
 import { gateMemoryBudgets, withGateAdmission, type GateAdmission } from './gate-resources.ts';
 import { prepareGateBuildCache } from './gate-build-cache.ts';

@@ -13,7 +13,7 @@ import { packageCommand } from '../../scripts/package-command.ts';
 
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { prepareSourceConsumer, builtConcord } from './installed-package.ts';
 import { replaceInstalledNativeBinary } from '../../scripts/verify-installed-native.ts';
 

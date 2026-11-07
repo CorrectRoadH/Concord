@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/feedback/cli.md
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { listFeedback, syncFeedback } from "../../app/index.ts";
 import { FeedbackConnectionSchema } from "../../model/index.ts";
 import { setConfig, showConfig } from "../../app/index.ts";
@@ -19,8 +19,8 @@ const feedbackConnection = Command.make('connection').pipe(Command.withDescripti
   Command.make('list', {}, () => withQuery({ name: 'feedback.connection.list', input: {} })),
   Command.make('add', {
     id: text('id'),
-    provider: Flag.choice('provider', ['github', 'linear']),
-    transport: Flag.choice('transport', ['api', 'gh']).pipe(Flag.optional),
+    provider: Flag.Literals('provider', ['github', 'linear']),
+    transport: Flag.Literals('transport', ['api', 'gh']).pipe(Flag.optional),
     credentialEnv: optional('credential-env'),
     owner: optional('owner'),
     repo: optional('repo'),
@@ -61,7 +61,7 @@ const feedbackSync = Command.make('sync', { connection: text('connection') }, ar
   yield* emit(receipt, settings.json);
 }));
 
-const feedbackImport = Command.make('import', { url: Argument.string('url'), connection: text('connection') }, args => Effect.gen(function*() {
+const feedbackImport = Command.make('import', { url: Argument.String('url'), connection: text('connection') }, args => Effect.gen(function*() {
   const settings = yield* root;
   const receipt = yield* syncFeedback((yield* viewRoot(settings)), args.connection, { url: args.url, dryRun: settings.dryRun });
   yield* emit(receipt, settings.json);

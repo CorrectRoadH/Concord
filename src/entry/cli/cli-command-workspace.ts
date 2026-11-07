@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md
 import { Effect } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { getWorkspaceSnapshot, validateViewRoot } from "../../app/index.ts";
 import { readWorkspaceProjection, workspaceProjectionContext } from "../../app/index.ts";
 import { root, emit, sync, viewRoot } from "./cli-base.ts";

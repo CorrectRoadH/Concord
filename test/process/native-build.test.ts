@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 
 const runtime = makeRuntimeEnvironment(process.cwd(), process.env);

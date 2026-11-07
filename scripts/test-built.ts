@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { Duration, Effect, Fiber, FileSystem, Schema } from 'effect';
 import { join, resolve } from 'node:path';
 import { availableParallelism, loadavg } from 'node:os';

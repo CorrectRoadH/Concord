@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Context, Deferred, Effect, Fiber, Layer, Option } from 'effect';
-import { ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcessSpawner } from 'effect/process';
 import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService } from '../../src/base/process/index.ts';
 import { TestClock } from 'effect/testing';
 import { Workspace, WorkspaceContext } from '../../src/base/workspace/index.ts';

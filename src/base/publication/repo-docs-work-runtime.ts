@@ -3,7 +3,7 @@ import * as observer from '../process/index.ts';
 import { randomUUID, createHash } from "node:crypto";
 import { resolve, isAbsolute, join, dirname } from "node:path";
 import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { fail, problem } from "../../model/index.ts";
 
 export const canonical = (value: unknown): string => {

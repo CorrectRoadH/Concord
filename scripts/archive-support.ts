@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 export class ArchiveFailed extends Schema.TaggedError<ArchiveFailed>()('ArchiveFailed', { message: Schema.String }) {}
 export class UnsupportedTarget extends Schema.TaggedError<UnsupportedTarget>()('UnsupportedTarget', { message: Schema.String }) {}

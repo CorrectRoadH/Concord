@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { root } from "./cli-base.ts";
 import { init } from "./cli-command-init.ts";
 import { skills } from './cli-command-skills.ts';

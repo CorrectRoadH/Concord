@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#创建与编辑文档
 import { Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { loadDocuments, readDocumentReference, findDocument } from "../../app/index.ts";
 import { adoptRoadmap } from "../../app/index.ts";
 import { createDocument } from "../../app/index.ts";
@@ -12,10 +12,10 @@ import { text, optional, many, id, body, sync, cached } from "./cli-base.ts";
 import { withRepo, withReadRepo, withQuery } from "./cli-repository.ts";
 
 const kinds = ['feature', 'use-case', 'design', 'roadmap', 'engineering', 'issue', 'memory'] as const;
-const category = Argument.choice('category', kinds);
+const category = Argument.Literals('category', kinds);
 
 export const newDocument = Command.make('new', {
-  category, name: Argument.string('name'), title: optional('title'), body: optional('body'),
+  category, name: Argument.String('name'), title: optional('title'), body: optional('body'),
   feature: optional('feature'), pages: many('pages'),
 }, args => withRepo((repo, settings) => Effect.gen(function*() {
   const receipt = yield* createDocument(repo, args.category, {
@@ -36,8 +36,8 @@ export function docsGroup(kind: Extract<DocumentKind, 'use-case' | 'roadmap'>) {
     Command.make('start', { id, feature: optional('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, Option.getOrUndefined(args.feature), s.dryRun)))).pipe(Command.withDescription('Start a Roadmap as a Feature; --feature optionally selects a different Feature ID.')),
   ] : [
     Command.make('steps', { id }, args => withReadRepo(repo => sync(() => useCaseSteps(repo, args.id)))),
-    Command.make('format', { id, seed: Flag.boolean('seed').pipe(Flag.withDefault(false)), list: Flag.integer('list').pipe(Flag.optional) }, args => withRepo((repo, s) => sync(() => formatUseCase(repo, args.id, args.seed, Option.getOrUndefined(args.list), s.dryRun)))),
-    Command.make('rename-step', { id, oldId: Argument.string('old-id'), newId: Argument.string('new-id') }, args => withRepo((repo, s) => sync(() => renameUseCaseStep(repo, args.id, args.oldId, args.newId, s.dryRun)))),
+    Command.make('format', { id, seed: Flag.Boolean('seed').pipe(Flag.withDefault(false)), list: Flag.Int('list').pipe(Flag.optional) }, args => withRepo((repo, s) => sync(() => formatUseCase(repo, args.id, args.seed, Option.getOrUndefined(args.list), s.dryRun)))),
+    Command.make('rename-step', { id, oldId: Argument.String('old-id'), newId: Argument.String('new-id') }, args => withRepo((repo, s) => sync(() => renameUseCaseStep(repo, args.id, args.oldId, args.newId, s.dryRun)))),
   ];
   return Command.make(kind).pipe(Command.withDescription(`Maintain ${kind} documents.`), Command.withSubcommands(commands));
 }

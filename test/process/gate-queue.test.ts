@@ -4,7 +4,7 @@ import test from 'node:test';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NodeServices } from '@effect/platform-node';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { Deferred, Effect, Fiber, FileSystem, Stream } from 'effect';
 import { tmpdir } from '../support/temporary.ts';
 import { gateSlotCapacity, withGateQueue } from '../../scripts/gate-queue.ts';

@@ -10,7 +10,7 @@ import { Publication } from "../../base/publication/index.ts";
 import type { Queries } from "../../app/index.ts";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Cause, Clock, ConfigProvider, Console, Context, Effect, Fiber, Layer, Option, Queue, Schema, Stdio, Stream, type Terminal } from "effect";
-import type { Command } from "effect/unstable/cli";
+import type { Command } from "effect/cli";
 import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.ts";
 import { humanOutput } from "./presentation.ts";
 import { OwnedProcess, OwnedProcessLive, ProcessEventsLive } from "../../base/process/index.ts";
@@ -420,7 +420,7 @@ export const cliLayer = /*#__PURE__*/ makeCliLayer();
 
 /** Both the real startup adapter and captured invocations await this exact program. */
 export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, argv: readonly string[]) => Cache.withParseCache(Effect.scoped(Effect.gen(function*() {
-  const Command = yield* Effect.tryPromise(() => import('effect/unstable/cli/Command'));
+  const Command = yield* Effect.tryPromise(() => import('effect/cli/Command'));
   yield* Layer.build(ProcessEventsLive);
   const version = yield* (yield* Installation).version;
   // @concord-begin
@@ -441,7 +441,7 @@ export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, a
   const program = Command.runWith(guarded, { version, renderErrors: !argv.includes('--json') })(argv);
   if (argv.includes('--json')) {
     const console = yield* Console.Console;
-    const CliError = yield* Effect.tryPromise(() => import('effect/unstable/cli/CliError'));
+    const CliError = yield* Effect.tryPromise(() => import('effect/cli/CliError'));
     const lines: unknown[][] = [];
     // Effect renders help before returning parse failures. Keep JSON errors atomic.
     yield* program.pipe(

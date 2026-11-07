@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { Console, Effect, FileSystem, Schema, Stream, type PlatformError } from 'effect';
-import { FetchHttpClient, HttpClient } from 'effect/unstable/http';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { FetchHttpClient, HttpClient } from 'effect/http';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget, type NativeArtifact } from "../src/base/installation/index.ts";
 
 import { nativeSourceDigest, nativeCacheRoot } from "../src/base/installation/index.ts";

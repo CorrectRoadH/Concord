@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { root } from "./cli-base.ts";
 import type { StartupData } from "../../model/index.ts";
 

@@ -6,7 +6,7 @@ export const IssuePayloadSchema = Schema.Union([
   Schema.Struct({ operation: Schema.Literal("body-set"), body: Schema.String }),
   Schema.Struct({ operation: Schema.Literal("comment-add"), body: Schema.String }),
   Schema.Struct({ operation: Schema.Literal("labels-add"), labels: Schema.Array(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(50), Schema.isPattern(/^[^\u0000-\u001f\u007f]+$/u))).check(Schema.isMinLength(1)) }),
-  Schema.Struct({ operation: Schema.Literal("labels-remove"), labels: Schema.Array(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(50), Schema.isPattern(/^[^\u0000-\u001f\u007f]+$/u))).check(Schema.isLengthBetween(1, 1)) }),
+  Schema.Struct({ operation: Schema.Literal("labels-remove"), labels: Schema.Array(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(50), Schema.isPattern(/^[^\u0000-\u001f\u007f]+$/u))).check(Schema.isMinLength(1), Schema.isMaxLength(1)) }),
   Schema.Struct({ operation: Schema.Literal("close"), reason: Schema.optional(Schema.Literals(["completed", "not_planned"])) }),
   Schema.Struct({ operation: Schema.Literal("reopen") }),
 ]);

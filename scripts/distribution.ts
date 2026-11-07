@@ -1,6 +1,6 @@
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { join, resolve } from 'node:path';
 import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
@@ -27,7 +27,7 @@ class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
 // These pinned packages expose side-effect-free namespace barrels and matching
 // public subpaths. Preserve module identity while avoiding unrelated services at
 // CLI startup. Rewrite only emitted JS and remove mappings for rewritten lines.
-const namespaceBarrels = new Set(['effect', '@effect/platform-node', 'effect/unstable/cli', 'effect/unstable/process']);
+const namespaceBarrels = new Set(['effect', '@effect/platform-node', 'effect/cli', 'effect/process']);
 
 class BuildOutputFailed extends Schema.TaggedError<BuildOutputFailed>()('BuildOutputFailed', {
   file: Schema.String,

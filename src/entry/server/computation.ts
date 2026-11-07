@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Schema } from 'effect';
-import { Rpc, RpcGroup } from 'effect/unstable/rpc';
+import { Rpc, RpcGroup } from 'effect/rpc';
 import { QueryRequest } from '../../app/index.ts';
 import { CacheDerivationBatch } from '../../model/index.ts';
 import { CallerCwd, Packet, QueryEnvironment, strict, WorkspaceServerError } from './protocol.ts';

@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Scope } from 'effect';
-import type { ChildProcessSpawner } from 'effect/unstable/process';
+import type { ChildProcessSpawner } from 'effect/process';
 import { Effect, FileSystem } from 'effect';
 import { acquireRecoverablePublicationLease, CoordinationError, releaseFileLease } from '../src/base/publication/file-lease.ts';
 import { buildCacheTree } from './gate-build-cache.ts';

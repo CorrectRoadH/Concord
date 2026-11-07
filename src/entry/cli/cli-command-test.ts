@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#测试与修复核验
 // @concord-implements docs/feature/local-sdlc/cli.md#原生测试-adapter
 import { Effect } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { collectNativeTests, readNativeObservations } from "../../app/index.ts";
 import { runCase } from "../../app/index.ts";
 import { verifyTest } from "../../app/index.ts";
@@ -19,8 +19,8 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
   Command.make('marker', { contract: text('contract'), issue: many('issue') }, args => withReadRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.issue)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
   Command.make('list', {}, () => withQuery({ name: 'test.list', input: {} })),
   Command.make('show', { id }, args => withQuery({ name: 'test.show', input: { id: args.id } })),
-  Command.make('discover', { files: Argument.string('file').pipe(Argument.variadic()) }, args => withRepo((repo,s) => s.dryRun ? Effect.fail(new ConcordError('InvalidOption','test discover does not accept --dry-run')) : collectNativeTests(repo,args.files), { unlocked:true, cacheRequired:true })).pipe(Command.withDescription('Run configured native test adapters and save disposable discovery observations.')),
-  Command.make('run', { id, requireNative: Flag.boolean('require-native').pipe(Flag.withDefault(false)) }, args => withRepo((repo,s) => Effect.gen(function*(){
+  Command.make('discover', { files: Argument.String('file').pipe(Argument.variadic()) }, args => withRepo((repo,s) => s.dryRun ? Effect.fail(new ConcordError('InvalidOption','test discover does not accept --dry-run')) : collectNativeTests(repo,args.files), { unlocked:true, cacheRequired:true })).pipe(Command.withDescription('Run configured native test adapters and save disposable discovery observations.')),
+  Command.make('run', { id, requireNative: Flag.Boolean('require-native').pipe(Flag.withDefault(false)) }, args => withRepo((repo,s) => Effect.gen(function*(){
     if(s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','test run does not accept --dry-run; use test show to inspect the declaration'));
     const t=yield* sync(()=>repo.snapshot(()=>buildTrace(repo,'off',{includeCode:false})));yield* sync(()=>requireValidTrace(t));
     const selected=yield* sync(()=>selectCase(t.annotations.cases,args.id));

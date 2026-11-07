@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, Exit, FileSystem } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { dirname, join } from 'node:path';
 import { selectGateTests } from '../../scripts/gate-selection.ts';
 
