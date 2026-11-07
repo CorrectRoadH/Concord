@@ -11,6 +11,8 @@ import { createDocument } from '../support/operations.ts';
 import { LocalRepository } from '../support/repository.ts';
 import { sourceCli } from '../support/source-consumer.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
+import { packedEnvelope } from '../support/asynchronous-projections-fixture.ts';
+import { pollUntil } from '../support/support.ts';
 
 const Projection = Schema.Struct({ projection: Schema.Struct({ current: Schema.Literal(false), builtAt: Schema.String }) });
 const Pending = Schema.Struct({ error: Schema.Literal('QueryPending'), details: Schema.Struct({ refresh: Schema.Struct({ code: Schema.String }) }) });
@@ -72,6 +74,7 @@ test('interrupting the first diagnostic CLI leaves its requested refresh alive',
     });
     child.kill('SIGTERM');
     await exited;
+    await pollUntil(async () => (await packedEnvelope(root, ['trace', 'gaps'])).record, { timeoutMs: 30_000, description: 'refresh survives the first client interruption' });
     const result = await runCli({ argv: ['--root', root, '--json', 'trace', 'gaps'], cwd: root, env: process.env, signal: t.signal });
     assert.equal(result.exitCode, 0, result.stdout + result.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(Projection), { onExcessProperty: 'ignore' })(result.stdout).projection.current, false);

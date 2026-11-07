@@ -9,7 +9,7 @@ import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./la
 import { Publication } from "../../base/publication/index.ts";
 import type { Queries } from "../../app/index.ts";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
-import { type Cause, Clock, ConfigProvider, Console, Context, Effect, Fiber, Layer, Queue, Schema, Stdio, Stream, type Terminal } from "effect";
+import { type Cause, Clock, ConfigProvider, Console, Context, Effect, Fiber, Layer, Option, Queue, Schema, Stdio, Stream, type Terminal } from "effect";
 import type { Command } from "effect/unstable/cli";
 import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.ts";
 import { humanOutput } from "./presentation.ts";
@@ -50,6 +50,36 @@ const installationIdentity = (runtime: ServerRuntime['Service']) => Effect.try({
 const nativeAvailable = Effect.flatMap(PersistentCache, cache => cache.verifyArtifact).pipe(
   Effect.mapError(cause => new ConcordError('HawdbUnavailable', cause.message)),
 );
+
+const PendingRefresh = Schema.Struct({ refresh: Schema.Json });
+/** Keep the requesting connection alive while the service owns the first scan. */
+const queryWithFirstProjection = Effect.fn('queryWithFirstProjection')(function*(connection: ServerTypes.WorkspaceConnection, request: Parameters<typeof ServerTypes.requestWorkspace<'query'>>[2], json: boolean) {
+  const startedAt = yield* Clock.currentTimeMillis;
+  const limitMs = 120_000;
+  let initialFailure: string | undefined;
+  let announced = false;
+  for (;;) {
+    const reply = yield* Effect.result(requestWorkspace(connection, 'query', request));
+    if (reply._tag === 'Success') return reply.success;
+    const error = workspaceServerFailure(reply.failure);
+    if (request.name !== 'historical' || error.code !== 'QueryPending') return yield* Effect.fail(error);
+    const details = Schema.decodeUnknownExit(PendingRefresh, { onExcessProperty: 'ignore' })(error.details);
+    const refresh = details._tag === 'Success' ? details.value.refresh : 'requested';
+    const observedFailure = typeof refresh === 'object' && refresh !== null ? JSON.stringify(refresh) : undefined;
+    if (!announced) {
+      initialFailure = observedFailure;
+      announced = true;
+      if (!json) yield* writeStderr('Building diagnostic snapshot…\n');
+    } else if (observedFailure !== undefined && observedFailure !== initialFailure) return yield* Effect.fail(error);
+    const elapsedMs = (yield* Clock.currentTimeMillis) - startedAt;
+    if (elapsedMs >= limitMs) return yield* Effect.fail(new ConcordError('QueryPending', 'No readable diagnostic snapshot. Use --fresh to wait for current sources.', {
+      refresh: { code: 'QueryRefreshTimedOut', message: 'Diagnostic snapshot was not published within the refresh limit', elapsedMs, limitMs },
+    }));
+    yield* Effect.sleep(Math.min(100, limitMs - elapsedMs));
+  }
+}, Effect.timeoutOrElse({ duration: '120 seconds', orElse: () => Effect.fail(new ConcordError('QueryPending', 'No readable diagnostic snapshot. Use --fresh to wait for current sources.', {
+  refresh: { code: 'QueryRefreshTimedOut', message: 'Diagnostic snapshot was not published within the refresh limit', elapsedMs: 120_000, limitMs: 120_000 },
+})) }));
 
 const loadServerMain = () => Effect.tryPromise(() => import('../server/main.ts'));
 const loadApp = () => Effect.tryPromise(() => import('../../app/index.ts'));
@@ -290,6 +320,7 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
   const persistent = yield* PersistentCache;
   const execution = yield* RuntimeEnvironment;
   const stdio = yield* Stdio.Stdio;
+  const invocation = yield* Effect.serviceOption(CliInvocation);
   return Queries.Remote((root, request, cache = 'use') => Effect.scoped(Effect.gen(function*() {
     if (cache === 'off' && execution.env.CONCORD_SERVER_SCOPE === undefined) return yield* executeQuery(root, request, cache);
     const native = yield* Effect.result(nativeAvailable.pipe(Effect.provideService(PersistentCache, persistent)));
@@ -311,7 +342,7 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
       const result = yield* Effect.result(Effect.scoped(Effect.gen(function*() {
         const connection = yield* connectQueryWorkspace(identified.root, identified.privateDir).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.provideService(Installation, installation), Effect.provideService(OwnedProcess, processes), Effect.provideService(PersistentCache, persistent));
         yield* awaitQueryReady(connection);
-        const reply = yield* requestWorkspace(connection, 'query', { ...request, cwd: execution.cwd, environment, cache });
+        const reply = yield* queryWithFirstProjection(connection, { ...request, cwd: execution.cwd, environment, cache }, Option.isSome(invocation) && invocation.value.argv.includes('--json'));
         return yield* Schema.decodeUnknownEffect(QueryReply, { onExcessProperty: 'error' })(reply).pipe(Effect.mapError(failure));
       })));
       if (result._tag === 'Success') return result.success;

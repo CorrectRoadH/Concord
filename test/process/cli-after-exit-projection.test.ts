@@ -8,8 +8,8 @@ test('packed diagnostic CLI refreshes after exit and marks cached output as hist
  (await call(root, ['new', 'feature', 'cached', '--title', 'Cached'], Ack));
  const query = () => spawnSync(process.execPath, [cli, '--root', root, '--json', 'trace', 'gaps'], { encoding: 'utf8', timeout: 20000 });
  const first = query();
- assert.equal(first.status, 1, first.stdout + first.stderr);
- assert.match(first.stderr, /QueryPending/);
+ assert.equal(first.status, 0, first.stdout + first.stderr);
+ assert.equal(JSON.parse(first.stdout).projection.current, false);
  const result = await pollUntil(async () => {
   const result = query();
   if (result.status === 0) return result;
