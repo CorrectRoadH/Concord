@@ -65,7 +65,9 @@ export function observeOwnedProcessGroup(groupId: number, dependencies: GroupPre
           const fields = stat.slice(stat.lastIndexOf(')') + 1).trimStart().split(/\s+/u);
           if (Number(fields[2]) === groupId) states.push(fields[0] === 'Z' || fields[0] === 'X');
         } catch (cause) {
-          if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') incomplete = true;
+          // A proc stat FD can outlive its task: Linux then returns ESRCH on read.
+          const code = (cause as NodeJS.ErrnoException).code;
+          if (code !== 'ENOENT' && code !== 'ESRCH') incomplete = true;
         }
       }
       if (incomplete) return 'unknown';
