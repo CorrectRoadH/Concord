@@ -20,7 +20,7 @@ import {
 import * as stylex from "@stylexjs/stylex"
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { Link, Navigate, Outlet, useNavigate, useParams } from "react-router-dom"
+import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom"
 
 import type { DocumentKind, DocumentRecord } from '../../src/model/index.ts'
 import type { ViewAction, ViewFile } from '../../src/model/index.ts'
@@ -319,14 +319,25 @@ export function CreateDocument({
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md#web-组件组合
+// @concord-implements docs/feature/web-workbench/ui.md
 export function DocumentsListPage({
   kind,
 }: {
   kind: Exclude<DocumentKind, "use-case">
 }) {
   const { snapshot, projection, dirty } = useWorkspace()
+  const location = useLocation()
+  const navigate = useNavigate()
   const conclusive = projectionIsConclusive(projection)
   const [filter, setFilter] = React.useState("")
+  const previewsFirst = ["feature", "engineering", "roadmap", "design", "memory"].includes(kind)
+  const first = previewsFirst ? snapshot.documents.find(document => document.metadata.kind === kind) : undefined
+  React.useEffect(() => {
+    // A selection can change the browser URL before this render's effect runs.
+    // A delayed category default must not replace that newer selection.
+    if (!first || dirty || window.location.pathname !== location.pathname) return
+    void navigate(documentHref(first, snapshot.documents), { replace: true })
+  }, [first, dirty, location.pathname, navigate, snapshot.documents])
   const documents = snapshot.documents.filter(
     (document) =>
       document.metadata.kind === kind &&
@@ -334,10 +345,7 @@ export function DocumentsListPage({
         .toLocaleLowerCase()
         .includes(filter.toLocaleLowerCase())
   )
-  if (["feature", "engineering", "roadmap", "design", "memory"].includes(kind)) {
-    const first = snapshot.documents.find(document => document.metadata.kind === kind)
-    if (first) return dirty ? null : <Navigate to={documentHref(first, snapshot.documents)} replace />
-  }
+  if (first) return null
 
   return (
     <>
