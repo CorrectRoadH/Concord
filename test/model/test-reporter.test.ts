@@ -293,7 +293,6 @@ runnerTest('official TAP retains circular failure diagnostics and reaches its ru
 }));
 
 // @feature docs/engineering/testing/README.md#检查入口
-// @issue docs/issues/zero-case-run-counted-as-test.md
 runnerTest('name-filtered files count executed cases instead of successful file wrappers', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const excluded = join(root, 'excluded.test.ts'), selected = join(root, 'selected.test.ts');
