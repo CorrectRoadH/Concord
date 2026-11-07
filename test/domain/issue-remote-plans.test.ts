@@ -16,7 +16,7 @@ test('remote previews reject invalid labels and unsupported connections before a
     { row: 'C13 API transport cannot plan remote writes', connection: { ...remoteIssueConnection, transport: 'api', credentialEnv: 'TEST_TOKEN' }, payload: { operation: 'close' }, code: 'IssueRemoteTransportUnsupported' },
   ];
   for (const row of rows) await t.test(row.row, async () => {
-    const fixture = remoteIssueConsumer(row.connection);
+    const fixture = (await remoteIssueConsumer(row.connection));
     try {
       await assert.rejects(fixture.preview(row.payload), { _tag: row.code });
       assert.equal(fixture.calls(), '', `${row.row}: no gh request`);

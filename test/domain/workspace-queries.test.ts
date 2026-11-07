@@ -16,9 +16,9 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @feature docs/feature/local-data-engine/README.md
 test('fresh computation requests retain the annotation parser cache owned by the long-lived process', async () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'local-sdlc', title: 'Local SDLC' }); }
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'local-sdlc', title: 'Local SDLC' })); }
   finally { repo.close(); }
   mkdirSync(join(root, 'test'), { recursive: true });
   writeFileSync(join(root, 'test/case.test.ts'), '// @feature docs/feature/local-sdlc/README.md\nexport {};\n');
@@ -26,7 +26,7 @@ test('fresh computation requests retain the annotation parser cache owned by the
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const context = yield* Layer.build(computationLayer);
-      const owner = yield* PersistentCache.owner(genericPrivateDirectorySync(root));
+      const owner = yield* PersistentCache.owner(genericPrivateDirectorySync(root, process.env));
       yield* owner.open;
       const query = () => Effect.gen(function*() {
         const snapshot = yield* owner.snapshot, derived = CacheDerivations.make();
@@ -42,9 +42,9 @@ test('fresh computation requests retain the annotation parser cache owned by the
 
 // @feature docs/feature/local-data-engine/README.md
 test('current query operations on read-only computation capabilities match cache-disabled source results', async t => {
-  const root = createConsumer();
-  const repository = new LocalRepository(root);
-  try { createDocument(repository, 'feature', { id: 'service-query', title: 'Service query' }); }
+  const root = (await createConsumer());
+  const repository = (await LocalRepository.open(root));
+  try { (await createDocument(repository, 'feature', { id: 'service-query', title: 'Service query' })); }
   finally { repository.close(); }
   const requests: readonly QueryRequest[] = [
     { name: 'documents.list', input: { kind: 'feature' } },

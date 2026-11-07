@@ -1,7 +1,7 @@
 import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { workerEntryArgv } from "../base/installation/index.ts";
-import { Effect } from "effect";
-import { OwnedProcess, makeOwnedProcessService, type OwnedProcessService } from "../base/process/index.ts";
+import { Deferred, Effect } from "effect";
+import { OwnedProcess, makeOwnedProcessService, residentMemory, type OwnedProcessService } from "../base/process/index.ts";
 import { ConcordError, failure } from "../model/index.ts";
 import * as P from '../model/editor/index.ts';
 
@@ -15,10 +15,20 @@ export const runEditorJob = Effect.fn('editor.runJob')(function*(job: P.Job, cle
   let attempted = false;
   const work = Effect.gen(function*() {
     const owner = yield* OwnedProcess;
+    const started = yield* Deferred.make<number>();
+    const memory = Effect.gen(function*() {
+      const pid = yield* Deferred.await(started);
+      while (true) {
+        const bytes = yield* residentMemory(pid).pipe(Effect.mapError(error => new ConcordError('EditorTaskFailed', error.detail)));
+        if (bytes !== undefined && bytes > 256 * 1024 * 1024) return yield* Effect.fail(new ConcordError('EditorBudgetExceeded', 'Editor resident memory limit'));
+        yield* Effect.sleep('100 millis');
+      }
+    });
     attempted = true;
-    const result = yield* owner.run([process.execPath, ...workerEntryArgv('editor-worker', ['--max-old-space-size=256']), service.environment.cwd], {
+    const result = yield* owner.run([process.execPath, ...workerEntryArgv('editor-worker'), service.environment.cwd], {
       cwd: job.root, stdin: input, timeoutMs: P.editorLimits.timeout, outputLimitBytes: P.editorLimits.output,
-    }).pipe(Effect.mapError(error => new ConcordError('EditorTaskFailed', error.detail)));
+      stream: { ready: (_write, _end, identity) => { if (identity.pid !== undefined) Deferred.doneUnsafe(started, Effect.succeed(identity.pid)); }, stdout: () => {} },
+    }).pipe(Effect.mapError(error => new ConcordError('EditorTaskFailed', error.detail)), Effect.raceFirst(memory));
     if (result.timedOut || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('EditorBudgetExceeded', result.timedOut ? 'Computation timeout' : 'Computation output limit'));
     if (result.exitCode !== 0 || result.signal !== null || result.cancelled || result.error !== undefined) return yield* Effect.fail(new ConcordError('EditorTaskFailed', result.error ?? 'Computation did not finish normally'));
     return yield* Effect.try({ try: () => {

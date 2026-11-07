@@ -5,8 +5,8 @@ import { readWorkspaceProjection, createDocument, initialize, Workspace, NodeSer
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('View publishes external same-length edits and atomic saves without any requests', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* fixture();
-  yield* Effect.sync(() => {
-    writeProjectConfig(root, { ...readProjectConfig(root), sourceIgnore: ['src/vendor'] });
+  yield* Effect.tryPromise(async () => {
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceIgnore: ['src/vendor'] });
     mkdirSync(join(root, 'src/vendor'));
     symlinkSync(root, join(root, 'src/vendor/cycle'));
     symlinkSync(join(root, 'absent-secret'), join(root, 'src/.env'));

@@ -31,14 +31,21 @@ export class FrozenBrowserRepository {
   private preserve = false;
   get retained(): boolean { return this.preserve; }
 
-  constructor(root?: string) {
-    this.root = root ?? mkdtempSync(join(tmpdir(), 'concord-browser-worker-'));
+  static async open(root?: string): Promise<FrozenBrowserRepository> {
+    const directory = root ?? mkdtempSync(join(tmpdir(), 'concord-browser-worker-'));
     try {
       if (root === undefined) {
-        this.git(['init', '-q']);
-        const repo = new LocalRepository(this.root, { initialize: true });
-        try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+        execFileSync('git', ['init', '-q', directory]);
+        const repo = await LocalRepository.open(directory, { initialize: true });
+        try { await initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
       }
+      return new FrozenBrowserRepository(directory);
+    } catch (cause) { rmSync(directory, { recursive: true, force: true }); throw cause; }
+  }
+
+  private constructor(root: string) {
+    this.root = root;
+    try {
       const captureTree = (directory: string, prefix = '') => {
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
           if (!prefix && entry.name === '.git') continue;
@@ -168,7 +175,7 @@ export class BrowserSharedFixture {
     const closing = (async () => {
       try { await closeContext(); }
       finally {
-        if (this.timer) await this.timer.measure('private-cleanup', () => this.closePrivate());
+        if (this.timer) await this.timer.measure('private-cleanup', async () => (await this.closePrivate()));
         else await this.closePrivate();
       }
     })();
@@ -273,10 +280,10 @@ export class BrowserSharedFixture {
 }
 
 /** Scope order releases the service before deleting the worktree, including partial startup. */
-export const acquireBrowserSharedFixture = Effect.fn('acquireBrowserSharedFixture')(function*(signal?: AbortSignal, createRepository: () => FrozenBrowserRepository = () => new FrozenBrowserRepository()) {
+export const acquireBrowserSharedFixture = Effect.fn('acquireBrowserSharedFixture')(function*(signal?: AbortSignal, createRepository: () => Promise<FrozenBrowserRepository> = () => FrozenBrowserRepository.open()) {
   let serviceStopped = true;
   const repository = yield* Effect.acquireRelease(
-    Effect.sync(() => createRepository()),
+    Effect.tryPromise(() => createRepository()),
     repository => Effect.sync(() => {
       if (!serviceStopped) {
         if (existsSync(repository.root)) retainConsumer(repository.root);

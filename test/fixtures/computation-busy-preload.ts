@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from '../support/builtin-mocks.ts';
 import { join } from 'node:path';
 
 const boundary = process.env.CONCORD_TEST_BUSY_BOUNDARY;

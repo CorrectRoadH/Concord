@@ -1,4 +1,8 @@
 // @concord-file
-// @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
-import { runComputeMain } from './main.ts';
-runComputeMain(process.argv[2]);
+// @concord-implements docs/engineering/build/architecture.md#编译入口
+import { pathToFileURL } from 'node:url';
+import { run } from './compute-worker-main.ts';
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await run();
+}

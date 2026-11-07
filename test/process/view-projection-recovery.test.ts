@@ -35,9 +35,9 @@ import { sourceCli, prepareSourceConsumer, sourceRoot } from '../support/source-
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('a live publication keeps the first workspace generation pending and refreshes after completion', async () => {
-  const root = fixture();
-  interruptPublication(root);
-  const lease = acquireTraceLeaseSync(root, 'exclusive', 'projection-test-publication');
+  const root = (await fixture());
+  (await interruptPublication(root));
+  const lease = acquireTraceLeaseSync(root, 'exclusive', 'projection-test-publication', undefined, undefined, process.env);
   assert.ok(lease);
   let released = false;
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
@@ -51,7 +51,7 @@ test('a live publication keeps the first workspace generation pending and refres
       assert.equal(parseWorkspaceHttpResponse(response.status, body), undefined);
       await runApplication(Effect.sleep('50 millis'));
     } while (Date.now() < until);
-    rmSync(join(genericPrivateDirectorySync(root), 'journal.json'));
+    rmSync(join(genericPrivateDirectorySync(root, process.env), 'journal.json'));
     releaseTraceLeaseSync(lease, 'projection-test-publication-complete');
     released = true;
     const value = await waitForWorkspaceProjection(base);
@@ -66,8 +66,8 @@ test('a live publication keeps the first workspace generation pending and refres
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('an interrupted publication blocks the first workspace generation with a named recovery error', async () => {
-  const root = fixture();
-  interruptPublication(root);
+  const root = (await fixture());
+  (await interruptPublication(root));
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
@@ -82,12 +82,12 @@ test('an interrupted publication blocks the first workspace generation with a na
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('an interrupted publication retains a prior generation with blocked status', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
     const previous = await waitForWorkspaceProjection(base);
-    interruptPublication(root);
+    (await interruptPublication(root));
     writeFileSync(join(root, 'src/main.ts'), 'export const unpublishableReplacement = 2;\n');
     const response = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
     assert.equal(response.status, 202);

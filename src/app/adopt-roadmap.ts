@@ -12,8 +12,8 @@ import { findDocument } from "../domain/documents/index.ts";
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#adopt
-export function adoptRoadmap(repo: Repository, selector: string, featureId?: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export async function adoptRoadmap(repo: Repository, selector: string, featureId?: string, dryRun = false): Promise<MutationReceipt> {
+  return (await inRepositorySnapshot(repo, async () => {
   const documents = loadDocuments(repo); const roadmap = findDocument(documents, selector, 'roadmap');
   if (roadmap.metadata.kind !== 'roadmap') throw new ConcordError('InvalidDocumentKind', selector);
   if (roadmap.metadata.state !== 'planned') throw new ConcordError('InvalidRoadmapState', 'Only a planned Roadmap can be adopted');
@@ -65,6 +65,6 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId?: str
   const recaptured = repo.files(roadmapDirectory).sort();
   if (recaptured.length !== sourcePaths.length || recaptured.some((path, index) => path !== sourcePaths[index])) throw new ConcordError('FileChangedSinceRead', 'Roadmap source collection changed during adoption planning');
   for (const sourcePath of sourcePaths) if (repo.read(sourcePath) !== observed.get(sourcePath)) throw new ConcordError('FileChangedSinceRead', `${sourcePath} changed during adoption planning`);
-  return repo.publish('roadmap-start', changes, dryRun);
-  });
+  return (await repo.publish('roadmap-start', changes, dryRun));
+  }));
 }

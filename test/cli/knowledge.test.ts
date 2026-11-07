@@ -19,25 +19,25 @@ async function call(root: string, args: readonly string[], status = 0, input = '
   assert.equal(run.exitCode, status, JSON.stringify({ args, stdout: run.stdout, stderr: run.stderr }));
   return Schema.decodeUnknownSync(Schema.fromJsonString(Result), { onExcessProperty: 'ignore' })(status === 0 || run.stdout.trim() ? run.stdout : run.stderr);
 }
-function consumer(_name: string): string { return createConsumer(); }
+async function consumer(_name: string): Promise<string> { return (await createConsumer()); }
 function digestFor(root: string, path: string): string {
   const record = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8'), parserRuntime);
   assert.ok(record);
   return record.digest;
 }
 
-function saveBody(root: string, path: string, body: string, expectedDigest: string, status = 0) {
+async function saveBody(root: string, path: string, body: string, expectedDigest: string, status = 0) {
   const record = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8'), parserRuntime)!;
   return call(root, ['action', '--input', '-'], status, JSON.stringify({ action: 'document.set', path, body: renderDocument(record.metadata, body), expectedDigest }));
 }
 
-function run(root: string, args: readonly string[], input = '') {
+async function run(root: string, args: readonly string[], input = '') {
   return runCli({ argv: ['--root', root, ...args], cwd: process.cwd(), env: process.env, stdin: input, signal: AbortSignal.timeout(20_000) });
 }
 
 // @use-case docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
 test('packed CLI parse errors preserve the input diagnostic and help remains successful', () => Effect.runPromise(Effect.promise(async () => {
-  const root = consumer('parse-errors');
+  const root = (await consumer('parse-errors'));
   const ErrorResult = Schema.Struct({ ok: Schema.Boolean, error: Schema.String, message: Schema.String });
   for (const args of [['--json', 'new', 'memory', 'x', '--title', 't', '--type', 'bogus'], ['--json', 'memory', 'search'], ['--json', '--unknown-flag']]) {
     const result = await run(root, args);

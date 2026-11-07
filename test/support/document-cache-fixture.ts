@@ -6,8 +6,8 @@ import { renderDocument } from '../../src/model/index.ts';
 
 export const useCasePath = 'docs/feature/sample/use-case/inspect.md';
 export const engineeringPath = 'docs/engineering/sample/README.md';
-export function fixture() {
-  const root = createConsumer();
+export async function fixture() {
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: [], sourceRoots: [] });
   mkdirSync(join(root, 'docs/feature/sample/use-case'), { recursive: true });
   mkdirSync(join(root, 'docs/engineering/sample'), { recursive: true });

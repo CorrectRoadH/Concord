@@ -16,9 +16,9 @@ import { pollUntil } from '../support/support.ts';
 
 const Projection = Schema.Struct({ projection: Schema.Struct({ current: Schema.Literal(false), builtAt: Schema.String }) });
 const Pending = Schema.Struct({ error: Schema.Literal('QueryPending'), details: Schema.Struct({ refresh: Schema.Struct({ code: Schema.String }) }) });
-function consumer() {
-  const root = createConsumer(), repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); }
+async function consumer() {
+  const root = (await createConsumer()), repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' })); }
   finally { repo.close(); }
   return root;
 }
@@ -26,7 +26,7 @@ function consumer() {
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#first-run
 test('first diagnostic CLI waits for a published projection and keeps JSON output atomic', async t => {
   for (const json of [true, false]) await t.test(json ? 'JSON' : 'human', async () => {
-    const root = consumer();
+    const root = (await consumer());
     try {
       const result = await runCli({ argv: ['--root', root, ...(json ? ['--json'] : []), 'trace', 'show', 'docs/feature/sample/README.md'], cwd: root, env: process.env, signal: t.signal });
       assert.equal(result.exitCode, 0, result.stdout + result.stderr);
@@ -44,7 +44,7 @@ test('first diagnostic CLI waits for a published projection and keeps JSON outpu
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#first-run
 test('first diagnostic CLI reports the failed refresh instead of a pending request', async t => {
-  const root = consumer();
+  const root = (await consumer());
   try {
     mkdirSync(join(root, 'src'), { recursive: true });
     writeFileSync(join(root, 'src/broken.ts'), '// @concord-file\n// @concord-implements docs/feature/missing/README.md\nexport const broken = true;\n');
@@ -58,7 +58,7 @@ test('first diagnostic CLI reports the failed refresh instead of a pending reque
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#first-run
 test('interrupting the first diagnostic CLI leaves its requested refresh alive', async t => {
-  const root = consumer();
+  const root = (await consumer());
   const child = spawn(process.execPath, [sourceCli(), '--root', root, 'trace', 'gaps'], { stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '';
   const exited = new Promise<void>(resolve => child.once('close', () => resolve()));

@@ -6,8 +6,8 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh dry-run and cache-off processes never touch an existing complete cache', () => runApplication(Effect.sync(() => {
-  const root = freshConsumer();
+test('fresh dry-run and cache-off processes never touch an existing complete cache', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await freshConsumer());
   try {
     const rebuilt = cli(root, 'cache', 'rebuild');
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);

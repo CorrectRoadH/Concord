@@ -1,6 +1,6 @@
 /// <reference path="../../src/entry/herdr-mod/host.d.ts" />
 import assert from 'node:assert/strict';
-import { registerHooks } from 'node:module';
+import { plugin } from 'bun';
 import test from 'node:test';
 import type { AsyncContext, Context, Task } from 'gpui-kit';
 
@@ -159,13 +159,11 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
     'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'],
     herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'props', 'theme'],
   };
-  const hooks = registerHooks({
-    resolve(specifier, context, next) { return names[specifier] ? { url: `host-sync:${specifier}`, shortCircuit: true } : next(specifier, context); },
-    load(url, context, next) {
-      const exports = names[url.replace('host-sync:', '')];
-      return exports ? { format: 'module', source: exports.map(name => `export const ${name} = globalThis.__concordHostSync.${name};`).join('\n'), shortCircuit: true } : next(url, context);
-    },
-  });
+  plugin({ name: 'concord-test-herdr-host', setup(build) {
+    for (const [specifier, members] of Object.entries(names)) {
+      build.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(members.map(name => [name, external[name as keyof typeof external]])) }));
+    }
+  } });
   try {
     const { default: Mod } = await import('../../src/entry/herdr-mod/main.ts');
     const start = async (setup?: (boundary: Boundary) => void) => {
@@ -287,5 +285,5 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       assert.match(host.output.text(), /Concord mod 只能用于本机的 pane/u);
       assert.equal(host.calls.length, 0); assert.equal(host.tasks.length, 0); host.close();
     });
-  } finally { hooks.deregister(); delete global.__concordHostSync; }
+  } finally { plugin.clearAll(); delete global.__concordHostSync; }
 });

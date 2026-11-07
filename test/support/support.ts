@@ -61,11 +61,11 @@ export const effectAfter = (program: TestEffect): void => {
 };
 
 export const projectConfigPath = (_root: string): 'concord.config.ts' => 'concord.config.ts';
-export const readProjectConfig = (root: string): ProjectConfig => {
+export const readProjectConfig = async (root: string): Promise<ProjectConfig> => {
   const path = projectConfigPath(root);
   if (!existsSync(join(root, path))) return {};
   const source = readFileSync(join(root, path), 'utf8');
-  return parseTypeScriptConfig(source);
+  return (await parseTypeScriptConfig(source));
 };
 export const writeProjectConfig = (root: string, input: unknown): void => {
   const config = decode(ProjectSchema, input, 'test project configuration');

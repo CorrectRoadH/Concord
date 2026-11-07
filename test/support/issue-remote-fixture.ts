@@ -35,11 +35,11 @@ test.before(() => Effect.runPromise(Effect.sync(() => {
   packedCli = sourceCli();
 })));
 test.after(() => { rmSync(scratch, { recursive: true, force: true }); });
-export function consumer(name: string, selected: unknown = connection): string {
+export async function consumer(name: string, selected: unknown = connection): Promise<string> {
   const root = join(scratch, name); mkdirSync(root); execFileSync('git', ['init', '-q', root]);
-  const initial = new LocalRepository(root, { initialize: true }); try { initialize(initial); } finally { initial.close(); }
-  const repository = new LocalRepository(root);
-  try { const config = showConfig(repository); setConfig(repository, { ...config.config, feedbackConnections: Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))([selected]) as typeof config.config.feedbackConnections }, config.digest); }
+  const initial = (await LocalRepository.open(root, { initialize: true })); try { (await initialize(initial)); } finally { initial.close(); }
+  const repository = (await LocalRepository.open(root));
+  try { const config = showConfig(repository); (await setConfig(repository, { ...config.config, feedbackConnections: Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))([selected]) as typeof config.config.feedbackConnections }, config.digest)); }
   finally { repository.close(); }
   return root;
 }
@@ -77,7 +77,7 @@ export function execute(root: string, receipt: Receipt, authorization = receipt.
   }
   return result;
 }
-export function error(result: ReturnType<typeof cli>, code: string | readonly string[]) { assert.equal(result.status, 1, result.stdout); const actual = (JSON.parse(result.stderr) as { error: string }).error; if (typeof code === 'string') assert.equal(actual, code, result.stderr); else assert.ok(code.includes(actual), result.stderr); }
+export function error(result: Awaited<ReturnType<typeof cli>>, code: string | readonly string[]) { assert.equal(result.status, 1, result.stdout); const actual = (JSON.parse(result.stderr) as { error: string }).error; if (typeof code === 'string') assert.equal(actual, code, result.stderr); else assert.ok(code.includes(actual), result.stderr); }
 export function alterReceipt(root: string, receipt: Receipt, patch: Readonly<Record<string, unknown>>) {
   const path = join(root, '.git/concord/issue-plan/v1/planned', `${receipt.receiptId}.json`);
   writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')) as object, ...patch }));

@@ -13,7 +13,7 @@ const action = (root: string, input: unknown) => runApplication(executeViewActio
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('configuration writes reject retired fields and stale digests without changing bytes', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const current = Schema.decodeUnknownSync(Config)((await runApplication(executeQuery(root, { name: 'config.show', input: {} }))).value);
   assert.deepEqual(current.config, {});
   await action(root, { action: 'config.set', config: { testRoots: [] }, expectedDigest: current.digest });
@@ -27,7 +27,7 @@ test('configuration writes reject retired fields and stale digests without chang
 
 // @use-case docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
 test('owner relation helpers persist only current owner fields', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   for (const [kind, id, extra] of [
     ['feature', 'cart', {}], ['use-case', 'add', { feature: 'cart' }], ['memory', 'choice', {}],
   ] as const) await action(root, { action: 'document.create', kind, id, title: id, ...extra });
@@ -45,7 +45,7 @@ test('owner relation helpers persist only current owner fields', async () => {
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
 test('Design creation produces one directly editable tradeoff page', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   await action(root, { action: 'document.create', kind: 'design', id: 'storage', title: 'storage' });
   assert.equal(existsSync(join(root, 'docs/design/storage.md')), true);
   assert.equal(existsSync(join(root, 'docs/design/storage')), false);

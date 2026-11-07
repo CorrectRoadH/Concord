@@ -6,26 +6,26 @@ import { fromMarkdown, markdownBody, ConcordError, parseReference, digest, inRep
 import { CONTRACT_KINDS, changed, loadDocuments, readDocumentReference, readDocumentSelector } from '../documents/index.ts';
 import type { Nodes } from 'mdast';
 
-export function linkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueRelation['role'] = 'investigation'): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export async function linkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueRelation['role'] = 'investigation'): Promise<MutationReceipt> {
+  return (await inRepositorySnapshot(repo, async () => {
     const record = readDocumentSelector(repo, selector, 'issue');
     if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
     const target = readDocumentReference(repo, reference, role === 'related' ? ['issue'] : role === 'spec' ? CONTRACT_KINDS : ['memory']);
     if (role === 'related' && target.path === record.path) throw new ConcordError('InvalidReferenceTarget', 'related requires another Issue');
     const canonical = parseReference(reference).ref;
     if (record.metadata.relations.some(item => item.role === role && item.target === canonical)) throw new ConcordError('DuplicateLink', `${role}: ${canonical}`);
-    return changed(repo, 'link-issue', record, { ...record.metadata, relations: [...record.metadata.relations, { role, target: canonical }] }, record.body, dryRun);
-  });
+    return (await changed(repo, 'link-issue', record, { ...record.metadata, relations: [...record.metadata.relations, { role, target: canonical }] }, record.body, dryRun));
+  }));
 }
-export function unlinkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueRelation['role'] = 'investigation'): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export async function unlinkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueRelation['role'] = 'investigation'): Promise<MutationReceipt> {
+  return (await inRepositorySnapshot(repo, async () => {
     const record = readDocumentSelector(repo, selector, 'issue');
     if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
     const canonical = parseReference(reference).ref;
     const relations = record.metadata.relations.filter(item => item.role !== role || item.target !== canonical);
     if (relations.length === record.metadata.relations.length) throw new ConcordError('LinkNotFound', `${role}: ${canonical}`);
-    return changed(repo, 'unlink-issue', record, { ...record.metadata, relations }, record.body, dryRun);
-  });
+    return (await changed(repo, 'unlink-issue', record, { ...record.metadata, relations }, record.body, dryRun));
+  }));
 }
 
 /** Only authored links and owner relations retain an Issue; regression markers retain historical evidence. */
@@ -55,14 +55,14 @@ export function issueReferences(repo: Repository, target: string): readonly { pa
   }
   return references;
 }
-export function closeIssue(repo: LocalRepository, selector: string, reason = 'Handled', dryRun = false) {
-  return inRepositorySnapshot(repo, () => {
+export async function closeIssue(repo: LocalRepository, selector: string, reason = 'Handled', dryRun = false) {
+  return (await inRepositorySnapshot(repo, async () => {
     const record = readDocumentSelector(repo, selector, 'issue');
     const references = issueReferences(repo, record.path);
     if (references.length) throw new ConcordError('IssueReferenced', `${record.path} is still linked`, { references });
     const before = repo.read(record.path);
     if (before === undefined || digest(before) !== record.digest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; reload and retry`);
     const conclusion = `Closed ${record.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
-    return { ...repo.publishIssueClose(record.path, dryRun), conclusion };
-  });
+    return { ...(await repo.publishIssueClose(record.path, dryRun)), conclusion };
+  }));
 }

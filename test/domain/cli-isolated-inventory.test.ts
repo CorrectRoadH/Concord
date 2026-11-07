@@ -27,13 +27,13 @@ async function query<A>(root: string, request: QueryRequest, schema: Schema.Cons
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('local operations isolate unrelated malformed contracts and check reports every failure', async () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
   try {
-    for (const id of ['target', 'broken-a', 'broken-b']) createDocument(repo, 'feature', { id, title: id });
+    for (const id of ['target', 'broken-a', 'broken-b']) (await createDocument(repo, 'feature', { id, title: id }));
   } finally { repo.close(); }
   for (const id of ['broken-a', 'broken-b']) write(root, `docs/feature/${id}/README.md`, '---\nformat: concord.document/v1\nkind: feature\n---\n# Incomplete owner\n');
-  const reader = new LocalRepository(root, { access: 'read' });
+  const reader = (await LocalRepository.open(root, { access: 'read' }));
   try {
     const inventory = diagnoseDocuments(reader);
     assert.equal(inventory.complete, false);

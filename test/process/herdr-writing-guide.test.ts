@@ -1,7 +1,7 @@
 // 跨进程保证：外部程序——真实mod经宿主exec调用CLI初始化和读取指南，并在会话重开时连接工作区。
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
-import { registerHooks } from 'node:module';
+import { plugin } from 'bun';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -88,13 +88,11 @@ test('source mod initializes through the real CLI, reopens without the guide and
   const global = globalThis as typeof globalThis & { __concordGuideHost?: typeof host };
   global.__concordGuideHost = host;
   const exports: Record<string, string[]> = { 'gpui-kit': ['View', 'div'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'props', 'theme'] };
-  const hooks = registerHooks({
-    resolve(specifier, cx, next) { return exports[specifier] ? { url: `concord-guide-host:${specifier}`, shortCircuit: true } : next(specifier, cx); },
-    load(url, cx, next) {
-      const names = exports[url.replace('concord-guide-host:', '')];
-      return names ? { format: 'module', source: names.map(name => `export const ${name} = globalThis.__concordGuideHost.${name};`).join('\n'), shortCircuit: true } : next(url, cx);
-    },
-  });
+  plugin({ name: 'concord-test-herdr-host', setup(build) {
+    for (const [specifier, members] of Object.entries(exports)) {
+      build.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(members.map(name => [name, host[name as keyof typeof host]])) }));
+    }
+  } });
   const wait = (condition: () => boolean) => pollUntil(() => condition() ? Promise.resolve(true) : Promise.resolve(undefined), { timeoutMs: 45_000, description: 'source mod guide state' }).catch(cause => {
     throw new Error(`Source mod did not reach the expected state: ${output?.text()}\nCalls: ${JSON.stringify(calls)}\nHost errors: ${errors.map(String).join('\n')}`, { cause });
   });
@@ -159,7 +157,7 @@ test('source mod initializes through the real CLI, reopens without the guide and
     assert.deepEqual(errors, []);
   } finally {
     await close();
-    hooks.deregister(); delete global.__concordGuideHost;
+    plugin.clearAll(); delete global.__concordGuideHost;
     stopWorkspaceServer(root);
     rmSync(root, { recursive: true, force: true });
     rmSync(hostRoot, { recursive: true, force: true });

@@ -10,9 +10,9 @@ import { AnnotatedCaseSchema, ConcordError, failure, type Repository } from '../
 
 const Counter = Schema.Struct({ status: Schema.String, hits: Schema.Number, misses: Schema.Number, path: Schema.String, detail: Schema.optional(Schema.String) });
 const Projection = Schema.Struct({ cases: Schema.Array(AnnotatedCaseSchema), findings: Schema.Array(Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int) })), files: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })), digest: Schema.String, cache: Counter, codeCache: Counter });
-function compile(repo: Repository): typeof Projection.Type {
-  const annotations = scanAnnotations(repo, { cache: 'rebuild' });
-  const code = scanCode(repo, { cache: 'rebuild' });
+async function compile(repo: Repository): Promise<typeof Projection.Type> {
+  const annotations = (await scanAnnotations(repo, { cache: 'rebuild' }));
+  const code = (await scanCode(repo, { cache: 'rebuild' }));
   return { ...annotations, codeCache: code.cache };
 }
 
@@ -24,15 +24,15 @@ export function finishCacheRebuild(input: unknown, status: CacheStatus): typeof 
   return { ...value, cacheStatus: status };
 }
 
-export function rebuildCache(repo: Repository): ReturnType<typeof finishCacheRebuild> {
+export async function rebuildCache(repo: Repository): Promise<ReturnType<typeof finishCacheRebuild>> {
   try { PersistentCache.repository(repo).prepareWrite({ create: true }); }
   catch (cause) { throw new ConcordError('CacheRebuildUnavailable', 'Cache rebuild cannot obtain the persistent cache', { reason: cause instanceof HawdbFailure ? cause.code : 'HawdbUnavailable', message: cause instanceof Error ? cause.message : String(cause) }); }
-  const value = compile(repo);
+  const value = (await compile(repo));
   return finishCacheRebuild(value, cacheStatus(repo));
 }
 
 /** Computes derivations only; the caller's persistent owner publishes the batches. */
 export const computeCacheRebuild = Effect.fn('computeCacheRebuild')(function*(root: string) {
   const repo = yield* (yield* Workspace).openRead(root, { access: 'read', optimistic: true });
-  return yield* (yield* Sources).snapshot(repo, Effect.try({ try: () => compile(repo), catch: failure }));
+  return yield* (yield* Sources).snapshot(repo, Effect.tryPromise({ try: async () => (await compile(repo)), catch: failure }).pipe(Effect.uninterruptible));
 });

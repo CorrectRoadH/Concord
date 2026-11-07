@@ -6,7 +6,7 @@ import { runCli } from '../support/cli.ts';
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
 // CASES lsp-integration C6, C12, C16, C18.
 test('analysis runner ownership survives cancellation and rejects coordinated A-B-A publication', () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = consumer(), auditPath = join(tmpdir(), `concord-lsp-lifecycle-${process.pid}.json`);
+  const root = (await consumer()), auditPath = join(tmpdir(), `concord-lsp-lifecycle-${process.pid}.json`);
   const start = () => {
     const child = spawn(process.execPath, [cli, '--root', root, '--json', 'code', 'analyze'], { stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
@@ -18,7 +18,7 @@ test('analysis runner ownership survives cancellation and rejects coordinated A-
     });
     return { child, done, output: () => output };
   };
-  let active: ReturnType<typeof start> | undefined;
+  let active: Awaited<ReturnType<typeof start>> | undefined;
   const waitStarted = async () => await pollUntil(async () => {
     try {
       const log = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ pid: Schema.Number })), { onExcessProperty: 'ignore' })(JSON.parse(readFileSync(auditPath, 'utf8')));
@@ -27,7 +27,7 @@ test('analysis runner ownership survives cancellation and rejects coordinated A-
   }, { timeoutMs: 15000, description: 'server initialized' });
   try {
     const config = server('timeout');
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...config, initializationOptions: { mode: 'timeout', auditPath }, budgets: { totalMs: 10000, requestMs: 5000 } }] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [{ ...config, initializationOptions: { mode: 'timeout', auditPath }, budgets: { totalMs: 10000, requestMs: 5000 } }] });
     active = start(); const group = await waitStarted();
     assert.equal(call(root, ['code', 'analyze'], failure, 1).error, 'RepositoryBusy');
     // Source reads still work while the external server is waiting.
@@ -37,7 +37,7 @@ test('analysis runner ownership survives cancellation and rejects coordinated A-
     assert.equal(call(root, ['recover'], Schema.Struct({ status: Schema.String })).status, 'clean');
     rmSync(auditPath, { force: true });
     const slow = server(), gatePath = join(root, '.git/continue-analysis');
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...slow, initializationOptions: { auditPath, gatePath }, budgets: { totalMs: 30000, requestMs: 10000 } }] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [{ ...slow, initializationOptions: { auditPath, gatePath }, budgets: { totalMs: 30000, requestMs: 10000 } }] });
     const original = readFileSync(join(root, target), 'utf8');
     const body = original.trim();
     const document = Schema.Struct({ document: Schema.Struct({ digest: Schema.String }) });
@@ -65,11 +65,11 @@ test('analysis runner ownership survives cancellation and rejects coordinated A-
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
 // CASES lsp-integration C1, C2, C14, C18.
 test('explicit analysis attempts a configured executable and releases ownership when it is missing', async () => {
-  const root = consumer();
+  const root = (await consumer());
   try {
     const profiles = [['python', '.py', '#'], ['go', '.go', '//'], ['rust', '.rs', '//'], ['java', '.java', '//']] as const;
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: profiles.map(([languageId, extension, prefix]) => ({ ...server(), id: languageId, languageId, extensions: [extension], argv: ['concord-server-that-must-not-start'], profile: { ...server().profile, commentPrefixes: [prefix] } })) });
-    const invoke = (args: readonly string[]) => runCli({ argv: ['--root', root, '--json', '--fresh', ...args], cwd: process.cwd(), env: process.env, signal: AbortSignal.timeout(30_000) });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: profiles.map(([languageId, extension, prefix]) => ({ ...server(), id: languageId, languageId, extensions: [extension], argv: ['concord-server-that-must-not-start'], profile: { ...server().profile, commentPrefixes: [prefix] } })) });
+    const invoke = async (args: readonly string[]) => runCli({ argv: ['--root', root, '--json', '--fresh', ...args], cwd: process.cwd(), env: process.env, signal: AbortSignal.timeout(30_000) });
     const analyzed = await invoke(['code', 'analyze']);
     assert.equal(analyzed.exitCode, 1, analyzed.stdout + analyzed.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(failure))(analyzed.stderr || analyzed.stdout).error, 'LanguageServerFailed');

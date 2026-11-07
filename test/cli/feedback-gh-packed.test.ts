@@ -10,7 +10,7 @@ import { createConsumer } from '../support/consumer.ts';
 
 // @feature docs/feature/feedback/cli.md
 test('packed public CLI rejects a credential-env option for gh transport', { skip: process.platform === 'win32' }, async () => {
-  const { scratch, consumer, env } = ghFixture(createConsumer);
+  const { scratch, consumer, env } = (await ghFixture(createConsumer));
   try {
     const invalid = await runCli({ argv: ['--root', consumer, '--json', 'feedback', 'connection', 'add', '--id', 'bad-gh', '--provider', 'github', '--transport', 'gh', '--credential-env', 'BAD', '--owner', 'acme', '--repo', 'widgets'], cwd: consumer, env, signal: AbortSignal.timeout(30_000) });
     assert.notEqual(invalid.exitCode, 0);

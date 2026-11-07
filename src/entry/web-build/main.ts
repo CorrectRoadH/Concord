@@ -1,7 +1,7 @@
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { ConfigProvider, Effect, Layer, Schema } from 'effect';
-import { SourceWebBuilder, SourceWebBuilderLive } from '../../base/installation/index.ts';
+import { SourceWebBuilder, SourceWebBuilderLive } from '../../base/installation/source-web-builder.ts';
 
 // NodeRuntime owns signal interruption and scope teardown. Parent death travels
 // over the private IPC channel, including when the service itself was SIGKILLed.

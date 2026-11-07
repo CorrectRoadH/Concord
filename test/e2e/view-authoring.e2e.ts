@@ -11,7 +11,7 @@ import { prepareAuthoringFixture } from './authoring-fixture.ts';
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser creates a Feature, edits Markdown, preserves conflicts and opens Git changes', async ({ page, workspace }) => {
   const root = workspace.root;
-  prepareAuthoringFixture(root);
+  (await prepareAuthoringFixture(root));
   let server: ViewServerHandle | undefined;
 
   server = await workspace.ready();

@@ -7,6 +7,7 @@ import test from 'node:test';
 import { hawdbTarget } from '../../src/base/installation/index.ts';
 import { installationResources } from '../support/source-resources.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';
+import { sourceCliCommand } from '../support/source-consumer.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { Schema } from 'effect';
 
@@ -17,7 +18,8 @@ test('broken source native artifacts keep current queries local and reject serve
     const installed = join(scratch, 'source');
     const cli = privateSourceInstallation(installed), root = join(scratch, 'consumer');
     mkdirSync(root); execFileSync('git', ['init', '-q', root]);
-    const invoke = (...args: string[]) => spawnSync(process.execPath, ['--conditions=concord-source', '--import', new URL('../support/source-runtime.ts', import.meta.url).href, cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20_000, env: { ...process.env, NODE_OPTIONS: '' } });
+    const [command, ...prefix] = sourceCliCommand(cli);
+    const invoke = (...args: string[]) => spawnSync(command, [...prefix, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20_000, env: { ...process.env, NODE_OPTIONS: '' } });
     const initialized = invoke('init', '--docs-only');
     assert.equal(initialized.status, 0, initialized.stdout + initialized.stderr);
     const binary = join(installationResources(installed).native, hawdbTarget(), 'hawdb.node');

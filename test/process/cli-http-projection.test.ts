@@ -4,7 +4,7 @@ import { assert, spawn, test, once, Schema, waitForWorkspaceProjection, fetchFre
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('packed HTTP workspace projection reads the shared generation and holds warm budgets', async t => {
- const root = consumer('packed-projection');
+ const root = (await consumer('packed-projection'));
  (await call(root,['new', 'feature','projected','--title','Projected','--pages','architecture'],Ack));
  const server = spawn(globalThis.process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
  const exited = once(server, 'exit');

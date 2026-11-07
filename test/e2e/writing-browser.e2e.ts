@@ -84,9 +84,9 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
   const interceptedPromise = new Promise<void>(resolve => { intercepted = resolve; });
   await first.route('**/api/action', async route => {
     const input = route.request().postDataJSON() as { action?: string };
-    if (input.action !== 'document.set') return route.continue();
+    if (input.action !== 'document.set') return (await route.continue());
     await new Promise<void>(resolve => { release = resolve; intercepted(); });
-    return route.continue();
+    return (await route.continue());
   });
   const heldPolicy = browserActionReceipt(first, 'document.set', input => input.path === 'docs/writing.md' && String(input.body).includes('Saved during request'));
   await first.getByLabel(`替换建议 ${rule}`).fill('Saved during request');
@@ -172,9 +172,9 @@ test('post-save derived refresh cannot adopt an unseen writer digest as the draf
 
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    writeWritingFile(repo, { roots: ['docs'], bannedTerms: [{ term: 'Old', use: 'Seed', why: '初始规则' }] }, showWriting(repo).digest);
+    (await writeWritingFile(repo, { roots: ['docs'], bannedTerms: [{ term: 'Old', use: 'Seed', why: '初始规则' }] }, showWriting(repo).digest));
   } finally { repo.close(); }
   server = await workspace.ready();
 
@@ -189,11 +189,11 @@ test('post-save derived refresh cannot adopt an unseen writer digest as the draf
     const input = route.request().postDataJSON() as { action?: string };
     if (input.action === 'writing.show' && interceptRefresh) {
       interceptRefresh = false;
-      const other = new LocalRepository(root);
+      const other = (await LocalRepository.open(root));
       try {
         const current = showWriting(other);
         if (current.state !== 'valid') throw new Error('Expected saved writing policy');
-        writeWritingFile(other, { ...current.policy, bannedTerms: [{ term: 'Old', use: 'External', why: '另一写者' }] }, current.digest);
+        (await writeWritingFile(other, { ...current.policy, bannedTerms: [{ term: 'Old', use: 'External', why: '另一写者' }] }, current.digest));
       } finally { other.close(); }
       externalWritten();
     }

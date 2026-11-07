@@ -5,6 +5,10 @@ import { Effect } from 'effect';
 
 export const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
 export const sourceCli = (owner = sourceRoot): string => join(owner, 'src/entry/cli/entry.ts');
+export const sourceCliCommand = (entry = sourceCli(), runtime: readonly string[] = []): [string, ...string[]] => [
+  'bun', '--no-env-file', '--config=/dev/null', '--conditions=concord-source',
+  '--preload', fileURLToPath(new URL('./source-runtime.ts', import.meta.url)), ...runtime, entry,
+];
 
 // Directly selected tests and their product children resolve the public source exports too.
 Effect.runSync(Effect.sync(() => {
@@ -27,11 +31,11 @@ export function prepareSourceConsumer(directory: string, dependencies: readonly 
     }
     if (dependencies.length) cpSync(join(sourceRoot, 'node_modules/.bin'), join(modules, '.bin'), { recursive: true });
     mkdirSync(join(modules, '.bin'), { recursive: true });
-    const cli = sourceCli();
-    if (process.platform === 'win32') writeFileSync(join(modules, '.bin/concord.cmd'), `@"${process.execPath}" --conditions=concord-source "${cli}" %*\r\n`);
+    const command = sourceCliCommand();
+    if (process.platform === 'win32') writeFileSync(join(modules, '.bin/concord.cmd'), `@${command.map(value => `"${value}"`).join(' ')} %*\r\n`);
     else {
       const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
-      writeFileSync(join(modules, '.bin/concord'), `#!/bin/sh\nexec ${quote(process.execPath)} --conditions=concord-source ${quote(cli)} "$@"\n`);
+      writeFileSync(join(modules, '.bin/concord'), `#!/bin/sh\nexec ${command.map(quote).join(' ')} "$@"\n`);
       chmodSync(join(modules, '.bin/concord'), 0o755);
     }
   }));

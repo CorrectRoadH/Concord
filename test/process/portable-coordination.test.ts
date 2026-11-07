@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from '../support/builtin-mocks.ts';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
@@ -47,8 +47,8 @@ function holder(root: string, recover = false): ChildProcess {
   return spawn(process.execPath, ['--input-type=module', '-e', `
     import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts';
     try {
-      if (process.argv[2] === 'recover') recoverPublicationLeaseSync(process.argv[1]);
-      const lease = acquireTraceLeaseSync(process.argv[1], 'exclusive', 'consumer');
+      if (process.argv[2] === 'recover') recoverPublicationLeaseSync(process.argv[1], process.env);
+      const lease = acquireTraceLeaseSync(process.argv[1], 'exclusive', 'consumer', undefined, undefined, process.env);
       console.log('held');
       process.stdin.once('data', () => { releaseTraceLeaseSync(lease, 'consumer'); process.exit(0); });
     } catch (error) { console.log('refused:' + error.message); process.exit(0); }
@@ -63,11 +63,11 @@ async function stop(child: ChildProcess): Promise<void> {
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name publication-wait-does-not-reclaim-later-deaths
 test('acquisition waiting does not reclaim an owner that arrived after its first dead-owner recovery', async t => {
-  const root = fixture(t);
+  const root = (await fixture(t));
   const dead = holder(root);
   assert.equal(await line(dead), 'held');
   await stop(dead);
-  const path = join(tracePrivateDirectorySync(root), 'publication.lease');
+  const path = join(tracePrivateDirectorySync(root, process.env), 'publication.lease');
   const original = fs.rmdirSync;
   let token = '';
   fs.rmdirSync = (target) => {
@@ -76,7 +76,7 @@ test('acquisition waiting does not reclaim an owner that arrived after its first
       token = 'starting';
       const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
         import { acquireTraceLeaseSync } from './src/base/publication/index.ts';
-        console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'new-dead-owner').owner.token);
+        console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'new-dead-owner', undefined, undefined, process.env).owner.token);
       `, root], { cwd: process.cwd(), encoding: 'utf8', timeout: 15000 });
       assert.equal(child.status, 0, child.stderr);
       token = child.stdout.trim();
@@ -84,48 +84,48 @@ test('acquisition waiting does not reclaim an owner that arrived after its first
   };
   syncBuiltinESMExports();
   try {
-    await assert.rejects(runApplication(waitForPublication(reclaimDead => Effect.try({
-      try: () => new LocalRepository(root, { reclaimPublication: reclaimDead }), catch: failure,
+    await assert.rejects(runApplication(waitForPublication(reclaimDead => Effect.tryPromise({
+      try: async () => (await LocalRepository.open(root, { reclaimPublication: reclaimDead })), catch: failure,
     }))), { code: 'RepositoryBusy' });
     assert.ok(existsSync(join(path, `${token}.json`)));
   } finally { fs.rmdirSync = original; syncBuiltinESMExports(); }
-  assert.deepEqual(recoverPublicationLeaseSync(root), [token]);
+  assert.deepEqual(recoverPublicationLeaseSync(root, process.env), [token]);
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name ordinary-query-reclaims-dead-publication
 test('ordinary built CLI reads despite a killed publication owner and preserves its token', async t => {
-  const root = fixture(t);
+  const root = (await fixture(t));
   const dead = holder(root);
   try {
     assert.equal(await line(dead), 'held');
     await stop(dead);
     const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'list', 'memory'], { encoding: 'utf8', timeout: 15000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(existsSync(join(tracePrivateDirectorySync(root), 'publication.lease')), true);
-  } finally { await stop(dead); recoverPublicationLeaseSync(root); }
+    assert.equal(existsSync(join(tracePrivateDirectorySync(root, process.env), 'publication.lease')), true);
+  } finally { await stop(dead); recoverPublicationLeaseSync(root, process.env); }
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name live-publication-wait-is-bounded
 test('built CLI reads without waiting for live publication owners and preserves their tokens', async t => {
-  const root = fixture(t);
+  const root = (await fixture(t));
   const live = holder(root);
   try {
     assert.equal(await line(live), 'held');
-    const path = join(tracePrivateDirectorySync(root), 'publication.lease');
+    const path = join(tracePrivateDirectorySync(root, process.env), 'publication.lease');
     const before = readdirSync(path);
     const started = performance.now();
     const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'list', 'memory'], { encoding: 'utf8', timeout: 15000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.deepEqual(readdirSync(path), before);
-  } finally { await stop(live); recoverPublicationLeaseSync(root); }
+  } finally { await stop(live); recoverPublicationLeaseSync(root, process.env); }
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name ordinary-query-waits-for-publication
 test('built CLI succeeds when a contending writer finishes within the acquisition deadline', async t => {
-  const root = fixture(t);
+  const root = (await fixture(t));
   const live = holder(root);
   try {
     assert.equal(await line(live), 'held');
@@ -142,20 +142,20 @@ test('built CLI succeeds when a contending writer finishes within the acquisitio
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('real owner death and competing recoverers never grant two live writers', async t => {
-  const root = fixture(t);
+  const root = (await fixture(t));
   const dead = holder(root);
   assert.equal(await line(dead), 'held');
-  assert.throws(() => new LocalRepository(root), { code: 'RepositoryBusy' });
+  (await assert.rejects(async () => (await LocalRepository.open(root)), { code: 'RepositoryBusy' }));
   await stop(dead);
   const first = holder(root, true), second = holder(root, true);
   try {
     const results = await Promise.all([line(first), line(second)]);
     assert.equal(results.filter(value => value === 'held').length, 1, results.join('\n'));
-    assert.throws(() => recoverPublicationLeaseSync(root), /busy/);
-    assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'third'), /busy/);
+    assert.throws(() => recoverPublicationLeaseSync(root, process.env), /busy/);
+    assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'third', undefined, undefined, process.env), /busy/);
   } finally { await Promise.all([stop(first), stop(second)]); }
-  recoverPublicationLeaseSync(root);
-  const next = acquireTraceLeaseSync(root, 'exclusive', 'after-recovery')!;
+  recoverPublicationLeaseSync(root, process.env);
+  const next = acquireTraceLeaseSync(root, 'exclusive', 'after-recovery', undefined, undefined, process.env)!;
   releaseTraceLeaseSync(next, 'after-recovery');
 });
 

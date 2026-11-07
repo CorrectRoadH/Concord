@@ -1,8 +1,8 @@
 // 跨进程保证：OS 锁与互斥——两个真实apply进程竞争同一receipt时仅一个消费并向gh写入一次。
 import { sourceCli, sourceRoot, prepareSourceConsumer, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, statSync, tmpdir, join, resolve, test, Effect, Schema, makeOwnedProcessService, LocalRepository, initialize, setConfig, showConfig, type Call, type Receipt, connection, issue, scratch, bin, scenarioFile, callsFile, packedCli, consumer, mode, calls, writes, cli, plan, execute, error, alterReceipt } from '../support/issue-remote-fixture.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed execute aborts on read budgets and preserves rejection when outcome publication fails', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer('outcome-errors'); mode(); const receipt = plan(root, 'close');
+test('packed execute aborts on read budgets and preserves rejection when outcome publication fails', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer('outcome-errors')); mode(); const receipt = plan(root, 'close');
   writeFileSync(scenarioFile, JSON.stringify({ issue: issue(), oversize: true }));
   error(execute(root, receipt), 'IssueRemoteBudgetExceeded'); assert.equal(writes().length, 0);
   const outcome = JSON.parse(readFileSync(join(root, '.git/concord/issue-plan/v1/consumed', `${receipt.receiptId}.outcome.json`), 'utf8')) as { state: string; code: string };
@@ -15,7 +15,7 @@ test('packed execute aborts on read budgets and preserves rejection when outcome
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 test('packed concurrent execute consumes the receipt exactly once across processes', async () => {
-  const root = consumer('concurrent'); mode(); const receipt = plan(root, 'close');
+  const root = (await consumer('concurrent')); mode(); const receipt = plan(root, 'close');
   const service = makeOwnedProcessService();
   const argv = [process.execPath, packedCli, '--root', root, 'issue', 'remote', 'apply', receipt.receiptId, '--connection', connection.id, '--authorize', receipt.authorize, '--json'];
   const results = await Effect.runPromise(Effect.all([1, 2].map(() => Effect.scoped(service.run(argv, { cwd: root, env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` }, timeoutMs: 20_000 }))), { concurrency: 2 }));

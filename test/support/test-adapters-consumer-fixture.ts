@@ -52,9 +52,9 @@ export const prepare = Effect.fn('adapterTest.consumer')(function* (scratch: str
   });
   return root;
 });
-export const configure = (root: string, adapters: readonly TestAdapter[], sourceIgnore: readonly string[] = []) => {
+export const configure = async (root: string, adapters: readonly TestAdapter[], sourceIgnore: readonly string[] = []) => {
   const configPath = join(root, 'concord.config.ts');
-  const config = existsSync(configPath) ? parseTypeScriptConfig(readFileSync(configPath, 'utf8')) : {};
+  const config = existsSync(configPath) ? (await parseTypeScriptConfig(readFileSync(configPath, 'utf8'))) : {};
   writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig(Schema.decodeUnknownSync(ProjectSchema)({ ...config, runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 60000 }, testAdapters: adapters, sourceIgnore })));
 };
 export const call = Effect.fn('adapterTest.call')(function* (root: string, cli: string, args: readonly string[]) {

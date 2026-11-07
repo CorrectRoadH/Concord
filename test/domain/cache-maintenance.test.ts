@@ -15,11 +15,11 @@ import { Effect } from 'effect';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
-function fixture() {
+async function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-maintenance-')));
   execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [], sourceRoots: [] }); } finally { repo.close(); }
+  const repo = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(repo, false, { testRoots: [], sourceRoots: [] })); } finally { repo.close(); }
   const path = join(root, '.git/concord/cache.hawdb');
   const db = openHawdb(path, { readOnly: false, create: true }, nativeRuntime);
   db.put('config_cache', [{ key: 'retained', payload: 'a current logical value' }]); db.close();
@@ -32,7 +32,7 @@ const read = (path: string) => {
 };
 
 // @feature docs/feature/local-data-engine/cli.md#缓存状态
-test('physical status counts internal hard links once and reports the reclamation threshold without a physical limit', () => Effect.runPromise(Effect.sync(() => {
+test('physical status counts internal hard links once and reports the reclamation threshold without a physical limit', () => Effect.runPromise(Effect.tryPromise(async () => {
   const fixtureRoot = realpathSync(mkdtempSync(join(tmpdir(), 'concord-physical-')));
   const path = join(fixtureRoot, 'cache.hawdb');
   try {
@@ -43,9 +43,9 @@ test('physical status counts internal hard links once and reports the reclamatio
     linkSync(join(path, 'one'), join(fixtureRoot, 'outside'));
     assert.throws(() => cachePhysicalBytes(fixtureRoot), { code: 'UnsafePath' });
   } finally { rmSync(fixtureRoot, { recursive: true, force: true }); }
-  const f = fixture();
+  const f = (await fixture());
   try {
-    const repo = new LocalRepository(f.root, { access: 'read' });
+    const repo = (await LocalRepository.open(f.root, { access: 'read' }));
     try {
       const report = cacheStatus(repo, nativeRuntime);
       assert.equal(Reflect.get(report, 'reclaimThresholdBytes'), 1024 * 1024 * 1024);
@@ -56,8 +56,8 @@ test('physical status counts internal hard links once and reports the reclamatio
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('default-limits native reclamation preserves logical rows and refuses memory or readonly handles', () => Effect.runPromise(Effect.sync(() => {
-  const f = fixture();
+test('default-limits native reclamation preserves logical rows and refuses memory or readonly handles', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const f = (await fixture());
   try {
     const db = openHawdb(f.path, { readOnly: false, create: false }, nativeRuntime);
     try {
@@ -78,7 +78,7 @@ test('default-limits native reclamation preserves logical rows and refuses memor
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('native sweep budget and I/O failures defer even an oversized cache and release the handle', async () => {
-  const f = fixture();
+  const f = (await fixture());
   const db = openHawdb(f.path, { readOnly: false, create: false }, nativeRuntime);
   const boundary = Object.getPrototypeOf(db) as { reclaim: typeof db.reclaim };
   const reclaim = boundary.reclaim;
@@ -99,7 +99,7 @@ test('native sweep budget and I/O failures defer even an oversized cache and rel
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 // @issue docs/issues/maintenance-restarts-computation.md
 test('reclamation preserves an arbitrarily large cache and waits for 256 MiB of further growth', async () => {
-  const f = fixture();
+  const f = (await fixture());
   try {
     pad(f.padding, 1024 * 1024 * 1024 + 1);
     assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), true);

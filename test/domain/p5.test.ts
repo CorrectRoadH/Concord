@@ -14,14 +14,14 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/web-workbench/use-case/embed-p5-sketch.md
 test('p5 compiler checks captured modules, resources, options and repository boundaries without executing code', () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const document = 'docs/feature/sketch/README.md';
   const write = (path: string, source: string | Buffer) => { const target = join(root, 'docs/feature/sketch', path); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, source); };
   const compile = (code: string, meta = '') => runApplication(compileP5(root, { document, code, meta }));
   try {
     writeProjectConfig(root, { testRoots: [] });
-    const repo = new LocalRepository(root);
-    try { createDocument(repo, 'feature', { id: 'sketch', title: 'Sketch' }); }
+    const repo = (await LocalRepository.open(root));
+    try { (await createDocument(repo, 'feature', { id: 'sketch', title: 'Sketch' })); }
     finally { repo.close(); }
     const before = readFileSync(join(root, document), 'utf8');
     const inline = await compile('p.setup = () => { p.createCanvas(20, 20); p.noLoop(); }; p.draw = () => p.background(30);');
@@ -55,7 +55,7 @@ test('p5 compiler checks captured modules, resources, options and repository bou
     assert.ok(external.files.includes('docs/feature/sketch/demo/color.ts'));
     assert.match(external.javascript, /data:image\/png/);
     write('addon.js', 'window.customAddon = true;');
-    writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound', 'p5.brush', './docs/feature/sketch/addon.js'] } });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), p5: { libraries: ['p5.sound', 'p5.brush', './docs/feature/sketch/addon.js'] } });
     const libraries = await compile('p.setup = () => p.noLoop();');
     assert.deepEqual(libraries.libraries.map(library => library.name), ['p5.sound@0.4.1', 'p5.brush@3.0.0', 'docs/feature/sketch/addon.js']);
     await assert.rejects(compile('p.setup = () => { const value: number = "wrong"; };'), /P5TypeError|not assignable/);
@@ -68,14 +68,14 @@ test('p5 compiler checks captured modules, resources, options and repository bou
     await assert.rejects(compile('', 'src="https://example.com/main.ts"'), /relative repository imports/);
     await assert.rejects(compile('import "react";'), /relative repository imports/);
     await assert.rejects(compile('', 'libraries="p5.sound"'), /libraries belong in project configuration/);
-    writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['unknown'] } });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), p5: { libraries: ['unknown'] } });
     await assert.rejects(compile(''), /Unknown bundled library/);
-    writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: [] } });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), p5: { libraries: [] } });
     await assert.rejects(compile('', 'mode="global" mode="instance"'), /unique/);
     symlinkSync(join(root, 'docs/feature/sketch/demo'), join(root, 'docs/feature/sketch/linked'));
     await assert.rejects(compile('', 'src="./linked/main.ts"'), /Symbolic links/);
     assert.equal(readFileSync(join(root, document), 'utf8'), before);
-    const writable = new LocalRepository(root);
+    const writable = (await LocalRepository.open(root));
     try { writable.snapshot(() => assert.ok(writable.read(document))); } finally { writable.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

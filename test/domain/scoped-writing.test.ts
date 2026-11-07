@@ -24,65 +24,65 @@ const parserRuntime = makeParserRuntime(process.cwd(), process.env);
 const json = (value: unknown): string => typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`;
 const policy = (extra: Record<string, unknown> = {}) => ({ bannedTerms: [], ...extra });
 const concept = (id: string, term: string, deprecated: string[] = []) => ({ id, term, definition: `${id} meaning`, deprecated });
-const catalog = (concepts: ReturnType<typeof concept>[]) => `# Terms\n${concepts.map(item => `\n## ${item.term} {#${item.id}}\n\n${item.definition}\n${item.deprecated.length ? `\n旧写法：${item.deprecated.map(word => `\`${word}\``).join('、')}\n` : ''}`).join('')}`;
-const fixture = () => {
-  const root = createConsumer();
+const catalog = (concepts: Awaited<ReturnType<typeof concept>>[]) => `# Terms\n${concepts.map(item => `\n## ${item.term} {#${item.id}}\n\n${item.definition}\n${item.deprecated.length ? `\n旧写法：${item.deprecated.map(word => `\`${word}\``).join('、')}\n` : ''}`).join('')}`;
+const fixture = async () => {
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: [] });
   rmSync(join(root, 'docs/writing.md'));
   return root;
 };
-const withRepo = <T>(root: string, run: (repo: LocalRepository) => T, options = {}) => {
-  const repo = new LocalRepository(root, options);
-  try { return run(repo); } finally { repo.close(); }
+const withRepo = async <T>(root: string, run: (repo: LocalRepository) => T, options = {}) => {
+  const repo = (await LocalRepository.open(root, options));
+  try { return await run(repo); } finally { repo.close(); }
 };
 const write = (root: string, path: string, source: string) => { mkdirSync(join(root, path, ".."), { recursive: true }); writeFileSync(join(root, path), source); };
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('project selection composes ancestor rules while explicit managed selection stays narrow', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
+test('project selection composes ancestor rules while explicit managed selection stays narrow', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await fixture());
   try {
     write(root, 'docs/feature/a/page.md', 'bad old Feedback.\n');
     write(root, 'docs/feature/b/page.md', 'bad OldFeedback Feedback.\n');
-    withRepo(root, repo => writeWritingFile(repo, { ...policy(), roots: ['docs/feature/a', 'docs/feature/b'], bannedTerms: [{ term: 'bad', use: 'good', why: 'global' }], }, null));
-    withRepo(root, repo => writeWritingFile(repo, { ...policy(), bannedTerms: [{ term: 'old', use: 'new', why: 'local' }] }, null, false, 'docs/feature/a/writing.md'));
+    (await withRepo(root, async repo => (await writeWritingFile(repo, { ...policy(), roots: ['docs/feature/a', 'docs/feature/b'], bannedTerms: [{ term: 'bad', use: 'good', why: 'global' }], }, null))));
+    (await withRepo(root, async repo => (await writeWritingFile(repo, { ...policy(), bannedTerms: [{ term: 'old', use: 'new', why: 'local' }] }, null, false, 'docs/feature/a/writing.md'))));
     const b = catalog([concept('feedback', 'Feedback', ['OldFeedback'])]);
-    withRepo(root, repo => writeConceptFile(repo, b, null, false, 'docs/feature/b/concepts.md'));
-    withRepo(root, repo => writeConceptFile(repo, catalog([]), null, false, 'docs/feature/a/concepts.md'));
-    const scopes = withRepo(root, writingIndex).scopes;
+    (await withRepo(root, async repo => (await writeConceptFile(repo, b, null, false, 'docs/feature/b/concepts.md'))));
+    (await withRepo(root, async repo => (await writeConceptFile(repo, catalog([]), null, false, 'docs/feature/a/concepts.md'))));
+    const scopes = (await withRepo(root, writingIndex)).scopes;
     assert(scopes.some(item => item.scope === 'docs/feature/b' && item.hasCatalog && !item.hasPolicy));
-    const project = withRepo(root, checkWriting);
+    const project = (await withRepo(root, checkWriting));
     assert.deepEqual(project.selectedRoots, ['docs/feature/a', 'docs/feature/b']);
     assert(project.findings.some(item => item.file === 'docs/feature/b/page.md' && item.message.includes('bad')));
     assert(project.findings.some(item => item.file === 'docs/feature/a/page.md' && item.message.includes('old')));
     assert(project.findings.some(item => item.file === 'docs/feature/b/page.md' && item.message.includes('OldFeedback')));
     assert(!project.findings.some(item => item.rule === 'unusedConcept'));
-    const narrow = withRepo(root, repo => checkWriting(repo, 'docs/feature/a/writing.md'));
+    const narrow = (await withRepo(root, repo => checkWriting(repo, 'docs/feature/a/writing.md')));
     assert.equal(narrow.mode, 'managed');
     assert.deepEqual(narrow.selectedRoots, ['docs/feature/a']);
     assert(!narrow.findings.some(item => item.file === 'docs/feature/b/page.md'));
-    assert.deepEqual(withRepo(root, indexConcepts).concepts.map(item => item.reference), ['docs/feature/b/concepts.md#feedback']);
+    assert.deepEqual((await withRepo(root, indexConcepts)).concepts.map(item => item.reference), ['docs/feature/b/concepts.md#feedback']);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('writing snapshots exclude SVG and CSS content and membership', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
+test('writing snapshots exclude SVG and CSS content and membership', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await fixture());
   try {
     write(root, 'apps/docs-site/zh/page.md', '外部词说明。\n');
     write(root, 'apps/docs-site/zh/figure.svg', '<svg><text class="label">外部词</text></svg>');
     write(root, 'docs/feature/a/page.md', '甲词说明。\n');
     write(root, 'docs/feature/a/figure.svg', '<svg><text class="label">乙词</text></svg>');
     write(root, 'docs/feature/b/page.md', '乙词说明。\n');
-    withRepo(root, repo => writeWritingFile(repo, { ...policy(), roots: ['apps/docs-site/zh', 'docs/feature/a', 'docs/feature/b'] }, null));
-    withRepo(root, repo => writeConceptFile(repo, catalog([]), null, false, 'docs/feature/a/concepts.md'));
-    withRepo(root, repo => writeConceptFile(repo, catalog([]), null, false, 'docs/feature/b/concepts.md'));
-    const report = withRepo(root, checkWriting);
+    (await withRepo(root, async repo => (await writeWritingFile(repo, { ...policy(), roots: ['apps/docs-site/zh', 'docs/feature/a', 'docs/feature/b'] }, null))));
+    (await withRepo(root, async repo => (await writeConceptFile(repo, catalog([]), null, false, 'docs/feature/a/concepts.md'))));
+    (await withRepo(root, async repo => (await writeConceptFile(repo, catalog([]), null, false, 'docs/feature/b/concepts.md'))));
+    const report = (await withRepo(root, checkWriting));
     assert.equal(report.files, 5);
     assert.equal(report.findings.length, 0);
     write(root, 'docs/feature/a/figure.svg', '<svg>changed</svg>');
     write(root, 'docs/feature/a/another.svg', '<svg/>');
     write(root, 'docs/feature/a/style.css', 'changed');
-    assert.equal(withRepo(root, checkWriting).inputDigest, report.inputDigest);
+    assert.equal((await withRepo(root, checkWriting)).inputDigest, report.inputDigest);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
@@ -94,19 +94,19 @@ test('single spelling and deprecated uniqueness use the same normalization', () 
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('missing and invalid local catalog show inherited projections without blocking repair', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), path = 'docs/feature/a/nested/concepts.md';
+test('missing and invalid local catalog show inherited projections without blocking repair', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await fixture()), path = 'docs/feature/a/nested/concepts.md';
   try {
-    const globalShow = withRepo(root, showConcepts);
-    withRepo(root, repo => writeConceptFile(repo, catalog([concept('global', 'Global')]), globalShow.digest));
-    withRepo(root, repo => writeConceptFile(repo, catalog([concept('shared', 'Shared')]), null, false, 'docs/feature/b/concepts.md'));
-    withRepo(root, repo => writeConceptFile(repo, catalog([concept('local', 'Local')]), null, false, 'docs/feature/a/concepts.md'));
-    const missing = withRepo(root, repo => showConcepts(repo, path));
+    const globalShow = (await withRepo(root, showConcepts));
+    (await withRepo(root, async repo => (await writeConceptFile(repo, catalog([concept('global', 'Global')]), globalShow.digest))));
+    (await withRepo(root, async repo => (await writeConceptFile(repo, catalog([concept('shared', 'Shared')]), null, false, 'docs/feature/b/concepts.md'))));
+    (await withRepo(root, async repo => (await writeConceptFile(repo, catalog([concept('local', 'Local')]), null, false, 'docs/feature/a/concepts.md'))));
+    const missing = (await withRepo(root, repo => showConcepts(repo, path)));
     assert.equal(missing.state, 'missing');
     assert.deepEqual(missing.effectiveConcepts.map(item => item.reference).sort(), ['docs/concepts.md#global', 'docs/feature/a/concepts.md#local'].sort());
     write(root, path, '{ broken');
     write(root, 'docs/feature/other/concepts.md', '{ unrelated broken');
-    const invalid = withRepo(root, repo => showConcepts(repo, path));
+    const invalid = (await withRepo(root, repo => showConcepts(repo, path)));
     assert.equal(invalid.state, 'invalid');
     assert.equal(invalid.source, '{ broken');
     assert.equal(invalid.effectiveConcepts.length, 2);
@@ -116,22 +116,22 @@ test('missing and invalid local catalog show inherited projections without block
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('overlapping effective concepts expose ambiguity and actual term conflicts with both sources', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
+test('overlapping effective concepts expose ambiguity and actual term conflicts with both sources', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await fixture());
   try {
     write(root, 'docs/feature/a/page.md', 'Label appears.\n');
     write(root, 'docs/feature/b/page.md', 'Label appears.\n');
-    withRepo(root, repo => writeWritingFile(repo, { ...policy(), roots: ['docs/feature/a', 'docs/feature/b'] }, null));
+    (await withRepo(root, async repo => (await writeWritingFile(repo, { ...policy(), roots: ['docs/feature/a', 'docs/feature/b'] }, null))));
     const global = catalog([concept('global-label', 'Label')]);
     const local = catalog([concept('local-label', 'Label')]);
-    const globalShow = withRepo(root, showConcepts);
-    withRepo(root, repo => writeConceptFile(repo, global, globalShow.digest));
-    withRepo(root, repo => writeConceptFile(repo, local, null, false, 'docs/feature/a/concepts.md'));
-    const index = withRepo(root, indexConcepts);
+    const globalShow = (await withRepo(root, showConcepts));
+    (await withRepo(root, async repo => (await writeConceptFile(repo, global, globalShow.digest))));
+    (await withRepo(root, async repo => (await writeConceptFile(repo, local, null, false, 'docs/feature/a/concepts.md'))));
+    const index = (await withRepo(root, indexConcepts));
     const ambiguity = index.diagnostics.find(item => item.code === 'AmbiguousConceptName');
     assert.equal(ambiguity?.scope, 'docs/feature/a');
     assert.equal(ambiguity?.sources.length, 2);
-    const report = withRepo(root, checkWriting);
+    const report = (await withRepo(root, checkWriting));
     const conflict = report.findings.find(item => item.file === 'docs/feature/a/page.md' && item.rule === 'writingConflict');
     assert.equal(conflict?.sources?.length, 2);
     assert(!report.findings.some(item => item.file === 'docs/feature/b/page.md' && item.rule === 'writingConflict'));
@@ -140,11 +140,11 @@ test('overlapping effective concepts expose ambiguity and actual term conflicts 
 
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('init creates only the exact empty global catalog and preserves a pre-existing invalid owner', () => Effect.runPromise(Effect.sync(() => {
-  const fresh = fixture();
+test('init creates only the exact empty global catalog and preserves a pre-existing invalid owner', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const fresh = (await fixture());
   try {
     assert.equal(readFileSync(join(fresh, 'docs/concepts.md'), 'utf8'), EMPTY_CONCEPT_CATALOG);
-    withRepo(fresh, repo => repo.publish('set-markdown', [{ path: 'docs/concepts.md', before: repo.read('docs/concepts.md')!, after: json(catalog([])) }]));
+    (await withRepo(fresh, async repo => (await repo.publish('set-markdown', [{ path: 'docs/concepts.md', before: repo.read('docs/concepts.md')!, after: json(catalog([])) }]))));
     assert.equal(readFileSync(join(fresh, 'docs/concepts.md'), 'utf8'), json(catalog([])));
   } finally { rmSync(fresh, { recursive: true, force: true }); }
   // Initial catalogs and initialization recovery are the inputs under test, before any template exists.
@@ -152,9 +152,9 @@ test('init creates only the exact empty global catalog and preserves a pre-exist
   try {
     execFileSync('git', ['init', '-q', root]);
     write(root, 'docs/concepts.md', '{ broken');
-    const repo = new LocalRepository(root, { initialize: true });
+    const repo = (await LocalRepository.open(root, { initialize: true }));
     try {
-      const receipt = initialize(repo, false, { testRoots: [] });
+      const receipt = (await initialize(repo, false, { testRoots: [] }));
       assert(receipt.preservedPaths.includes('docs/concepts.md'));
       assert(!receipt.createdPaths.includes('docs/concepts.md'));
     } finally { repo.close(); }
@@ -163,8 +163,8 @@ test('init creates only the exact empty global catalog and preserves a pre-exist
   const forgedRoot = mkdtempSync(join(tmpdir(), 'concord-init-forged-catalog-'));
   try {
     execFileSync('git', ['init', '-q', forgedRoot]);
-    const initial = new LocalRepository(forgedRoot, { initialize: true, dryRun: true });
-    const preview = (() => { try { return initialize(initial, true, { testRoots: [] }); } finally { initial.close(); } })();
+    const initial = (await LocalRepository.open(forgedRoot, { initialize: true, dryRun: true }));
+    const preview = await (async () => { try { return (await initialize(initial, true, { testRoots: [] })); } finally { initial.close(); } })();
     const configSource = renderTypeScriptConfig(preview.config);
     const after = json(catalog([concept('forged', 'Forged')]));
     const journalPath = join(forgedRoot, '.git/concord/journal.json');
@@ -173,7 +173,7 @@ test('init creates only the exact empty global catalog and preserves a pre-exist
       { path: 'concord.config.ts', before: null, after: configSource, beforeDigest: null, afterDigest: digest(configSource), mode: 0o644 },
       { path: 'docs/concepts.md', before: null, after, beforeDigest: null, afterDigest: digest(after), mode: 0o644 },
     ] }));
-    assert.throws(() => new LocalRepository(forgedRoot, { recover: true }), { code: 'RecoveryConflict' });
+    (await assert.rejects(async () => (await LocalRepository.open(forgedRoot, { recover: true })), { code: 'RecoveryConflict' }));
     assert.equal(existsSync(journalPath), true);
     assert.equal(existsSync(join(forgedRoot, 'docs/concepts.md')), false);
   } finally { rmSync(forgedRoot, { recursive: true, force: true }); }

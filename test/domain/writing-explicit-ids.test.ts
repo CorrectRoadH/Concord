@@ -8,8 +8,8 @@ import { createConsumer } from '../support/consumer.ts';
 import { LocalRepository } from '../support/repository.ts';
 
 // @feature docs/feature/documentation-quality/format.md#匹配
-test('explicit heading and step IDs are excluded while authored terminology remains checked', () => {
-  const root = createConsumer();
+test('explicit heading and step IDs are excluded while authored terminology remains checked', async () => {
+  const root = (await createConsumer());
   const path = 'docs/feature/sample/use-case/checkout.md';
   const write = (path: string, source: string) => {
     mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -45,7 +45,7 @@ test('explicit heading and step IDs are excluded while authored terminology rema
       '## [Label {#receipt}](#preimage)',
       '',
     ].join('\n'));
-    const repo = new LocalRepository(root, { persistentCache: 'off' });
+    const repo = (await LocalRepository.open(root, { persistentCache: 'off' }));
     try {
       const report = checkWriting(repo, undefined, false);
       assert.deepEqual(report.findings.filter(item => item.rule === 'bannedTerm').map(item => ({ file: item.file, line: item.line, term: item.message.split(':')[0] })), [

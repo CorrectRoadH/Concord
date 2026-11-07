@@ -6,9 +6,9 @@ import { dirname, extname, join, posix } from "node:path";
 import { Effect } from "effect";
 import { build, type Loader } from "esbuild";
 import * as ts from 'typescript/ast';
-import type { RawCompilerOptions } from "typescript/sync";
+import type { RawCompilerOptions } from "typescript/async";
 import { createFileSystem } from "typescript/fs";
-import { nativeTypeScript, typescriptLibraries, typescriptRequest, withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../base/process/index.ts";
+import { nativeTypeScript, typescriptLibraries, typescriptRequest, withTypeScript, withTypeScriptFiles, withTypeScriptSource, withTypeScriptResource } from "../base/process/index.ts";
 import { openReadRepository } from "../base/workspace/index.ts";
 import { getViewFile } from "./application.ts";
 import { ConcordError, decode, failure } from "../model/index.ts";
@@ -26,7 +26,7 @@ const loaders: Readonly<Record<string, Loader>> = {
 };
 const hooks = ['setup', 'draw', 'mouseMoved', 'mouseDragged', 'mousePressed', 'mouseReleased', 'mouseClicked', 'doubleClicked', 'mouseWheel', 'keyPressed', 'keyReleased', 'keyTyped', 'touchStarted', 'touchMoved', 'touchEnded', 'windowResized', 'deviceMoved', 'deviceTurned', 'deviceShaken'];
 
-function sketchSource(source: string, mode: 'instance' | 'global', inline: boolean): string {
+function sketchSource(source: string, mode: 'instance' | 'global', inline: boolean): Promise<string> {
   return withTypeScriptSource('sketch.ts', source, ast => {
   if (mode === 'global') {
     const declared = hooks.filter(name => ast.statements.some(statement =>
@@ -43,17 +43,17 @@ function sketchSource(source: string, mode: 'instance' | 'global', inline: boole
 }
 
 /** Type checking reads only the captured graph and trusted compiler/p5 declarations. */
-function checkTypes(declarations: ReadonlyMap<string, string>, sources: Map<string, string>, resolutions: Map<string, string>, global: boolean, captureType: (specifier: string, importer: string) => { path: string; source: string }): void {
+async function checkTypes(declarations: ReadonlyMap<string, string>, sources: Map<string, string>, resolutions: Map<string, string>, global: boolean, captureType: (specifier: string, importer: string) => { path: string; source: string }): Promise<void> {
   const { DiagnosticCategory, ModuleKind, ModuleResolutionKind } = nativeTypeScript();
   const p5Types = join(builtAssetRoot('p5-types'), 'p5.d.ts').replaceAll('\\', '/');
   const globalTypes = join(dirname(p5Types), 'global.d.ts').replaceAll('\\', '/');
   // Freeze the full type closure before handing a total filesystem to the compiler.
-  withTypeScript(() => {
+  await withTypeScript(async () => {
     const visited = new Set<string>();
     for (const [path, source] of sources) {
       if (visited.has(path) || path.endsWith('.json')) continue;
       visited.add(path);
-      const names = withTypeScriptSource(path, source, ast => {
+      const names = await withTypeScriptSource(path, source, ast => {
         const names = new Set<string>();
         const visit = (node: ts.Node): void => {
           if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) names.add(node.moduleSpecifier.text);
@@ -93,19 +93,23 @@ function checkTypes(declarations: ReadonlyMap<string, string>, sources: Map<stri
     const [importer, name] = key.split('\0');
     fixed.set(`${posix.dirname(`/${importer!}`)}\0${name!}`, `/${target}`);
   }
-  withTypeScriptFiles(virtual, api => {
-    using resolver = typescriptRequest(() => api.createModuleResolver(options, { resolveModuleName: (name, directory) => {
+  await withTypeScriptFiles(virtual, async api => {
+    const resolver = await typescriptRequest(() => api.createModuleResolver(options, { resolveModuleName: (name, directory) => {
       if (name === 'p5' || directory === dirname(p5Types) && name === './p5.js') return { resolvedFileName: p5Types };
       const target = fixed.get(`${directory}\0${name}`);
       return target && /\.(?:ts|js|mjs|json)$/u.test(target) ? { resolvedFileName: target } : undefined;
     } }));
-    using snapshot = typescriptRequest(() => api.createSnapshot({ fileSystem: createFileSystem([...virtual]), createPrograms: [{ rootFiles: [...sources.keys()].map(path => `/${path}`).concat(ambient, ...(global ? [globalTypes] : [])), compilerOptions: options, options: { moduleResolver: resolver } }] }));
+    await withTypeScriptResource(resolver, async () => {
+    const snapshot = await typescriptRequest(() => api.createSnapshot({ fileSystem: createFileSystem([...virtual]), createPrograms: [{ rootFiles: [...sources.keys()].map(path => `/${path}`).concat(ambient, ...(global ? [globalTypes] : [])), compilerOptions: options, options: { moduleResolver: resolver } }] }));
+    await withTypeScriptResource(snapshot, async () => {
     const program = snapshot.operation.createdPrograms[0];
-    const errors = typescriptRequest(() => [...program.getProgramDiagnostics(), ...program.getGlobalDiagnostics(), ...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]).filter(d => d.category === DiagnosticCategory.Error);
+    const errors = (await typescriptRequest(async () => [...await program.getProgramDiagnostics(), ...await program.getGlobalDiagnostics(), ...await program.getSyntacticDiagnostics(), ...await program.getSemanticDiagnostics()])).filter(d => d.category === DiagnosticCategory.Error);
     if (errors.length) throw new ConcordError('P5TypeError', errors.slice(0, 20).map(d => {
       const where = d.fileName && d.startPosition ? `${d.fileName.replace(/^\//u, '')}:${d.startPosition.line + 1}: ` : '';
       return where + d.text;
     }).join('\n'));
+    });
+    });
   });
 }
 
@@ -153,7 +157,7 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
   const mode = options.mode ?? 'instance';
   const entry = yield* Effect.try({ try: () => options.src ? resolveImport(options.src, document.path) : posix.join(posix.dirname(document.path), '__inline_p5__.ts'), catch: failure });
   if (!/\.(ts|js|mjs)$/u.test(entry)) return yield* Effect.fail(new ConcordError('P5EntryInvalid', 'Sketch entry must be TypeScript or JavaScript'));
-  const source = yield* Effect.try({ try: () => sketchSource(options.src ? read(entry)!.toString('utf8') : request.code, mode, !options.src), catch: failure });
+  const source = yield* Effect.tryPromise({ try: () => sketchSource(options.src ? read(entry)!.toString('utf8') : request.code, mode, !options.src), catch: failure }).pipe(Effect.uninterruptible);
   const bundled = new Map<string, string>();
   for (const name of repo.config.p5?.libraries ?? []) if (Object.hasOwn(P5_LIBRARIES, name)) {
     const library = P5_LIBRARIES[name as keyof typeof P5_LIBRARIES];
@@ -193,9 +197,9 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
         return { contents, loader };
       });
     } }],
-  }), catch: cause => new ConcordError('P5CompileFailed', cause instanceof Error ? cause.message : String(cause)) });
-  yield* Effect.try({ try: () => {
-    checkTypes(declarations, sources, resolutions, mode === 'global', (specifier, importer) => {
+  }), catch: cause => new ConcordError('P5CompileFailed', cause instanceof Error ? cause.message : String(cause)) }).pipe(Effect.uninterruptible);
+  yield* Effect.tryPromise({ try: async () => {
+    await checkTypes(declarations, sources, resolutions, mode === 'global', (specifier, importer) => {
       const path = resolveImport(specifier, importer);
       return { path, source: read(path)!.toString('utf8') };
     });
@@ -207,7 +211,7 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
         if (before === undefined ? stat !== undefined : after === undefined || !before.equals(after)) throw new ConcordError('P5SourceChanged', 'Sketch inputs changed during compilation; run again');
       }
     });
-  }, catch: failure });
+  }, catch: failure }).pipe(Effect.uninterruptible);
   const javascript = output.outputFiles.find(file => file.path.endsWith('.js'))?.text ?? '';
   const css = output.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '';
   if (Buffer.byteLength(javascript) + Buffer.byteLength(css) + libraries.reduce((size, library) => size + Buffer.byteLength(library.source), 0) > 16 * 1024 * 1024) return yield* Effect.fail(new ConcordError('P5BudgetExceeded', 'Compiled sketch exceeds 16 MiB'));

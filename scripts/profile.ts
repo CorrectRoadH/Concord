@@ -1,4 +1,7 @@
 import { packageBin } from './package-location.ts';
+import { archiveTarget } from './archive-support.ts';
+import { bunCompilerIdentity, compilationArguments } from './compile-application.ts';
+import { compiledStartupReceipts } from './compile-startup.ts';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +12,7 @@ import { Effect, FileSystem, Schema } from 'effect';
 import { loadBudgets } from './perf/budgets.ts';
 import { environment, loadArtifact } from './perf/artifact.ts';
 import { combineProfiles, CpuProfile, hotSpots } from './perf/cpu-profile.ts';
-import { io, PerfError, timedRun } from './perf/process.ts';
+import { io, mustRun, PerfError, timedRun } from './perf/process.ts';
 import { executeScenario, loadScenarios, makeContext, runArguments, cliCommand } from './perf/scenario.ts';
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.ts';
 import { buildForMeasurement } from './measurement-build.ts';
@@ -22,7 +25,7 @@ const CounterRecord = Schema.Struct({
   voluntaryContextSwitches: NonNegative, involuntaryContextSwitches: NonNegative,
   fs: Schema.Record(Schema.String, Schema.Struct({ count: Schema.Int, ms: NonNegative })),
 });
-/** NODE_OPTIONS is inherited by nested refresh processes; benchmark runs never load these probes. */
+/** A private compiled executable carries profiler flags into its internal children. */
 const main = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const separator = process.argv.indexOf('--');
@@ -43,7 +46,6 @@ const main = Effect.gen(function*() {
   const runs = join(workDir, 'runs');
   yield* fs.makeDirectory(runs);
   const candidatePackage = yield* buildForMeasurement(resolve('.'), runs);
-  const candidate = yield* loadArtifact('candidate', '.', yield* packageBin(candidatePackage));
   // Output artifacts intentionally survive; only the work directory is disposable.
   const dir = values.out === undefined ? yield* fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-profile-out-' }) : resolve(values.out);
   yield* fs.makeDirectory(dir, { recursive: true });
@@ -54,12 +56,24 @@ const main = Effect.gen(function*() {
     platform: 'node', format: 'esm', target: 'node24', logLevel: 'silent',
     deps: { alwaysBundle: /.*/u, onlyBundle: false }, outputOptions: { entryFileNames: '[name].mjs' },
   }).pipe(Effect.mapError(cause => new PerfError({ message: `Build profile preload: ${String(cause)}` })));
-  // Stop owned services before collecting profiles: V8 writes them on exit.
+  const profilePackage = join(workDir, 'profile-install');
+  yield* fs.copy(candidatePackage, profilePackage, { overwrite: false });
+  const profileEntry = yield* packageBin(profilePackage);
+  const repository = resolve('.');
+  const target = archiveTarget(`${process.platform}-${process.arch}`);
+  yield* bunCompilerIdentity(repository, target);
+  const receipts = yield* compiledStartupReceipts(repository);
+  const compiled = yield* mustRun(['bun', ...compilationArguments(target, profileEntry),
+    '--define', `CONCORD_STARTUP_RECEIPTS=${JSON.stringify(receipts)}`,
+    `--compile-exec-argv=--cpu-prof --cpu-prof-dir=${JSON.stringify(out)} --preload=${JSON.stringify(counter)}`,
+  ], { cwd: repository, outputDir: runs, timeoutMs: 120_000 });
+  yield* io('Report profile compilation', () => process.stderr.write(compiled.stdout + compiled.stderr));
+  const candidate = yield* loadArtifact('candidate', repository, profileEntry);
+  // Stop owned services before collecting profiles: Bun writes them on exit.
   const { consumer, run } = yield* Effect.gen(function*() {
   const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
   const command = cliCommand(candidate, consumer.root, args);
   const env = {
-    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --cpu-prof --cpu-prof-dir=${JSON.stringify(out)} --import ${JSON.stringify(counter)}`,
     CONCORD_PERF_COUNTER_DIR: out, CONCORD_PERF_COUNTER_ROOT: consumer.root,
   };
   const run = yield* Effect.gen(function*() {

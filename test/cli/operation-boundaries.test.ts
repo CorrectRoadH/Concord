@@ -10,15 +10,15 @@ import { Effect } from 'effect';
 import { LocalRepository } from '../support/repository.ts';
 
 async function withConsumerAsync(run: (root: string) => Promise<void>): Promise<void> {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     await run(root);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
-function withRepo(root: string, run: (repo: LocalRepository) => void, access: 'read' | 'write' = 'write'): void {
-  const repo = new LocalRepository(root, { access });
-  try { run(repo); } finally { repo.close(); }
+async function withRepo(root: string, run: (repo: LocalRepository) => void, access: 'read' | 'write' = 'write'): Promise<void> {
+  const repo = (await LocalRepository.open(root, { access }));
+  try { await run(repo); } finally { repo.close(); }
 }
 
 function write(root: string, path: string, source: string): void {
@@ -34,8 +34,8 @@ async function call(root: string, args: readonly string[], status: number, input
 }
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('CLI and action preserve partial inventory diagnostics and healthy documents', () => runApplication(Effect.promise(() => withConsumerAsync(async root => {
-    withRepo(root, repo => createDocument(repo, 'feature', { id: 'healthy', title: 'Healthy', pages: [] }));
+test('CLI and action preserve partial inventory diagnostics and healthy documents', () => runApplication(Effect.promise(async () => withConsumerAsync(async root => {
+    (await withRepo(root, async repo => (await createDocument(repo, 'feature', { id: 'healthy', title: 'Healthy', pages: [] }))));
     const bad = 'docs/feature/broken/README.md';
     write(root, bad, '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
     const command = JSON.parse((await call(root, ['check'], 1)).stdout) as { ok: boolean; complete?: boolean; documents: number; findings: { path: string; code: string }[] };

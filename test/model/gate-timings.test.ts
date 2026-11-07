@@ -42,14 +42,14 @@ test('missing, failed, mismatched and untimed observations remain unknown rather
     summarizeFileTimings([file], [{ ...failed, success: true }], 'node-file-elapsed-sum', false),
     summarizeFileTimings([file], [{ ...failed, success: true, metric: 'browser-attempt-sum' }], 'node-file-elapsed-sum'),
     summarizeFileTimings([file], [{ ...failed, success: true, unknownAttempts: 1 }], 'browser-attempt-sum'),
-    timingMeasurement('serial-packaging-wallclock', [], 1),
+    timingMeasurement('suite-wallclock', [], 1),
   ]) {
     assert.equal(result.state, 'unknown');
     assert.equal(result.duration_ms, null);
   }
   const partial = summarizeFileTimings([file], [failed], 'node-file-elapsed-sum');
   assert.equal(partial.observed_duration_ms, 15);
-  assert.equal(timingMeasurement('serial-packaging-wallclock', [], 0).state, 'not-selected');
+  assert.equal(timingMeasurement('suite-wallclock', [], 0).state, 'not-selected');
 })));
 
 // @feature docs/engineering/testing/README.md#成本与稳定

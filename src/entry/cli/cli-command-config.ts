@@ -11,7 +11,7 @@ const config = Command.make('config').pipe(Command.withDescription('Inspect or r
   Command.make('show', {}, () => withQuery({ name: 'config.show', input: {} })),
   Command.make('set', { input: text('input'), expectedDigest: text('if-unchanged') }, args => withRepo((repo, settings) => Effect.gen(function*() {
     const source = yield* body(args.input);
-    return yield* sync(() => setConfig(repo, decode(ProjectSchema, JSON.parse(source), 'configuration input'), args.expectedDigest, settings.dryRun));
+    return yield* sync(async () => (await setConfig(repo, decode(ProjectSchema, JSON.parse(source), 'configuration input'), args.expectedDigest, settings.dryRun)));
   }))),
 ]));
 

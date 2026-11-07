@@ -11,12 +11,12 @@ import { inspectWorkflowSkills } from './workflow-skills.ts';
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#结果
 // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#update
-export function doctor(repo: Repository, trace?: ReturnType<typeof buildTrace>, cache: 'use' | 'off' = 'off', environment: Readonly<Record<string, string | undefined>> = {}) {
+export async function doctor(repo: Repository, trace?: Awaited<ReturnType<typeof buildTrace>>, cache: 'use' | 'off' = 'off', environment: Readonly<Record<string, string | undefined>> = {}) {
   if (repo.read('docs/taste.md') === undefined) {
     const guide = selectWritingGuide(repo.root, environment);
     return uninitializedDoctor({ root: repo.root, guide }, repo.runtimeVersion ?? 'unknown', repo.config);
   }
-  trace ??= buildTrace(repo, 'off');
+  trace ??= (await buildTrace(repo, 'off'));
   const { documents, annotations, codeDeclarations, findings } = trace;
   const missingTestRoots = repo.config.testRoots.filter(path => !(repo.exists?.(path) ?? repo.files(path).length > 0));
   const missingSourceRoots = (repo.config.sourceRoots ?? []).filter(path => !(repo.exists?.(path) ?? repo.files(path).length > 0));

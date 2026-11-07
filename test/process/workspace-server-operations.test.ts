@@ -16,7 +16,7 @@ import { recordPath, record, fixture, command, rpcModule, stop } from '../suppor
 
 // @feature docs/feature/local-data-engine/README.md
 test('CLI cache clear drains the running persistent owner and publishes a new generation under the same service token', { timeout: 25_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     assert.equal((await command(root, ['server', 'start'])).status, 0);
     const previous = await pollUntil(async () => {
@@ -45,7 +45,7 @@ test('C21 current query commands and a local writer share the persistent owner w
     assert.equal(initialized.status, 0, initialized.stderr);
     assert.equal((await command(root, ['server', 'start'])).status, 0);
     const simultaneous = await Promise.all([
-      command(root, ['list', 'feature']), command(root, ['config', 'show']),
+      (await command(root, ['list', 'feature'])), command(root, ['config', 'show']),
       command(root, ['taste']), command(root, ['test', 'list']),
       command(root, ['new', 'feature', 'service-query', '--title', 'Service query']),
     ]);
@@ -59,7 +59,7 @@ test('C21 current query commands and a local writer share the persistent owner w
 
 // @feature docs/feature/local-data-engine/README.md
 test('HTTP cache status and forced rebuild use the persistent workspace owner', { timeout: 30_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
     const running = record(root), rpc = await rpcModule();

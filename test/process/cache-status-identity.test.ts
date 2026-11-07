@@ -15,7 +15,7 @@ const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Status));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#status
 test('cache status identifies the actual CLI or workspace service owner', async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const local = await command(root, ['cache', 'status']);
     assert.equal(local.status, 0, local.stderr);

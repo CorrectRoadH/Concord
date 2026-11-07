@@ -41,12 +41,12 @@ import { checkProject } from "./project-check.ts";
 import { indexConcepts, showConcepts } from "../domain/concepts/index.ts";
 import type { RequestTiming } from "./request-timing.ts";
 
-const sync = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> => Effect.try({
-  try: evaluate,
+const sync = <A>(name: string, evaluate: () => A | Promise<A>): Effect.Effect<A, ConcordError> => Effect.tryPromise({
+  try: async () => await evaluate(),
   catch: failure,
-}).pipe(Effect.withSpan(name));
-const measuredSync = (timing?: RequestTiming) => <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> =>
-  sync(name, () => timing === undefined ? evaluate() : timing.sync(name, evaluate));
+}).pipe(Effect.uninterruptible, Effect.withSpan(name));
+const measuredSync = (timing?: RequestTiming) => <A>(name: string, evaluate: () => A | Promise<A>): Effect.Effect<A, ConcordError> =>
+  sync(name, () => timing === undefined ? evaluate() : timing.async(name, async () => await evaluate()));
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md
@@ -110,7 +110,7 @@ function withRepository<A, R>(root: string, operation: (repo: LocalRepository) =
 
 // @concord-code
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
-function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefined, name: string, evaluate: () => A): Effect.Effect<A, ConcordError, Sources> {
+function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefined, name: string, evaluate: () => A | Promise<A>): Effect.Effect<A, ConcordError, Sources> {
   return Effect.flatMap(Sources, sources => sources.snapshot(repo, measuredSync(timing)(name, evaluate)));
 }
 
@@ -158,29 +158,29 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
     };
   }
   return yield* withRepository(root, (repo) => Effect.gen(function*() {
-    const compile = () => repo.snapshot(() => {
+    const compile = async () => repo.snapshot(async () => {
     const currentConfigSource = repo.configSnapshot.source;
     const inspected = timing === undefined ? inspectDocuments(repo) : timing.sync('view.inspectDocuments', () => inspectDocuments(repo));
-    let cases: ReturnType<typeof scanAnnotations>;
-    let codes: ReturnType<typeof scanCode>['codes'];
-    let codeFiles: ReturnType<typeof scanCode>['files'];
-    let edges: ReturnType<typeof buildTrace>['edges'] = [];
+    let cases: Awaited<ReturnType<typeof scanAnnotations>>;
+    let codes: Awaited<ReturnType<typeof scanCode>>['codes'];
+    let codeFiles: Awaited<ReturnType<typeof scanCode>>['files'];
+    let edges: Awaited<ReturnType<typeof buildTrace>>['edges'] = [];
     let findings = [...inspected.findings];
     let diagnostics: unknown;
     try {
-      const compile = () => buildTrace(repo, cache, { timing, inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
-      const trace = timing === undefined ? compile() : timing.sync('view.buildTrace', compile);
+      const compile = async () => buildTrace(repo, cache, { timing, inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
+      const trace = await (timing === undefined ? compile() : timing.async('view.buildTrace', compile));
       timing?.cache(trace.codeCache, 'code');
       cases = trace.annotations;
       codes = trace.codeDeclarations;
       codeFiles = trace.codeFiles;
       edges = trace.edges;
       findings = [...trace.findings];
-      diagnostics = doctor(repo, trace, cache, environment.env);
+      diagnostics = await doctor(repo, trace, cache, environment.env);
     } catch (cause) {
       if (observe !== undefined && cause instanceof ConcordError && ['UnsafePath', 'RecoveryRequired', 'InvalidFile'].includes(cause.code)) throw cause;
-      cases = scanAnnotations(repo, { cache });
-      const code = scanCode(repo, { cache });
+      cases = await scanAnnotations(repo, { cache });
+      const code = await scanCode(repo, { cache });
       timing?.cache(code.cache, 'code');
       codes = code.codes;
       codeFiles = code.files;
@@ -302,48 +302,48 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>, environment: Readonly<Record<string, string | undefined>>): unknown {
+async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>, environment: Readonly<Record<string, string | undefined>>): Promise<unknown> {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
     case 'document.create': throw new ConcordError('InvalidInput', 'Creation must run in its Effect scope');
-    case 'memory.link': return linkMemory(repo, action.id, action.target, action.role, dryRun);
-    case 'issue.unlink': return unlinkIssue(repo, action.id, action.memory, dryRun, action.role);
-    case 'document.set': return setMarkdown(repo, action.path, action.body, action.expectedDigest, dryRun);
-    case 'roadmap.start': return adoptRoadmap(repo, action.id, action.feature, dryRun);
+    case 'memory.link': return (await linkMemory(repo, action.id, action.target, action.role, dryRun));
+    case 'issue.unlink': return (await unlinkIssue(repo, action.id, action.memory, dryRun, action.role));
+    case 'document.set': return (await setMarkdown(repo, action.path, action.body, action.expectedDigest, dryRun));
+    case 'roadmap.start': return (await adoptRoadmap(repo, action.id, action.feature, dryRun));
     case 'memory.index': return knowledgeIndex(repo, 'memory');
     case 'memory.search': return knowledgeSearchRecords(repo, 'memory', action.query);
-    case 'issue.link': return linkIssue(repo, action.id, action.memory, dryRun, action.role);
+    case 'issue.link': return (await linkIssue(repo, action.id, action.memory, dryRun, action.role));
     case 'issue.list': { const { action: _, ...filter } = action; return { operation: 'issue-list', drafts: listFeedback(repo, undefined, filter).map(item => item.document) }; }
     case 'feedback.list': { const { action: _, ...filter } = action; return { operation: 'feedback-list', feedback: listFeedback(repo, undefined, filter) }; }
     case 'issue.index': return knowledgeIndex(repo, 'issue');
     case 'issue.search': return knowledgeSearchRecords(repo, 'issue', action.query);
-    case 'issue.edit': return editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun);
-    case 'issue.remove': return removeIssue(repo, action.id, action.expectedDigest, dryRun);
-    case 'issue.close': return closeIssue(repo, action.id, action.reason, dryRun);
+    case 'issue.edit': return (await editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun));
+    case 'issue.remove': return (await removeIssue(repo, action.id, action.expectedDigest, dryRun));
+    case 'issue.close': return (await closeIssue(repo, action.id, action.reason, dryRun));
     case 'feedback.link': throw new ConcordError('CommandRetired', 'Use concord issue link <id> --role spec <target>', { command: 'concord feedback link', replacement: 'concord issue link <id> --role spec <target>' });
-    case 'source.set': return setSource(repo, action.path, action.body, action.expectedDigest, dryRun);
+    case 'source.set': return (await setSource(repo, action.path, action.body, action.expectedDigest, dryRun));
     case 'writing.index': return writingIndex(repo);
     case 'writing.show': return showWriting(repo, action.path);
     case 'writing.check': return checkWriting(repo, action.path);
     case 'concepts.index': return indexConcepts(repo);
     case 'concepts.show': return showConcepts(repo, action.path);
-    case 'config.set': return setConfig(repo, action.config, action.expectedDigest, dryRun);
+    case 'config.set': return (await setConfig(repo, action.config, action.expectedDigest, dryRun));
     case 'code.marker': return codeSnippet(repo, action.scope, action.contracts);
-    case 'code.at': return locateCode(repo, action.path, action.line);
+    case 'code.at': return (await locateCode(repo, action.path, action.line));
     case 'test.marker': return annotationSnippet(repo, action.contract, action.issues);
     case 'cache.status': return cacheStatus(repo);
     case 'cache.clear': return dryRun ? previewCacheClear(repo) : clearCache(repo);
-    case 'cache.rebuild': return rebuildCache(repo);
+    case 'cache.rebuild': return (await rebuildCache(repo));
     case 'check': {
-      return checkProject(repo);
+      return (await checkProject(repo));
     }
     case 'trace.check': {
-      const trace = buildTrace(repo);
+      const trace = (await buildTrace(repo));
       return { operation: 'trace-check', ok: trace.complete, complete: trace.complete, findings: trace.findings, edges: trace.edges };
     }
-    case 'trace.show': return traceShow(repo, action.reference);
-    case 'review': return { operation: 'review-render', markdown: renderReview(repo, action.reference) };
-    case 'doctor': return doctor(repo, undefined, 'off', environment);
+    case 'trace.show': return (await traceShow(repo, action.reference));
+    case 'review': return { operation: 'review-render', markdown: (await renderReview(repo, action.reference)) };
+    case 'doctor': return (await doctor(repo, undefined, 'off', environment));
   }
 }
 

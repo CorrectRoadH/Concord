@@ -15,8 +15,8 @@ import { Schema } from 'effect';
 const Report = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Json), cache: Schema.Struct({ status: Schema.String, detail: Schema.optionalKey(Schema.String) }) });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#hit
-test('a CLI current-source check falls back while another process holds the persistent database', () => {
-  const root = createConsumer();
+test('a CLI current-source check falls back while another process holds the persistent database', async () => {
+  const root = (await createConsumer());
   const runtime = makeRuntimeEnvironment(root, process.env);
   const call = (...argv: string[]) => spawnSync(process.execPath, [sourceCli(), '--root', root, '--json', ...argv], { encoding: 'utf8', timeout: 30_000 });
   try {

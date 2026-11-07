@@ -4,17 +4,6 @@
   "description": "Contract, test evidence, and engineering memory for a repository's development lifecycle.",
   "type": "module",
   "private": true,
-  "bin": {
-    "concord": "dist/entry/cli/entry.js"
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "docs",
-    "pnpm-workspace.yaml",
-    "templates",
-    "skills"
-  ],
   "packageManager": "pnpm@11.18.0",
   "scripts": {
     "build": "vp build",
@@ -47,7 +36,6 @@
     "@codemirror/view": "6.43.15",
     "@e2e-dev/web": "0.15.5",
     "@fontsource-variable/noto-sans-sc": "5.3.1",
-    "@jridgewell/sourcemap-codec": "1.6.0",
     "@lezer/highlight": "1.2.5",
     "@lezer/xml": "1.0.6",
     "@mdxeditor/editor": "4.5.0",
@@ -55,6 +43,7 @@
     "@stylexjs/stylex": "0.19.1",
     "@stylexjs/unplugin": "0.19.1",
     "@tailwindcss/vite": "4.3.4",
+    "@types/bun": "1.4.2",
     "@types/mdast": "4.0.4",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
@@ -92,12 +81,5 @@
     "vite": "npm:@voidzero-dev/vite-plus-core@1.5.0",
     "vite-plus": "1.5.0",
     "vitest": "5.1.0"
-  },
-  "imports": {
-    "#typescript-host": {
-      "concord-source": "./src/base/process/typescript-host.ts",
-      "types": "./dist/base/process/typescript-host.d.ts",
-      "default": "./dist/base/process/typescript-host.js"
-    }
   }
 }

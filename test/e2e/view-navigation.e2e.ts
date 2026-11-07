@@ -11,16 +11,16 @@ import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } fro
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('URL navigation saves the latest draft and restores nested drawers without local selection state', async ({ page, workspace }) => {
   const root = workspace.root;
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
     const body = '# Navigation\n\n' + 'A paragraph for restoring the reading position.\n\n'.repeat(60);
-    createDocument(repo, 'feature', { id: 'navigation', title: 'Navigation', body });
+    (await createDocument(repo, 'feature', { id: 'navigation', title: 'Navigation', body }));
     renameSync(join(root, 'docs/feature/navigation'), join(root, 'docs/feature/中文导航'));
-    createDocument(repo, 'use-case', { id: 'history', title: 'History', feature: '中文导航', body: body.replace('# Navigation', '# History') });
+    (await createDocument(repo, 'use-case', { id: 'history', title: 'History', feature: '中文导航', body: body.replace('# Navigation', '# History') }));
   } finally { repo.close(); }
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src/navigation.ts'), '// @concord-file\n// @concord-implements docs/feature/中文导航/use-case/history.md\nexport const navigation = true;\n');
-  writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'] });
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceRoots: ['src'] });
   const server = await workspace.ready();
 
   let release = () => {};

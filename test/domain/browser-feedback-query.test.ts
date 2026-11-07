@@ -21,15 +21,15 @@ const FeedbackList = Schema.Struct({
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md#browse
 test('feedback action filters the original source while a newer cached remote observation stays separate', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const path = join(root, 'docs/issues/remote-observation.md');
   try {
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
       openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: false, create: true }, makeRuntimeEnvironment(process.cwd(), process.env)).close();
-      createDocument(repo, 'feature', { id: 'target', title: 'Feedback target' });
-      createDocument(repo, 'issue', { id: 'remote-observation', title: 'Local title retained', body: 'Local notes retained.' });
-      createDocument(repo, 'issue', { id: 'local-unrelated', title: 'Unrelated local feedback' });
+      (await createDocument(repo, 'feature', { id: 'target', title: 'Feedback target' }));
+      (await createDocument(repo, 'issue', { id: 'remote-observation', title: 'Local title retained', body: 'Local notes retained.' }));
+      (await createDocument(repo, 'issue', { id: 'local-unrelated', title: 'Unrelated local feedback' }));
       const document = loadDocuments(repo).find(item => item.metadata.id === 'remote-observation');
       assert.ok(document?.metadata.kind === 'issue');
       const source: FeedbackSource = { provider: 'github', instance: 'https://api.github.com', id: '123', url: 'https://github.com/example/demo/issues/7', title: 'Original remote title', body: 'Original remote body', state: 'open', updatedAt: '2026-09-13T00:00:00.000Z', connectionId: 'fixture', importedAt: '2026-09-13T01:00:00.000Z' };

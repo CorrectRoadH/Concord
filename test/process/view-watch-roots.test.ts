@@ -25,19 +25,19 @@ test('View follows new nested directories, deletion and recreation, and changed 
   yield* Effect.sync(() => write(root, nestedPath, laterSource));
   yield* waitForSource(root, nestedPath, laterSource);
 
-  yield* Effect.sync(() => writeProjectConfig(root, { ...readProjectConfig(root), sourceIgnore: ['src/new'] }));
+  yield* Effect.tryPromise(async () => writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceIgnore: ['src/new'] }));
   yield* waitForPublished(root, 'sourceIgnore removes existing sources', value => value.snapshot.project?.sourceIgnore?.includes('src/new') === true
     && sourceDigest(value, nestedPath) === undefined);
-  yield* Effect.sync(() => writeProjectConfig(root, { ...readProjectConfig(root), sourceIgnore: [] }));
+  yield* Effect.tryPromise(async () => writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceIgnore: [] }));
   yield* waitForSource(root, nestedPath, laterSource);
   yield* Effect.sync(() => write(root, nestedPath, editedSource));
   yield* waitForSource(root, nestedPath, editedSource);
 
   const newPath = 'app/deep/current.ts';
   const newSource = 'export const current = 1;\n';
-  const changedConfig = yield* Effect.sync(() => {
+  const changedConfig = yield* Effect.tryPromise(async () => {
     write(root, newPath, newSource);
-    writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['app'] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceRoots: ['app'] });
     return readFileSync(join(root, 'concord.config.ts'), 'utf8');
   });
   yield* waitForPublished(root, 'changed sourceRoots', value => value.snapshot.configDigest === digest(changedConfig)

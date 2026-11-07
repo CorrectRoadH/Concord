@@ -10,8 +10,8 @@ import { LocalRepository } from '../support/repository.ts';
 import { createConsumer } from '../support/consumer.ts';
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
-test('synchronous repository consumers resolve a relative native cache from each caller directory', () => {
-  const root = createConsumer();
+test('synchronous repository consumers resolve a relative native cache from each caller directory', async () => {
+  const root = (await createConsumer());
   const source = nativeArtifactRoot(makeRuntimeEnvironment(process.cwd(), process.env));
   try {
     const callers = ['a', 'b'].map(name => {
@@ -27,7 +27,7 @@ test('synchronous repository consumers resolve a relative native cache from each
       const env: NodeJS.ProcessEnv = { ...process.env, XDG_CACHE_HOME: 'cache', CONCORD_REPOSITORY_CALLER: caller.value };
       delete env.HOME; delete env.USERPROFILE;
       const runtime = makeRuntimeEnvironment(caller.cwd, env);
-      const repo = new LocalRepository(root, { access: 'read', runtime });
+      const repo = (await LocalRepository.open(root, { access: 'read', runtime }));
       try {
         env.XDG_CACHE_HOME = 'changed-after-construction';
         const captured = repositoryRuntime(repo);

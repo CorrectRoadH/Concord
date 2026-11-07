@@ -14,11 +14,11 @@ import { fixture } from '../support/publication-ownership-fixture.ts';
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name recovery-reports-runner-blocker
 test('CLI recovery reports quarantined runner instead of claiming clean readiness', t => runApplication(Effect.promise(async () => {
-  const root = fixture(t);
-  const repo = new LocalRepository(root);
+  const root = (await fixture(t));
+  const repo = (await LocalRepository.open(root));
   try {
-    const run = repo.snapshot(() => beginRun(root));
-    repo.snapshot(() => finalizeRun(root, run, false));
+    const run = repo.snapshot(() => beginRun(root, process.env));
+    repo.snapshot(() => finalizeRun(root, run, false, process.env));
     const result = await runCli({ argv: ['--root', root, '--json', 'recover'], cwd: process.cwd(), env: process.env, stdin: '', signal: AbortSignal.timeout(15000) });
     assert.equal(result.exitCode, 1, result.stdout + result.stderr);
     const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.String })))(result.stdout);
@@ -26,7 +26,7 @@ test('CLI recovery reports quarantined runner instead of claiming clean readines
     assert.ok(existsSync(join(run.lease.path, `${run.lease.owner.token}.json`)));
     const observed = await runCli({ argv: ['--root', root, '--json', 'list', 'memory'], cwd: process.cwd(), env: process.env, stdin: '', signal: AbortSignal.timeout(15000) });
     assert.equal(observed.exitCode, 0, observed.stderr);
-    assert.throws(() => repo.publish('still-blocked', [{ path: 'memory/blocked.md', before: null, after: 'no' }]), { code: 'CleanupFailed' });
+    (await assert.rejects(async () => (await repo.publish('still-blocked', [{ path: 'memory/blocked.md', before: null, after: 'no' }])), { code: 'CleanupFailed' }));
   } finally { repo.close(); }
 })));
 
@@ -34,11 +34,11 @@ test('CLI recovery reports quarantined runner instead of claiming clean readines
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('recovery preserves prepared and committed journals when runner cleanup is unknown', t => runApplication(Effect.promise(async () => {
   for (const phase of ['prepared', 'committed']) {
-    const root = fixture(t);
-    const repo = new LocalRepository(root);
+    const root = (await fixture(t));
+    const repo = (await LocalRepository.open(root));
     try {
-      const run = repo.snapshot(() => beginRun(root));
-      repo.snapshot(() => finalizeRun(root, run, false));
+      const run = repo.snapshot(() => beginRun(root, process.env));
+      repo.snapshot(() => finalizeRun(root, run, false, process.env));
       const config = repo.configSnapshot;
       const journal = JSON.stringify({ format: 'concord.journal', root, privateDir: join(root, '.git/concord'), operation: 'interrupted', phase, directories: [],
         scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: config.source, configDigest: config.digest },

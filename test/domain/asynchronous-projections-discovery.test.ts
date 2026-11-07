@@ -10,11 +10,11 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 test('current queries discover real sources without reading environment files or following excluded links', async t => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
-    writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], sourceRoots: ['src'], sourceIgnore: ['src/vendor', 'test/vendor'] });
-    const repo = new LocalRepository(root);
-    try { createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); }
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], sourceRoots: ['src'], sourceIgnore: ['src/vendor', 'test/vendor'] });
+    const repo = (await LocalRepository.open(root));
+    try { (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' })); }
     finally { repo.close(); }
     for (const base of ['src', 'test']) mkdirSync(join(root, base));
     writeFileSync(join(root, 'src/000.ts'), '// @concord-file\n// @concord-implements docs/feature/sample/README.md\nexport const first = 1;\n');

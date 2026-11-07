@@ -12,10 +12,10 @@ import { runCli } from '../support/cli.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('code commands map help, marker arguments, locations, trace output and named errors', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeProjectConfig(root, { sourceRoots: ['src'] });
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'orders', title: 'Orders' }); }
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'orders', title: 'Orders' })); }
   finally { repo.close(); }
   async function call<A>(args: readonly string[], schema: Schema.ConstraintDecoder<A, never>, status = 0): Promise<A> {
     const result = await runCli({ argv: ['--root', root, '--json', '--fresh', ...args], cwd: process.cwd(), env: process.env });

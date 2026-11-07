@@ -12,18 +12,18 @@ import { tmpdir } from './temporary.ts';
 export const remoteIssueConnection = { id: 'product-gh', provider: 'github', transport: 'gh', owner: 'example', repo: 'product', repositoryId: '42' } as const;
 
 /** Exercise the production composition root without starting its external transport. */
-export function remoteIssueConsumer(connection: FeedbackConnection = remoteIssueConnection) {
-  const root = createConsumer();
+export async function remoteIssueConsumer(connection: FeedbackConnection = remoteIssueConnection) {
+  const root = (await createConsumer());
   const scratch = mkdtempSync(join(tmpdir(), 'concord-issue-remote-domain-'));
   const bin = join(scratch, 'bin');
   const scenarioFile = join(scratch, 'scenario.json');
   const callsFile = join(scratch, 'calls.ndjson');
   writeGhFixture(bin, scenarioFile, callsFile);
   // No request should reach gh; a spawned fixture will fail on the absent scenario.
-  const repository = new LocalRepository(root);
+  const repository = (await LocalRepository.open(root));
   try {
     const config = showConfig(repository);
-    setConfig(repository, { ...config.config, feedbackConnections: [connection] }, config.digest);
+    (await setConfig(repository, { ...config.config, feedbackConnections: [connection] }, config.digest));
   } finally { repository.close(); }
   const owner = makeOwnedProcessService();
   const processes = { ...owner, environment: { ...owner.environment, env: { ...owner.environment.env, PATH: `${bin}:${owner.environment.env.PATH ?? ''}`, GH_DEBUG: 'api', GH_REPO: 'attacker/other' } } };

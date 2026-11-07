@@ -1,13 +1,13 @@
-import { registerHooks } from 'node:module';
-import { Effect } from 'effect';
+import { readFileSync } from 'node:fs';
+import { plugin } from 'bun';
 
 // Instrument calls at the real parser boundary, preserving its implementation.
-Effect.runSync(Effect.sync(() => registerHooks({ load(url, context, nextLoad) {
-  const loaded = nextLoad(url, context);
-  if (!/\/model\/markdown-parser\.(?:ts|js)$/u.test(url)) return loaded;
-  const source = String(loaded.source);
-  const needle = /return parse\(\.\.\.args\);?/u;
-  if (!needle.test(source)) throw new Error('Markdown call instrumentation no longer matches the source parser');
-  return { ...loaded, source: source.replace(needle,
-    'process.getBuiltinModule("fs").appendFileSync(process.env.CONCORD_TEST_PARSE_COUNTS, JSON.stringify(args[0]) + "\\n"); ' + '$&') };
-} })));
+plugin({ name: 'concord-test-markdown-parses', setup(build) {
+  build.onLoad({ filter: /\/model\/markdown-parser\.ts$/u }, ({ path }) => {
+    const source = readFileSync(path, 'utf8');
+    const needle = /return parse\(\.\.\.args\);?/u;
+    if (!needle.test(source)) throw new Error('Markdown call instrumentation no longer matches the source parser');
+    return { loader: 'ts', contents: source.replace(needle,
+      'process.getBuiltinModule("fs").appendFileSync(process.env.CONCORD_TEST_PARSE_COUNTS, JSON.stringify(args[0]) + "\\n"); ' + '$&') };
+  });
+} });

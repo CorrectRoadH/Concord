@@ -36,7 +36,7 @@ async function consumer(run: (root: string) => Promise<void>): Promise<void> {
   finally { rmSync(root, { recursive: true, force: true }); }
 }
 
-function invoke(root: string, args: readonly string[], json = true) {
+async function invoke(root: string, args: readonly string[], json = true) {
   const arguments_ = args.includes('--skill') ? args : ['--root', root, ...(json ? ['--json'] : []), ...args];
   return runCli({argv:arguments_,
     cwd: root, stdin: '{"action":"init"}', signal:AbortSignal.timeout(30_000),
@@ -45,7 +45,7 @@ function invoke(root: string, args: readonly string[], json = true) {
 }
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-test('every project command rejects an empty Git worktree before any repository or private-state write', () => consumer(async root => {
+test('every project command rejects an empty Git worktree before any repository or private-state write', async () => consumer(async root => {
   const before = snapshot(root);
   for (const args of requiredCommands) {
     const result = (await invoke(root, args));
@@ -59,7 +59,7 @@ test('every project command rejects an empty Git worktree before any repository 
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-test('uninitialized human errors recommend init and use the same Git-file guide selection as init', () => consumer(async root => {
+test('uninitialized human errors recommend init and use the same Git-file guide selection as init', async () => consumer(async root => {
   mkdirSync(join(root, 'src')); writeFileSync(join(root, 'src/main.ts'), 'export const answer = 42;\n');
   const before = snapshot(root);
   const result = (await invoke(root, ['check'], false));
@@ -72,7 +72,7 @@ test('uninitialized human errors recommend init and use the same Git-file guide 
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-test('help version skills templates and doctor remain usable without initialization', () => consumer(async root => {
+test('help version skills templates and doctor remain usable without initialization', async () => consumer(async root => {
   const before = snapshot(root);
   for (const args of [['--help'], ['check', '--help'], ['--version'], ['--skill'], ['--skill', 'docs-from-scratch'], ['template', 'list'], ['template', 'show', 'feature']]) {
     const result = (await invoke(root, args));
@@ -88,7 +88,7 @@ test('help version skills templates and doctor remain usable without initializat
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-test('Herdr install and uninstall dry-runs stay independent of initialization', () => consumer(async root => {
+test('Herdr install and uninstall dry-runs stay independent of initialization', async () => consumer(async root => {
   mkdirSync(join(root, '.herdr'));
   const before = snapshot(root);
   for (const operation of ['install', 'uninstall']) {
@@ -100,7 +100,7 @@ test('Herdr install and uninstall dry-runs stay independent of initialization', 
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-test('only taste-file existence determines initialization and non-Git directories retain their error', () => consumer(async root => {
+test('only taste-file existence determines initialization and non-Git directories retain their error', async () => consumer(async root => {
   mkdirSync(join(root, 'docs')); writeFileSync(join(root, 'concord.config.ts'), 'export default {};\n');
   const rejected = (await invoke(root, ['--dry-run', 'list']));
   assert.equal(JSON.parse(rejected.stderr).error, 'ProjectNotInitialized');
@@ -121,7 +121,7 @@ test('only taste-file existence determines initialization and non-Git directorie
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-test('init remains available and immediately permits project commands', () => consumer(async root => {
+test('init remains available and immediately permits project commands', async () => consumer(async root => {
   const initialized = (await invoke(root, ['init']));
   assert.equal(initialized.exitCode, 0, initialized.stderr);
   assert.equal(JSON.parse(initialized.stdout).guide, 'docs-from-scratch');

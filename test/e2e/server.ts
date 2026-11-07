@@ -5,7 +5,7 @@ import { readServerRecord } from '../../src/base/server-lock/index.ts';
 import { genericPrivateDirectorySync } from '../../src/base/publication/index.ts';
 import { connectWorkspaceSocket, requestWorkspace, waitForServerHandshake } from '../../src/entry/server/index.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
-import { sourceCli } from '../support/source-consumer.ts';
+import { sourceCli, sourceCliCommand } from '../support/source-consumer.ts';
 import { packageCommand } from '../../scripts/package-command.ts';
 import { BrowserAttemptTimer } from '../../scripts/gate-timings.ts';
 
@@ -43,7 +43,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     options.signal?.throwIfAborted();
     // Archive consumers and CLI-output tests retain the real View command.
     const direct = !options.installedBin && !options.cliView;
-    const [command, ...prefix] = options.installedBin ? packageCommand(entry) : [process.execPath, ...(entry.endsWith('.ts') ? ['--conditions=concord-source', '--import', new URL('../support/source-runtime.ts', import.meta.url).href] : []), entry];
+    const [command, ...prefix] = options.installedBin ? packageCommand(entry) : sourceCliCommand(entry);
     child = spawn(command!, [...prefix, '--root', options.root, '--json', ...(direct ? ['server', 'run'] : ['view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)])], { stdio: ['ignore', 'pipe', 'pipe'], ...(options.installedBin ? { env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' } } : {}) });
     const stop = () => {
       if (!options.installedBin) return stopWorkspaceServer(options.root, entry);
@@ -63,7 +63,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       processHandle.once('exit', exited);
       const signal = options.signal ? AbortSignal.any([options.signal, startup.signal]) : startup.signal;
       const lease = await Effect.runPromise(Effect.gen(function*() {
-        const record = yield* waitForServerHandshake(Effect.try(() => readServerRecord(genericPrivateDirectorySync(options.root))).pipe(
+        const record = yield* waitForServerHandshake(Effect.try(() => readServerRecord(genericPrivateDirectorySync(options.root, process.env))).pipe(
           Effect.map(value => value && ['running', 'degraded', 'blocked'].includes(value.state) ? value : undefined),
         ));
         if (record.pid !== processHandle.pid) throw new Error('Direct browser fixture did not acquire its own workspace service');

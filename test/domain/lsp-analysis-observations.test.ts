@@ -19,9 +19,9 @@ const semanticServer = (): LanguageServer => ({ ...server(), budgets: { totalMs:
 // @issue docs/issues/test-architecture-gaps.md
 // CASES lsp-integration C1-C5, C10, C12-C16, C18; test-journey-steps C6-C8, C13.
 test('LSP observations retain marker identity, traverse test helpers, and never govern check', async () => {
-  const root = consumer();
+  const root = (await consumer());
   try {
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [semanticServer()] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [semanticServer()] });
     const baseline = await query(root, { name: 'check', input: {} }, projectCheck); assert.equal(baseline.ok, true);
     const before = await query(root, { name: 'code.list', input: {} }, codeList);
     assert.equal(before.codes.length, 1); assert.equal(before.analysis.relevance[0]?.relevance.verdict, 'not-observed');
@@ -60,7 +60,7 @@ test('LSP observations retain marker identity, traverse test helpers, and never 
     write(root, 'test/helper.py', 'def helper():\n    implementation()\n');
     const repeat = (await analyze(root)).observations.find(value => value.value.analyzer === 'python-fixture')!;
     assert.deepEqual(repeat.value, lsp.value); assert.equal(repeat.inputs, lsp.inputs);
-    const cacheRepo = new LocalRepository(root);
+    const cacheRepo = (await LocalRepository.open(root));
     try { cacheRepo.snapshot(() => {
       const database = PersistentCache.repository(cacheRepo);
       const rows = database!.scan('code_cache');
@@ -69,10 +69,10 @@ test('LSP observations retain marker identity, traverse test helpers, and never 
     assert.deepEqual(await query(root, { name: 'check', input: {} }, projectCheck), baseline);
     assert.deepEqual((await query(root, { name: 'code.list', input: {} }, codeList)).codes, before.codes);
     assert.equal((await query(root, { name: 'code.list', input: {} }, codeList)).analysis.observations.length, 0);
-    const shallow = semanticServer(); writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...shallow, budgets: { ...shallow.budgets, depth: 1 } }] });
+    const shallow = semanticServer(); writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [{ ...shallow, budgets: { ...shallow.budgets, depth: 1 } }] });
     const limited = (await analyze(root)).observations.find(value => value.value.analyzer === 'python-fixture')!;
     assert.ok(limited.gaps.includes('DepthLimit')); assert.deepEqual(limited.value.dependencies[0]?.declarations, []);
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [semanticServer()] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [semanticServer()] });
     await runApplication(clearWorkspaceCache(root));
     assert.deepEqual(await query(root, { name: 'check', input: {} }, projectCheck), baseline);
     assert.deepEqual((await query(root, { name: 'code.list', input: {} }, codeList)).codes, before.codes);
@@ -89,9 +89,9 @@ test('LSP observations retain marker identity, traverse test helpers, and never 
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
 // CASES test-journey-steps C6-C8; lsp-integration C4, C13, C14, C18.
 test('TypeScript imports and reexports provide only file-scoped relevance with boundary gaps', async () => {
-  const root = consumer();
+  const root = (await consumer());
   try {
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [] });
     write(root, 'src/sample.ts', `// @concord-code\n// @concord-implements ${target}\nexport function implementation() { return 1; }\n`);
     write(root, 'src/barrel.ts', "export { implementation } from './sample.js';\n");
     write(root, 'test/sample.ts', `// @use-case ${target}\n// @name imports\nimport { implementation } from '../src/barrel.js';\nimport { spawn } from 'node:child_process';\nvoid import('./unknown.js');\nfetch('http://example.invalid');\nimplementation();\n`);

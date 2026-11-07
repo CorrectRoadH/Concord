@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import { io, mustRun } from './perf/process.ts';
 import { prepareGateBuildCache } from './gate-build-cache.ts';
 
-/** Measurements retain a lease on the same immutable archive as packaging tests. */
+/** Measurements retain a lease on the immutable compiled CLI archive. */
 export const buildForMeasurement = Effect.fn('perf.buildForMeasurement')(function*(root: string, outputDir: string) {
   const cached = yield* prepareGateBuildCache(root);
   const result = yield* cached.build(output => Effect.gen(function*() {

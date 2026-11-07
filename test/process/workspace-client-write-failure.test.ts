@@ -9,7 +9,7 @@ import { command, fixture, record, rpcModule, stop } from '../support/workspace-
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/bun-socket-diagnostic.md
 test('a socket write defect becomes a named transport failure during derivation submission', { timeout: 30_000 }, async t => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const started = await command(root, ['server', 'start']);
     assert.equal(started.status, 0, started.stderr);

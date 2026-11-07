@@ -34,7 +34,7 @@ test('packed CLI manages documentation without test roots and can later discover
     (await call(['--dry-run', 'init', '--docs-only'], ack));
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);
     (await call(['init', '--docs-only'], ack));
-    const config = readProjectConfig(root);
+    const config = (await readProjectConfig(root));
     assert.deepEqual(config.testRoots, []);
     (await call(['new', 'feature', 'backup', '--title', 'Backup'], ack));
     (await call(['new', 'design', 'storage', '--title', 'Storage'], ack));

@@ -14,7 +14,7 @@ export async function action<A>(root: string, input: unknown, schema: Schema.Con
   return Schema.decodeUnknownSync(schema, { onExcessProperty: 'ignore' })(await runApplication(executeViewAction(root, input)));
 }
 
-export function withRepository<A>(root: string, operation: (repo: LocalRepository) => A): A {
-  const repo = new LocalRepository(root);
-  try { return operation(repo); } finally { repo.close(); }
+export async function withRepository<A>(root: string, operation: (repo: LocalRepository) => A): Promise<A> {
+  const repo = (await LocalRepository.open(root));
+  try { return await operation(repo); } finally { repo.close(); }
 }

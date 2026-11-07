@@ -7,7 +7,7 @@ const Verification = Schema.Struct({ verification: Schema.Struct({ defect: Schem
 
 // @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
 test('a neutral software consumer completes Spec, source relations, configured execution, fix verification and review through the packed CLI', () => Effect.runPromise(Effect.promise(async () => {
-  const root = consumer('neutral-governance');
+  const root = (await consumer('neutral-governance'));
   const contract = 'docs/feature/cart/use-case/add-item.md';
   (await call(root, ['new', 'feature', 'cart', '--title', 'Cart'], Ack));
   (await call(root, ['new', 'use-case', 'add-item', '--feature', 'cart', '--title', 'Add item'], Ack));

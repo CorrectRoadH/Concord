@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { Effect, FileSystem, Schema } from 'effect';
+import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 export class ArchiveFailed extends Schema.TaggedError<ArchiveFailed>()('ArchiveFailed', { message: Schema.String }) {}
@@ -14,13 +14,16 @@ export const archiveTarget = (value: unknown = process.env.CONCORD_TARGET ?? `${
 };
 export const sha256 = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 export const attempt = <A>(operation: () => Promise<A>) => Effect.tryPromise({ try: operation, catch: cause => new ArchiveFailed({ message: String(cause) }) });
-export const command = Effect.fn('archive.command')(function*(executable: string, args: readonly string[], cwd?: string) {
+export const command = Effect.fn('archive.command')(function*(executable: string, args: readonly string[], cwd?: string, environment: NodeJS.ProcessEnv = process.env) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  return yield* spawner.string(ChildProcess.make(executable, args, { cwd, stderr: 'inherit', env: { ...process.env, COPYFILE_DISABLE: '1' } }));
-});
-export const run = Effect.fn('archive.run')(function*(executable: string, args: readonly string[], cwd?: string) {
+  const child = yield* spawner.spawn(ChildProcess.make(executable, args, { cwd, stderr: 'inherit', env: { ...environment, COPYFILE_DISABLE: '1' } }));
+  const [stdout, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.stdout)), child.exitCode], { concurrency: 'unbounded' });
+  if (Number(code) !== 0) return yield* new ArchiveFailed({ message: `${executable} exited ${code}` });
+  return stdout;
+}, Effect.scoped);
+export const run = Effect.fn('archive.run')(function*(executable: string, args: readonly string[], cwd?: string, environment: NodeJS.ProcessEnv = process.env) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const code = Number(yield* spawner.exitCode(ChildProcess.make(executable, args, { cwd, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', env: { ...process.env, CI: 'true', COPYFILE_DISABLE: '1' } })));
+  const code = Number(yield* spawner.exitCode(ChildProcess.make(executable, args, { cwd, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', env: { ...environment, CI: 'true', COPYFILE_DISABLE: '1' } })));
   if (code !== 0) return yield* new ArchiveFailed({ message: `${executable} exited ${code}` });
 });
 export const readJson = <S extends Schema.Top>(path: string, schema: S) => Effect.gen(function*() {

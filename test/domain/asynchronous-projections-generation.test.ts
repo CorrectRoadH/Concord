@@ -13,11 +13,11 @@ import { writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('publication of an older scan cannot satisfy a later refresh request', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     writeProjectConfig(root, { testRoots: [], sourceRoots: ['src'] });
-    const repo = new LocalRepository(root);
-    try { createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); }
+    const repo = (await LocalRepository.open(root));
+    try { (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' })); }
     finally { repo.close(); }
     const context = await runApplication(queryContext(root, ['trace', 'gaps']));
     const requestedAt = Date.now() - 100;
@@ -38,7 +38,7 @@ test('publication of an older scan cannot satisfy a later refresh request', asyn
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('diagnostic query identity binds configuration appearing after an absent configuration', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);
     const missing = await runApplication(queryContext(root, ['trace', 'gaps']));
@@ -52,7 +52,7 @@ test('diagnostic query identity binds configuration appearing after an absent co
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 // @issue docs/issues/test-architecture-gaps.md
 test('diagnostic query identity follows each caller environment without falling back to the host', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const source = nativeArtifactRoot(makeRuntimeEnvironment(process.cwd(), process.env));
   try {
     const callers = ['a', 'b'].map(name => {

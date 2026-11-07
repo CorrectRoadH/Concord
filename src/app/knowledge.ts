@@ -78,22 +78,22 @@ export function knowledgeSearch(repo: Repository, query: string) {
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#edit
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
-export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export async function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: string, body: string, expectedDigest: string, dryRun = false): Promise<MutationReceipt> {
+  return (await inRepositorySnapshot(repo, async () => {
     const record = readDocumentSelector(repo, selector, kind);
-    return setAuthor(repo, record.path, body, expectedDigest, dryRun);
-  });
+    return (await setAuthor(repo, record.path, body, expectedDigest, dryRun));
+  }));
 }
 
 
 // @concord-code
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
-export function removeIssue(repo: WorkspaceTypes.LocalRepository, selector: string, expectedDigest: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-    const trace = buildTrace(repo, 'off', { includeCode: false });
+export async function removeIssue(repo: WorkspaceTypes.LocalRepository, selector: string, expectedDigest: string, dryRun = false): Promise<MutationReceipt> {
+  return (await inRepositorySnapshot(repo, async () => {
+    const trace = (await buildTrace(repo, 'off', { includeCode: false }));
     requireValidTrace(trace);
     const record = findDocument(trace.documents, selector, 'issue');
     if (record.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; use its current digest`);
-    return { ...closeIssue(repo, record.path, 'Handled', dryRun), operation: 'remove-issue' };
-  });
+    return { ...(await closeIssue(repo, record.path, 'Handled', dryRun)), operation: 'remove-issue' };
+  }));
 }

@@ -33,7 +33,7 @@ import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjection
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('GET /api/workspace serves a body-free projection and reports pending before the first generation', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
@@ -64,7 +64,7 @@ test('GET /api/workspace serves a body-free projection and reports pending befor
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('POST /api/workspace requests one merged refresh without waiting for the scan', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
@@ -92,7 +92,7 @@ test('POST /api/workspace requests one merged refresh without waiting for the sc
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('workspace ETag reuses the published generation and only 304s while the cache stays readable', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {

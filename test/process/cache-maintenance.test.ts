@@ -15,11 +15,11 @@ import { openHawdb } from "../../src/base/cache/index.ts";
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
-function fixture() {
+async function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-maintenance-')));
   execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [], sourceRoots: [] }); } finally { repo.close(); }
+  const repo = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(repo, false, { testRoots: [], sourceRoots: [] })); } finally { repo.close(); }
   const path = join(root, '.git/concord/cache.hawdb');
   const db = openHawdb(path, { readOnly: false, create: true }, nativeRuntime);
   db.put('config_cache', [{ key: 'retained', payload: 'a current logical value' }]); db.close();
@@ -36,8 +36,8 @@ const read = (path: string) => {
 };
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('the maintenance worker reclaims without discarding an arbitrarily large cache', () => Effect.runPromise(Effect.sync(() => {
-  const f = fixture();
+test('the maintenance worker reclaims without discarding an arbitrarily large cache', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const f = (await fixture());
   try {
     pad(f.padding, CACHE_MAINTENANCE_THRESHOLD_BYTES + 1);
     worker(f.root);
@@ -56,9 +56,9 @@ test('the maintenance worker reclaims without discarding an arbitrarily large ca
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('publication contention does not make reclamation discard logical data', () => Effect.runPromise(Effect.sync(() => {
-  const f = fixture();
-  const publisher = new LocalRepository(f.root);
+test('publication contention does not make reclamation discard logical data', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const f = (await fixture());
+  const publisher = (await LocalRepository.open(f.root));
   try {
     pad(f.padding, CACHE_MAINTENANCE_THRESHOLD_BYTES * 2 + 1);
     publisher.beginSnapshot();

@@ -23,7 +23,7 @@ export function firstParentPath(root: string, defect: string, fix: string, envir
 }
 
 /** Historical sources are object reads, never a checkout or a cache authority. */
-export function commitRepository(repo: Repository, commit: string, environment: Readonly<Record<string, string | undefined>> = {}): Repository {
+export async function commitRepository(repo: Repository, commit: string, environment: Readonly<Record<string, string | undefined>> = {}): Promise<Repository> {
   environment = Object.freeze({ ...environment });
   const entries = git(repo.root, ['ls-tree', '-r', '-z', commit], environment).split('\0').filter(Boolean).map(entry => {
     const tab = entry.indexOf('\t'); return { mode: entry.slice(0, 6), path: entry.slice(tab + 1) };
@@ -39,7 +39,7 @@ export function commitRepository(repo: Repository, commit: string, environment: 
   };
   const exactRead = read;
   const configSource = exactRead('concord.config.ts');
-  const configSnapshot: ConfigSnapshot = configSource === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : snapshot('concord.config.ts', configSource, undefined, false, makeRuntimeEnvironment(repo.root, environment));
+  const configSnapshot: ConfigSnapshot = configSource === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : await snapshot('concord.config.ts', configSource, undefined, false, makeRuntimeEnvironment(repo.root, environment));
   return { root: repo.root, privateDir: repo.privateDir, environment: names => names === undefined ? environment : Object.freeze(Object.fromEntries(names.map(name => [name, environment[name]]))), config: { ...configSnapshot.config, testRoots: configSnapshot.config.testRoots ?? ['test', 'tests'].filter(root => entries.some(entry => entry.path.startsWith(`${root}/`))), sourceRoots: configSnapshot.config.sourceRoots ?? ['src'].filter(root => entries.some(entry => entry.path.startsWith(`${root}/`))) }, configSnapshot, access: 'read', persistentCache: 'off', read: exactRead, readBytes: path => exactRead(path) === undefined ? undefined : gitBlobBytes(repo.root, commit, path, environment), files: prefix => entries.filter(entry => entry.path === prefix || entry.path.startsWith(`${prefix}/`)).map(entry => entry.path), absolute: path => { canonicalPath(path); return join(repo.root, path); }, publish: () => { throw new ConcordError('ReadOnlyRepository', 'Historical sources cannot publish'); } };
 }
 

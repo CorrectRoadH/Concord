@@ -14,7 +14,7 @@ test('packed editor C9/C17 rereads disk configuration, policy, deletion and rena
   c.change(file, source('new-step'), 2);
   assert.ok((await c.diagnostic(file, 2, count)).diagnostics.some(item => item.code === 'bannedTerm'));
   c.close(policyPath);
-  const configPath = join(root, 'concord.config.ts'), config = readProjectConfig(root);
+  const configPath = join(root, 'concord.config.ts'), config = (await readProjectConfig(root));
   await c.result('textDocument/hover', c.query('test/flow.ts', 1, 20));
   writeFileSync(join(root, '.git/concord/editor-job-gate'), 'armed');
   const pending = c.request('textDocument/hover', c.query('test/flow.ts', 1, 20));

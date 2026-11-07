@@ -1,4 +1,5 @@
-import { API } from 'typescript/sync';
+import { withTypeScriptResource } from '../../src/base/process/index.ts';
+import { API } from 'typescript/async';
 import * as ts from 'typescript/ast';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -22,7 +23,7 @@ const domainLevel = new Map([
 const plain = (file: string, line: number, code: string, text: string): Violation => ({ file, line, code, text });
 
 /** Parse source without evaluating any product module or consumer code. */
-export function inspectArchitecture(root: string, sources?: ReadonlyMap<string, string>): Audit {
+export async function inspectArchitecture(root: string, sources?: ReadonlyMap<string, string>): Promise<Audit> {
   const files = sources === undefined ? sourceFiles(root) : [...sources.keys()].sort();
   const known = new Set(files), edges: Edge[] = [], invalid: Violation[] = [], platform: Violation[] = [];
   const api = new API({ runExternalCode: false });
@@ -30,13 +31,12 @@ export function inspectArchitecture(root: string, sources?: ReadonlyMap<string, 
     if (!specifier.startsWith('.')) return;
     const value = relative(root, resolve(root, dirname(from), specifier)).replace(/\.js$/u, '.ts');
     const candidates = [value, `${value}.ts`, `${value}/index.ts`];
-    if (value.endsWith('/cli-fallback-bundle.ts')) candidates.push(value.replace('cli-fallback-bundle.ts', 'cli-fallback.ts'));
     return candidates.find(path => known.has(path));
   };
-  try {
+  await withTypeScriptResource({ dispose: () => api.close() }, async () => {
     for (const file of files) {
-      const retained = api.createSourceFile(resolve(root, file), sources?.get(file) ?? readFileSync(join(root, file), 'utf8'), { scriptKind: ts.ScriptKind.TS });
-      try {
+      const retained = await api.createSourceFile(resolve(root, file), sources?.get(file) ?? readFileSync(join(root, file), 'utf8'), { scriptKind: ts.ScriptKind.TS });
+      await withTypeScriptResource(retained, retained => {
         const source = retained.sourceFile;
         if (file.endsWith('/index.ts')) {
           for (const statement of source.statements) {
@@ -136,13 +136,14 @@ export function inspectArchitecture(root: string, sources?: ReadonlyMap<string, 
           node.forEachChild(destructures);
         };
         destructures(source);
-        const cli = file.startsWith('src/entry/cli/') && file !== 'src/entry/cli/entry.ts';
-        const cliCapabilities = new Set(['cwd', 'env', 'argv', 'stdin', 'stdout', 'stderr', 'exitCode', 'exit']);
+        const cli = file.startsWith('src/entry/cli/') && file !== 'src/entry/cli/run.ts';
+        const cliCapabilities = new Set(['cwd', 'env', ...(file === 'src/entry/cli/entry.ts' ? [] : ['argv']), 'stdin', 'stdout', 'stderr', 'exitCode', 'exit']);
         const signalMethods = new Set(['on', 'once', 'addListener', 'prependListener', 'prependOnceListener', 'removeListener', 'off', 'removeAllListeners']);
         const add = (node: ts.Node, specifier: string, typeOnly: boolean, kind: string, bindings: readonly string[] = []): void => {
           const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
           const to = local(file, specifier);
-          if (specifier.startsWith('.') && to === undefined) invalid.push(plain(file, line, 'UnresolvedInternalImport', specifier));
+          const pinnedNativeRelease = file === 'src/base/installation/hawdb-native-contract.ts' && specifier === '../../../native-release.json' && kind === 'import';
+          if (specifier.startsWith('.') && to === undefined && !pinnedNativeRelease) invalid.push(plain(file, line, 'UnresolvedInternalImport', specifier));
           edges.push({ from: file, ...(to === undefined ? {} : { to }), specifier, typeOnly, kind, line, bindings });
         };
         const location = (node: ts.Node, code: string): Violation => plain(file, source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, code, node.getText(source));
@@ -160,10 +161,8 @@ export function inspectArchitecture(root: string, sources?: ReadonlyMap<string, 
             add(node, node.argument.literal.text, true, 'import-type');
           } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
             const argument = node.arguments[0], paths = argument && values(argument);
-            if (file === 'src/base/installation/startup/startup-data.ts' && paths?.length === 1 && paths[0] === 'dist/startup-data.js') {
-              edges.push({ from: file, specifier: paths[0], typeOnly: false, kind: 'generated-installation-resource', line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, bindings: [] });
-            } else if (paths) for (const path of paths) add(node, path, false, 'dynamic');
-            else if (file !== 'src/entry/server/test-adapter-vitest.ts') invalid.push(location(node, 'UnenumerableDynamicImport'));
+            if (paths) for (const path of paths) add(node, path, false, 'dynamic');
+            else if (file !== 'src/entry/server/test-adapter-vitest-main.ts') invalid.push(location(node, 'UnenumerableDynamicImport'));
           }
           if (!['base', 'entry'].includes(layerOf(file))) {
             if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)
@@ -204,9 +203,9 @@ export function inspectArchitecture(root: string, sources?: ReadonlyMap<string, 
           node.forEachChild(visit);
         };
         visit(source);
-      } finally { retained.dispose(); }
+      });
     }
-  } finally { api.close(); }
+  });
   return { files, edges, invalid, platform };
 }
 
@@ -218,19 +217,28 @@ export function dependencyViolations(audit: Audit): Violation[] {
     if (!['model', 'base', 'domain', 'app', 'entry'].includes(from)) { fail('UnclassifiedSource'); continue; }
     if (edge.to) {
       const serviceStartup = edge.from === 'src/entry/cli/main.ts' && edge.to === 'src/entry/server/main.ts' && edge.kind === 'dynamic';
-      if (moduleOf(edge.from) !== moduleOf(edge.to) && !edge.to.endsWith('/index.ts') && !serviceStartup) fail('ModuleExit');
+      const compiledRole = edge.from === 'src/entry/compiled/run.ts' && edge.kind === 'dynamic' && [
+        'src/entry/cli/run.ts', 'src/entry/server/compute-worker-main.ts', 'src/entry/server/editor-worker-main.ts',
+        'src/entry/server/query-refresh-worker-main.ts', 'src/entry/server/query-scan-worker-main.ts',
+        'src/entry/server/view-scan-worker-main.ts', 'src/entry/server/cache-maintenance-worker-main.ts',
+        'src/entry/server/test-adapter-vitest-main.ts', 'src/entry/server/operation/run.ts',
+      ].includes(edge.to);
+      const compilerSupervisor = edge.from === 'src/entry/compiler/main.ts' && edge.kind === 'import' && edge.to === 'src/base/process/typescript-supervisor.ts'
+        || edge.from === 'src/entry/compiled/run.ts' && edge.kind === 'dynamic' && ['src/base/process/typescript-supervisor.ts', 'src/base/installation/location.ts'].includes(edge.to);
+      const sourceWebBuilder = edge.from === 'src/entry/web-build/main.ts' && edge.to === 'src/base/installation/source-web-builder.ts' && edge.kind === 'import';
+      if (moduleOf(edge.from) !== moduleOf(edge.to) && !edge.to.endsWith('/index.ts') && !serviceStartup && !compiledRole && !sourceWebBuilder && !compilerSupervisor) fail('ModuleExit');
       if (edge.kind === 'export' && moduleOf(edge.from) !== moduleOf(edge.to)) fail('ForeignReexport');
-      const root = /^src\/entry\/[^/]+\/(?:[^/]+\/)?main\.ts$/u.test(edge.from);
+      const root = /^src\/entry\/[^/]+\/(?:[^/]+\/)?main\.ts$/u.test(edge.from) || edge.from === 'src/entry/server/operation/run.ts';
       if (from === 'model' && to !== 'model' || from === 'base' && !['model', 'base'].includes(to!)
         || from === 'domain' && !['model', 'base', 'domain'].includes(to!) || from === 'app' && to === 'entry'
-        || from === 'entry' && to !== 'model' && to !== 'app' && moduleOf(edge.from) !== moduleOf(edge.to) && !root) fail('LayerDirection');
-      if (from === 'entry' && root && (to === 'domain' || to === 'base') && !edge.typeOnly
+        || from === 'entry' && to !== 'model' && to !== 'app' && moduleOf(edge.from) !== moduleOf(edge.to) && !root && !compiledRole && !compilerSupervisor) fail('LayerDirection');
+      if (from === 'entry' && root && (to === 'domain' || to === 'base') && !edge.typeOnly && !compilerSupervisor
         && !edge.bindings.every(name => /(?:Live|Layer|layer)$/u.test(name) || ['RuntimeEnvironment', 'makeRuntimeEnvironment', 'Installation', 'Workspace', 'Sources', 'Publication', 'Cache', 'CacheSnapshot', 'CacheDerivations', 'PersistentCache', 'Git', 'OwnedProcess', 'PublicationValidation', 'ServerRuntime', 'FeedbackCacheWriter', 'SourceWebBuilder'].includes(name))) fail('CompositionRootLayer');
       if (from === 'domain' && to === 'domain' && domainOf(edge.from) !== domainOf(edge.to)) {
         const left = domainLevel.get(domainOf(edge.from)), right = domainLevel.get(domainOf(edge.to));
         if (left === undefined || right === undefined || right >= left) fail('DomainOrder');
       }
-    } else if (from === 'model' && edge.kind !== 'generated-installation-resource') {
+    } else if (from === 'model') {
       const allowed = edge.specifier === 'effect' || edge.specifier.startsWith('effect/') || edge.specifier === 'yaml'
         || /^(?:mdast-util-|micromark-)/u.test(edge.specifier) || edge.specifier === 'mdast' && edge.typeOnly
         || edge.specifier === 'node:crypto' && edge.bindings.every(name => name === 'createHash');
@@ -298,10 +306,11 @@ const cliTarget = (text: string): boolean => /(?:^|\/)(?:src|dist)?\/?entry\/cli
 const processCategories = new Set(['进程终止与信号', 'OS 锁与互斥', '服务与 IPC', '文件监听', '外部程序', '原生模块与句柄', '运行环境', '网络']);
 
 /** Function-level abstract evaluation stays in test helpers; runCli and product services are boundaries. */
-export function inspectTestLayout(root: string, sources?: ReadonlyMap<string, string>): Violation[] {
+export async function inspectTestLayout(root: string, sources?: ReadonlyMap<string, string>): Promise<Violation[]> {
   const files = sources ? [...sources.keys()].sort() : [...sourceFiles(root, 'test'), ...sourceFiles(root, 'scripts'), ...sourceFiles(root, 'bench')];
   const known = new Set(files), violations = new Map<string, Violation>(), modules = new Map<string, LayoutModule>();
-  const dispose: (() => void)[] = [];
+  const dispose: (() => Promise<void>)[] = [];
+  const parsed = new Map<string, ts.SourceFile>();
   const api = new API({ runExternalCode: false });
   const contents = (file: string) => sources?.get(file) ?? readFileSync(join(root, file), 'utf8');
   const target = (file: string, specifier: string) => {
@@ -320,9 +329,7 @@ export function inspectTestLayout(root: string, sources?: ReadonlyMap<string, st
     if (!known.has(file) || file.startsWith('src/')) return;
     const prior = modules.get(file);
     if (prior) return prior;
-    const retained = api.createSourceFile(resolve(root, file), contents(file), { scriptKind: ts.ScriptKind.TS });
-    dispose.push(() => retained.dispose());
-    const module: LayoutModule = { file, source: retained.sourceFile, bindings: new Map(), exports: new Map(), stars: [] };
+    const module: LayoutModule = { file, source: parsed.get(file)!, bindings: new Map(), exports: new Map(), stars: [] };
     modules.set(file, module);
     for (const statement of module.source.statements) {
       if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
@@ -363,7 +370,19 @@ export function inspectTestLayout(root: string, sources?: ReadonlyMap<string, st
     assignments(module.source);
     return module;
   };
-  try {
+  await withTypeScriptResource({ dispose: () => api.close() }, async () => {
+    await withTypeScriptResource({ async dispose() {
+      const failures: unknown[] = [];
+      for (const release of dispose.reverse()) {
+        try { await release(); } catch (cause) { failures.push(cause); }
+      }
+      if (failures.length) throw new AggregateError(failures, 'Architecture source lease cleanup failed');
+    } }, async () => {
+    for (const file of files.filter(file => !file.startsWith('src/'))) {
+      const retained = await api.createSourceFile(resolve(root, file), contents(file), { scriptKind: ts.ScriptKind.TS });
+      dispose.push(() => retained.dispose());
+      parsed.set(file, retained.sourceFile);
+    }
     for (const file of files.filter(file => file.startsWith('test/process/') && file.endsWith('.test.ts'))) {
       const text = contents(file), first = ts.createScanner(false, ts.LanguageVariant.Standard, text, ts.getShebang(text)?.length ?? 0);
       let header = '';
@@ -683,9 +702,7 @@ export function inspectTestLayout(root: string, sources?: ReadonlyMap<string, st
       const module = moduleFor(entry);
       if (module) walk(module.source, module, new Map());
     }
-  } finally {
-    for (const release of dispose.reverse()) release();
-    api.close();
-  }
+    });
+  });
   return [...violations.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.text.localeCompare(b.text));
 }

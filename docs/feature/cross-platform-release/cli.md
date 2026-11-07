@@ -26,12 +26,11 @@ git push origin v0.9.0
 
 | 路径 | 内容 |
 | --- | --- |
-| `bin/concord` | POSIX 启动脚本，解析符号链接后相对自身定位，用 `runtime/node` 启动应用入口 |
-| `runtime/node` | 固定版本的官方 Node.js 运行时 |
+| `bin/concord` | 固定 Bun 编译的单个可执行文件，内含应用与字节码；从真实文件位置定位归档 |
 | `runtime/rg` | 固定版本的 ripgrep |
 | `runtime/lib/` | 仅 Linux：归档内 ELF 需要的 glibc 之外的运行库（libatomic、libstdc++） |
-| `licenses/` | Node.js、ripgrep、Linux 运行库与运行依赖的许可证文本 |
-| `app/` | 构建好的应用、运行依赖、该目标的 HawDB 原生绑定与随附资源（Web、Preview、skills、templates） |
+| `licenses/` | Bun 及其嵌入组件、ripgrep、Linux 运行库与运行依赖的许可证文本 |
+| `app/` | 运行依赖、该目标的 HawDB 原生绑定与随附资源（Web、Preview、skills、templates） |
 
 tap 随后包含同版本的 Formula 与 Linux Nix 表达式，引用相同归档与 SHA-256。从任一渠道安装后，`concord --version` 输出标签中的版本。
 

@@ -16,10 +16,10 @@ import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/feature/local-data-engine/architecture.md#进程与资源
 test('a cold computation with CPU progress survives sixty seconds and completes without restarting', { skip: process.platform === 'win32' }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   const boundary = mkdtempSync(join(tmpdir(), 'concord-compute-busy-'));
   const environment = Object.fromEntries(Object.entries({ ...process.env,
-    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${fileURLToPath(new URL('../fixtures/computation-busy-preload.ts', import.meta.url))}`.trim(),
+    BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${fileURLToPath(new URL('../fixtures/computation-busy-preload.ts', import.meta.url))}`.trim(),
     CONCORD_TEST_BUSY_BOUNDARY: boundary, CONCORD_TEST_BUSY_SOURCE: join(root, useCasePath),
   }).filter((entry): entry is [string, string] => entry[1] !== undefined));
   try {

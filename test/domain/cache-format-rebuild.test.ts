@@ -25,7 +25,7 @@ const prepare = (root: string, missing: boolean) => {
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#hit
 test('the workspace persistent owner rebuilds missing and incompatible cache identities', async () => {
   for (const missing of [true, false]) {
-    const root = createConsumer();
+    const root = (await createConsumer());
     try {
       const f = prepare(root, missing);
       await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -41,7 +41,7 @@ test('the workspace persistent owner rebuilds missing and incompatible cache ide
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#hit
 test('source snapshot writes rebuild incompatible cache identities while readonly opens preserve them', async () => {
   for (const missing of [true, false]) {
-    const root = createConsumer();
+    const root = (await createConsumer());
     try {
       const f = prepare(root, missing);
       await Effect.runPromise(Effect.gen(function*() {
@@ -62,7 +62,7 @@ test('source snapshot writes rebuild incompatible cache identities while readonl
 
 // @feature docs/feature/local-data-engine/architecture.md#句柄与打开模式
 test('cache rebuild refuses another clear owner and preserves the incompatible directory', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     const f = prepare(root, false);
     const guard = acquireHawdbClearGuard(f.path, f.runtime);
@@ -80,7 +80,7 @@ test('cache rebuild refuses another clear owner and preserves the incompatible d
 
 // @feature docs/feature/local-data-engine/architecture.md#句柄与打开模式
 test('source snapshot aggregate caches fall back on contention without pretending historical observations exist', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     const privateDir = join(root, '.git/concord');
     const runtime = makeRuntimeEnvironment(root, process.env);

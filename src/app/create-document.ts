@@ -29,7 +29,7 @@ export interface CreateDocumentInput {
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#add
 export const createDocument = Effect.fn('createDocument')(function*(repo: Repository, kind: DocumentKind, input: CreateDocumentInput) {
   const catalog = yield* templateCatalog();
-  return yield* Effect.try({ try: (): MutationReceipt => inRepositorySnapshot(repo, () => {
+  return yield* Effect.tryPromise({ try: async (): Promise<MutationReceipt> => (await inRepositorySnapshot(repo, async () => {
   const id = decode(DocumentName, input.id, 'id');
   if (['use-case', 'issue', 'memory', 'design'].includes(kind) && id.toLowerCase() === 'readme') throw new ConcordError('InvalidInput', 'README is reserved for navigation');
   const title = required(input.title, 'title');
@@ -71,7 +71,7 @@ export const createDocument = Effect.fn('createDocument')(function*(repo: Reposi
   const add = (pagePath: string, name: string) => changes.push({ path: pagePath, before: null, after: authorBody(catalog.render(name, title, requested)) });
   if (allowed) for (const page of requested) add(`${posix.dirname(path)}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
   for (const change of changes) if (repo.read(change.path) !== undefined) throw new ConcordError('DocumentExists', `${change.path} already exists`);
-  return repo.publish(`create-${kind}`, changes, input.dryRun ?? false);
-  }), catch: failure });
+  return (await repo.publish(`create-${kind}`, changes, input.dryRun ?? false));
+  })), catch: failure }).pipe(Effect.uninterruptible);
 });
 // @concord-end

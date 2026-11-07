@@ -8,6 +8,7 @@ import type { StepRename } from "../../model/index.ts";
 
 import { canonicalPath } from "../../model/index.ts";
 import { execFileSync } from "node:child_process";
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, rmdirSync, writeFileSync, type BigIntStats } from "node:fs";
 import { release } from "node:os";
@@ -261,10 +262,11 @@ export class LocalRepository implements Repository {
   readonly persistentCache: 'use' | 'off';
   readonly root: string;
   readonly privateDir: string;
-  config: ResolvedProjectConfig;
-  configSnapshot: ConfigSnapshot;
+  config!: ResolvedProjectConfig;
+  configSnapshot!: ConfigSnapshot;
   private traceLease: TraceLease | undefined;
   private borrowedPublicationLease = false;
+  private activeJournal: string | undefined;
   private readonly coordinationDirectory: string;
   private readonly noWrite: boolean;
   private snapshotDepth = 0;
@@ -282,9 +284,16 @@ export class LocalRepository implements Repository {
   private readonly checkedSegments = new Set<string>();
   private verifyListings: Map<string, Buffer[]> | undefined;
   private readonly validation?: PublicationValidation['Service'];
-  constructor(input: string | undefined, options: ReadRepositoryOptions);
-  constructor(input: string | undefined, options: RepositoryOptions, validation: PublicationValidation['Service']);
-  constructor(input?: string, options: RepositoryOptions = {}, validation?: PublicationValidation['Service']) {
+  private readonly snapshotContext = new AsyncLocalStorage<symbol>();
+  private activeSnapshot: symbol | undefined;
+  static open(input: string | undefined, options: ReadRepositoryOptions): Promise<LocalRepository>;
+  static open(input: string | undefined, options: RepositoryOptions, validation: PublicationValidation['Service']): Promise<LocalRepository>;
+  static async open(input: string | undefined, options: RepositoryOptions, validation?: PublicationValidation['Service']): Promise<LocalRepository> {
+    const repo = new LocalRepository(input, options, validation);
+    await repo.initialize(options);
+    return repo;
+  }
+  private constructor(input: string | undefined, options: RepositoryOptions, validation?: PublicationValidation['Service']) {
     this.validation = validation;
     const environment = Object.freeze({ ...(options.environment ?? options.runtime?.env ?? {}) });
     this.root = discoverRoot(input, options.initialize, options.runtime === undefined ? undefined : { cwd: options.runtime.cwd, env: environment });
@@ -316,6 +325,8 @@ export class LocalRepository implements Repository {
     this.privateDir = privateDir;
     assertNoSymlink(this.privateDir);
     this.coordinationDirectory = tracePrivateDirectorySync(this.root, this.executionEnvironment);
+  }
+  private async initialize(options: RepositoryOptions): Promise<void> {
     try {
       this.openRoot();
       this.snapshotDepth = 1;
@@ -347,14 +358,15 @@ export class LocalRepository implements Repository {
       const markerPath = 'concord.config.ts';
       const recoveryJournal = options.recover && present(genericJournal) ? currentJournal(genericJournal) : undefined;
       if (options.initialize && marker !== undefined) throw new ConcordError('ProjectExists', `${markerPath} already exists`);
-      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
+      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : await snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
       this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
       this.validateConfiguredRoots(this.config);
       for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...(this.config.runner?.sourceFiles ?? [])]) this.absolute(path);
       for (const adapter of this.config.testAdapters ?? []) {
         for (const path of [...adapter.include, ...adapter.inputRoots, ...adapter.implementationFiles, ...adapter.lockFiles]) this.absolute(path);
       }
-      if (recoveryJournal !== undefined) this.preflight(recoveryJournal, true);
+      if (recoveryJournal !== undefined) await this.preflight(recoveryJournal, true);
+      this.validateObservations();
       if (this.optimistic) this.verifySnapshot();
 
     } catch (cause) { this.close(); throw cause; }
@@ -498,7 +510,7 @@ export class LocalRepository implements Repository {
     for (const path of config.runner?.sourceFiles ?? []) this.absolute(path);
   }
   private allowedOwner(path: string, _config: ProjectConfig = this.config): boolean { return fixedOwner(path) || isWorkflowSkillPath(path) || path.startsWith('memory/') && path.endsWith('.md') || path.startsWith('docs/') && path.endsWith('/writing.md'); }
-  private currentSnapshot(): ConfigSnapshot {
+  private async currentSnapshot(): Promise<ConfigSnapshot> {
     const source = this.read('concord.config.ts');
     return snapshot('concord.config.ts', source ?? '', this.persistentCache === 'off' ? undefined : this.privateDir, source === undefined, this.runtime, this.configContentCache);
   }
@@ -515,14 +527,19 @@ export class LocalRepository implements Repository {
     return this.underLease(read);
   }
   /** Historical navigation only. Current queries and publications still verify strictly. */
+  observeProjection<A>(read: () => Promise<A>): Promise<{ value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } }>;
+  observeProjection<A>(read: () => A): { value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } };
   // @concord-code
   // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-  observeProjection<A>(read: () => A): { value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } } {
+  observeProjection<A>(read: () => A | Promise<A>): { value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } } | Promise<{ value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } }> {
     this.beginProjection();
     try {
       const value = read();
-      return { value, drift: this.projectionDrift() };
-    } finally { this.endSnapshot(); }
+      if (value instanceof Promise) return value.then(result => ({ value: result, drift: this.projectionDrift() })).finally(() => this.endSnapshot());
+      const result = { value, drift: this.projectionDrift() };
+      this.endSnapshot();
+      return result;
+    } catch (cause) { this.endSnapshot(); throw cause; }
   }
   beginProjection(reclaimDead = true): void {
     if (this.snapshotDepth !== 0 || !this.optimistic) throw new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot');
@@ -537,8 +554,31 @@ export class LocalRepository implements Repository {
     return { files, directories, publicationChanged: false };
   }
   private underLease<A>(read: () => A): A {
-    this.beginSnapshot();
-    try { const value = read(); if (this.snapshotDepth === 1) this.verifySnapshot(); return value; } finally { this.endSnapshot(); }
+    const inherited = this.snapshotContext.getStore();
+    if (this.activeSnapshot !== undefined && inherited !== this.activeSnapshot) throw new ConcordError('RepositoryBusy', 'Independent asynchronous operations require separate repository readers');
+    const owner = this.activeSnapshot === undefined;
+    const token = this.activeSnapshot ?? Symbol('source snapshot');
+    this.activeSnapshot = token;
+    return this.snapshotContext.run(token, () => {
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        try { this.endSnapshot(); }
+        finally { if (owner) this.activeSnapshot = undefined; }
+      };
+      try {
+        this.beginSnapshot();
+        const value = read();
+        if (value instanceof Promise) return value.then(result => {
+          if (this.snapshotDepth === 1) this.verifySnapshot();
+          return result;
+        }).finally(release) as A;
+        if (this.snapshotDepth === 1) this.verifySnapshot();
+        release();
+        return value;
+      } catch (cause) { release(); throw cause; }
+    });
   }
   /** Optimistic reads never hold up a publisher; changed inputs reject the result. */
   // @concord-code
@@ -621,7 +661,13 @@ export class LocalRepository implements Repository {
     const directory = this.coordinationDirectory;
     const pending = ['publication-journal.json', 'multi-file-publication-journal.json'].filter(name => present(join(directory, name)));
     for (const name of pending) assertJournalFinished(this.root, directory, join(directory, name), 'An interrupted Trace publication exists; run concord recover');
-    if (!this.recovering) assertJournalFinished(this.root, directory, join(this.privateDir, 'journal.json'), 'An interrupted publication exists; run concord recover', this.traceLease?.owner.token);
+    const generic = join(this.privateDir, 'journal.json');
+    if (!this.recovering && this.activeJournal !== undefined && this.traceLease !== undefined) {
+      assertNoSymlink(generic);
+      const owner = readLeaseOwner(join(directory, PUBLICATION_LEASE), 'read-publication');
+      if (owner?.token === this.traceLease.owner.token && readFileSync(generic, 'utf8') === this.activeJournal) return;
+    }
+    if (!this.recovering) assertJournalFinished(this.root, directory, generic, 'An interrupted publication exists; run concord recover', this.traceLease?.owner.token);
   }
   private assertReady(): void {
     assertCurrentRuntimeFormat(this.root, this.privateDir);
@@ -704,7 +750,7 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
-  publish(operation: string, changes: readonly Change[], dryRun = false): MutationReceipt {
+  async publish(operation: string, changes: readonly Change[], dryRun = false): Promise<MutationReceipt> {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const managedWritingOwner = (path: string) => path.startsWith('docs/') && !path.split('/').some(part => part === '_template' || part === '.git' || part === 'node_modules') && (path.endsWith(`/${policyName}`) || path.endsWith(`/${catalogName}`));
     if (operation === 'init') {
@@ -720,7 +766,7 @@ export class LocalRepository implements Repository {
     const plannedConfigChange = configChanges[0];
     if (plannedConfigChange?.after === null) throw new ConcordError('InvalidChange', 'The runtime configuration cannot be deleted or renamed');
     if (operation === 'set-config' && changes.length !== 1) throw new ConcordError('InvalidChange', 'config.set must publish exactly one configuration');
-    const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, dryRun || this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache).config;
+    const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : (await snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, dryRun || this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache)).config;
     if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) this.validateProjectConfig(authorizationConfig);
     const entries = changes.map(c => {
       this.absolute(c.path);
@@ -734,19 +780,15 @@ export class LocalRepository implements Repository {
     for (const c of entries) { let dir = dirname(c.path); while (dir !== '.') { if (!present(this.absolute(dir))) directories.add(dir); dir = dirname(dir); } }
     const isInit = operation === 'init' && this.configSnapshot.source === '';
     const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest } };
-    const receipt = this.publishJournal(journal, dryRun);
-    if (!receipt.dryRun && plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
-      this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
-      this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
-    }
+    const receipt = await this.publishJournal(journal, dryRun);
     return receipt;
   }
   /** Publishes one existing configured JS/TS file using the unified source-set journal. */
   // @concord-code
   // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
-  publishSource(path: string, before: string, after: string, dryRun = false): MutationReceipt {
+  async publishSource(path: string, before: string, after: string, dryRun = false): Promise<MutationReceipt> {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
-    const frozen = this.currentSnapshot();
+    const frozen = await this.currentSnapshot();
     const configSource = frozen.source;
     const config = frozen.config;
     const roots = this.sourceScopeRoots(config);
@@ -767,10 +809,10 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-  publishIssueClose(issue: string, dryRun = false): MutationReceipt {
+  async publishIssueClose(issue: string, dryRun = false): Promise<MutationReceipt> {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
-    const frozen = this.currentSnapshot();
-    const plan = this.validation!.planIssueClose(this, { issue });
+    const frozen = await this.currentSnapshot();
+    const plan = await this.validation!.planIssueClose(this, { issue });
     const changes = plan.changes.map(change => {
       this.absolute(change.path);
       if (change.before === null || (this.read(change.path) ?? null) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before Issue closure`);
@@ -783,10 +825,10 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
-  publishStepRename(request: StepRename, dryRun = false): MutationReceipt {
+  async publishStepRename(request: StepRename, dryRun = false): Promise<MutationReceipt> {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
-    const frozen = this.currentSnapshot();
-    const plan = this.validation!.planStepRename(this, request);
+    const frozen = await this.currentSnapshot();
+    const plan = await this.validation!.planStepRename(this, request);
     const changes = plan.changes.map(change => {
       this.absolute(change.path);
       if (change.before === null || change.after === null || this.read(change.path) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before step rename`);
@@ -799,8 +841,8 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#data-flow
-  private publishJournal(journal: Journal, dryRun: boolean): MutationReceipt {
-    return this.underLease(() => {
+  private async publishJournal(journal: Journal, dryRun: boolean): Promise<MutationReceipt> {
+    return this.underLease(async () => {
       // Planning is optimistic. Only validation and publication serialize writers.
       const commitLease = this.optimistic && !dryRun && !this.noWrite
         ? acquireTraceLeaseSync(this.root, 'exclusive', 'publication', true, true, this.executionEnvironment) : undefined;
@@ -810,17 +852,18 @@ export class LocalRepository implements Repository {
       this.clearPathObservations();
       this.observing = false;
       try {
-        const receipt = this.publishUnderLease(journal, dryRun);
+        const configChange = journal.changes.find(change => change.path === 'concord.config.ts');
+        const nextConfig = configChange?.after == null ? undefined : await snapshot('concord.config.ts', configChange.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
+        const receipt = await this.publishUnderLease(journal, dryRun);
         if (!receipt.dryRun) {
-          this.observedFiles.clear(); this.observedDirectories.clear();
-          const config = journal.changes.find(change => change.path === 'concord.config.ts');
-          if (config?.after !== undefined && config.after !== null) {
-            this.configSnapshot = snapshot('concord.config.ts', config.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
-            this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
+          this.observedFiles.clear(); this.observedBytes.clear(); this.observedDirectories.clear(); this.observedRootFiles = undefined;
+          if (nextConfig !== undefined) {
+            this.configSnapshot = nextConfig;
+            this.config = resolveProjectConfig(this.root, nextConfig.config);
           }
         }
         return receipt;
-      } finally { this.observing = true; }
+      } finally { this.observing = true; this.activeJournal = undefined; }
       } finally {
         if (commitLease !== undefined) {
           try { closeRepositoryCache(this); }
@@ -834,11 +877,13 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
-  private publishUnderLease(journal: Journal, dryRun: boolean): MutationReceipt {
+  private async publishUnderLease(journal: Journal, dryRun: boolean): Promise<MutationReceipt> {
     if (Buffer.byteLength(canonical(journal)) > MAX_TRANSACTION_BYTES) throw new ConcordError('InvalidChange', 'Publication exceeds the transaction size limit');
     const changedPaths = journal.changes.map(change => change.path);
     // Validate the complete set before persisting a prepared journal; dry-run follows this same guard.
-    this.preflight(journal);
+    await this.preflight(journal);
+    this.validateObservations();
+    this.observing = false;
     if (dryRun || this.noWrite) return { operation: journal.operation, dryRun: true, changedPaths };
     if (this.access !== 'write') throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     if (this.traceLease?.mode !== 'exclusive') throw new ConcordError('RepositoryBusy', 'Publication requires an owned exclusive lease');
@@ -846,20 +891,28 @@ export class LocalRepository implements Repository {
     invalidateActiveRun(this.root, this.executionEnvironment);
     const journalPath = join(this.privateDir, 'journal.json');
     if (present(journalPath)) throw new ConcordError('RecoveryRequired', 'Run concord recover before another publication');
-    atomic(journalPath, `${canonical(journal)}\n`);
+    this.activeJournal = `${canonical(journal)}\n`;
+    atomic(journalPath, this.activeJournal);
     try {
-      this.preflight(journal);
+      await this.preflight(journal);
+      this.validateObservations();
+      this.observing = false;
       for (const dir of journal.directories) { const target = this.absolute(dir); mkdirSync(target, { recursive: true }); syncDirectory(dirname(target)); this.clearPathObservations(); }
       for (const change of journal.changes) {
         if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
-          const current = this.currentSnapshot();
-          if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('FileChangedSinceRead', 'Project configuration changed before source replacement');
+          const current = this.readCurrent(journal.scope.configPath) ?? '';
+          if (digest(current) !== journal.scope.configDigest) throw new ConcordError('FileChangedSinceRead', 'Project configuration changed before source replacement');
         }
         if ((this.read(change.path) ?? null) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before replacement`);
         this.apply(change.path, change.after, change.mode);
       }
-      if (journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') this.preflight(journal, true);
-      atomic(journalPath, `${canonical({ ...journal, phase: 'committed' })}\n`);
+      if (journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
+        await this.preflight(journal, true);
+        this.validateObservations();
+        this.observing = false;
+      }
+      this.activeJournal = `${canonical({ ...journal, phase: 'committed' })}\n`;
+      atomic(journalPath, this.activeJournal);
     } catch (cause) {
       throw new ConcordError('RecoveryRequired', `Publication stopped: ${cause instanceof Error ? cause.message : String(cause)}; run concord recover`);
     }
@@ -872,7 +925,10 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#写入保护
-  private preflight(journal: Journal, recovering = false): void {
+  private async preflight(journal: Journal, recovering = false): Promise<void> {
+    this.observedFiles.clear(); this.observedBytes.clear(); this.observedDirectories.clear(); this.observedRootFiles = undefined;
+    this.clearPathObservations();
+    this.observing = true;
     const fail = (message: string): never => { throw new ConcordError(recovering ? journal.scope.kind === 'issue-close' ? 'RecoveryRequired' : 'RecoveryConflict' : 'FileChangedSinceRead', message); };
     if (journal.root !== this.root || journal.privateDir !== this.privateDir) fail('Publication belongs to a different worktree');
     if (new Set(journal.changes.map(change => change.path)).size !== journal.changes.length || journal.changes.length === 0) fail('Journal must contain unique changes');
@@ -891,7 +947,7 @@ export class LocalRepository implements Repository {
     if (journal.scope.kind === 'issue-close') {
       const scope = journal.scope;
       if (journal.operation !== 'close-issue' || journal.directories.length !== 0) fail('Issue closure has an unauthorized operation or directory write');
-      const current = this.currentSnapshot();
+      const current = await this.currentSnapshot();
       if (digest(scope.configSource) !== scope.configDigest || current.path !== scope.configPath || current.digest !== scope.configDigest) fail('Issue closure project configuration changed');
       const before = new Map(journal.changes.map(change => [change.path, change.before]));
       const reader: Repository = { root: this.root, privateDir: this.privateDir, config: resolveProjectConfig(this.root, current.config), configSnapshot: current,
@@ -899,7 +955,7 @@ export class LocalRepository implements Repository {
         read: path => before.has(path) ? before.get(path) ?? undefined : this.read(path), files: (path, scope) => this.files(path, scope), absolute: path => this.absolute(path), publish: () => { throw new ConcordError('InvalidChange', 'Recovery recomputation cannot publish'); } };
       bindRepositoryRuntime(reader, this.runtime);
       try {
-        const plan = this.validation!.planIssueClose(reader, scope);
+        const plan = await this.validation!.planIssueClose(reader, scope);
         if (plan.inputsDigest !== scope.inputsDigest || canonical(plan.testFiles) !== canonical(scope.testFiles) || canonical(plan.changes) !== canonical(journal.changes.map(({ path, before, after }) => ({ path, before, after })))) fail('Issue closure inputs or allowed rewrite differ from the journal');
         for (const change of journal.changes) {
           if (change.before === null || change.before === change.after || (change.path === scope.issue ? change.after !== null : change.after === null)) fail('Invalid Issue closure file images');
@@ -912,7 +968,7 @@ export class LocalRepository implements Repository {
     } else if (journal.scope.kind === 'step-rename') {
       const scope = journal.scope;
       if (journal.operation !== 'rename-step' || journal.directories.length !== 0) fail('Step rename cannot create directories or use another operation');
-      const current = this.currentSnapshot();
+      const current = await this.currentSnapshot();
       const before = new Map(journal.changes.map(change => [change.path, change.before]));
       const requiredMemberships = new Set<string>();
       const reader: Repository = { root: this.root, privateDir: this.privateDir, config: resolveProjectConfig(this.root, current.config), configSnapshot: current,
@@ -920,7 +976,7 @@ export class LocalRepository implements Repository {
         read: path => before.has(path) ? before.get(path) ?? undefined : this.read(path), files: (path, scope) => { requiredMemberships.add(canonical([path, scope ?? 'all'])); return this.files(path, scope); }, absolute: path => this.absolute(path), publish: () => { throw new ConcordError('InvalidChange', 'Recovery recomputation cannot publish'); } };
       bindRepositoryRuntime(reader, this.runtime);
       try {
-        const plan = this.validation!.planStepRename(reader, scope);
+        const plan = await this.validation!.planStepRename(reader, scope);
         if (plan.inputsDigest !== scope.inputsDigest || canonical(plan.changes) !== canonical(journal.changes.map(({ path, before, after }) => ({ path, before, after })))) fail('Step rename inputs or complete allowed rewrite differ from the journal');
         const recordedMemberships = new Set(scope.memberships.map(item => canonical([item.path, item.scope ?? 'all'])));
         if (recordedMemberships.size !== scope.memberships.length || [...requiredMemberships].some(key => !recordedMemberships.has(key))) fail('Step rename requires every observed directory membership');
@@ -943,9 +999,9 @@ export class LocalRepository implements Repository {
       if (journal.operation !== 'set-source' || journal.changes.length !== 1 || journal.directories.length !== 0) fail('Source publication must replace exactly one existing file without directories');
       if (digest(journal.scope.configSource) !== journal.scope.configDigest) fail('Frozen project configuration digest is invalid');
       const frozenPath = journal.scope.configPath;
-      const current = this.currentSnapshot();
+      const current = await this.currentSnapshot();
       if (current.path !== frozenPath || current.digest !== journal.scope.configDigest) fail('Project configuration changed since source publication');
-      const config = snapshot(frozenPath, journal.scope.configSource, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache).config;
+      const config = (await snapshot(frozenPath, journal.scope.configSource, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache)).config;
       const change = journal.changes[0]!;
       const roots = this.sourceScopeRoots(config);
       this.sourcePath(change.path, roots);
@@ -964,18 +1020,18 @@ export class LocalRepository implements Repository {
           const plannedSource = plannedConfigChange?.after ?? '';
           const typed = this.read('concord.config.ts');
           if (!recovering && typed !== undefined) fail('Project configuration appeared since init planning');
-          authorizationConfig = snapshot('concord.config.ts', plannedSource as string, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache).config;
+          authorizationConfig = (await snapshot('concord.config.ts', plannedSource as string, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache)).config;
           this.validateProjectConfig(authorizationConfig);
         } else {
-          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache).config;
+          authorizationConfig = (await snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.persistentCache === 'off' ? undefined : this.privateDir, true, this.runtime, this.configContentCache)).config;
           this.validateProjectConfig(authorizationConfig);
-          const current = this.currentSnapshot();
+          const current = await this.currentSnapshot();
           const recoveringPlannedConfig = recovering && plannedConfigChange?.path === journal.scope.configPath && plannedConfigChange.after !== null && current.source === plannedConfigChange.after;
           if (current.path !== journal.scope.configPath || current.source !== journal.scope.configSource && !recoveringPlannedConfig) fail('Project configuration changed since publication planning');
         }
       }
       if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
-        const next = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache).config;
+        const next = (await snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache)).config;
         this.validateProjectConfig(next);
       }
       if (plannedConfigChange?.after === null) fail('A journal cannot delete the runtime configuration');
@@ -1024,23 +1080,28 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#完整路径
-  recover(): { operation: string; status: string; changedPaths: readonly string[] } {
-    return this.snapshot(() => this.recoverUnderLease());
+  async recover(): Promise<{ operation: string; status: string; changedPaths: readonly string[] }> {
+    return this.snapshot(async () => {
+      try { return await this.recoverUnderLease(); }
+      finally { this.observing = true; }
+    });
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#写入保护
-  private recoverUnderLease(): { operation: string; status: string; changedPaths: readonly string[] } {
+  private async recoverUnderLease(): Promise<{ operation: string; status: string; changedPaths: readonly string[] }> {
     this.clearPathObservations();
     const path = join(this.privateDir, 'journal.json');
     if (!present(path)) return { operation: 'recover', status: 'clean', changedPaths: [] };
     const journal = currentJournal(path);
-    this.preflight(journal, true);
+    await this.preflight(journal, true);
+    this.validateObservations();
+    this.observing = false;
     if (journal.phase === 'prepared') {
       invalidateActiveRun(this.root, this.executionEnvironment);
       for (const change of [...journal.changes].reverse()) {
         if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
-          const current = this.currentSnapshot();
-          if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('RecoveryConflict', 'Project configuration changed during source recovery');
+          const current = this.readCurrent(journal.scope.configPath) ?? '';
+          if (digest(current) !== journal.scope.configDigest) throw new ConcordError('RecoveryConflict', 'Project configuration changed during source recovery');
         }
         const current = this.read(change.path) ?? null;
         if (current !== change.before && current !== change.after) throw new ConcordError('RecoveryConflict', `${change.path} changed during recovery`);
@@ -1057,7 +1118,7 @@ export class LocalRepository implements Repository {
   }
 }
 
-export function readRepositoryBytesSync(root: string, path: string, runtime?: RuntimeEnvironmentSnapshot): Uint8Array | undefined {
-  const repo = new LocalRepository(root, { access: 'read', optimistic: true, runtime });
+export async function readRepositoryBytes(root: string, path: string, runtime?: RuntimeEnvironmentSnapshot): Promise<Uint8Array | undefined> {
+  const repo = await LocalRepository.open(root, { access: 'read', optimistic: true, runtime });
   try { return repo.snapshot(() => repo.readBytes(path)); } finally { repo.close(); }
 }

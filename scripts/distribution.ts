@@ -2,17 +2,14 @@ import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { join, resolve } from 'node:path';
-import { API } from 'typescript/sync';
-import * as ts from 'typescript/ast';
-import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { packJavaScript, p5RuntimeNotice } from './pack-javascript.ts';
-import { buildStartup, bindStartupPackage } from './startup-build.ts';
 import { P5_LIBRARIES } from "../src/model/p5/index.ts";
 import { captureBuildSource, writeBuildIdentity } from './build-identity.ts';
 import { assembleArchive } from './archive.ts';
 import { archivePartInput, cachedArchivePart } from './application-cache.ts';
 import { externalBuildOutput } from './build-output.ts';
 import { archiveTarget } from './archive-support.ts';
+import { assertCompilationHost } from './compile-application.ts';
 import { sourceWebDigest } from '../src/base/installation/index.ts';
 import { buildHerdrModAssets } from './build-herdr-mod.ts';
 import { modManifest } from '../src/model/herdr-mod/index.ts';
@@ -25,109 +22,19 @@ class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
   exitCode: Schema.Number,
 }) {}
 
-// These pinned packages expose side-effect-free namespace barrels and matching
-// public subpaths. Preserve module identity while avoiding unrelated services at
-// CLI startup. Rewrite only emitted JS and remove mappings for rewritten lines.
-const namespaceBarrels = new Set(['effect', '@effect/platform-node', 'effect/cli', 'effect/process']);
-
 class BuildOutputFailed extends Schema.TaggedError<BuildOutputFailed>()('BuildOutputFailed', {
   file: Schema.String,
   message: Schema.String,
 }) {}
 
-const SourceMapSchema = Schema.Struct({
-  version: Schema.Literal(3),
-  file: Schema.optional(Schema.String),
-  sourceRoot: Schema.optional(Schema.String),
-  sources: Schema.Array(Schema.String),
-  sourcesContent: Schema.optional(Schema.Array(Schema.NullOr(Schema.String))),
-  names: Schema.Array(Schema.String),
-  mappings: Schema.String,
-});
-
-function namespaceImportEdits(api: API, file: string, text: string) {
-  const retained = api.createSourceFile(file, text, { scriptKind: ts.ScriptKind.JS });
-  const edits: { start: number; end: number; text: string; firstLine: number; lastLine: number }[] = [];
-  try {
-    const source = retained.sourceFile;
-    const lines = source.getLineStarts();
-    for (const statement of source.statements) {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)
-        || !namespaceBarrels.has(statement.moduleSpecifier.text)) continue;
-      const clause = statement.importClause;
-      if (!clause || clause.phaseModifier !== undefined || clause.name || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
-      const imports = clause.namedBindings.elements.filter(binding => !binding.isTypeOnly);
-      if (imports.length === 0) continue;
-      const first = statement.getStart(source), last = statement.getEnd();
-      const firstLine = source.getLineAndCharacterOfPosition(first).line;
-      const lastLine = source.getLineAndCharacterOfPosition(last - 1).line;
-      const start = lines[firstLine]!, end = lines[lastLine + 1] ?? text.length;
-      if (text.slice(start, first).trim() || text.slice(last, end).trim()) {
-        throw new BuildOutputFailed({ file, message: 'A narrowed import must occupy whole generated lines without another statement or trailing comment' });
-      }
-      const attributes = statement.attributes === undefined ? '' : ` ${statement.attributes.getText(source)}`;
-      const module = statement.moduleSpecifier.text;
-      const replacement = imports.map(binding => `import * as ${binding.name.text} from ${JSON.stringify(`${module}/${(binding.propertyName ?? binding.name).text}`)}${attributes};`).join(' ');
-      if (/[\r\n\u2028\u2029]/u.test(replacement)) throw new BuildOutputFailed({ file, message: 'A narrowed import replacement must fit on one generated line' });
-      // Keep every original line ending, including blank lines inside a multiline import.
-      const endings = text.slice(start, end).match(/\r\n|[\r\n\u2028\u2029]/gu) ?? [];
-      edits.push({ start, end, text: replacement + endings.join(''), firstLine, lastLine });
-    }
-  } finally { retained.dispose(); }
-  return edits;
-}
-
-const narrowNamespaceImports = Effect.fn('build.narrowNamespaceImports')(function*(api: API, file: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(file);
-  const edits = yield* Effect.try({
-    try: () => namespaceImportEdits(api, file, text),
-    catch: cause => cause instanceof BuildOutputFailed ? cause : new BuildOutputFailed({ file, message: String(cause) }),
-  });
-  if (edits.length === 0) return;
-  const mapPath = `${file}.map`;
-  let nextMap: string | undefined;
-  if (yield* fs.exists(mapPath)) {
-    const map = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SourceMapSchema), { onExcessProperty: 'error' })(yield* fs.readFileString(mapPath));
-    // decode resolves all cross-line source/name deltas before any line is removed.
-    const mappings = decode(map.mappings);
-    for (const edit of edits) for (let line = edit.firstLine; line <= edit.lastLine && line < mappings.length; line++) mappings[line] = [];
-    nextMap = JSON.stringify({ ...map, mappings: encode(mappings) });
-  } else if (/^\s*\/\/[#@]\s*sourceMappingURL=/mu.test(text)) {
-    return yield* new BuildOutputFailed({ file, message: 'Generated JavaScript declares a missing source map' });
-  }
-  let rewritten = text;
-  for (const edit of edits.reverse()) rewritten = rewritten.slice(0, edit.start) + edit.text + rewritten.slice(edit.end);
-  yield* fs.writeFileString(file, rewritten);
-  if (nextMap !== undefined) yield* fs.writeFileString(mapPath, nextMap);
-});
-
-const narrowGeneratedImports = Effect.fn('build.narrowGeneratedImports')(function*() {
-  const fs = yield* FileSystem.FileSystem;
-  const api = yield* Effect.acquireRelease(Effect.sync(() => new API({ runExternalCode: false })), api => Effect.sync(() => api.close()));
-  for (const name of (yield* fs.readDirectory(dist(), { recursive: true })).sort((left, right) => left.localeCompare(right))) {
-    if (!/\.(?:[cm]?js)$/u.test(name)) continue;
-    const file = dist(name);
-    if ((yield* fs.stat(file)).type === 'File') yield* narrowNamespaceImports(api, file);
-  }
-}, Effect.scoped);
-
-const prepare = Effect.gen(function*() {
+/** Check the complete application; Bun consumes source and emits no application JS. */
+const typecheck = Effect.fn('build.typecheck')(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const fs = yield* FileSystem.FileSystem;
-  yield* fs.remove(outputRoot, { recursive: true, force: true });
-  yield* fs.makeDirectory(outputRoot, { recursive: true });
-  yield* fs.remove(join(outputRoot, 'node_modules'), { recursive: true, force: true });
-  yield* fs.symlink(resolve('node_modules'), join(outputRoot, 'node_modules'));
-  yield* fs.remove(dist(), { recursive: true, force: true });
-  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) yield* fs.copy(name, join(outputRoot, name), { overwrite: true });
-  yield* Effect.all(['tsconfig.json'].map(project => Effect.gen(function*() {
-    const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError', ...(project === 'tsconfig.json' ? ['--noEmit', 'false', '--outDir', dist()] : [])], { stdout: 'inherit', stderr: 'inherit' }));
+  for (const project of ['tsconfig.json', 'tsconfig.web.json']) {
+    const exitCode = Number(yield* spawner.exitCode(ChildProcess.make(process.execPath,
+      ['node_modules/typescript/bin/tsc', '-p', project, '--noEmit'], { stdout: 'inherit', stderr: 'inherit' })));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
-  })), { concurrency: 'unbounded' });
-  yield* narrowGeneratedImports();
-  yield* buildStartup(dist(), outputRoot);
-  yield* buildHerdrModAssets(dist('herdr-mod'));
+  }
 });
 
 const finish = Effect.gen(function*() {
@@ -164,20 +71,9 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
   const fs = yield* FileSystem.FileSystem;
   const repository = resolve(import.meta.dirname, '..');
   const destination = yield* externalBuildOutput(output);
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const webCheck = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.web.json', '--noEmit'], { stdout: 'inherit', stderr: 'inherit' }));
-  if (webCheck !== 0) return yield* new BuildFailed({ project: 'tsconfig.web.json', exitCode: Number(webCheck) });
+  yield* typecheck();
   const tooling = ['scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts', 'scripts/pack-javascript.ts',
-    'scripts/startup-build.ts', 'scripts/build-identity.ts', 'scripts/build-output.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'tsconfig.json', 'tsconfig.web.json', 'node_modules/typescript/package.json', 'node_modules/esbuild/package.json', 'node_modules/vite-plus/package.json'];
-  const codeInput = () => archivePartInput(repository, ['src', ...tooling]);
-  const codeDigest = yield* codeInput();
-  const code = yield* cachedArchivePart('application', codeDigest, directory => Effect.gen(function*() {
-    outputRoot = directory;
-    yield* prepare;
-    yield* fs.chmod(dist('entry/cli/entry.js'), 0o755);
-    yield* fs.chmod(dist('entry/cli/cli.js'), 0o755);
-    yield* fs.remove(join(directory, 'node_modules'));
-  }), codeInput);
+    'scripts/build-herdr-mod.ts', 'scripts/herdr-mod-catalog.ts', 'scripts/build-identity.ts', 'scripts/build-output.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches', 'package.json', 'tsconfig.json', 'tsconfig.web.json', 'node_modules/typescript/package.json', 'node_modules/esbuild/package.json', 'node_modules/vite-plus/package.json'];
   const resourcePaths = ['docs', 'skills', 'templates', ...(yield* fs.readDirectory(repository)).filter(name => /^README(?:\..+)?\.md$/u.test(name))];
   const resourceInput = () => archivePartInput(repository, [...resourcePaths, 'scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts']);
   const resourceDigest = yield* resourceInput();
@@ -186,7 +82,7 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
     for (const name of resourcePaths) yield* fs.copy(join(repository, name), join(directory, name));
   }), resourceInput);
   const webInput = () => Effect.gen(function*() {
-    return yield* archivePartInput(repository, [...tooling, 'src/model/p5'], yield* sourceWebDigest(repository));
+    return yield* archivePartInput(repository, [...tooling, 'src/model/p5', 'src/model/herdr-mod', 'src/entry/herdr-mod'], yield* sourceWebDigest(repository));
   });
   const webDigest = yield* webInput();
   const web = yield* cachedArchivePart('web', webDigest, directory => Effect.gen(function*() {
@@ -197,22 +93,25 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
       await build({ configFile: 'vite.source.config.ts', build: { outDir: dist('web'), write: true, minify: true, license: true, emptyOutDir: true } });
     });
     yield* finish;
+    yield* buildHerdrModAssets(dist('herdr-mod'));
   }), webInput);
   yield* fs.remove(destination, { recursive: true, force: true });
   yield* fs.makeDirectory(destination, { recursive: true });
-  for (const part of [code, resources, web]) yield* copyPart(part, destination);
+  for (const part of [resources, web]) yield* copyPart(part, destination);
+  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) yield* fs.copyFile(join(repository, name), join(destination, name));
+  if (yield* fs.exists(join(repository, 'patches'))) yield* fs.copy(join(repository, 'patches'), join(destination, 'patches'));
   const identity = yield* captureBuildSource();
   const manifest = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(yield* fs.readFileString(join(destination, 'package.json')));
-  yield* fs.writeFileString(join(destination, 'package.json'), `${JSON.stringify({ ...manifest, gitHead: identity.commit })}\n`);
+  yield* fs.writeFileString(join(destination, 'package.json'), `${JSON.stringify({ ...manifest, bin: { concord: '../bin/concord' }, gitHead: identity.commit })}\n`);
   const version = yield* Schema.decodeUnknownEffect(Schema.String)(manifest.version);
   yield* fs.writeFileString(join(destination, 'dist/herdr-mod/mod.json'), `${JSON.stringify(modManifest(version))}\n`);
   yield* writeBuildIdentity(identity, join(destination, 'dist'));
-  yield* bindStartupPackage(join(destination, 'dist'), destination);
-  if ((yield* codeInput()) !== codeDigest || (yield* resourceInput()) !== resourceDigest || (yield* webInput()) !== webDigest) return yield* new BuildOutputFailed({ file: destination, message: 'Application inputs changed while assembling parts' });
+  if ((yield* resourceInput()) !== resourceDigest || (yield* webInput()) !== webDigest) return yield* new BuildOutputFailed({ file: destination, message: 'Application inputs changed while assembling parts' });
 })).pipe(Effect.provide(NodeServices.layer)));
 
 export const buildDistribution = async (output: string): Promise<void> => {
   const target = archiveTarget();
+  assertCompilationHost(target);
   await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const temporary = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-application-' });

@@ -19,7 +19,7 @@ jobs:
   gate:
     uses: ./.github/workflows/gate.yml
     with:
-      ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
 
   native:
     timeout-minutes: 15
@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.18.0
@@ -67,18 +67,26 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  package:
+  candidate:
     needs: native
-    outputs:
-      commit: ${{ steps.identity.outputs.commit }}
     timeout-minutes: 15
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x64
+            native: linux-x64-glibc
+          - os: macos-15
+            target: darwin-arm64
+            native: darwin-arm64
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.18.0
@@ -99,15 +107,58 @@ jobs:
         run: node scripts/prepare-release.ts
       - uses: actions/download-artifact@v4
         with:
-          pattern: concord-hawdb-*
+          name: concord-hawdb-${{ matrix.native }}
           path: native-artifacts
-          merge-multiple: true
       - name: Typecheck maintained build scripts
         run: pnpm exec vp exec tsc -p tsconfig.scripts.json
       - name: Prepare Linux archive relocation tools
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y patchelf binutils
-      - name: Assemble both target archives and the library from one application build
-        run: node scripts/assemble-release.ts release "$RUNNER_TEMP/concord-package" native-artifacts
+      - name: Compile and assemble the target candidate
+        env:
+          CONCORD_TARGET: ${{ matrix.target }}
+        run: node scripts/assemble-release.ts candidate candidate "$RUNNER_TEMP/concord-package" native-artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concord-candidate-${{ matrix.target }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  package:
+    needs: candidate
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Record the checked out tag commit
+        id: identity
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: concord-candidate-*
+          path: candidates
+      - name: Collect the exact target candidates
+        env:
+          RELEASE_COMMIT: ${{ steps.identity.outputs.commit }}
+        run: node scripts/assemble-release.ts collect release candidates/concord-candidate-linux-x64 candidates/concord-candidate-darwin-arm64
       - uses: actions/upload-artifact@v4
         with:
           name: concord-release-package
@@ -132,7 +183,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.18.0

@@ -158,7 +158,7 @@ const executeFullRun = Effect.fn('perf.executeFullRun')(function*(scenario: Benc
   const run = scenario.run;
   let result: TimedRun;
   if ('mod' in run) {
-    const captured = yield* timedRun([process.execPath, 'scripts/herdr-mod-host.ts', context.artifact.entry, context.consumer.root, run.mod], { cwd: process.cwd(), outputDir: context.outputDir, ...(timeoutMs ? { timeoutMs } : {}) });
+    const captured = yield* timedRun(['bun', '--no-env-file', '--config=/dev/null', 'scripts/herdr-mod-host.ts', context.artifact.entry, context.consumer.root, run.mod], { cwd: process.cwd(), outputDir: context.outputDir, ...(timeoutMs ? { timeoutMs } : {}) });
     yield* checkExpectation(scenario, captured);
     const timing = yield* io('Decode readable mod description measurement', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ms: Schema.Number, startedAtMs: Schema.Number, endedAtMs: Schema.Number })), { onExcessProperty: 'ignore' })(captured.stdout));
     result = { ...captured, ...timing };
@@ -189,7 +189,7 @@ const executeFullRun = Effect.fn('perf.executeFullRun')(function*(scenario: Benc
     const application = installationRootForBin(context.artifact.entry);
     const bundled = packagedRuntimeForApplication(application);
     const scanWorker = installationResources(application).worker('query-scan-worker');
-    const argv = [...(bundled === undefined ? nodeEntry((yield* fs.exists(scanWorker)) ? scanWorker : join(dirname(context.artifact.entry), 'query-scan-worker.js')) : [bundled.node, scanWorker]), context.consumer.root, JSON.stringify(run.scan)];
+    const argv = [...(bundled === undefined ? nodeEntry((yield* fs.exists(scanWorker)) ? scanWorker : join(dirname(context.artifact.entry), 'query-scan-worker.js')) : [bundled.concord, '--concord-internal', 'query-scan-worker']), context.consumer.root, JSON.stringify(run.scan)];
     const results = yield* Effect.all(Array.from({ length: 1 }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,
       ...(timeoutMs === undefined ? {} : { timeoutMs }), env: { ...context.env, ...scenario.env } })), { concurrency: 'unbounded' });
     for (const item of results) {

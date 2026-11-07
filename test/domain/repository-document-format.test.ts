@@ -18,8 +18,8 @@ import { traceDigest } from "../../src/base/publication/index.ts";
 
 
 function write(root: string, path: string, source: string): void { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), source); }
-function fixture(): string {
-  const root = createConsumer();
+async function fixture(): Promise<string> {
+  const root = (await createConsumer());
   for (const path of ['docs/issues', 'memory', 'e2e']) mkdirSync(join(root, path), { recursive: true });
   write(root, 'memory/insight.md', renderOwnerFixture({ id: 'insight', title: 'Knowledge', kind: 'memory', relations: [] }));
   write(root, 'docs/issues/issue.md', renderOwnerFixture({ id: 'issue', title: 'Issue', kind: 'issue', relations: [] }));
@@ -33,21 +33,21 @@ const run = <A, E>(effect: Effect.Effect<A, E, EffectTypes.FileSystem.FileSystem
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
 test('advanced writing emits plain Spec pages and reads a single Design page', async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const path = 'docs/design/storage.md';
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
     const decoded = loadDocuments(repo).find(record => record.path === path)!;
     const base = 'docs/_template/feature-design';
-    write(root, `${base}/README.md`, templateBody('feature', '<功能或候选名>'));
-    write(root, `${base}/use-case/README.md`, templateBody('use-case-index', '<功能或候选名>'));
-    write(root, `${base}/library.md`, templateBody('library', '<功能或候选名>'));
-    createDocument(repo, 'feature', { id: 'written', title: 'Written', pages: ['use-case'] });
-    createDocument(repo, 'use-case', { id: 'written-flow', feature: 'written', title: 'Written Flow', body: '# Written Flow\n' });
-    addPage(repo, 'feature', 'written', 'library');
+    write(root, `${base}/README.md`, (await templateBody('feature', '<功能或候选名>')));
+    write(root, `${base}/use-case/README.md`, (await templateBody('use-case-index', '<功能或候选名>')));
+    write(root, `${base}/library.md`, (await templateBody('library', '<功能或候选名>')));
+    (await createDocument(repo, 'feature', { id: 'written', title: 'Written', pages: ['use-case'] }));
+    (await createDocument(repo, 'use-case', { id: 'written-flow', feature: 'written', title: 'Written Flow', body: '# Written Flow\n' }));
+    (await addPage(repo, 'feature', 'written', 'library'));
     const page = 'docs/feature/written/library.md';
-    setPage(repo, 'feature', 'written', 'library', '# Updated\n', traceDigest(readFileSync(join(root, page), 'utf8')));
+    (await setPage(repo, 'feature', 'written', 'library', '# Updated\n', traceDigest(readFileSync(join(root, page), 'utf8'))));
     assert.equal(readFileSync(join(root, 'docs/feature/written/README.md'), 'utf8').startsWith('---'), false);
     assert.equal(readFileSync(join(root, page), 'utf8'), '# Updated\n');
     assert.equal(readFileSync(join(root, 'docs/feature/written/use-case/written-flow.md'), 'utf8').startsWith('---'), false);

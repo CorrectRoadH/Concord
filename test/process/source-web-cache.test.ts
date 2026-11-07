@@ -123,14 +123,15 @@ test('two real source workspace services share one disk Web build without checko
     // Ask the live product service to stop before releasing its owning View
     // command; killing the owner first can race the server's own finalizers.
     for (const root of roots) stopWorkspaceServer(root, entry, env, ['--conditions=concord-source']);
-    await Promise.all(handles.map(handle => stop(handle.child)));
+    await Promise.all(handles.map(async handle => stop(handle.child)));
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
 const runBuilder = (root: string, cache: string, digest: string) => new Promise<{ code: number | null; stderr: string }>((accept, reject) => {
-  // An explicit JavaScript consumer exercises the public source export in an independent Node process.
-  const code = `const nativeRuntime = { cwd: process.cwd(), env: { ...process.env } }; import { runSourceWeb, buildSourceWebArtifact } from ${JSON.stringify(installation)}; await runSourceWeb(buildSourceWebArtifact(process.argv[1], process.argv[2], process.argv[3]), nativeRuntime);`;
+  // Exercise the real builder in an independent Bun process, including failed compilation cleanup.
+  const builder = new URL('../../src/base/installation/source-web-builder.ts', import.meta.url).href;
+  const code = `const nativeRuntime = { cwd: process.cwd(), env: { ...process.env } }; import { runSourceWeb } from ${JSON.stringify(installation)}; import { buildSourceWebArtifact } from ${JSON.stringify(builder)}; await runSourceWeb(buildSourceWebArtifact(process.argv[1], process.argv[2], process.argv[3]), nativeRuntime);`;
   const child = spawn(process.execPath, ['--conditions=concord-source', '--input-type=module', '-e', code, root, cache, digest], { cwd: checkout, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, NODE_ENV: 'production' } });
   let stderr = ''; child.stderr.on('data', data => { stderr += String(data); });
   child.once('error', reject); child.once('close', code => accept({ code, stderr }));
@@ -200,8 +201,8 @@ test('source builder disconnect interrupts a real lock wait and retains the live
   mkdirSync(cache, { recursive: true });
   const lease = acquireFileLease(cache, cache, `${digest}.lease`, 'exclusive', 'test-web-parent')!;
   let child: ChildProcess | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let observer: ReturnType<typeof watch> | undefined;
+  let timer: Awaited<ReturnType<typeof setTimeout>> | undefined;
+  let observer: Awaited<ReturnType<typeof watch>> | undefined;
   let diagnostics = '';
   try {
     const attempting = new Promise<void>((accept, reject) => {

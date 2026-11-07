@@ -27,17 +27,17 @@ test('code findings preserve real red and green test execution and original refe
   try {
 
     assert.ok(existsSync(sourceCli()));
-    root = createConsumer();
+    root = (await createConsumer());
     const consumer = root;
     writeProjectConfig(root, { sourceRoots: ['src', 'test'], testRoots: [] });
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
-      createDocument(repo, 'feature', { id: 'orders', title: 'Orders' });
-      createDocument(repo, 'use-case', { id: 'create-order', title: 'Create order', feature: 'orders' });
+      (await createDocument(repo, 'feature', { id: 'orders', title: 'Orders' }));
+      (await createDocument(repo, 'use-case', { id: 'create-order', title: 'Create order', feature: 'orders' }));
     } finally { repo.close(); }
     mkdirSync(join(root, 'src')); mkdirSync(join(root, 'test'));
     const useCase = 'docs/feature/orders/use-case/create-order.md';
-    const config = readProjectConfig(root), ack = Schema.Struct({}), error = Schema.Struct({ error: Schema.String });
+    const config = (await readProjectConfig(root)), ack = Schema.Struct({}), error = Schema.Struct({ error: Schema.String });
     async function call<A>(args: readonly string[], schema: Schema.ConstraintDecoder<A, never>, status = 0): Promise<A> {
       const result = await runCli({ argv: ['--root', consumer, '--json', '--fresh', ...args], cwd: process.cwd(), env: process.env, signal: AbortSignal.timeout(30000) });
       assert.equal(result.exitCode, status, JSON.stringify({ args, ...result }));

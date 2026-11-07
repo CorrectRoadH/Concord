@@ -47,7 +47,6 @@ export { fullCommand } from './cli-full.ts';
 export { withReadRepo } from './cli-repository.ts';
 export { withRepo } from './cli-repository.ts';
 export { runCommand } from './main.ts';
-export { loadCommand } from './cli.ts';
 export { humanOutput } from './presentation.ts';
 export { SkillArgumentsInvalid } from './skill.ts';
 export { SkillContentInvalid } from './skill.ts';

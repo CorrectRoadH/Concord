@@ -12,7 +12,7 @@ import { startViewServer } from '../e2e/server.ts';
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a native Web job returns derived observations to the persistent workspace owner', { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const { consumer, cli, id } = yield* externalCase();
-  const server = yield* Effect.acquireRelease(Effect.promise(() => startViewServer({ root: consumer, installedBin: cli })), value => Effect.promise(() => value.close()));
+  const server = yield* Effect.acquireRelease(Effect.promise(async () => startViewServer({ root: consumer, installedBin: cli })), value => Effect.promise(() => value.close()));
   yield* Effect.promise(async () => {
     await waitForWorkspaceProjection(new URL(server.address).origin);
     const response = await fetchFresh(new URL('/api/jobs', server.address).href, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caseId: id }) });

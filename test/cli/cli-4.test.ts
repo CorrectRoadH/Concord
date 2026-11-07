@@ -11,10 +11,10 @@ import { runCli } from '../support/cli.ts';
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name packed-operation-boundaries
 test('marker commands print JSON snippets and map malformed targets to a named failure', async () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
   try {
-    for (const id of ['target', 'broken']) createDocument(repo, 'feature', { id, title: id });
+    for (const id of ['target', 'broken']) (await createDocument(repo, 'feature', { id, title: id }));
   } finally { repo.close(); }
   writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Incomplete owner\n');
   for (const [args, expected] of [

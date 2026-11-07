@@ -33,7 +33,7 @@ import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjection
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a new consistent generation with findings replaces the previous healthy generation', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
@@ -58,14 +58,14 @@ test('a new consistent generation with findings replaces the previous healthy ge
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('closing a View server confirms scan-process cleanup and frees the worktree', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
     await waitForWorkspaceProjection(baseOf(server));
   } finally { await server.close(); }
   // A fresh repository handle must open immediately: the refresh lease and owned scan must be gone.
-  assert.equal(existsSync(join(genericPrivateDirectorySync(root), 'workspace-refresh/current')), false);
-  const reopened = new LocalRepository(root);
+  assert.equal(existsSync(join(genericPrivateDirectorySync(root, process.env), 'workspace-refresh/current')), false);
+  const reopened = (await LocalRepository.open(root));
   try { assert.ok(reopened.read('concord.config.ts')); }
   finally { reopened.close(); }
   rmSync(root, { recursive: true, force: true });

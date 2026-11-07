@@ -12,10 +12,10 @@ import { prepareAuthoringFixture } from './authoring-fixture.ts';
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser preserves project configuration conflicts and navigates test evidence on narrow screens', async ({ page, workspace }) => {
   const root = workspace.root;
-  prepareAuthoringFixture(root);
+  (await prepareAuthoringFixture(root));
   let server: ViewServerHandle | undefined;
 
-  replayAuthoringState(root);
+  (await replayAuthoringState(root));
   server = await workspace.ready();
   await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
   await page.setViewportSize({width:1440,height:1000});
@@ -36,7 +36,7 @@ test('browser preserves project configuration conflicts and navigates test evide
     (response.request().postDataJSON() as { config?: { runner?: { timeoutMs?: number } } }).config?.runner?.timeoutMs === 11111);
   await page.getByLabel('运行超时',{exact:true}).fill('11111');
   assert.equal((await timeoutSave).status(), 200);
-  await expect.poll(()=>readProjectConfig(root).runner?.timeoutMs).toBe(11111);
+  await expect.poll(async ()=>(await readProjectConfig(root)).runner?.timeoutMs).toBe(11111);
   await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
   await expect(page.getByRole('status')).toContainText('已自动保存');
   // 暂缓真实保存请求，分别观察草稿与回读，避免把自动保存速度当作断言条件。
@@ -63,7 +63,7 @@ test('browser preserves project configuration conflicts and navigates test evide
   await expect(page.getByRole('status')).toContainText('已自动保存');
   await page.getByLabel('运行超时',{exact:true}).fill('12345');
   const configPath=join(root,projectConfigPath(root));
-  const config=readProjectConfig(root);
+  const config=(await readProjectConfig(root));
   writeProjectConfig(root,{...config,runner:{...config.runner,timeoutMs:54321}});
   const externalConfig=readFileSync(configPath,'utf8');
   await expect(page.locator('.form-error').first()).toBeVisible({ timeout: 60000 });

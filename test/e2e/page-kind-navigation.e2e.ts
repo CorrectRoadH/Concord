@@ -12,9 +12,9 @@ test('Feature and Engineering kind directories open README and retain deep leaf 
   const root = workspace.root;
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    for (const kind of ['feature', 'engineering'] as const) createDocument(repo, kind, { id: 'cart', title: `${kind} cart`, pages: [] });
+    for (const kind of ['feature', 'engineering'] as const) (await createDocument(repo, kind, { id: 'cart', title: `${kind} cart`, pages: [] }));
   } finally { repo.close(); }
   for (const kind of ['feature', 'engineering']) {
     const directory = join(root, `docs/${kind}/cart/architecture`);

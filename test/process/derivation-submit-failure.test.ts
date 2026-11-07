@@ -8,7 +8,7 @@ import { command, fixture, record, recordPath, stop } from '../support/workspace
 
 // @feature docs/feature/local-data-engine/README.md
 test('discovery reports CacheUpdateFailed as JSON when its cache owner disappears after collection', { timeout: 60_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   const source = fileURLToPath(new URL('../..', import.meta.url));
   try {
     mkdirSync(join(root, 'test'));

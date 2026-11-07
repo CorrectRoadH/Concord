@@ -6,13 +6,13 @@
 | --- | --- |
 | `pnpm install --frozen-lockfile` | 首次安装依赖与项目固定版本的 `vp` |
 | `vp install` | 之后的依赖安装 |
-| `pnpm concord <参数>` | 运行当前 worktree 的源码 CLI，等价于 `node src/entry/cli/entry.ts`（[从源码运行](architecture.md#从源码运行)） |
+| `pnpm concord <参数>` | 运行当前 worktree 的源码 CLI，等价于 `bun --no-env-file --config=/dev/null src/entry/cli/entry.ts`（[从源码运行](architecture.md#从源码运行)） |
 | `vp build --outDir <目录>` | 把 `CONCORD_TARGET` 选择的目标的完整归档构建到 worktree 之外的目录 |
 | `vp run build:native` | 准备原生绑定，按[原生绑定复用](architecture.md#原生绑定复用)的顺序取得 |
 | `pnpm build:herdr` | 只构建并更新仓库的 `concord/`，见[独立交付 mod](use-case/share-herdr-mod.md)；成功退出 0，校验或构建失败非零退出并输出具名失败，不执行 Git 或创建 Release |
 | `vp dev` | 只启动 Web 开发服务器，不运行发行准备 |
 
-完整归档包含启动脚本、Node.js 运行时、ripgrep、CLI、原生绑定、Web、PR 预览与随包资源。
+完整归档包含内含 Bun 与应用字节码的可执行文件、ripgrep、原生绑定、Web、PR 预览与随包资源。
 
 原生绑定只在 `native-release.json` 固定版本升级时更新。`build:native` 下载并校验本机的生产与测试绑定；遇到缺包、下载失败或校验不一致时非零退出，绝不调用编译器。
 

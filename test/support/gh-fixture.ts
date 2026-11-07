@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 /** The external gh boundary, shared by source and built command tests. */
 export function writeGhFixture(bin: string, scenarioFile: string, callsFile: string): void {
-mkdirSync(bin);
+mkdirSync(bin, { recursive: true });
 // JavaScript consumer fixture models the gh executable boundary only.
 writeFileSync(join(bin, 'gh'), `#!${process.execPath}
 const fs=require('node:fs');

@@ -5,10 +5,10 @@ import { LocalRepository } from '../support/repository.ts';
 // @feature docs/feature/local-sdlc/README.md
 test('owner and configuration commands map arguments to publication receipts and named errors', async () => {
   const root = consumer('owner-mapping');
-  const repo = new LocalRepository(root, { initialize: true });
+  const repo = (await LocalRepository.open(root, { initialize: true }));
   try {
-    initialize(repo);
-    createDocument(repo, 'feature', { id: 'cart', title: 'Cart' });
+    (await initialize(repo));
+    (await createDocument(repo, 'feature', { id: 'cart', title: 'Cart' }));
   } finally { repo.close(); }
   const current = await run(root, ['config', 'show']);
   assert.deepEqual(current.config, {});

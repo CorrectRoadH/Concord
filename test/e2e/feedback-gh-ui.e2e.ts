@@ -5,8 +5,8 @@ import { expect } from '@playwright/test';
 import { type ViewServerHandle } from './server.ts';
 import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.ts';
 
-function savedTransport(root: string, index: number): string | undefined {
-  const connection = readProjectConfig(root).feedbackConnections?.[index];
+async function savedTransport(root: string, index: number): Promise<string | undefined> {
+  const connection = (await readProjectConfig(root)).feedbackConnections?.[index];
   return connection && 'transport' in connection && typeof connection.transport === 'string' ? connection.transport : undefined;
 }
 
@@ -21,7 +21,7 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
   let releaseCheck: (() => void) | undefined;
   function releasePendingCheck(): void { releaseCheck?.(); releaseCheck = undefined; }
   try {
-    const initial = readProjectConfig(root);
+    const initial = (await readProjectConfig(root));
     writeProjectConfig(root, { ...initial, feedbackConnections: [{ id: 'existing', provider: 'github', credentialEnv: 'GITHUB_TOKEN', owner: 'acme', repo: 'demo', repositoryId: '321' }] });
     server = await workspace.ready();
 
@@ -32,7 +32,7 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
       const body = route.request().postDataJSON() as { action: string; connection?: string };
       if (body.action !== 'feedback.check') { await route.continue(); return; }
       checks.push(body.connection ?? '');
-      savedAtCheck.push(savedTransport(root, body.connection === 'existing' ? 0 : 1) ?? 'api');
+      savedAtCheck.push((await savedTransport(root, body.connection === 'existing' ? 0 : 1)) ?? 'api');
       if (delayCheck) await new Promise<void>((resolve) => { releaseCheck = resolve; });
       try { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, value: { connectionId: body.connection, provider: 'github', transport: 'gh', target: body.connection === 'existing' ? 'acme/demo' : 'other/repo', checkedAt: '2026-09-23T12:00:00.000Z' } }) }); } catch { /* Aborted requests have no response. */ }
     });
@@ -53,12 +53,12 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await page.getByRole('option', { name: '复用 gh 登录' }).click();
     await expect(page.getByRole('dialog').getByLabel('凭据环境变量')).toHaveCount(0);
     // A concurrent disk edit must reject the draft; checking cannot use the old saved API connection.
-    writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['external-source'] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceRoots: ['external-source'] });
     await page.getByRole('button', { name: '保存方式' }).click();
     await existing.getByRole('button', { name: '检测连接' }).click();
     await expect(existing.getByRole('alert')).toBeVisible();
     assert.deepEqual(checks, []);
-    assert.equal(savedTransport(root, 0), undefined);
+    assert.equal((await savedTransport(root, 0)), undefined);
     await page.getByRole('button', { name: '重新载入' }).click();
     await page.getByRole('button', { name: '丢弃并载入' }).click();
     // 外部配置改变会使旧投影失效，先等当前身份重新可读再操作连接。
@@ -72,8 +72,8 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await page.getByRole('option', { name: '复用 gh 登录' }).click();
     await page.getByRole('button', { name: '保存方式' }).click();
     await ghSaved1;
-    await expect.poll(() => savedTransport(root, 0)).toBe('gh');
-    assert.deepEqual(readProjectConfig(root).feedbackConnections?.[0], { id: 'existing', provider: 'github', transport: 'gh', owner: 'acme', repo: 'demo', repositoryId: '321' });
+    await expect.poll(async () => (await savedTransport(root, 0))).toBe('gh');
+    assert.deepEqual((await readProjectConfig(root)).feedbackConnections?.[0], { id: 'existing', provider: 'github', transport: 'gh', owner: 'acme', repo: 'demo', repositoryId: '321' });
     assert.deepEqual(checks, []);
     const existingChecked = browserActionReceipt(page, 'feedback.check', input => input.connection === 'existing');
     await existing.getByRole('button', { name: '检测连接' }).click();
@@ -92,7 +92,7 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await page.getByRole('button', { name: '保存方式' }).click();
     releasePendingCheck(); delayCheck = false;
     await apiConnection;
-    await expect.poll(() => readProjectConfig(root).feedbackConnections?.[0]).toMatchObject({ credentialEnv: 'TEMP_GITHUB_TOKEN' });
+    await expect.poll(async () => (await readProjectConfig(root)).feedbackConnections?.[0]).toMatchObject({ credentialEnv: 'TEMP_GITHUB_TOKEN' });
     await expect(existing.getByRole('status')).toHaveCount(0);
     await existing.getByRole('button', { name: '编辑连接 existing' }).click();
     await page.getByRole('combobox', { name: 'GitHub 读取方式' }).click();
@@ -100,7 +100,7 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await page.getByRole('option', { name: '复用 gh 登录' }).click();
     await page.getByRole('button', { name: '保存方式' }).click();
     await ghSaved2;
-    await expect.poll(() => savedTransport(root, 0)).toBe('gh');
+    await expect.poll(async () => (await savedTransport(root, 0))).toBe('gh');
     assert.deepEqual(checks, ['existing', 'existing']);
 
     await page.getByRole('button', { name: '添加连接', exact: true }).click();
@@ -120,8 +120,8 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await next.getByRole('button', { name: '检测连接' }).click();
     await addedChecked;
     await expect(next.getByRole('status')).toContainText('连接正常');
-    await expect.poll(() => readProjectConfig(root).feedbackConnections?.length).toBe(2);
-    assert.deepEqual(readProjectConfig(root).feedbackConnections?.[1], { id: 'new-gh', provider: 'github', transport: 'gh', owner: 'other', repo: 'repo' });
+    await expect.poll(async () => (await readProjectConfig(root)).feedbackConnections?.length).toBe(2);
+    assert.deepEqual((await readProjectConfig(root)).feedbackConnections?.[1], { id: 'new-gh', provider: 'github', transport: 'gh', owner: 'other', repo: 'repo' });
     assert.deepEqual(checks, ['existing', 'existing', 'new-gh']);
     assert.deepEqual(savedAtCheck, ['gh', 'gh', 'gh']);
     delayCheck = true;
@@ -131,7 +131,7 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await next.getByRole('button', { name: '移除连接 new-gh' }).click();
     releasePendingCheck();
     await removedConnection;
-    await expect.poll(() => readProjectConfig(root).feedbackConnections?.length).toBe(1);
+    await expect.poll(async () => (await readProjectConfig(root)).feedbackConnections?.length).toBe(1);
     await expect(page.getByText('连接正常 · other/repo')).toHaveCount(0);
     await existing.getByRole('button', { name: '编辑连接 existing' }).click();
     await page.getByRole('combobox', { name: 'GitHub 读取方式' }).click();
@@ -142,8 +142,8 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await page.getByLabel('凭据环境变量').fill('OTHER_GITHUB_TOKEN');
     await page.getByRole('button', { name: '保存方式' }).click();
     await updatedCredential;
-    await expect.poll(() => readProjectConfig(root).feedbackConnections?.[0]).toMatchObject({ credentialEnv: 'OTHER_GITHUB_TOKEN' });
-    assert.deepEqual(readProjectConfig(root).feedbackConnections?.[0], { id: 'existing', provider: 'github', credentialEnv: 'OTHER_GITHUB_TOKEN', owner: 'acme', repo: 'demo', repositoryId: '321' });
+    await expect.poll(async () => (await readProjectConfig(root)).feedbackConnections?.[0]).toMatchObject({ credentialEnv: 'OTHER_GITHUB_TOKEN' });
+    assert.deepEqual((await readProjectConfig(root)).feedbackConnections?.[0], { id: 'existing', provider: 'github', credentialEnv: 'OTHER_GITHUB_TOKEN', owner: 'acme', repo: 'demo', repositoryId: '321' });
     assert.deepEqual(checks, ['existing', 'existing', 'new-gh', 'new-gh']);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     assert.deepEqual(pageErrors, []);

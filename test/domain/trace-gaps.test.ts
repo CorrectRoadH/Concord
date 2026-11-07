@@ -16,9 +16,9 @@ import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.ts";
 import { documentShow, renderReview, traceGaps, traceShow } from "../../src/app/index.ts";
 import { referenceResolver } from "../../src/domain/documents/index.ts";
 
-function naiveGaps(repo: LocalRepository) {
-  return repo.snapshot(() => {
-    const trace = buildTrace(repo, 'off'); requireValidTrace(trace);
+async function naiveGaps(repo: LocalRepository) {
+  return (await repo.snapshot(async () => {
+    const trace = (await buildTrace(repo, 'off')); requireValidTrace(trace);
     const counts = (matches: (ref: string) => boolean) => ({
       code: trace.edges.filter(edge => edge.relation === 'implements' && matches(edge.to)).length,
       test: trace.edges.filter(edge => edge.relation === 'contract' && matches(edge.to)).length,
@@ -45,44 +45,44 @@ function naiveGaps(repo: LocalRepository) {
         return gaps.length ? [{ path, feature: document.path, title: document.metadata.title, missing: gaps, relationships }] : [];
       }),
     };
-  });
+  }));
 }
 
-function withTraceConsumer(run: (repo: LocalRepository, root: string) => void) {
-  const root = createConsumer();
+async function withTraceConsumer(run: (repo: LocalRepository, root: string) => void) {
+  const root = (await createConsumer());
   writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
   let repo: LocalRepository | undefined;
   try {
-    const initial = new LocalRepository(root);
+    const initial = (await LocalRepository.open(root));
     try {
-      createDocument(initial, 'feature', { id: 'shared', title: 'Shared', pages: ['cli', 'architecture'] });
-      createDocument(initial, 'use-case', { id: 'flow', title: 'Flow', feature: 'shared' });
-      createDocument(initial, 'feature', { id: 'empty', title: 'Empty', pages: ['cli'] });
+      (await createDocument(initial, 'feature', { id: 'shared', title: 'Shared', pages: ['cli', 'architecture'] }));
+      (await createDocument(initial, 'use-case', { id: 'flow', title: 'Flow', feature: 'shared' }));
+      (await createDocument(initial, 'feature', { id: 'empty', title: 'Empty', pages: ['cli'] }));
     } finally { initial.close(); }
     mkdirSync(join(root, 'src')); mkdirSync(join(root, 'test'));
-    repo = new LocalRepository(root, { access: 'read' });
-    run(repo, root);
+    repo = (await LocalRepository.open(root, { access: 'read' }));
+    await run(repo, root);
   } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
 }
 
 // @use-case docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md
-test('single-pass gaps preserve naive output, edge multiplicity, Use Case aggregation and exact CLI paths', () => Effect.runPromise(Effect.sync(() => withTraceConsumer((repo, root) => {
+test('single-pass gaps preserve naive output, edge multiplicity, Use Case aggregation and exact CLI paths', () => Effect.runPromise(Effect.tryPromise(async () => (await withTraceConsumer(async (repo, root) => {
   const flow = 'docs/feature/shared/use-case/flow.md';
   const page = 'docs/feature/shared/cli.md';
   writeFileSync(join(root, page), '# CLI\n\n## Run\n');
   for (let i = 0; i < 12; i++) writeFileSync(join(root, `src/flow-${i}.ts`), `// @concord-file\n// @concord-implements ${flow}\nexport const value = ${i};\n`);
   for (let i = 0; i < 7; i++) writeFileSync(join(root, `src/cli-${i}.ts`), `// @concord-file\n// @concord-implements ${page}#run\nexport const value = ${i};\n`);
   writeFileSync(join(root, 'test/empty.ts'), '// @feature docs/feature/empty/cli.md\n');
-  const result = traceGaps(repo, 'off');
-  assert.equal(JSON.stringify({ contracts: result.contracts, cliPages: result.cliPages }), JSON.stringify(naiveGaps(repo)));
+  const result = (await traceGaps(repo, 'off'));
+  assert.equal(JSON.stringify({ contracts: result.contracts, cliPages: result.cliPages }), JSON.stringify((await naiveGaps(repo))));
   assert.deepEqual(result.contracts.find(item => item.path === 'docs/feature/shared/README.md')?.relationships, { code: 19, test: 0 });
   assert.deepEqual(result.contracts.find(item => item.path === flow)?.relationships, { code: 12, test: 0 });
   assert.deepEqual(result.cliPages.find(item => item.path === page)?.relationships, { code: 7, test: 0 });
   assert.deepEqual(result.cliPages.find(item => item.path === 'docs/feature/empty/cli.md')?.relationships, { code: 0, test: 1 });
-}))));
+})))));
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
-test('every derived trace reuses repeated exact references and releases its memo between calls', () => Effect.runPromise(Effect.sync(() => withTraceConsumer((repo, root) => {
+test('every derived trace reuses repeated exact references and releases its memo between calls', () => Effect.runPromise(Effect.tryPromise(async () => (await withTraceConsumer(async (repo, root) => {
   const path = 'docs/feature/shared/architecture.md';
   writeFileSync(join(root, path), '# Architecture\n\n## Shared\n');
   for (let i = 0; i < 60; i++) {
@@ -92,37 +92,37 @@ test('every derived trace reuses repeated exact references and releases its memo
   const read = repo.read.bind(repo);
   let reads = 0;
   repo.read = file => { if (file === path) reads++; return read(file); };
-  const operations = [() => traceGaps(repo, 'off'), () => traceShow(repo, 'shared', 'off'), () => documentShow(repo, 'shared', 'feature', 'off'), () => renderReview(repo, 'shared', 'off')];
+  const operations = [async () => (await traceGaps(repo, 'off')), async () => (await traceShow(repo, 'shared', 'off')), async () => (await documentShow(repo, 'shared', 'feature', 'off')), async () => (await renderReview(repo, 'shared', 'off'))];
   for (const [index, operation] of operations.entries()) {
-    reads = 0; operation();
+    reads = 0; await operation();
     // Final reference verification reads once; show also reads each listed page's title.
     const limit = index === 2 ? 6 : 5;
     assert.ok(reads <= limit, `shared target had ${reads} reads for 120 references (limit ${limit})`);
     assert.ok(reads > 0, 'each invocation must read its own sources');
   }
   writeFileSync(join(root, path), '# Architecture\n');
-  for (const operation of [operations[0]!, operations[1]!, operations[3]!]) assert.throws(operation, { code: 'TraceInvalid' });
-  assert.equal(documentShow(repo, 'shared', 'feature', 'off').complete, false);
-}))));
+  for (const operation of [operations[0]!, operations[1]!, operations[3]!]) await assert.rejects(operation, { code: 'TraceInvalid' });
+  assert.equal((await documentShow(repo, 'shared', 'feature', 'off')).complete, false);
+})))));
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
-test('partial derived relationships retain healthy endpoints and reject malformed nested boundaries', () => Effect.runPromise(Effect.sync(() => withTraceConsumer((repo, root) => {
+test('partial derived relationships retain healthy endpoints and reject malformed nested boundaries', () => Effect.runPromise(Effect.tryPromise(async () => (await withTraceConsumer(async (repo, root) => {
   const nested = join(root, 'docs/feature/shared/nested'); mkdirSync(nested);
   writeFileSync(join(nested, 'README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
   writeFileSync(join(nested, 'page.md'), '# Page\n');
   writeFileSync(join(root, 'src/broken.ts'), '// @concord-file\n// @concord-implements docs/feature/shared/nested/page.md\nexport const broken = 1;\n');
   writeFileSync(join(root, 'src/healthy.ts'), '// @concord-file\n// @concord-implements docs/feature/shared/architecture.md\nexport const healthy = 1;\n');
-  const result = documentShow(repo, 'shared', 'feature', 'off');
+  const result = (await documentShow(repo, 'shared', 'feature', 'off'));
   assert.equal(result.complete, false);
   assert.equal(result.codeDeclarations.length, 1);
   assert.equal(result.incoming.filter(edge => edge.relation === 'implements').length, 1);
   assert.ok(result.findings.some(finding => finding.code === 'InvalidData' && finding.path.endsWith('/nested/README.md')));
-  assert.throws(() => traceGaps(repo, 'off'), { code: 'TraceInvalid' });
-}))));
+  (await assert.rejects(async () => (await traceGaps(repo, 'off')), { code: 'TraceInvalid' }));
+})))));
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
-test('memoized owners retain target-kind and anchor gates, and a rewrite during reading is found as SourceChanged', () => Effect.runPromise(Effect.sync(() => withTraceConsumer((repo, root) => {
-  const trace = buildTrace(repo, 'off');
+test('memoized owners retain target-kind and anchor gates, and a rewrite during reading is found as SourceChanged', () => Effect.runPromise(Effect.tryPromise(async () => (await withTraceConsumer(async (repo, root) => {
+  const trace = (await buildTrace(repo, 'off'));
   const path = 'docs/feature/shared/architecture.md';
   const references = referenceResolver(repo, trace.documents);
   const read = repo.read.bind(repo); let reads = 0;
@@ -135,26 +135,26 @@ test('memoized owners retain target-kind and anchor gates, and a rewrite during 
   assert.throws(() => references.resolve(`${path}#absent`), { code: 'AnchorNotFound' });
   writeFileSync(join(root, path), '# Changed\n');
   assert.ok(references.verify().some(finding => finding.code === 'SourceChanged' && finding.path === path));
-}))));
+})))));
 
 // @use-case docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md
-test('trace gaps distinguishes aggregate contract relations from direct documented CLI page relations', () => Effect.runPromise(Effect.sync(() => {
-  const root = createConsumer();
+test('trace gaps distinguishes aggregate contract relations from direct documented CLI page relations', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await createConsumer());
   writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
   let repo: LocalRepository | undefined;
   try {
-    const initial = new LocalRepository(root);
+    const initial = (await LocalRepository.open(root));
     initial.close();
-    repo = new LocalRepository(root);
-    createDocument(repo, 'feature', { id: 'orders', title: 'Orders', pages: ['cli'] });
-    createDocument(repo, 'use-case', { id: 'create-order', title: 'Create order', feature: 'orders' });
+    repo = (await LocalRepository.open(root));
+    (await createDocument(repo, 'feature', { id: 'orders', title: 'Orders', pages: ['cli'] }));
+    (await createDocument(repo, 'use-case', { id: 'create-order', title: 'Create order', feature: 'orders' }));
     mkdirSync(join(root, 'src')); mkdirSync(join(root, 'test'));
     writeFileSync(join(root, 'src/orders.ts'), '// @concord-file\n// @concord-implements docs/feature/orders/README.md\nexport const orders = true;\n');
     writeFileSync(join(root, 'test/orders.test.ts'), "import test from 'node:test';\n// @feature docs/feature/orders/README.md\ntest('orders', () => {});\n");
     mkdirSync(join(root, 'src/node_modules'));
     symlinkSync(root, join(root, 'src/node_modules/dependency'), 'dir');
 
-    const result = traceGaps(repo, 'off');
+    const result = (await traceGaps(repo, 'off'));
     assert.deepEqual(result.contracts, [{
       path: 'docs/feature/orders/use-case/create-order.md', kind: 'use-case', title: 'Create order',
       missing: ['code', 'test'], relationships: { code: 0, test: 0 },
@@ -171,35 +171,35 @@ test('trace gaps distinguishes aggregate contract relations from direct document
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
-test('shared reference targets are read once and reverified, including external edits and symlink replacement', () => Effect.runPromise(Effect.sync(() => {
-  const root = createConsumer();
+test('shared reference targets are read once and reverified, including external edits and symlink replacement', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await createConsumer());
   writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
-  const initial = new LocalRepository(root);
+  const initial = (await LocalRepository.open(root));
   try {
-    createDocument(initial, 'feature', { id: 'shared', title: 'Shared', pages: ['architecture'] });
+    (await createDocument(initial, 'feature', { id: 'shared', title: 'Shared', pages: ['architecture'] }));
   } finally { initial.close(); }
   const path = 'docs/feature/shared/architecture.md';
   const target = join(root, path);
   const original = readFileSync(target, 'utf8');
   mkdirSync(join(root, 'src'));
   for (let i = 0; i < 60; i++) writeFileSync(join(root, `src/file-${i}.ts`), `// @concord-file\n// @concord-implements ${path}\nexport const value = ${i};\n`);
-  const repo = new LocalRepository(root, { access: 'read' });
+  const repo = (await LocalRepository.open(root, { access: 'read' }));
   const read = repo.read.bind(repo);
   let reads = 0;
   repo.read = file => { if (file === path) reads++; return read(file); };
   try {
-    const healthy = buildTrace(repo);
+    const healthy = (await buildTrace(repo));
     assert.equal(healthy.complete, true);
     assert.equal(healthy.edges.filter(edge => edge.to === path).length, 60);
     assert.ok(reads <= 4, `shared target had ${reads} reads for 60 references`);
-    assert.throws(() => buildTrace(repo, 'use', { timing: { sync(name, operation) {
+    (await assert.rejects(async () => (await buildTrace(repo, 'use', { timing: { async: async (_name, operation) => await operation(), sync(name, operation) {
       if (name === 'trace.verifyReferences') writeFileSync(target, `${original}\nExternal edit\n`);
       return operation();
-    } } }), { code: 'SourceChanged' });
+    } } })), { code: 'SourceChanged' }));
     writeFileSync(target, original);
-    assert.throws(() => buildTrace(repo, 'use', { timing: { sync(name, operation) {
+    (await assert.rejects(async () => (await buildTrace(repo, 'use', { timing: { async: async (_name, operation) => await operation(), sync(name, operation) {
       if (name === 'trace.verifyReferences') { rmSync(target); symlinkSync(join(root, 'docs/taste.md'), target); }
       return operation();
-    } } }), { code: 'UnsafePath' });
+    } } })), { code: 'UnsafePath' }));
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 })));

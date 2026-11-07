@@ -26,9 +26,9 @@ async function query<A>(root: string, request: QueryRequest, schema: Schema.Cons
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('Unicode package paths retain identity through edits, discovery and trace', async () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'npc', title: 'NPC' }); }
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'npc', title: 'NPC' })); }
   finally { repo.close(); }
   renameSync(join(root, 'docs/feature/npc'), join(root, 'docs/feature/角色目录'));
   const expectedPath = 'docs/feature/角色目录/use-case/扩展NPC动作.md';

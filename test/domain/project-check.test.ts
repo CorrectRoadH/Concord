@@ -22,18 +22,18 @@ import { ConcordError } from "../../src/model/index.ts";
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('project check combines relation and writing findings and reports incomplete writing inputs', async t => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: [] });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const withRepo = <T>(run: (repo: LocalRepository) => T): T => {
-    const repo = new LocalRepository(root);
-    try { return run(repo); } finally { repo.close(); }
+  const withRepo = async <T>(run: (repo: LocalRepository) => T): Promise<T> => {
+    const repo = (await LocalRepository.open(root));
+    try { return await run(repo); } finally { repo.close(); }
   };
   const callCheck = async () => {
     const result = await runApplication(executeQuery(root, { name: 'check', input: {} }, 'off'));
-    return { status: result.exitCode, output: result.value as unknown as ReturnType<typeof checkProject> };
+    return { status: result.exitCode, output: result.value as unknown as Awaited<ReturnType<typeof checkProject>> };
   };
-  assert.equal(withRepo(checkProject).ok, true);
+  assert.equal((await withRepo(checkProject)).ok, true);
 
   const page = join(root, 'docs/_template/README.md');
   writeFileSync(page, `${readFileSync(page, 'utf8')}\nForbidden phrase.\n`);
@@ -42,26 +42,26 @@ test('project check combines relation and writing findings and reports incomplet
   const terms = [...current.bannedTerms];
   terms.push({ term: 'Forbidden phrase', use: 'Allowed phrase', why: 'test rule' });
   writeFileSync(policy, renderWritingPolicy({ ...current, bannedTerms: terms }));
-  const writingOnly = withRepo(checkProject);
+  const writingOnly = (await withRepo(checkProject));
   assert.equal(writingOnly.ok, false);
   assert.equal(writingOnly.complete, true);
   assert.deepEqual(writingOnly.checks, { relations: { ok: true, complete: true }, writing: { ok: false, complete: true } });
   assert(writingOnly.findings.some(finding => finding.category === 'writing' && finding.code === 'bannedTerm'));
   assert.equal((await callCheck()).status, 1);
   assert.deepEqual((await callCheck()).output.checks, writingOnly.checks);
-  const action = await runApplication(executeViewAction(root, { action: 'check' })) as ReturnType<typeof checkProject>;
+  const action = await runApplication(executeViewAction(root, { action: 'check' })) as Awaited<ReturnType<typeof checkProject>>;
   assert.deepEqual(action.checks, writingOnly.checks);
   assert.deepEqual(action.findings, writingOnly.findings);
 
   writeFileSync(join(root, 'docs/feature/README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
-  const both = withRepo(checkProject);
+  const both = (await withRepo(checkProject));
   assert.equal(both.ok, false);
   assert.equal(both.checks.relations.ok, false);
   assert(both.findings.some(finding => finding.category === 'relation'));
   assert(both.findings.some(finding => finding.category === 'writing'));
 
   writeFileSync(policy, '{bad json\n');
-  const incomplete = withRepo(checkProject);
+  const incomplete = (await withRepo(checkProject));
   assert.equal(incomplete.complete, false);
   assert.equal(incomplete.checks.writing.complete, false);
   assert(incomplete.findings.some(finding => finding.category === 'writing' && finding.code === 'InvalidWritingPolicy'));
@@ -73,7 +73,7 @@ test('project check combines relation and writing findings and reports incomplet
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('current check retries real observed edits, closes attempts and refuses persistent drift', async t => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: [] });
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const original = RepositoryBase.prototype.read;
@@ -91,10 +91,10 @@ test('current check retries real observed edits, closes attempts and refuses per
     assert.equal(result.ok, true);
     assert.equal(changed, 1);
     changes = 100;
-    await assert.rejects(runApplication(checkCurrentProject(root, 'off')), /after 3 attempts/u);
+    await assert.rejects((runApplication(checkCurrentProject(root, 'off'))), /after 3 attempts/u);
   } finally { spy.mock.restore(); }
   const error = mock.method(RepositoryBase.prototype, 'verifySnapshot', () => { throw new ConcordError('UnsafePath', 'fixture unsafe path'); });
-  try { await assert.rejects(runApplication(checkCurrentProject(root, 'off')), /fixture unsafe path/u); }
+  try { await assert.rejects((runApplication(checkCurrentProject(root, 'off'))), /fixture unsafe path/u); }
   finally { error.mock.restore(); }
   assert.equal((await runApplication(checkCurrentProject(root, 'off'))).ok, true);
 });

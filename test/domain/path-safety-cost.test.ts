@@ -3,7 +3,7 @@ import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs, { cpSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from '../support/builtin-mocks.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { dirname, join, sep } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -13,12 +13,12 @@ import { readRepositoryFileSync } from "../../src/base/workspace/index.ts";
 import { LocalRepository } from "../support/repository.ts";
 
 
-function fixture(t: TestContext): { container: string; parent: string; root: string } {
+async function fixture(t: TestContext): Promise<{ container: string; parent: string; root: string }> {
   const container = realpathSync(mkdtempSync(join(tmpdir(), 'concord-path-cost-')));
   const parent = join(container, 'parent');
   const root = join(parent, 'repo');
   mkdirSync(root, { recursive: true });
-  const consumer = createConsumer();
+  const consumer = (await createConsumer());
   try { cpSync(consumer, root, { recursive: true }); } finally { rmSync(consumer, { recursive: true, force: true }); }
   writeProjectConfig(root, { testRoots: [] });
   mkdirSync(join(root, 'src'));
@@ -28,8 +28,8 @@ function fixture(t: TestContext): { container: string; parent: string; root: str
   return { container, parent, root };
 }
 
-function reader(t: TestContext, root: string): LocalRepository {
-  const repo = new LocalRepository(root, { access: 'read' });
+async function reader(t: TestContext, root: string): Promise<LocalRepository> {
+  const repo = (await LocalRepository.open(root, { access: 'read' }));
   t.after(() => repo.close());
   return repo;
 }
@@ -56,8 +56,8 @@ function onOpen<A>(target: string, mutate: () => void, read: () => A): A {
 }
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-test('source discovery excludes environment entries before path checks and keeps strict observations independent', t => Effect.runSync(Effect.sync(() => {
-  const { container, root } = fixture(t);
+test('source discovery excludes environment entries before path checks and keeps strict observations independent', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { container, root } = (await fixture(t));
   const outside = join(container, 'outside');
   mkdirSync(outside);
   writeFileSync(join(outside, 'secret.ts'), '// @feature docs/feature/absent/README.md');
@@ -69,7 +69,7 @@ test('source discovery excludes environment entries before path checks and keeps
   writeFileSync(join(root, 'src/.environment.ts'), 'valid source');
   mkdirSync(join(root, 'src/dist'));
   writeFileSync(join(root, 'src/dist/generated.ts'), 'generated source');
-  const repo = reader(t, root);
+  const repo = (await reader(t, root));
   const expected = ['src/.environment.ts', 'src/a.ts', 'src/b.ts'];
   assert.deepEqual(repo.files('src/dist', 'source'), ['src/dist/generated.ts']);
   repo.snapshot(() => {
@@ -100,12 +100,12 @@ test('source discovery excludes environment entries before path checks and keeps
       fs.appendFileSync(join(root, 'mixed/.env'), 'after');
     }), { code: 'SourceChanged' });
   }
-})));
+}))));
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-test('configured discovery exclusions preserve explicit reads, root overrides and snapshot scope', t => Effect.runSync(Effect.sync(() => {
-  const { root, container } = fixture(t);
-  const config = readProjectConfig(root);
+test('configured discovery exclusions preserve explicit reads, root overrides and snapshot scope', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root, container } = (await fixture(t));
+  const config = (await readProjectConfig(root));
   for (const path of ['', '/src', "../src", 'src/../a', 'src//a', 'src/', 'src/*', 'src/!a', 'C:/src', 'src\\a']) {
     assert.throws(() => writeProjectConfig(root, { ...config, sourceIgnore: [path] }));
   }
@@ -115,7 +115,7 @@ test('configured discovery exclusions preserve explicit reads, root overrides an
   mkdirSync(join(root, 'src/generated'));
   writeFileSync(join(root, 'src/generated/a.ts'), 'explicit root');
   writeFileSync(join(root, 'src/file.tsx'), 'prefix sibling');
-  const repo = reader(t, root);
+  const repo = (await reader(t, root));
   repo.snapshot(() => {
     assert.deepEqual(repo.files('src', 'source'), ['src/a.ts', 'src/b.ts', 'src/file.tsx']);
     writeFileSync(join(root, 'src/file.ts'), 'changed ignored bytes');
@@ -129,13 +129,13 @@ test('configured discovery exclusions preserve explicit reads, root overrides an
     repo.files('src', 'source');
     writeProjectConfig(root, config);
   }), { code: 'SourceChanged' });
-  const unfiltered = reader(t, root);
+  const unfiltered = (await reader(t, root));
   assert.throws(() => unfiltered.files('src', 'source'), { code: 'UnsafePath' });
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('standalone repository reads reject symlinks and retain canonical and regular-file guards', t => Effect.runSync(Effect.sync(() => {
-  const { container, root } = fixture(t);
+test('standalone repository reads reject symlinks and retain canonical and regular-file guards', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { container, root } = (await fixture(t));
   const outside = join(container, 'outside.md');
   writeFileSync(outside, 'outside');
   symlinkSync(outside, join(root, 'linked.md'));
@@ -152,23 +152,23 @@ test('standalone repository reads reject symlinks and retain canonical and regul
   writeFileSync(replacement, 'x');
   assert.throws(() => onOpen(join(root, 'src/b.ts'), () => renameSync(replacement, join(root, 'src/b.ts')), () => readRepositoryFileSync(root, 'src/b.ts')), { code: 'SourceChanged' });
   assert.throws(() => onOpen(join(root, 'src/a.ts'), () => { rmSync(join(root, 'src/a.ts')); symlinkSync(outside, join(root, 'src/a.ts')); }, () => readRepositoryFileSync(root, 'src/a.ts')), { code: 'UnsafePath' });
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('standalone repository reads reject Darwin spelling mismatches without cached listings', t => Effect.runSync(Effect.sync(() => {
-  const { root } = fixture(t);
+test('standalone repository reads reject Darwin spelling mismatches without cached listings', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root } = (await fixture(t));
   if (!insensitiveDarwin(t, root)) return;
   writeFileSync(join(root, 'docs/feature.md'), 'before');
   assert.throws(() => readRepositoryFileSync(root, 'docs/Feature.md'), { code: 'UnsafePath' });
   assert.equal(readRepositoryFileSync(root, 'docs/feature.md'), 'before');
   renameSync(join(root, 'docs/feature.md'), join(root, 'docs/Feature.md'));
   assert.throws(() => readRepositoryFileSync(root, 'docs/feature.md'), { code: 'UnsafePath' });
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('C1/C1b: replaced ancestor symlink or real directory is refused before another read', t => Effect.runSync(Effect.sync(() => {
-  const { container, parent, root } = fixture(t);
-  const repo = reader(t, root);
+test('C1/C1b: replaced ancestor symlink or real directory is refused before another read', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { container, parent, root } = (await fixture(t));
+  const repo = (await reader(t, root));
   const backup = join(container, 'saved');
   for (const kind of ['symlink', 'directory']) {
     try {
@@ -181,12 +181,12 @@ test('C1/C1b: replaced ancestor symlink or real directory is refused before anot
       }), { code: 'UnsafePath' });
     } finally { rmSync(parent, { recursive: true, force: true }); renameSync(backup, parent); }
   }
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('C2/C2b: internal directory and open-time leaf symlinks are refused', t => Effect.runSync(Effect.sync(() => {
-  const { container, root } = fixture(t);
-  const repo = reader(t, root);
+test('C2/C2b: internal directory and open-time leaf symlinks are refused', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { container, root } = (await fixture(t));
+  const repo = (await reader(t, root));
   const src = join(root, 'src');
   const saved = join(root, 'saved');
   try {
@@ -198,16 +198,16 @@ test('C2/C2b: internal directory and open-time leaf symlinks are refused', t => 
   writeFileSync(secret, 'outside');
   const target = join(src, 'a.ts');
   assert.throws(() => onOpen(target, () => { rmSync(target); symlinkSync(secret, target); }, () => repo.snapshot(() => repo.read('src/a.ts'))), { code: 'UnsafePath' });
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('C3/C3b: Darwin case rename rejects current reads and publication and reports the exact drift path', t => Effect.runSync(Effect.sync(() => {
-  const { root } = fixture(t);
+test('C3/C3b: Darwin case rename rejects current reads and publication and reports the exact drift path', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root } = (await fixture(t));
   if (!insensitiveDarwin(t, root)) return;
   const upper = join(root, 'docs/Feature.md');
   const lower = join(root, 'docs/feature.md');
   writeFileSync(upper, 'original');
-  const repo = reader(t, root);
+  const repo = (await reader(t, root));
   assert.throws(() => repo.snapshot(() => { repo.read('docs/Feature.md'); renameSync(upper, lower); assert.equal(repo.read('docs/Feature.md'), 'original'); }), { code: 'SourceChanged', details: 'source-observation' });
   renameSync(lower, upper);
   const projection = repo.observeProjection(() => { repo.read('docs/Feature.md'); renameSync(upper, lower); return 'value'; });
@@ -217,21 +217,21 @@ test('C3/C3b: Darwin case rename rejects current reads and publication and repor
   writeFileSync(join(root, 'Root.md'), 'root');
   const rootProjection = repo.observeProjection(() => { repo.read('Root.md'); renameSync(join(root, 'Root.md'), join(root, 'root.md')); return 'value'; });
   assert.deepEqual(rootProjection.drift.files, ['Root.md']);
-  const writer = new LocalRepository(root, { optimistic: true });
+  const writer = (await LocalRepository.open(root, { optimistic: true }));
   try {
-    assert.throws(() => writer.snapshot(() => {
+    (await assert.rejects(async () => (await writer.snapshot(async () => {
       writer.read('docs/Feature.md'); renameSync(upper, lower);
-      writer.publish('edit', [{ path: 'docs/other.md', before: null, after: 'new' }]);
-    }), { code: 'FileChangedSinceRead', details: 'source-observation' });
+      (await writer.publish('edit', [{ path: 'docs/other.md', before: null, after: 'new' }]));
+    })), { code: 'FileChangedSinceRead', details: 'source-observation' }));
     assert.equal(existsSync(join(root, 'docs/other.md')), false);
     assert.equal(existsSync(join(writer.privateDir, 'journal.json')), false);
   } finally { writer.close(); }
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('C3c: same-size editor atomic save during open rejects queries and projection scans with SourceChanged', t => Effect.runSync(Effect.sync(() => {
-  const { root } = fixture(t);
-  const repo = reader(t, root);
+test('C3c: same-size editor atomic save during open rejects queries and projection scans with SourceChanged', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root } = (await fixture(t));
+  const repo = (await reader(t, root));
   const target = join(root, 'src/a.ts');
   for (const projection of [false, true]) {
     const temp = join(root, 'src/new.ts');
@@ -239,11 +239,11 @@ test('C3c: same-size editor atomic save during open rejects queries and projecti
     assert.throws(() => onOpen(target, () => renameSync(temp, target), () => projection
       ? repo.observeProjection(() => repo.read('src/a.ts')) : repo.snapshot(() => repo.read('src/a.ts'))), { code: 'SourceChanged' });
   }
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('C4: spelling checks reuse listings while every files scan enumerates current members without ancestors', t => Effect.runSync(Effect.sync(() => {
-  const { parent, root } = fixture(t);
+test('C4: spelling checks reuse listings while every files scan enumerates current members without ancestors', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { parent, root } = (await fixture(t));
   for (let index = 0; index < 5000; index++) writeFileSync(join(parent, `wide-${index}`), '');
   for (let index = 0; index < 1000; index++) writeFileSync(join(root, `src/f-${index}.ts`), 'x');
   const original = fs.readdirSync;
@@ -258,7 +258,7 @@ test('C4: spelling checks reuse listings while every files scan enumerates curre
   syncBuiltinESMExports();
   let repo: LocalRepository | undefined;
   try {
-    repo = new LocalRepository(root, { access: 'read' });
+    repo = (await LocalRepository.open(root, { access: 'read' }));
     phase = 'read'; repo.beginSnapshot();
     for (let index = 0; index < 1000; index++) assert.equal(repo.read(`src/f-${index}.ts`), 'x');
     assert.equal(repo.files('src').length, 1002);
@@ -278,12 +278,12 @@ test('C4: spelling checks reuse listings while every files scan enumerates curre
     assert.ok(constructionAbove < 200, `Construction ancestor count exceeded bounded setup: ${constructionAbove}`);
     t.diagnostic(`C4 construction ancestor readdir=${constructionAbove}; read=${JSON.stringify([...counts.get('read') ?? []])}; verify=${JSON.stringify([...counts.get('verify') ?? []])}`);
   } finally { repo?.close(); fs.readdirSync = original; syncBuiltinESMExports(); }
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('repeated files scans within one snapshot see deleted and newly added members', t => Effect.runSync(Effect.sync(() => {
-  const { root } = fixture(t);
-  const repo = reader(t, root);
+test('repeated files scans within one snapshot see deleted and newly added members', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root } = (await fixture(t));
+  const repo = (await reader(t, root));
   const observed = repo.observeProjection(() => {
     assert.deepEqual(repo.files('src'), ['src/a.ts', 'src/b.ts']);
     rmSync(join(root, 'src/a.ts'));
@@ -294,48 +294,48 @@ test('repeated files scans within one snapshot see deleted and newly added membe
   });
   assert.equal(observed.value, 'current members');
   assert.ok(observed.drift.directories.includes('src'));
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('C5: Darwin writes keep the full spelling guard inside a snapshot', t => Effect.runSync(Effect.sync(() => {
-  const { root } = fixture(t);
+test('C5: Darwin writes keep the full spelling guard inside a snapshot', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root } = (await fixture(t));
   if (!insensitiveDarwin(t, root)) return;
   writeFileSync(join(root, 'docs/feature.md'), 'old');
-  const repo = new LocalRepository(root, { optimistic: true });
-  try { assert.throws(() => repo.snapshot(() => repo.publish('edit', [{ path: 'docs/Feature.md', before: 'old', after: 'new' }])), { code: 'UnsafePath' }); }
+  const repo = (await LocalRepository.open(root, { optimistic: true }));
+  try { (await assert.rejects(async () => (await repo.snapshot(async () => (await repo.publish('edit', [{ path: 'docs/Feature.md', before: 'old', after: 'new' }])))), { code: 'UnsafePath' })); }
   finally { repo.close(); }
   assert.equal(readFileSync(join(root, 'docs/feature.md'), 'utf8'), 'old');
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('C7/C10: optimistic publication creates a directory after planning reads and verifies its own writes', t => Effect.runSync(Effect.sync(() => {
-  const { root } = fixture(t);
-  const repo = new LocalRepository(root, { optimistic: true });
+test('C7/C10: optimistic publication creates a directory after planning reads and verifies its own writes', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root } = (await fixture(t));
+  const repo = (await LocalRepository.open(root, { optimistic: true }));
   try {
-    repo.snapshot(() => {
+    (await repo.snapshot(async () => {
       repo.files('docs');
       const before = repo.read('docs/architecture.md')!;
-      const receipt = repo.publish('edit', [{ path: 'docs/new/x.md', before: null, after: 'created' }, { path: 'docs/architecture.md', before, after: '# Updated\n' }]);
+      const receipt = (await repo.publish('edit', [{ path: 'docs/new/x.md', before: null, after: 'created' }, { path: 'docs/architecture.md', before, after: '# Updated\n' }]));
       assert.equal(receipt.recoveryRequired, undefined);
       repo.verifySnapshot();
       assert.equal(repo.read('docs/new/x.md'), 'created');
-    });
+    }));
   } finally { repo.close(); }
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('C8/C9: unscanned sibling additions are harmless and scanned membership additions reject', t => Effect.runSync(Effect.sync(() => {
-  const { root } = fixture(t);
-  const repo = reader(t, root);
+test('C8/C9: unscanned sibling additions are harmless and scanned membership additions reject', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root } = (await fixture(t));
+  const repo = (await reader(t, root));
   repo.snapshot(() => { repo.read('src/a.ts'); writeFileSync(join(root, 'src/unrelated.ts'), 'x'); });
   const projection = repo.observeProjection(() => { repo.read('src/a.ts'); writeFileSync(join(root, 'src/other.ts'), 'x'); return 'value'; });
   assert.deepEqual(projection.drift.files, []); assert.deepEqual(projection.drift.directories, []);
   assert.throws(() => repo.snapshot(() => { repo.files('src'); writeFileSync(join(root, 'src/added.ts'), 'x'); }), { code: 'SourceChanged', details: 'source-observation' });
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('root fd belongs to outer snapshots, closes on failure, and inode replacement verifies as root drift', t => Effect.runSync(Effect.sync(() => {
-  const { container, parent, root } = fixture(t);
+test('root fd belongs to outer snapshots, closes on failure, and inode replacement verifies as root drift', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { container, parent, root } = (await fixture(t));
   const originalOpen = fs.openSync;
   const originalClose = fs.closeSync;
   const held = new Set<number>();
@@ -349,7 +349,7 @@ test('root fd belongs to outer snapshots, closes on failure, and inode replaceme
   syncBuiltinESMExports();
   let repo: LocalRepository | undefined;
   try {
-    repo = new LocalRepository(root, { access: 'read' });
+    repo = (await LocalRepository.open(root, { access: 'read' }));
     assert.equal(held.size, 0); assert.equal(acquired, 1);
     repo.beginSnapshot(); repo.beginSnapshot(); assert.equal(held.size, 1); assert.equal(acquired, 2);
     repo.endSnapshot(); assert.equal(held.size, 1); repo.endSnapshot(); assert.equal(held.size, 0);
@@ -359,19 +359,19 @@ test('root fd belongs to outer snapshots, closes on failure, and inode replaceme
     const config = join(root, 'concord.config.ts');
     const source = readFileSync(config, 'utf8');
     writeFileSync(config, 'invalid configuration');
-    try { assert.throws(() => new LocalRepository(root, { access: 'read' })); assert.equal(held.size, 0); }
+    try { (await assert.rejects(async () => (await LocalRepository.open(root, { access: 'read' })))); assert.equal(held.size, 0); }
     finally { writeFileSync(config, source); }
     const backup = join(container, 'backup');
     const drift = repo.observeProjection(() => { repo!.read('src/a.ts'); renameSync(parent, backup); mkdirSync(parent); return 'value'; });
     assert.deepEqual(drift.drift.files, ["."]); assert.equal(held.size, 0);
     rmSync(parent, { recursive: true }); renameSync(backup, parent);
   } finally { repo?.close(); fs.openSync = originalOpen; fs.closeSync = originalClose; syncBuiltinESMExports(); }
-})));
+}))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('verification rejects symlinks and nonregular files while atomic replacements report exact projection drift', t => Effect.runSync(Effect.sync(() => {
-  const { root } = fixture(t);
-  const repo = reader(t, root);
+test('verification rejects symlinks and nonregular files while atomic replacements report exact projection drift', async t => (await Effect.runPromise(Effect.tryPromise(async () => {
+  const { root } = (await fixture(t));
+  const repo = (await reader(t, root));
   const target = join(root, 'src/a.ts');
   const replacement = join(dirname(target), 'replacement.ts');
   const projection = repo.observeProjection(() => { repo.read('src/a.ts'); writeFileSync(replacement, 'new'); renameSync(replacement, target); return 'value'; });
@@ -381,4 +381,4 @@ test('verification rejects symlinks and nonregular files while atomic replacemen
   assert.throws(() => repo.snapshot(() => { repo.read('src/a.ts'); rmSync(target); mkdirSync(target); }), { code: 'UnsafePath' });
   // The kernel APIs remain usable after all snapshot finalizers have run.
   const fd = openSync(join(root, 'src/b.ts'), 'r'); closeSync(fd);
-})));
+}))));

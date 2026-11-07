@@ -13,7 +13,7 @@ import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/web-workbench/use-case/review-pull-request.md
 test('cancelling PR export awaits its Git process group and removes the temporary object repository', { skip: process.platform === 'win32' }, async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const scratch = mkdtempSync(join(tmpdir(), 'concord-preview-cancel-'));
   const temporary = join(scratch, 'temporary');
   const shim = join(scratch, 'bin');

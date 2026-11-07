@@ -1,3 +1,4 @@
+import { makeProcessGroupCpuReader } from '../../app/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
 import type * as CacheTypes from '../../base/cache/index.ts';
 import type * as ProcessTypes from '../../base/process/index.ts';
@@ -24,7 +25,7 @@ import { Socket, SocketServer } from 'effect/socket';
 import { makeOwnedProcessService } from '../../app/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { Git } from '../../base/git/index.ts';
-import { OwnedProcess, OwnedProcessLive, ProcessEventsLive, makeProcessGroupCpuReader } from '../../base/process/index.ts';
+import { OwnedProcess, OwnedProcessLive, ProcessEventsLive } from '../../base/process/index.ts';
 import { recordProcessEvent } from '../../app/index.ts';
 import { existsSync } from 'node:fs';
 import { channel } from 'node:diagnostics_channel';

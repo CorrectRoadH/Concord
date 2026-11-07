@@ -1,30 +1,34 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 // @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
-import type * as SyncTypes from 'typescript/sync';
+import type * as AsyncTypes from 'typescript/async';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type * as FsTypes from 'typescript/fs';
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import type { FileSystemCallbacks } from "typescript/fs";
 import type { SourceFile } from "typescript/ast";
-import type { API, Diagnostic } from "typescript/sync";
+import type { API, Diagnostic } from "typescript/async";
+import { packageRoot } from "../installation/index.ts";
+import { compilerSupervisorPath } from './typescript-supervisor-build.ts';
 import { ConcordError } from "../../model/index.ts";
 
-const require = createRequire(import.meta.url);
+const require = createRequire(join(packageRoot, 'package.json'));
 let packageVersion: string | undefined;
-let activeAPI: API | undefined;
+interface CompilerScope { readonly api: API; closed: boolean }
+const compilerScopes = new AsyncLocalStorage<CompilerScope>();
 let trustedLibraries: ReadonlyMap<string, string> | undefined;
 
 /** Load the native client namespace only when a compiler operation needs it. */
-export function nativeTypeScript(): typeof SyncTypes {
-  return require('typescript/sync') as typeof SyncTypes;
+export function nativeTypeScript(): typeof AsyncTypes {
+  return require('typescript/async') as typeof AsyncTypes;
 }
 
 /** Capture only library declarations from the matching installed platform package. */
 export function typescriptLibraries(): ReadonlyMap<string, string> {
   if (trustedLibraries !== undefined) return trustedLibraries;
-  return typescriptRequest(() => {
+  return syncRequest(() => {
     const compilerRequire = createRequire(require.resolve('typescript/package.json'));
     const metadata = compilerRequire.resolve(`@typescript/typescript-${process.platform}-${process.arch}/package.json`);
     const root = join(dirname(metadata), 'lib');
@@ -79,77 +83,95 @@ function capturedFileSystem(input: ReadonlyMap<string, string>, cwd: string): Fi
   };
 }
 
-/** Wrap compiler transport failures, without relabelling errors from domain callbacks. */
-export function typescriptRequest<T>(run: () => T): T {
+/** Wrap only transport calls, never the domain callback. */
+function syncRequest<T>(run: () => T): T {
   try { return run(); }
-  catch (cause) {
-    if (cause instanceof ConcordError) throw cause;
-    throw new ConcordError('TypeScriptUnavailable', `TypeScript compiler failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+  catch (cause) { throw compilerFailure(cause); }
+}
+function compilerFailure(cause: unknown): ConcordError {
+  return cause instanceof ConcordError ? cause : new ConcordError('TypeScriptUnavailable', `TypeScript compiler failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+}
+export async function typescriptRequest<T>(run: () => T | Promise<T>): Promise<T> {
+  try { return await run(); }
+  catch (cause) { throw compilerFailure(cause); }
+}
+
+/** Attempt cleanup without replacing the domain failure's named identity. */
+async function owned<T>(run: () => T | Promise<T>, release: () => void | Promise<void>): Promise<T> {
+  let outcome: { ok: true; value: T } | { ok: false; cause: unknown };
+  try { outcome = { ok: true, value: await run() }; }
+  catch (cause) { outcome = { ok: false, cause }; }
+  try { await release(); }
+  catch (cleanup) {
+    if (outcome.ok) throw compilerFailure(cleanup);
+    const primary = outcome.cause;
+    const detail = cleanup instanceof Error ? cleanup.message : String(cleanup);
+    if (primary instanceof ConcordError) throw new ConcordError(primary.code, primary.message, { primary: primary.details, cleanup: detail });
+    throw new AggregateError([primary, cleanup], 'TypeScript operation and cleanup failed', { cause: primary });
   }
+  if (!outcome.ok) throw outcome.cause;
+  return outcome.value;
 }
 
-function synchronous<T>(run: () => T): T {
-  const result = run();
-  if (result !== null && (typeof result === 'object' || typeof result === 'function') && 'then' in result) {
-    throw new ConcordError('TypeScriptScopeViolation', 'TypeScript scopes must return synchronously');
-  }
-  return result;
+export function withTypeScriptResource<R extends { dispose(): void | Promise<void> }, T>(resource: R, run: (resource: R) => T | Promise<T>): Promise<T> {
+  return owned(() => run(resource), () => typescriptRequest(() => resource.dispose()));
 }
 
-function createCompiler(files: ReadonlyMap<string, string>, cwd: string): API {
-  return typescriptRequest(() => {
-    const { API: CompilerAPI } = nativeTypeScript();
-    return new CompilerAPI({ cwd, useCaseSensitiveFileNames: true, runExternalCode: false, fs: capturedFileSystem(files, cwd) });
-  });
-}
-
-/** Own a distinct compiler with exactly these captured inputs. No handles may escape. */
-export function withTypeScriptFiles<T>(files: ReadonlyMap<string, string>, run: (api: API) => T, cwd = '/'): T {
-  const api = createCompiler(files, cwd);
-  const previous = activeAPI;
-  activeAPI = api;
-  try { return synchronous(() => run(api)); }
-  finally {
-    activeAPI = previous;
-    typescriptRequest(() => api.close());
-  }
-}
-
-/** Reuse only within a synchronous lexical call stack; never across await. */
-export function withTypeScript<T>(run: (api: API) => T): T {
-  if (activeAPI !== undefined) return synchronous(() => run(activeAPI!));
+function scopeFor(files: ReadonlyMap<string, string>, cwd: string): CompilerScope & { close(): Promise<void> } {
   let loaded: API | undefined;
-  const api = new Proxy({} as API, {
-    get(_target, property) {
-      loaded ??= createCompiler(new Map(), '/');
-      const value: unknown = Reflect.get(loaded, property, loaded);
-      return typeof value === 'function' ? value.bind(loaded) : value;
+  const scope: CompilerScope & { close(): Promise<void> } = {
+    closed: false,
+    api: new Proxy({} as API, {
+      get(_target, property) {
+        const current = () => {
+          if (scope.closed) throw new ConcordError('TypeScriptScopeViolation', 'TypeScript scope is closed');
+          loaded ??= syncRequest(() => new (nativeTypeScript().API)({ tsserverPath: compilerSupervisorPath(), cwd, useCaseSensitiveFileNames: true, runExternalCode: false, fs: capturedFileSystem(files, cwd) }));
+          return loaded;
+        };
+        const api = current();
+        const value: unknown = Reflect.get(api, property, api);
+        return typeof value === 'function' ? (...args: unknown[]) => Reflect.apply(value, current(), args) : value;
+      },
+    }),
+    close: async () => {
+      scope.closed = true;
+      if (loaded !== undefined) await typescriptRequest(() => loaded!.close());
     },
-  });
-  activeAPI = api;
-  try { return synchronous(() => run(api)); }
-  finally {
-    activeAPI = undefined;
-    const owned = loaded;
-    if (owned !== undefined) typescriptRequest(() => owned.close());
-  }
+  };
+  return scope;
 }
 
-/** Obtain real syntax diagnostics and an AST from a closed one-file input set. */
-export function withTypeScriptSource<T>(path: string, text: string, run: (source: SourceFile, diagnostics: readonly Diagnostic[]) => T): T {
-  return withTypeScript(api => {
+/** Own an independent captured compiler scope through the complete callback. */
+export async function withTypeScriptFiles<T>(files: ReadonlyMap<string, string>, run: (api: API) => T | Promise<T>, cwd = '/'): Promise<T> {
+  const scope = scopeFor(files, cwd);
+  return compilerScopes.run(scope, () => owned(() => run(scope.api), () => scope.close()));
+}
+
+/** Nested operations share only their asynchronous call chain's live scope. */
+export async function withTypeScript<T>(run: (api: API) => T | Promise<T>): Promise<T> {
+  const scope = compilerScopes.getStore();
+  if (scope !== undefined) {
+    if (scope.closed) throw new ConcordError('TypeScriptScopeViolation', 'TypeScript scope is closed');
+    return run(scope.api);
+  }
+  return withTypeScriptFiles(new Map(), run);
+}
+
+/** Project the real AST and diagnostics before releasing the snapshot. */
+export async function withTypeScriptSource<T>(path: string, text: string, run: (source: SourceFile, diagnostics: readonly Diagnostic[]) => T | Promise<T>): Promise<T> {
+  return withTypeScript(async api => {
     const { createFileSystem } = require('typescript/fs') as typeof FsTypes;
     const file = rooted(path, '/');
-    const snapshot = typescriptRequest(() => api.createSnapshot({
+    const snapshot = await typescriptRequest(() => api.createSnapshot({
       fileSystem: createFileSystem([[file, text]]),
       createPrograms: [{ rootFiles: [file], compilerOptions: { noLib: true, noResolve: true, allowJs: true, allowNonTsExtensions: true, jsx: nativeTypeScript().JsxEmit.Preserve } }],
     }));
-    try {
+    return withTypeScriptResource(snapshot, async () => {
       const program = snapshot.operation.createdPrograms[0];
-      const source = typescriptRequest(() => program.getSourceFile(file));
+      const source = await typescriptRequest(() => program.getSourceFile(file));
       if (source === undefined) throw new ConcordError('TypeScriptUnavailable', `TypeScript did not parse ${path}`);
-      const diagnostics = typescriptRequest(() => program.getSyntacticDiagnostics(file));
-      return synchronous(() => run(source, diagnostics));
-    } finally { typescriptRequest(() => snapshot.dispose()); }
+      const diagnostics = await typescriptRequest(() => program.getSyntacticDiagnostics(file));
+      return run(source, diagnostics);
+    });
   });
 }

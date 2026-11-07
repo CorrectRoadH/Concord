@@ -20,37 +20,37 @@ const fixture = async (body: (root: string) => unknown) => {
 };
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('warm configuration parsing preserves caller isolation and rejects changed source bytes', () => fixture(async root => {
-  const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial, false, { testRoots: ['test', 'tests'] }); } finally { initial.close(); }
+test('warm configuration parsing preserves caller isolation and rejects changed source bytes', async () => fixture(async root => {
+  const initial = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(initial, false, { testRoots: ['test', 'tests'] })); } finally { initial.close(); }
   const source = readFileSync(join(root, 'concord.config.ts'), 'utf8');
-  const first = snapshot('concord.config.ts', source);
+  const first = (await snapshot('concord.config.ts', source));
   const expected = [...(first.config.testRoots ?? [])];
   (first.config.testRoots as string[]).push('caller-only');
-  assert.deepEqual(snapshot('concord.config.ts', source).config.testRoots, expected);
-  assert.throws(() => snapshot('concord.config.ts', source.replace('testRoots', 'testRootz')), { code: 'InvalidData' });
-  assert.deepEqual(snapshot('concord.config.ts', source).config.testRoots, expected);
+  assert.deepEqual((await snapshot('concord.config.ts', source)).config.testRoots, expected);
+  (await assert.rejects(async () => (await snapshot('concord.config.ts', source.replace('testRoots', 'testRootz'))), { code: 'InvalidData' }));
+  assert.deepEqual((await snapshot('concord.config.ts', source)).config.testRoots, expected);
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('only the current TS config is read and unrelated files remain untouched', () => fixture(async root => {
+test('only the current TS config is read and unrelated files remain untouched', async () => fixture(async root => {
   const source = '{ deliberately invalid unrelated bytes }\n';
   writeFileSync(join(root, 'concord.json'), source);
   const result = await runApplication(executeQuery(root, { name: 'config.show', input: {} }, 'off'));
   assert.equal(result.exitCode, 0);
   assert.equal(existsSync(join(root, 'concord.config.ts')), false);
-  const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial, false, { testRoots: ['test', 'tests'] }); } finally { initial.close(); }
+  const initial = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(initial, false, { testRoots: ['test', 'tests'] })); } finally { initial.close(); }
   const checked = await runApplication(executeQuery(root, { name: 'check', input: {} }, 'off'));
   assert.equal(checked.exitCode, 0);
   assert.equal(readFileSync(join(root, 'concord.json'), 'utf8'), source);
-  assert.throws(() => Reflect.apply(snapshot, undefined, ['concord.json', source]), { code: 'InvalidData' });
+  await assert.rejects(async () => await Reflect.apply(snapshot, undefined, ['concord.json', source]), { code: 'InvalidData' });
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('old journals are refused before stale locks or interrupted files can be changed', () => fixture(async root => {
-  const initial = new LocalRepository(root, { initialize: true });
-  initialize(initial, false, { testRoots: ['test', 'tests'] }); const config = initial.configSnapshot; initial.close();
+test('old journals are refused before stale locks or interrupted files can be changed', async () => fixture(async root => {
+  const initial = (await LocalRepository.open(root, { initialize: true }));
+  (await initialize(initial, false, { testRoots: ['test', 'tests'] })); const config = initial.configSnapshot; initial.close();
   const privateDir = join(root, '.git/concord');
   const journalPath = join(privateDir, 'journal.json');
   const lockPath = join(privateDir, 'lock.json');
@@ -70,10 +70,10 @@ test('old journals are refused before stale locks or interrupted files can be ch
     const journal = JSON.stringify({ format: 'concord.journal', root, privateDir, operation: 'old-publication', phase: 'prepared', directories: [], scope, changes: [{ path, before: '# Before\n', after: '# Interrupted\n', beforeDigest: digest('# Before\n'), afterDigest: digest('# Interrupted\n'), mode: 420 }] });
     const lock = JSON.stringify({ format: 'concord.lock/v1', root, host: hostname(), pid: 2147483647, token: 'offline-recovery-only' });
     writeFileSync(journalPath, journal); writeFileSync(lockPath, lock);
-    for (const options of [{ dryRun: true }, { recover: true }]) assert.throws(() => new LocalRepository(root, options), { code });
+    for (const options of [{ dryRun: true }, { recover: true }]) (await assert.rejects(async () => (await LocalRepository.open(root, options)), { code }));
     for (const args of [['check'], ['recover']] as const) {
       if (args[0] === 'recover') await assert.rejects(runApplication(recoverLocalState(root)), { code: 'InvalidData' });
-      else await assert.rejects(runApplication(executeQuery(root, { name: 'check', input: {} }, 'off')), { code: 'InvalidData' });
+      else await assert.rejects((runApplication(executeQuery(root, { name: 'check', input: {} }, 'off'))), { code: 'InvalidData' });
     }
     assert.equal(readFileSync(journalPath, 'utf8'), journal);
     assert.equal(readFileSync(lockPath, 'utf8'), lock);
@@ -81,11 +81,11 @@ test('old journals are refused before stale locks or interrupted files can be ch
     assert.equal(statSync(publicationLock).mode & 0o777, 0o644);
     rmSync(journalPath); rmSync(lockPath);
   }
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    assert.throws(() => repo.publish('old-config', [{ path: 'concord.json', before: null, after: '{}' }]), { code: 'InvalidChange' });
+    (await assert.rejects(async () => (await repo.publish('old-config', [{ path: 'concord.json', before: null, after: '{}' }])), { code: 'InvalidChange' }));
     assert.equal(existsSync(join(root, 'concord.json')), false);
-    assert.throws(() => repo.publish('remove-config', [{ path: 'concord.config.ts', before: config.source, after: null }]), { code: 'InvalidChange' });
+    (await assert.rejects(async () => (await repo.publish('remove-config', [{ path: 'concord.config.ts', before: config.source, after: null }])), { code: 'InvalidChange' }));
   } finally { repo.close(); }
 }));
 

@@ -103,7 +103,6 @@ export { decodeChangePreview } from './change-preview.ts';
 export { PREVIEW_DATA_LIMIT } from './change-preview.ts';
 export { PREVIEW_ENTRY_LIMIT } from './change-preview.ts';
 export type { PreviewSide } from './change-preview.ts';
-export type { StartupData } from './cli-startup-types.ts';
 export type { StartupReceipt } from './cli-startup-types.ts';
 export type { ConceptCatalog } from './concepts-schema.ts';
 export { ConceptCatalogSchema } from './concepts-schema.ts';

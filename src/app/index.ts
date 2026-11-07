@@ -182,3 +182,6 @@ export { workspaceSourceDigest } from './workspace-source.ts';
 export { manageHerdrMod } from './herdr-mod.ts';
 
 export { verifyChangePreview } from './change-preview-verify.ts';
+
+export { makeProcessGroupCpuReader } from './entry-operations.ts';
+export type { ProcessGroupCpu } from './entry-operations.ts';

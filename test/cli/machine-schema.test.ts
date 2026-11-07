@@ -32,7 +32,7 @@ test('view verify checks strict preview data and exact directory entries without
   const directory = mkdtempSync(join(tmpdir(), 'concord-preview-verify-'));
   const oid = 'a'.repeat(40);
   const value = { format: 'concord.change-preview/v1', comparison: { base: oid, head: oid, mergeBase: oid, baseLabel: 'master' }, entries: [] };
-  const call = () => runCli({ argv: ['view', 'verify', directory, '--json'], cwd: directory, env: process.env });
+  const call = async () => runCli({ argv: ['view', 'verify', directory, '--json'], cwd: directory, env: process.env });
   try {
     mkdirSync(join(directory, 'assets'));
     for (const file of ['index.html', 'FONT-LICENSE.html']) writeFileSync(join(directory, file), 'fixture');
@@ -62,19 +62,19 @@ test('dependency-free JavaScript adapter discovers, selects and replays a fix th
   const { createDocument } = await import('../support/operations.ts');
   const { execFileSync } = await import('node:child_process');
   const { readFileSync } = await import('node:fs');
-  const root = createConsumer();
+  const root = (await createConsumer());
   const scratch = mkdtempSync(join(tmpdir(), 'concord-own-adapter-'));
   const transcript = join(scratch, 'transcript.jsonl');
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
-  const call = (args: string[], status = 0) => runCli({ argv: ['--root', root, '--server', 'command', '--json', ...args], cwd: root, env: process.env }).then(result => {
+  const call = async (args: string[], status = 0) => runCli({ argv: ['--root', root, '--server', 'command', '--json', ...args], cwd: root, env: process.env }).then(result => {
     assert.equal(result.exitCode, status, result.stdout + result.stderr);
     return JSON.parse(result.stdout || result.stderr);
   });
   try {
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
-      createDocument(repo, 'feature', { id: 'cart', title: 'Cart' });
-      createDocument(repo, 'issue', { id: 'duplicate', title: 'Duplicate SKU' });
+      await createDocument(repo, 'feature', { id: 'cart', title: 'Cart' });
+      await createDocument(repo, 'issue', { id: 'duplicate', title: 'Duplicate SKU' });
     } finally { repo.close(); }
     mkdirSync(join(root, 'test'), { recursive: true });
     writeFileSync(join(root, 'test/cart.ts'), '// @feature docs/feature/cart/README.md\n// @issue docs/issues/duplicate.md\n// @name cart\n');
@@ -142,8 +142,8 @@ test('external adapter timeouts accept longer E2E and retain builtin ceilings', 
   const { parseTypeScriptConfig } = await import('../../src/base/workspace/index.ts');
   const adapter = { id: 'external', include: ['test'], argv: ['runner'], implementationFiles: ['runner'], inputRoots: [], frameworkVersion: '1', lockFiles: [], envNames: [] };
   const config = (value: object) => `export default ${JSON.stringify({ testRoots: ['test'], testAdapters: [value] })};`;
-  assert.equal(parseTypeScriptConfig(config({ ...adapter, collectTimeoutMs: 600000, runTimeoutMs: 7200000, wallTimeoutMs: 7200000 })).testAdapters![0]!.runTimeoutMs, 7200000);
-  for (const value of [{ collectTimeoutMs: 600001 }, { runTimeoutMs: 7200001 }, { wallTimeoutMs: 7200001 }]) assert.throws(() => parseTypeScriptConfig(config({ ...adapter, ...value })));
+  assert.equal((await parseTypeScriptConfig(config({ ...adapter, collectTimeoutMs: 600000, runTimeoutMs: 7200000, wallTimeoutMs: 7200000 }))).testAdapters![0]!.runTimeoutMs, 7200000);
+  for (const value of [{ collectTimeoutMs: 600001 }, { runTimeoutMs: 7200001 }, { wallTimeoutMs: 7200001 }]) (await assert.rejects(async () => (await parseTypeScriptConfig(config({ ...adapter, ...value })))));
   const { argv: _argv, ...builtin } = adapter;
-  for (const value of [{ collectTimeoutMs: 60001 }, { runTimeoutMs: 300001 }, { wallTimeoutMs: 600001 }]) assert.throws(() => parseTypeScriptConfig(config({ ...builtin, builtin: 'node-test', ...value })));
+  for (const value of [{ collectTimeoutMs: 60001 }, { runTimeoutMs: 300001 }, { wallTimeoutMs: 600001 }]) (await assert.rejects(async () => (await parseTypeScriptConfig(config({ ...builtin, builtin: 'node-test', ...value })))));
 });

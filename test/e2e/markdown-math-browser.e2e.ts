@@ -58,11 +58,11 @@ test('real workbench math previews render locally, sanitize HTML and preserve Ma
   const root = workspace.root;
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'math', title: 'Math rendering', body });
-    createDocument(repo, 'feature', { id: 'math-target', title: 'Linked math document' });
-    createDocument(repo, 'feature', { id: 'math-decoy', title: 'Formula text is not a link' });
+    (await createDocument(repo, 'feature', { id: 'math', title: 'Math rendering', body }));
+    (await createDocument(repo, 'feature', { id: 'math-target', title: 'Linked math document' }));
+    (await createDocument(repo, 'feature', { id: 'math-decoy', title: 'Formula text is not a link' }));
   } finally { repo.close(); }
   const file = join(root, 'docs/feature/math/README.md');
   const before = readFileSync(file);

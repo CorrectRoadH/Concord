@@ -38,13 +38,13 @@ after(() => Effect.runPromise(Effect.sync(() => { if (scratch !== undefined) rmS
 function cli(root: string, ...args: string[]) {
   return JSON.parse(execFileSync(process.execPath, [entry, '--root', root, '--json', '--fresh', ...args], { encoding: 'utf8', timeout: 20000 })) as unknown;
 }
-function consumer(): string {
-  const root = createConsumer();
+async function consumer(): Promise<string> {
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: ['test'], sourceRoots: ['src'] });
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'sample', title: 'Sample' });
-    createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample' });
+    (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }));
+    (await createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample' }));
   } finally { repo.close(); }
   for (const directory of ['src', 'test']) mkdirSync(join(root, directory));
   writeFileSync(join(root, file), source('old-step'));
@@ -118,7 +118,7 @@ class Client {
   async eof() { this.child.stdin.end(); assert.equal(await Promise.race([this.closed, new Promise<number>((_, reject) => setTimeout(() => reject(new Error('EOF cleanup timeout')), 6000).unref())]), 0, this.stderr); }
 }
 const run = (body: (client: Client, root: string) => Promise<void>, gateWorkers = false) => Effect.runPromise(Effect.tryPromise({ try: async () => {
-  const root = consumer(), client = gateWorkers ? new Client(root, undefined, { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${new URL('../fixtures/editor-job-gate.ts', import.meta.url).href}` }) : new Client(root);
+  const root = (await consumer()), client = gateWorkers ? new Client(root, undefined, { ...process.env, BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${new URL('../fixtures/editor-job-gate.ts', import.meta.url).href}` }) : new Client(root);
   let failed = false;
   try { await client.initialize(); await body(client, root); }
   catch (cause) { failed = true; throw cause; }

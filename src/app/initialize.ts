@@ -37,7 +37,7 @@ export type InitializationReceipt = typeof InitializationReceiptSchema.Type;
 export const initialize = Effect.fn('initialize')(function*(repo: Repository, dryRun = false, options: InitializeOptions = {}, initialGuide?: WritingGuide) {
   const catalog = yield* templateCatalog();
   const runtime = yield* RuntimeEnvironment;
-  return yield* Effect.try({ try: (): InitializationReceipt => inRepositorySnapshot(repo, () => {
+  return yield* Effect.tryPromise({ try: async (): Promise<InitializationReceipt> => (await inRepositorySnapshot(repo, async () => {
   const guide = initialGuide ?? selectWritingGuide(repo.root, runtime.env);
   const config = decode(ProjectSchema, { ...(options.testRoots === undefined ? {} : { testRoots: options.testRoots }), ...(options.sourceRoots === undefined ? {} : { sourceRoots: options.sourceRoots }), ...(options.runner === undefined ? {} : { runner: options.runner }) }, 'init configuration');
   for (const root of [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])]) {
@@ -71,8 +71,8 @@ export const initialize = Effect.fn('initialize')(function*(repo: Repository, dr
   const changes: Change[] = Object.entries(paths).map(([path, after]) => ({ path, before: null, after }));
   if (agentBefore !== agentAfter) changes.push({ path: 'AGENTS.md', before: agentBefore, after: agentAfter });
   changes.push(...skills.changes);
-  const receipt = repo.publish('init', changes, dryRun);
+  const receipt = (await repo.publish('init', changes, dryRun));
   return decode(InitializationReceiptSchema, { ...receipt, config, createdPaths: receipt.changedPaths, preservedPaths, guide }, 'init result');
-  }), catch: failure });
+  })), catch: failure }).pipe(Effect.uninterruptible);
 });
 // @concord-end

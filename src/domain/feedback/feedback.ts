@@ -31,10 +31,10 @@ export interface FeedbackSyncReceipt extends MutationReceipt {
   readonly warnings: readonly string[];
 }
 
-const attempt = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> => Effect.try({
-  try: evaluate,
+const attempt = <A>(name: string, evaluate: () => A | Promise<A>): Effect.Effect<A, ConcordError> => Effect.tryPromise({
+  try: async () => await evaluate(),
   catch: failure,
-}).pipe(Effect.withSpan(name));
+}).pipe(Effect.uninterruptible, Effect.withSpan(name));
 
 // @concord-begin
 // @concord-implements docs/feature/feedback/architecture.md
@@ -167,7 +167,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
 
   if (options.signal?.aborted) return yield* Effect.fail(new ConcordError('GhCancelled', 'Feedback read was cancelled before publication'));
 
-  const receipt = yield* withRepository(root, (repo) => attempt('feedback.publish', () => {
+  const receipt = yield* withRepository(root, (repo) => attempt('feedback.publish', async () => {
     const current = configSnapshot(repo, connectionId);
     if (current.digest !== observed.digest) throw new ConcordError('FileChangedSinceRead', `${repo.configSnapshot.path} changed while remote feedback was fetched; retry with the current configuration`);
     assertReturnedConnection(current.connection, bound);
@@ -205,7 +205,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
     }
     const receipt = changes.length === 0
       ? { operation: options.url === undefined ? 'feedback-sync' : 'feedback-import', dryRun, changedPaths: [] }
-      : repo.publish(options.url === undefined ? 'feedback-sync' : 'feedback-import', changes, dryRun);
+      : (await repo.publish(options.url === undefined ? 'feedback-sync' : 'feedback-import', changes, dryRun));
     const warnings = [...remote.warnings];
     return { ...receipt, connection: bound, fetched: fetched.items.length, imported: changes.filter((change) => change.path.startsWith('docs/issues/')).length, warnings };
   }), dryRun);

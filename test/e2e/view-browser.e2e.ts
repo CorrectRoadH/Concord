@@ -14,22 +14,22 @@ test('browser opens and refreshes a deep link without credentials and retries in
   const root = workspace.root;
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'web', title: 'Direct access fixture' });
-    createDocument(repo, 'use-case', { id: 'floating-path', title: 'Floating user path', feature: 'web' });
-    createDocument(repo, 'engineering', { id: 'floating-tooling', title: 'Floating tooling' });
-    createDocument(repo, 'feature', { id: 'child-code', title: 'Feature with child implementation' });
-    createDocument(repo, 'use-case', { id: 'implemented', title: 'Implemented child', feature: 'child-code' });
-    createDocument(repo, 'feature', { id: 'child-test', title: 'Feature with child test' });
-    createDocument(repo, 'use-case', { id: 'tested', title: 'Tested child', feature: 'child-test' });
-    createDocument(repo, 'roadmap', { id: 'planned', title: 'Planned direction' });
-    createDocument(repo, 'feature', {
+    (await createDocument(repo, 'feature', { id: 'web', title: 'Direct access fixture' }));
+    (await createDocument(repo, 'use-case', { id: 'floating-path', title: 'Floating user path', feature: 'web' }));
+    (await createDocument(repo, 'engineering', { id: 'floating-tooling', title: 'Floating tooling' }));
+    (await createDocument(repo, 'feature', { id: 'child-code', title: 'Feature with child implementation' }));
+    (await createDocument(repo, 'use-case', { id: 'implemented', title: 'Implemented child', feature: 'child-code' }));
+    (await createDocument(repo, 'feature', { id: 'child-test', title: 'Feature with child test' }));
+    (await createDocument(repo, 'use-case', { id: 'tested', title: 'Tested child', feature: 'child-test' }));
+    (await createDocument(repo, 'roadmap', { id: 'planned', title: 'Planned direction' }));
+    (await createDocument(repo, 'feature', {
       id: 'html',
       title: 'Raw HTML fixture',
       body: '# Raw HTML fixture\n\n<details><summary>More</summary>\n\nContent\n\n</details>\n',
-    });
-    for (let index = 0; index < 24; index += 1) createDocument(repo, 'feature', { id: `fixture-${index}`, title: `Navigation fixture ${index}` });
+    }));
+    for (let index = 0; index < 24; index += 1) (await createDocument(repo, 'feature', { id: `fixture-${index}`, title: `Navigation fixture ${index}` }));
   } finally { repo.close(); }
   writeFileSync(join(root, 'docs/concepts.md'), "# Terms\n\n## 直接访问 {#direct-access}\n\n浏览器直接打开工作台\n\n旧写法：`旧访问`\n");
   writeFileSync(join(root, 'docs/feature/web/concepts.md'), "# Terms\n\n## Workbench {#workbench}\n\nWeb Feature 所属定义\n");
@@ -38,7 +38,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
   mkdirSync(join(root, 'test'));
   writeFileSync(join(root, 'src/child.ts'), '// @concord-file\n// @concord-implements docs/feature/child-code/use-case/implemented.md\nexport const implemented = true;\n');
   writeFileSync(join(root, 'test/child.test.ts'), '// @use-case docs/feature/child-test/use-case/tested.md\n');
-  writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'], testRoots: ['test'] });
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceRoots: ['src'], testRoots: ['test'] });
   server = await workspace.ready();
   await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 

@@ -47,13 +47,13 @@ function template(page: DocumentPage): string | undefined {
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page
 export const addPage = Effect.fn('addPage')(function*(repo: Repository, kind: DocumentKind, selector: string, page: string, dryRun = false) {
   const catalog = yield* templateCatalog();
-  return yield* Effect.try({ try: (): MutationReceipt => inRepositorySnapshot(repo, () => {
+  return yield* Effect.tryPromise({ try: async (): Promise<MutationReceipt> => (await inRepositorySnapshot(repo, async () => {
   const target = pagePath(repo, kind, selector, page);
   if (repo.read(target.path) !== undefined) throw new ConcordError('PageExists', `${target.path} already exists`);
   const name = template(checkedPage(page));
   const content = name === undefined ? `# ${target.title}: ${page}\n\nDescribe this topic and link to the package contract.\n` : catalog.render(name, target.title, []);
-  return repo.publish('add-page', [{ path: target.path, before: null, after: body(content) }], dryRun);
-  }), catch: failure });
+  return (await repo.publish('add-page', [{ path: target.path, before: null, after: body(content) }], dryRun));
+  })), catch: failure }).pipe(Effect.uninterruptible);
 });
 // @concord-end
 
@@ -73,12 +73,12 @@ export function showPage(repo: Repository, kind: DocumentKind, selector: string,
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page
-export function setPage(repo: Repository, kind: DocumentKind, selector: string, page: string, next: string, expectedDigest: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export async function setPage(repo: Repository, kind: DocumentKind, selector: string, page: string, next: string, expectedDigest: string, dryRun = false): Promise<MutationReceipt> {
+  return (await inRepositorySnapshot(repo, async () => {
   const target = pagePath(repo, kind, selector, page); const source = repo.read(target.path);
   if (source === undefined) throw new ConcordError('PageNotFound', `${target.path} does not exist`);
   if (digest(source) !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${target.path} changed; use its current digest`);
-  if ((page === 'README' || page === 'readme')) return setAuthor(repo, target.path, next, expectedDigest, dryRun);
-  return repo.publish('set-page', [{ path: target.path, before: source, after: body(next) }], dryRun);
-  });
+  if ((page === 'README' || page === 'readme')) return (await setAuthor(repo, target.path, next, expectedDigest, dryRun));
+  return (await repo.publish('set-page', [{ path: target.path, before: source, after: body(next) }], dryRun));
+  }));
 }

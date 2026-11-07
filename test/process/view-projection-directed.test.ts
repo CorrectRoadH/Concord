@@ -34,13 +34,13 @@ import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjection
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('current-source queries and cached projection queries remain separate', async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const shown = await runApplication(getWorkspaceSnapshot(root, 'off'));
     assert.equal(shown.root, root);
     assert.ok(shown.documents.length > 0);
     assert.equal('projection' in shown, false);
-    assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionPending' });
+    (await assert.rejects(async () => readWorkspaceProjection((await workspaceProjectionContext(root))), { code: 'WorkspaceProjectionPending' }));
     const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     try { await waitForWorkspaceProjection(baseOf(server)); } finally { await server.close(); }
     const cached = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));

@@ -43,7 +43,7 @@ export function gateSelectionArguments(argv: readonly string[]) {
   const parsed = parseArgs({ args: normalized, allowPositionals: true, tokens: true, options: {
     changed: { type: 'string' },
     'test-name-pattern': { type: 'string' }, 'test-shard': { type: 'string' },
-    suite: { type: 'string' }, 'node-worker': { type: 'boolean' },
+    suite: { type: 'string' },
   } });
   if (parsed.tokens.filter(token => token.kind === 'option' && token.name === 'changed').length > 1) {
     throw new GateSelectionInvalid({ detail: '--changed may appear only once' });
@@ -100,20 +100,20 @@ export const selectGateTests = Effect.fn('gate.selectTests')(function*(argv: rea
         if (yield* fs.exists(join(absoluteRoot, file))) sources.push({ file, text: yield* fs.readFileString(join(absoluteRoot, file)) });
         if (oldFiles.has(file)) sources.push({ file, text: yield* git(['show', `${base}:${file}`]) });
       }
-      yield* Effect.try({ try: () => withTypeScript(() => {
-        for (const source of sources) for (const token of codeReferenceTokens(source.file, source.text)) references.add(page(token.reference));
-      }), catch: cause => new GateSelectionInvalid({ detail: `Read code associations: ${String(cause)}` }) });
+      yield* Effect.tryPromise({ try: async () => (await withTypeScript(async () => {
+        for (const source of sources) for (const token of (await codeReferenceTokens(source.file, source.text))) references.add(page(token.reference));
+      })), catch: cause => new GateSelectionInvalid({ detail: `Read code associations: ${String(cause)}` }) }).pipe(Effect.uninterruptible);
       affectedContracts = [...references].filter(ref => owner(ref) !== undefined).sort();
       selected = new Set(changedFiles.filter(file => allFiles.includes(file)));
       if (affectedContracts.length > 0) {
         const tests = yield* Effect.forEach(allFiles, file => Effect.map(fs.readFileString(join(absoluteRoot, file)), text => ({ file, text })));
-        yield* Effect.try({ try: () => withTypeScript(() => {
+        yield* Effect.tryPromise({ try: async () => (await withTypeScript(async () => {
           for (const source of tests) {
-            const markers = parseTestDeclarations(source.file, source.text);
+            const markers = (await parseTestDeclarations(source.file, source.text));
             if (markers.findings.length > 0) throw new GateSelectionInvalid({ detail: `Invalid test markers: ${source.file}` });
             if (markers.cases.some(test => test.status === 'active' && affectedContracts.some(ref => affectedTestContract(ref, test.contract)))) selected.add(source.file);
           }
-        }), catch: cause => cause instanceof GateSelectionInvalid ? cause : new GateSelectionInvalid({ detail: String(cause) }) });
+        })), catch: cause => cause instanceof GateSelectionInvalid ? cause : new GateSelectionInvalid({ detail: String(cause) }) }).pipe(Effect.uninterruptible);
       }
     }
   }

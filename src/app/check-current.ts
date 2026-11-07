@@ -7,7 +7,7 @@ import { Sources } from '../base/sources/index.ts';
 import { checkProject } from "./project-check.ts";
 import { waitForPublication } from "../base/publication/index.ts";
 
-const sync = <A>(run: () => A) => Effect.try({ try: run, catch: failure });
+const sync = <A>(run: () => A | Promise<A>) => Effect.tryPromise({ try: async () => await run(), catch: failure }).pipe(Effect.uninterruptible);
 
 /** Only this read-only operation may replay; every attempt owns a fresh repository. */
 export const checkCurrentProject = Effect.fn('checkCurrentProject')(function*(root?: string, cache: 'use' | 'off' = 'use') {
@@ -15,9 +15,9 @@ export const checkCurrentProject = Effect.fn('checkCurrentProject')(function*(ro
     const result = yield* Effect.result(Effect.gen(function*() {
       const repo = yield* waitForPublication(reclaimPublication => openReadRepository(root, { access: 'read', persistentCache: cache, reclaimPublication }));
       const sources = yield* Sources;
-      return yield* sources.snapshot(repo, sync(() => {
-        let report: ReturnType<typeof checkProject>;
-        try { report = checkProject(repo, cache); }
+      return yield* sources.snapshot(repo, sync(async () => {
+        let report: Awaited<ReturnType<typeof checkProject>>;
+        try { report = (await checkProject(repo, cache)); }
         catch (cause) {
           if (cause instanceof ConcordError && ['UnsafePath', 'RecoveryRequired', 'InvalidFile', 'ReadOnlyRepository'].includes(cause.code)) throw cause;
           repo.verifySnapshot();

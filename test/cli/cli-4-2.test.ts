@@ -4,7 +4,7 @@ import { assert, symlinkSync, join, test, Schema, ErrorOutput, CheckOutput, call
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('packed writing reports JSON findings, exit one and named unsafe input failures', async () => {
- const root = consumer('writing-boundaries');
+ const root = (await consumer('writing-boundaries'));
  const policy = { roots: ['guide'] as [string, ...string[]], bannedTerms: [{ term: 'bad', use: 'clear', why: 'test rule' }] };
  write(root, 'docs/writing.md', renderWritingPolicy(policy));
  write(root, 'guide/page.md', 'clear.');

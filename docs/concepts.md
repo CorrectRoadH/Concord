@@ -204,7 +204,7 @@ advisory 是不使检查失败的提示，不算 finding。原生诊断与缓存
 
 ## 归档 {#archive}
 
-一个目标平台的 `concord-<version>-<target>.tar.gz`，内含启动脚本、固定版本的 Node.js 运行时、构建好的应用、原生绑定与 ripgrep；所有渠道都从它安装。
+一个目标平台的 `concord-<version>-<target>.tar.gz`，内含固定版本 Bun 编译并预编译字节码的单个可执行文件、应用资源、原生绑定与 ripgrep；所有渠道都从它安装。
 
 解压后的目录是安装目录。
 

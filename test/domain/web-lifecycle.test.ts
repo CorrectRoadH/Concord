@@ -15,7 +15,7 @@ test('Issue fixed actions decode CLI inputs and reject caller-provided verificat
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md#close
 test('Issue actions preserve reason closure and reject invalid fixed options before mutation', async () => {
-  const fixture = createFixConsumer();
+  const fixture = (await createFixConsumer());
   const issue = join(fixture.root, 'docs/issues/sku.md');
   try {
     for (const options of [{ fixed: true, dryRun: true }, { defect: 'HEAD~1' }, { fix: 'HEAD' }]) {
@@ -29,7 +29,7 @@ test('Issue actions preserve reason closure and reject invalid fixed options bef
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md#close
 test('fixed action verifies real frozen red and green commands before deleting the Issue', async () => {
-  const fixture = createFixConsumer();
+  const fixture = (await createFixConsumer());
   try {
     const fix = fixture.fix();
     const result = await runApplication(executeViewAction(fixture.root, { action: 'issue.close', id: 'sku', fixed: true, defect: fixture.defect, fix, reason: 'Accumulate quantity' })) as {
@@ -44,7 +44,7 @@ test('fixed action verifies real frozen red and green commands before deleting t
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md#close
 test('fixed action leaves the Issue untouched when the real defect runner is green', async () => {
-  const fixture = createFixConsumer({ greenAtDefect: true });
+  const fixture = (await createFixConsumer({ greenAtDefect: true }));
   const path = join(fixture.root, 'docs/issues/sku.md');
   try {
     writeFileSync(join(fixture.root, 'unrelated.txt'), 'Later commit without behavior changes\n');

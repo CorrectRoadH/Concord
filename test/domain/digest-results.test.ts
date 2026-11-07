@@ -13,7 +13,7 @@ import { record, projection, ports, stateLayer } from '../support/workspace-serv
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('workspace source identity survives ABA between refreshes and includes supporting sources', async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const path = join(root, 'docs/feature/projected/README.md');
     const original = readFileSync(path, 'utf8');
@@ -65,21 +65,21 @@ test('a changed source digest discards the late candidate before persistent publ
 })).pipe(Effect.provide(stateLayer))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('final source verification detects a completed multi-file publication inside a read', () => {
-  const root = fixture();
-  const reader = new LocalRepository(root, { access: 'read', optimistic: true });
-  const writer = new LocalRepository(root);
+test('final source verification detects a completed multi-file publication inside a read', async () => {
+  const root = (await fixture());
+  const reader = (await LocalRepository.open(root, { access: 'read', optimistic: true }));
+  const writer = (await LocalRepository.open(root));
   try {
     writeFileSync(join(root, 'memory/a.md'), 'old-a');
     writeFileSync(join(root, 'memory/b.md'), 'old-b');
-    assert.throws(() => reader.snapshot(() => {
+    (await assert.rejects(async () => (await reader.snapshot(async () => {
       assert.equal(reader.read('memory/a.md'), 'old-a');
-      writer.publish('replace-pair', [
+      (await writer.publish('replace-pair', [
         { path: 'memory/a.md', before: 'old-a', after: 'new-a' },
         { path: 'memory/b.md', before: 'old-b', after: 'new-b' },
-      ]);
+      ]));
       assert.equal(reader.read('memory/b.md'), 'new-b');
-    }), { code: 'SourceChanged' });
+    })), { code: 'SourceChanged' }));
   } finally { reader.close(); writer.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

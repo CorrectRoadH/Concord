@@ -7,9 +7,9 @@ import { makeRuntimeEnvironment as makeParserRuntime } from '../../src/base/envi
 const parserRuntime = makeParserRuntime(process.cwd(), process.env);
 
 
-Effect.runSync(Effect.sync(() => {
+(await Effect.runPromise(Effect.tryPromise(async () => {
   const root = process.argv[2];
-  const repo = new LocalRepository(root, { access: 'read', dryRun: process.argv[3] === 'off', runtime: parserRuntime });
+  const repo = (await LocalRepository.open(root, { access: 'read', dryRun: process.argv[3] === 'off', runtime: parserRuntime }));
   const contentCache = makeDocumentProjectionCache(parserRuntime);
   try {
     const value = repo.snapshot(() => {
@@ -25,4 +25,4 @@ Effect.runSync(Effect.sync(() => {
     });
     console.log(JSON.stringify(value));
   } finally { try { contentCache.close(); } finally { repo.close(); } }
-}));
+})));

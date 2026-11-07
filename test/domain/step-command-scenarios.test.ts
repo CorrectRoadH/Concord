@@ -17,11 +17,11 @@ const write = (root: string, path: string, source: string) => { mkdirSync(join(r
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#link-declarations
 // @name packed-steps-navigation-and-maintenance
 test('steps C15 C16 C18 navigate exact steps, preserve examples and rename through one journal', async () => {
- const root = createConsumer();
+ const root = (await createConsumer());
  try {
  writeProjectConfig(root, { sourceRoots: ['src'], testRoots: ['test'] });
- withRepository(root, repo => createDocument(repo, 'feature', { id: 'journey', title: 'Journey' }));
- withRepository(root, repo => createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'journey' }));
+ (await withRepository(root, async repo => (await createDocument(repo, 'feature', { id: 'journey', title: 'Journey' }))));
+ (await withRepository(root, async repo => (await createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'journey' }))));
  const path = 'docs/feature/journey/use-case/flow.md';
  const owner = await query(root, { name: 'documents.show', input: { id: path } }, Schema.Struct({ document: DigestOutput }));
  await action(root, { action: 'document.set', path, body: '# Flow\n\n## Details\n\n1. Reject {#reject-token}\n2. Report\n\n## Acceptance\n\n1. Leave unmarked\n', expectedDigest: owner.document.digest }, Ack);
@@ -29,13 +29,13 @@ test('steps C15 C16 C18 navigate exact steps, preserve examples and rename throu
  write(root, 'src/flow.ts', `// @concord-file\n// @concord-implements ${path}#reject-token\nexport const flow = 1;\n`);
  write(root, 'docs/feature/journey/architecture.md', `[Flow](use-case/flow.md#reject-token)\n\n\`[Example](use-case/flow.md#reject-token)\`\n`);
  const steps = Schema.Struct({ steps: Schema.Array(Schema.Struct({ id: Schema.String, testCount: Schema.Int, codeCount: Schema.Int })), lists: Schema.Array(Schema.Struct({ ordinal: Schema.Int, marked: Schema.Int })) });
- const initial = Schema.decodeUnknownSync(steps)(withRepository(root, repo => useCaseSteps(repo, path)));
+ const initial = Schema.decodeUnknownSync(steps)((await withRepository(root, async repo => (await useCaseSteps(repo, path)))));
  assert.deepEqual(initial.steps, [{ id: 'reject-token', testCount: 1, codeCount: 1 }]);
  assert.equal(initial.lists[1]?.marked, 0);
  await query(root, { name: 'check', input: {} }, CheckOutput);
- withRepository(root, repo => formatUseCase(repo, path));
- assert.deepEqual(Schema.decodeUnknownSync(steps)(withRepository(root, repo => useCaseSteps(repo, path))).steps.map(step => step.id), ['reject-token', 'step-1']);
- const result = Schema.decodeUnknownSync(Schema.Struct({ affectedCases: Schema.Array(Schema.Struct({ before: Schema.String, after: Schema.String, named: Schema.Boolean })) }))(withRepository(root, repo => renameUseCaseStep(repo, path, 'reject-token', '拒绝令牌')));
+ (await withRepository(root, async repo => (await formatUseCase(repo, path))));
+ assert.deepEqual(Schema.decodeUnknownSync(steps)((await withRepository(root, async repo => (await useCaseSteps(repo, path))))).steps.map(step => step.id), ['reject-token', 'step-1']);
+ const result = Schema.decodeUnknownSync(Schema.Struct({ affectedCases: Schema.Array(Schema.Struct({ before: Schema.String, after: Schema.String, named: Schema.Boolean })) }))((await withRepository(root, async repo => (await renameUseCaseStep(repo, path, 'reject-token', '拒绝令牌')))));
  assert.equal(result.affectedCases[0]?.before, result.affectedCases[0]?.after);
  assert.match(readFileSync(join(root, 'docs/feature/journey/architecture.md'), 'utf8'), /\[Flow\]\(use-case\/flow.md#拒绝令牌\)/u);
  assert.match(readFileSync(join(root, 'docs/feature/journey/architecture.md'), 'utf8'), /`\[Example\]\(use-case\/flow.md#reject-token\)`/u);

@@ -9,6 +9,8 @@ import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../envi
 import { packageRoot } from './location.ts';
 import { modManifest } from '../../model/herdr-mod/index.ts';
 
+declare const CONCORD_COMPILED: boolean;
+
 export interface HerdrInstallHost {
   readonly available: Effect.Effect<boolean, ConcordError>;
   readonly check: (path: string) => Effect.Effect<{ code: number; output: string }, ConcordError>;
@@ -55,7 +57,7 @@ export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*
   yield* fs.makeDirectory(appHome, { recursive: true });
   const assets = ['main.js', 'mod.json', 'NOTICE.txt'];
   const generated = new Map<string, string>();
-  if (sourceRoot !== undefined) {
+  if (!(typeof CONCORD_COMPILED !== 'undefined' && CONCORD_COMPILED) && sourceRoot !== undefined) {
     const scratch = yield* fs.makeTempDirectoryScoped({ directory: appHome, prefix: '.concord-mod-build-' });
     yield* Effect.acquireRelease(Effect.tryPromise(async () => {
       const { build } = await import('vite-plus/pack');

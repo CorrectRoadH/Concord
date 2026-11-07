@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Clock, Effect, Schema, Stdio, Stream } from "effect";
 import { closeRepositoryCache, PersistentCache, HawdbFailure } from "../../base/cache/index.ts";
 import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
@@ -39,7 +39,7 @@ export function adapterInputSnapshot(repo: Repository, adapter: TestAdapter): { 
   });
   for (const path of [...adapter.implementationFiles, ...adapter.lockFiles]) if (!members.some(member => member.path === path) || snapshotMetadata(repo, path) === undefined) throw new ConcordError('CollectFailed', `A declared adapter input is missing: ${path}`);
   const argv = adapter.argv ?? builtinVersionCommand(adapter);
-  if (adapter.argv && argv[0] && ['node', process.execPath].includes(argv[0])) {
+  if (adapter.argv && argv[0] && ['node', 'node.exe'].includes(basename(argv[0]))) {
     const script = argv.find((part, index) => index > 0 && !part.startsWith('-') && /\.[cm]?[jt]s$/u.test(part));
     if (script && !adapter.implementationFiles.includes(script)) throw new ConcordError('AdapterProtocolInvalid', 'The executed adapter script must be included in implementationFiles');
   }
@@ -65,7 +65,7 @@ function outputTail(output: string): string {
 }
 interface InvocationDiagnostic extends ProcessStatus { readonly stdout: string; readonly stderr: string; }
 interface Session { readonly runId: string; readonly directory: string; readonly deadline: number; cleanupKnown: boolean; readonly reportBudget: ReportBudget; readonly reportErrors: string[]; readonly invocations: InvocationDiagnostic[]; }
-const sync = <A>(use: () => A) => Effect.try({ try: use, catch: failure });
+const sync = <A>(use: () => A | Promise<A>) => Effect.tryPromise({ try: async () => await use(), catch: failure }).pipe(Effect.uninterruptible);
 const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[], use: (session: Session) => Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication>, publish?: (value: A) => void): Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication> => Effect.gen(function* () {
   const service = yield* OwnedProcess;
   const environment = service.environment.env;
@@ -183,16 +183,22 @@ const collectOne = Effect.fn('testAdapter.collect')(function* (repo: LocalReposi
   const sources = yield* Sources;
   yield* sources.createReportDirectory(reportDirectory);
   const context: AdapterContext = { root: repo.root, runId: session.runId, planId: randomUUID(), inputs: before.inputs, reportDirectory };
-  const versions: { -readonly [K in keyof AdapterVersions]: AdapterVersions[K] } = { framework: adapter.frameworkVersion, runtime: process.version };
+  const versions: { -readonly [K in keyof AdapterVersions]: AdapterVersions[K] } = { framework: adapter.frameworkVersion, runtime: process.versions.bun ?? 'unavailable' };
   if (adapter.builtin) {
     const version = yield* callProcess(repo, adapter, session, builtinVersionCommand(adapter));
     if (!hasSuccessfulOwnedProcessResult(version) || !`${version.stdout}\n${version.stderr}`.split(/[\s/]+/u).some(token => token === adapter.frameworkVersion || adapter.builtin === 'node-test' && token === `v${adapter.frameworkVersion}`)) return yield* Effect.fail(new ConcordError('CollectFailed', 'Installed framework version does not match the pinned adapter version'));
     versions.observedFramework = version.stdout.trim() || version.stderr.trim();
-    const runtimeCommand = adapter.builtin === 'cargo' ? ['rustc', '+stable', '--version'] : adapter.builtin === 'pytest' ? ['uv', 'run', '--offline', '--no-project', '--with', 'pytest==9.1.1', 'python', '--version'] : undefined;
+    const runtimeCommand = adapter.builtin === 'cargo' ? ['rustc', '+stable', '--version'] : adapter.builtin === 'pytest' ? ['uv', 'run', '--offline', '--no-project', '--with', 'pytest==9.1.1', 'python', '--version'] : adapter.builtin === 'vitest' ? ['node', '--version'] : undefined;
     if (runtimeCommand) {
       const runtime = yield* callProcess(repo, adapter, session, runtimeCommand);
-      if (hasSuccessfulOwnedProcessResult(runtime)) versions.observedRuntime = runtime.stdout.trim() || runtime.stderr.trim();
-    } else versions.observedRuntime = adapter.builtin === 'go' ? versions.observedFramework : process.version;
+      if (hasSuccessfulOwnedProcessResult(runtime)) {
+        versions.observedRuntime = runtime.stdout.trim() || runtime.stderr.trim();
+        if (adapter.builtin === 'vitest') versions.runtime = versions.observedRuntime;
+      } else if (adapter.builtin === 'vitest') return yield* Effect.fail(new ConcordError('CollectFailed', 'Project Node runtime version could not be read'));
+    } else {
+      versions.observedRuntime = adapter.builtin === 'go' || adapter.builtin === 'node-test' ? versions.observedFramework : process.versions.bun ?? 'unavailable';
+      if (adapter.builtin === 'node-test') versions.runtime = versions.observedRuntime;
+    }
   }
   const plan = adapter.builtin ? yield* builtinCollectPlan(adapter, context, files) : yield* exchange(repo, adapter, session, context, 'collect-plan', { files, members: before.members }, PlanSchema);
   const captures = yield* executePlan(repo, adapter, session, context, plan, true);

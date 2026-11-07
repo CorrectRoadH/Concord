@@ -2,9 +2,9 @@
 // @concord-implements docs/engineering/code/architecture.md#capability-boundaries
 import { Context, Effect } from 'effect';
 import { ConcordError } from '../../model/index.ts';
-import type { WorkspaceMetadata } from '../workspace/context.ts';
+import type { WorkspaceMetadata } from '../workspace/index.ts';
 import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
-import { assertLeasePath } from '../publication/file-lease.ts';
+import { assertLeasePath } from '../publication/index.ts';
 import { openCurrentPersistentCache } from './persistent-handle.ts';
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from './cache-file.ts';
 import { HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace, type HawdbReclamation } from './hawdb-native.ts';

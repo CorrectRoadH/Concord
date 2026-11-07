@@ -22,7 +22,7 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @feature docs/feature/web-workbench/README.md
 test('disconnecting a view client releases its HTTP lease while the service remains available', { timeout: 20_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     assert.equal((await command(root, ['server', 'start'])).status, 0);
     const running = record(root), rpc = await rpcModule();
@@ -49,7 +49,7 @@ test('disconnecting a view client releases its HTTP lease while the service rema
 
 // @feature docs/feature/local-data-engine/README.md
 test('a killed service releases persistent ownership and the next invocation can restart', { timeout: 30_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
     const before = record(root); process.kill(before.pid, 'SIGKILL');
@@ -61,7 +61,7 @@ test('a killed service releases persistent ownership and the next invocation can
 
 // @feature docs/feature/local-data-engine/README.md
 test('server stop confirms a dead owner through its lock despite a stale record and socket', { timeout: 20_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   let staleSocket: string | undefined;
   try {
     const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
@@ -86,8 +86,8 @@ test('server stop confirms a dead owner through its lock despite a stale record 
 
 // @feature docs/feature/local-data-engine/README.md
 test('C22 deleting the Git-private directory stops the service and removes its exact socket', { timeout: 20_000 }, async () => {
-  const root = fixture();
-  let running: ReturnType<typeof record> | undefined;
+  const root = (await fixture());
+  let running: Awaited<ReturnType<typeof record>> | undefined;
   try {
     assert.equal((await command(root, ['server', 'start'])).status, 0);
     running = record(root);

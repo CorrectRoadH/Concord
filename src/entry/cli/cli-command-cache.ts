@@ -30,7 +30,7 @@ const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear
     if(settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','cache rebuild does not accept --dry-run'));
     const remote = yield* (yield* ServerLauncher).cache((yield* viewRoot(settings)), 'cache-rebuild');
     if (remote !== undefined) return yield* emit(remote, settings.json);
-    return yield* withRepo(repo=>sync(()=>rebuildCache(repo)));
+    return yield* withRepo(repo=>sync(async ()=>(await rebuildCache(repo))));
   })),
 ]));
 

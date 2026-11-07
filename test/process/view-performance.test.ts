@@ -25,13 +25,13 @@ import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitF
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
-function fixture(): string {
+async function fixture(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-performance-'));
   execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
+  const repo = (await LocalRepository.open(root, { initialize: true }));
   try {
-    initialize(repo, false, { testRoots: [], sourceRoots: ['src'] });
-    createDocument(repo, 'feature', { id: 'cached', title: 'Cached', pages: ['architecture'] });
+    (await initialize(repo, false, { testRoots: [], sourceRoots: ['src'] }));
+    (await createDocument(repo, 'feature', { id: 'cached', title: 'Cached', pages: ['architecture'] }));
   } finally { repo.close(); }
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src/main.ts'), '// @concord-code\n// @concord-implements docs/feature/cached/README.md\nexport function cachedCode() { return true; }\n');
@@ -40,7 +40,7 @@ function fixture(): string {
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('HTTP projection retains orphan annotation incompleteness and observes its repair', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = `http://127.0.0.1:${server.port}`;
   const path = join(root, 'src/main.ts');
@@ -73,7 +73,7 @@ test('HTTP projection retains orphan annotation incompleteness and observes its 
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('unchanged projections return 304 and published external edits invalidate the previous ETag', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = `http://127.0.0.1:${server.port}`;
   const url = `${base}/api/workspace`;

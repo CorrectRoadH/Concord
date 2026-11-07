@@ -12,10 +12,10 @@ test('terminology tab discards a previous document response and shows scoped JSO
   const root = workspace.root;
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'alpha', title: 'Alpha Feature' });
-    createDocument(repo, 'feature', { id: 'beta', title: 'Beta Feature' });
+    (await createDocument(repo, 'feature', { id: 'alpha', title: 'Alpha Feature' }));
+    (await createDocument(repo, 'feature', { id: 'beta', title: 'Beta Feature' }));
   } finally { repo.close(); }
   writeFileSync(join(root, 'docs/concepts.md'), "# Terms\n\n## Shared {#shared}\n\nShared definition\n");
   writeFileSync(join(root, 'docs/feature/alpha/concepts.md'), "# Terms\n\n## Alpha {#alpha}\n\nAlpha definition\n");

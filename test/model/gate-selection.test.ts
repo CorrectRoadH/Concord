@@ -28,7 +28,7 @@ test('only a complete unfiltered gate selection enters the full-gate queue', () 
   assert.equal(isFullGateSelection({ files: allFiles, allFiles, args: [] }), true);
   assert.equal(isFullGateSelection({ files: ['a.test.ts'], allFiles, args: [] }), false);
   assert.equal(isFullGateSelection({ files: [], allFiles, args: [] }), false);
-  for (const args of [['--test-name-pattern=selected'], ['--test-name-pattern', 'selected'], ['--test-shard=1/16'], ['--test-shard=package'], ['--suite', 'node']]) {
+  for (const args of [['--test-name-pattern=selected'], ['--test-name-pattern', 'selected'], ['--test-shard=1/16'], ['--suite', 'node']]) {
     assert.equal(isFullGateSelection({ files: allFiles, allFiles, args }), false, args.join(' '));
   }
 });

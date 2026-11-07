@@ -17,7 +17,7 @@ const DoctorOutput = Schema.Struct({ cases: Schema.Int });
 const OwnerOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Unknown }) });
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
 test('editable packages connect supporting-page tests to their Feature', () => Effect.runPromise(Effect.promise(async () => {
- const root = createConsumer();
+ const root = (await createConsumer());
  writeProjectConfig(root, { testRoots: ['test', 'tests'] });
  async function query<A>(request: QueryRequest, schema: Schema.ConstraintDecoder<A, never>): Promise<A> {
    const result = await runApplication(executeQuery(root, request));
@@ -30,7 +30,7 @@ test('editable packages connect supporting-page tests to their Feature', () => E
    return Schema.decodeUnknownSync(schema)(result.value);
  }
  function readPage(path: string) { const body = readFileSync(join(root, path), 'utf8'); return { body, digest: digest(body) }; }
- function savePage(path: string, body: string, expectedDigest: string, status = 0) {
+ async function savePage(path: string, body: string, expectedDigest: string, status = 0) {
    return action({ action: 'document.set', path, body, expectedDigest }, status === 0 ? Ack : ErrorOutput, status) as Promise<{ error?: string }>;
  }
  function write(path: string, source: string) { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), source); }

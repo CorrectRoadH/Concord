@@ -17,8 +17,8 @@ const HerdrOutput = Schema.Struct({ operation: Schema.Literal('herdr-uninstall')
 const decodeError = Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'error' });
 const decodeHerdr = Schema.decodeUnknownSync(Schema.fromJsonString(HerdrOutput), { onExcessProperty: 'error' });
 
-function consumer(t: TestContext): string {
-  const root = createConsumer();
+async function consumer(t: TestContext): Promise<string> {
+  const root = (await createConsumer());
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return root;
 }
@@ -56,7 +56,7 @@ async function concurrent(invocations: readonly Promise<CliResult>[]): Promise<C
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('A, failing B, and A keep exact output and reset the invocation exit code', async t => {
-  const firstRoot = consumer(t), secondRoot = consumer(t);
+  const firstRoot = (await consumer(t)), secondRoot = (await consumer(t));
   const unchanged = hostGuard();
   try {
     const argv = ['--json', 'template', 'show', 'feature', '--title', '隔离 A 🧭'];
@@ -74,11 +74,11 @@ test('A, failing B, and A keep exact output and reset the invocation exit code',
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('concurrent callers own UTF-8 byte stdin, string stdin and EOF through real document writes', async t => {
-  const roots = [consumer(t), consumer(t)];
+  const roots = [(await consumer(t)), (await consumer(t))];
   const bodies = ['# 输入甲 🧭\n\n来自字节 stdin。\n', '# 输入乙 🌿\n\n来自字符串 stdin。\n'];
   const unchanged = hostGuard();
   try {
-    const results = await concurrent(roots.map((cwd, index) => runCli({
+    const results = await concurrent(roots.map(async (cwd, index) => runCli({
       argv: ['--json', 'new', 'feature', 'same-name', '--body', '-'], cwd, env: environment(cwd),
       stdin: index === 0 ? new Uint8Array(Buffer.from(bodies[index]!, 'utf8')) : bodies[index],
     })));
@@ -92,12 +92,12 @@ test('concurrent callers own UTF-8 byte stdin, string stdin and EOF through real
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('the same relative body filename resolves against each concurrent invocation cwd', async t => {
-  const roots = [consumer(t), consumer(t)];
+  const roots = [(await consumer(t)), (await consumer(t))];
   const bodies = ['# 相对甲\n\n甲的正文。\n', '# 相对乙\n\n乙的正文。\n'];
   roots.forEach((root, index) => writeFileSync(join(root, 'invocation-body.md'), bodies[index]!));
   const unchanged = hostGuard();
   try {
-    const results = await concurrent(roots.map(cwd => runCli({ argv: ['--json', 'new', 'feature', 'relative', '--body', 'invocation-body.md'], cwd, env: environment(cwd) })));
+    const results = await concurrent(roots.map(async cwd => runCli({ argv: ['--json', 'new', 'feature', 'relative', '--body', 'invocation-body.md'], cwd, env: environment(cwd) })));
     results.forEach(success);
     roots.forEach((root, index) => assert.equal(readFileSync(join(root, 'docs/feature/relative/README.md'), 'utf8'), bodies[index]));
   } finally { unchanged(); }
@@ -105,7 +105,7 @@ test('the same relative body filename resolves against each concurrent invocatio
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('concurrent environment snapshots choose their own paths and never fill absent HOME from the host', async t => {
-  const firstRoot = consumer(t), secondRoot = consumer(t);
+  const firstRoot = (await consumer(t)), secondRoot = (await consumer(t));
   const firstEnv = environment(firstRoot), secondEnv = environment(secondRoot);
   delete secondEnv.HOME;
   delete secondEnv.HERDR_APP_HOME;
@@ -137,13 +137,13 @@ test('init reads relative runner JSON from its invocation cwd without a TTY prom
     const result = await runCli({ argv: ['--json', 'init', '--docs-only', '--runner-config', 'invocation-runner.json'], cwd: root, env: environment(root) });
     success(result);
     Schema.decodeUnknownSync(Schema.fromJsonString(InitializationReceiptSchema), { onExcessProperty: 'error' })(result.stdout);
-    assert.deepEqual(readProjectConfig(root).runner, runner);
+    assert.deepEqual((await readProjectConfig(root)).runner, runner);
   } finally { unchanged(); }
 });
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('human and JSON help and argument failures use only the current invocation streams', async t => {
-  const root = consumer(t);
+  const root = (await consumer(t));
   const unchanged = hostGuard();
   try {
     for (const json of [false, true]) {

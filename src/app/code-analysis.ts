@@ -21,7 +21,7 @@ import { captureNativeAnalysis } from "./native-analysis.ts";
 
 const ALGORITHM = 'concord.analysis/v1';
 
-const sync = <A>(run: () => A) => Effect.try({ try: run, catch: failure });
+const sync = <A>(run: () => A | Promise<A>) => Effect.tryPromise({ try: async () => await run(), catch: failure }).pipe(Effect.uninterruptible);
 
 const unitKey = (repo: Repository, analyzer: string): string => objectDigest({ kind: ALGORITHM, root: repo.root, privateDir: repo.privateDir, analyzer });
 
@@ -29,7 +29,7 @@ const unitKey = (repo: Repository, analyzer: string): string => objectDigest({ k
 /** Entire analysis unit, including membership and declared ignored implementation inputs. */
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
-export function captureAnalysisInputs(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)) {
+export async function captureAnalysisInputs(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)) {
   const paths = [...new Set([...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])].flatMap(root => repo.files(root, 'source')))];
   if (paths.length > ANALYSIS_LIMITS.files) throw new ConcordError('AnalysisBudgetExceeded', 'FileLimit');
   const explicit = new Set(['tsconfig.json', 'jsconfig.json', 'package.json', 'pnpm-lock.yaml', ...(repo.config.runner?.sourceFiles ?? [])]);
@@ -51,7 +51,7 @@ export function captureAnalysisInputs(repo: Repository, runtime: RuntimeEnvironm
     if (text !== undefined) files.set(path, text);
   }
   // Domain readers own contract decoding and provenance, including supporting pages.
-  const trace = buildTrace(repo, 'off');
+  const trace = (await buildTrace(repo, 'off'));
   requireValidTrace(trace);
   const contractPaths = [...new Set([...trace.documents.map(doc => doc.path), ...repo.files('docs').filter(path => path.endsWith('.md') || path.endsWith('.json'))])].sort();
   const contracts = contractPaths.map(path => ({ path, digest: digest(repo.read(path) ?? '') }));
@@ -61,7 +61,7 @@ export function captureAnalysisInputs(repo: Repository, runtime: RuntimeEnvironm
   return { identity, inputs, files, trace, native };
 }
 
-function captureReader(reader: LocalRepository, runtime: RuntimeEnvironmentSnapshot) {
+async function captureReader(reader: LocalRepository, runtime: RuntimeEnvironmentSnapshot) {
   const reads = new Map<string, string | null>();
   const listings = new Map<string, { prefix: string; scope?: 'source'; paths: string[] }>();
   // Freeze primitive source preimages, including reads made by native binding capture.
@@ -85,10 +85,10 @@ function captureReader(reader: LocalRepository, runtime: RuntimeEnvironmentSnaps
     publish: () => { throw new ConcordError('ReadOnlyRepository', 'Analysis capture is read-only'); },
   };
   try {
-    const captured = reader.snapshot(() => {
-      try { return PersistentCache.withView(reader, source, () => captureAnalysisInputs(source, runtime)); }
+    const captured = (await reader.snapshot(async () => {
+      try { return (await PersistentCache.withView(reader, source, async () => (await captureAnalysisInputs(source, runtime)))); }
       finally { closeRepositoryCache(source); }
-    });
+    }));
     return { ...captured, verifyFiles: () => reader.snapshot(() => {
       for (const [path, expected] of reads) {
         const value = reader.read(path);
@@ -107,7 +107,7 @@ function captureReader(reader: LocalRepository, runtime: RuntimeEnvironmentSnaps
 const readCapture = Effect.fn('analysis.capture')(function*(root: string) {
   const runtime = (yield* OwnedProcess).environment;
   const reader = yield* openReadRepository(root, { access: 'read' });
-  return yield* sync(() => captureReader(reader, runtime));
+  return yield* sync(async () => (await captureReader(reader, runtime)));
 });
 
 function publishObservations(repo: Repository, values: readonly AnalysisObservation[]): void {
@@ -155,7 +155,7 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
     finally { closeRepositoryCache(repo); }
     if (previous.length > 0) publishObservations(repo, previous.map(value => ({ ...value, current: false, complete: false, gaps: [...new Set([...value.gaps, 'SnapshotNotCurrent'])] })));
   });
-  const values: AnalysisValue[] = [yield* sync(() => typescriptDependencies(repo, captured.files, captured.trace.annotations.cases, captured.trace.codeDeclarations))];
+  const values: AnalysisValue[] = [yield* sync(async () => (await typescriptDependencies(repo, captured.files, captured.trace.annotations.cases, captured.trace.codeDeclarations)))];
   for (const server of repo.config.languageServers ?? []) {
     values.push(yield* analyzeLanguageServer(repo, server, captured.files, captured.trace.annotations.cases, captured.trace.codeDeclarations, captured.native));
   }
@@ -205,10 +205,10 @@ function readStoredAnalysisObservations(repo: Repository): readonly AnalysisObse
 
 
 /** Missing, damaged and stale observations do not affect the authoritative trace. */
-export function readAnalysisObservations(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)): readonly AnalysisObservation[] {
+export async function readAnalysisObservations(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)): Promise<readonly AnalysisObservation[]> {
   const observations = readStoredAnalysisObservations(repo);
   if (observations.length === 0) return [];
   let inputs: string | undefined;
-  try { inputs = captureAnalysisInputs(repo, runtime).inputs; } catch { /* History remains explicitly non-current. */ }
+  try { inputs = (await captureAnalysisInputs(repo, runtime)).inputs; } catch { /* History remains explicitly non-current. */ }
   return observations.map(value => ({ ...value, current: value.current && value.inputs === inputs, complete: value.complete && value.inputs === inputs, gaps: value.inputs === inputs ? value.gaps : [...new Set([...value.gaps, 'SnapshotNotCurrent'])] }));
 }

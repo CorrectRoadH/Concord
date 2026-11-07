@@ -3,7 +3,8 @@ import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 // Destructive fixtures own their native cache; read-only source consumers share it.
-let owner = dirname(resolve(process.env.CONCORD_TEST_FILE_ID ?? process.argv[1] ?? '.'));
+const entry = process.env.CONCORD_TEST_BUN_FILE_ROOT === '1' ? process.env.CONCORD_TEST_FILE_ID : process.argv[1];
+let owner = dirname(resolve(entry ?? '.'));
 for (;;) {
   if (existsSync(join(owner, 'package.json')) && existsSync(join(owner, 'src/entry/cli/entry.ts'))) {
     if (existsSync(join(owner, '.test-cache'))) process.env.XDG_CACHE_HOME = join(owner, '.test-cache');

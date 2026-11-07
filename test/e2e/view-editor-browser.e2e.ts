@@ -12,21 +12,21 @@ test('long documents remain reachable and code blocks follow theme without chang
   const root = workspace.root;
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', {
+    (await createDocument(repo, 'feature', {
       id: 'long', title: 'Long document',
       body: '# Long document\n\n[Read architecture](architecture.md) · [Read engineering](../../engineering/long/)\n\n![Architecture diagram](assets/architecture.png "System architecture")\n\n' + ['ts', 'typescript', 'tsx', 'js', 'json', 'bash', 'yaml', 'python', 'sql'].map((language, index) =>
         '```' + language + '\n' + (index === 0 ? `const answer = "hello";\nconst nowrapProbe = ${'x'.repeat(180)};` : ({ json: '{"value": 42}', bash: 'echo "hello"', yaml: 'value: true', python: 'return "hello"', sql: 'SELECT 42' }[language] ?? 'const answer = "hello";')) + '\n```\n\n').join('') +
         '```text\n+----------------+\n| ASCII preserve |\n+----------------+\n```\n\n' +
         '```mermaid\ngraph TD\n  A[nowrap-' + 'x'.repeat(120) + '] --> B[done]\n```\n\n' +
         Array.from({ length: 80 }, (_, i) => `Paragraph ${i}. Long document content.\n\n`).join('') + 'END OF DOCUMENT\n',
-    });
-    addPage(repo, 'feature', 'long', 'architecture');
-    createDocument(repo, 'engineering', {
+    }));
+    (await addPage(repo, 'feature', 'long', 'architecture'));
+    (await createDocument(repo, 'engineering', {
       id: 'long', title: 'Long engineering document',
       body: '# Long engineering document\n\n' + Array.from({ length: 80 }, (_, i) => `Paragraph ${i}.\n\n`).join('') + 'ENGINEERING END\n',
-    });
+    }));
   } finally { repo.close(); }
   const file = join(root, 'docs/feature/long/README.md');
   const before = readFileSync(file, 'utf8');

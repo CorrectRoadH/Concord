@@ -54,9 +54,9 @@ function parseAnnotations(values: readonly string[], lines: readonly number[], p
   }
   return { contract, contractKind, contractLine, issues, status, name, native, recognized, rejected };
 }
-function realCommentLines(path: string, text: string): ReadonlySet<number> | undefined {
+async function realCommentLines(path: string, text: string): Promise<ReadonlySet<number> | undefined> {
   if (!SOURCE_EXTENSION.test(path)) return undefined;
-  return withTypeScriptSource(path, text, source => {
+  return (await withTypeScriptSource(path, text, source => {
     const lines = new Set<number>();
     const collect = (ranges: readonly ts.CommentRange[] | undefined): void => {
       for (const range of ranges ?? []) {
@@ -73,29 +73,29 @@ function realCommentLines(path: string, text: string): ReadonlySet<number> | und
     };
     visit(source);
     return lines;
-  });
+  }));
 }
 function hasTestMarker(text: string): boolean { return !text.includes('\0') && /@(?:feature|use-case|issue|status|name|native)(?:\s|$)/u.test(text); }
-export function parseTestDeclarations(path: string, text: string): { readonly cases: readonly AnnotatedCase[]; readonly findings: readonly Finding[] } {
-  return parseSource({ path, text, digest: digest(text) });
+export async function parseTestDeclarations(path: string, text: string): Promise<{ readonly cases: readonly AnnotatedCase[]; readonly findings: readonly Finding[] }> {
+  return (await parseSource({ path, text, digest: digest(text) }));
 }
 
 /** Locate exact whole-line Issue markers through the same real-comment parser as discovery. */
-export function issueMarkerLines(path: string, text: string, issue: string): readonly number[] {
-  const comments = realCommentLines(path, text);
+export async function issueMarkerLines(path: string, text: string, issue: string): Promise<readonly number[]> {
+  const comments = await realCommentLines(path, text);
   const lines = text.split(/\r?\n/u).flatMap((line, index) => {
     const value = COMMENT_LINE.exec(line)?.[1];
     return value !== undefined && /^@issue\s+(.+?)\s*$/u.exec(value)?.[1] === issue && (comments === undefined || comments.has(index + 1)) ? [index + 1] : [];
   });
   if (!lines.length) return [];
-  const parsed = parseTestDeclarations(path, text);
+  const parsed = await parseTestDeclarations(path, text);
   if (parsed.findings.length || !parsed.cases.some(item => item.issues.includes(issue))) throw new ConcordError('InvalidAnnotation', `Cannot safely remove Issue markers from ${path}`, parsed.findings);
   return lines;
 }
 
-function parseSource(input: Source): Parsed {
+async function parseSource(input: Source): Promise<Parsed> {
   if (!hasTestMarker(input.text)) return { cases: [], findings: [] };
-  const comments = realCommentLines(input.path, input.text);
+  const comments = await realCommentLines(input.path, input.text);
   const lines = input.text.split(/\r?\n/u);
   const findings: Finding[] = [], cases: AnnotatedCase[] = [];
   const ordinals = new Map<string, number>();
@@ -182,9 +182,9 @@ function writeCache(repo: Repository, key: string, value: CachedSnapshot): void 
 function unchanged(repo: Repository, before: readonly Source[], mode: SourceMode): boolean {
   try { const after = sources(repo, mode); return after.length === before.length && after.every((source, index) => source.path === before[index]?.path && source.digest === before[index]?.digest); } catch { return false; }
 }
-function compile(current: readonly Source[]): CachedSnapshot {
-  const parse = () => current.map(parseSource);
-  const parsed = current.some(input => SOURCE_EXTENSION.test(input.path) && hasTestMarker(input.text)) ? withTypeScript(parse) : parse();
+async function compile(current: readonly Source[]): Promise<CachedSnapshot> {
+  const parse = async () => { const parsed: Parsed[] = []; for (const source of current) parsed.push(await parseSource(source)); return parsed; };
+  const parsed = await (current.some(input => SOURCE_EXTENSION.test(input.path) && hasTestMarker(input.text)) ? (await withTypeScript(parse)) : parse());
   const cases = parsed.flatMap(result => result.cases).sort((a, b) => a.id.localeCompare(b.id) || a.file.localeCompare(b.file) || a.line - b.line);
   const findings = parsed.flatMap(result => result.findings);
   const ids = new Map<string, AnnotatedCase>();
@@ -200,19 +200,19 @@ function sourceChanged(value: CachedSnapshot, cache: AnnotationSnapshot['cache']
 const cacheFailureDetail = (cause: unknown): string => cause instanceof HawdbFailure && cause.code === 'HawdbBusy'
   ? `${cause.code}: ${cause.message}` : cause instanceof Error ? cause.message : String(cause);
 
-export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode } = {}): AnnotationSnapshot {
-  return repo.snapshot === undefined ? scanUnderSnapshot(repo, options) : repo.snapshot(() => scanUnderSnapshot(repo, options));
+export async function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode } = {}): Promise<AnnotationSnapshot> {
+  return repo.snapshot === undefined ? (await scanUnderSnapshot(repo, options)) : (await repo.snapshot(async () => (await scanUnderSnapshot(repo, options))));
 }
-function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode }): AnnotationSnapshot {
+async function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode }): Promise<AnnotationSnapshot> {
   const mode = options.cache ?? 'use', sourceMode = options.sourceMode ?? 'disk', path = cachePath(repo);
   if (sourceMode === 'overlay' && mode !== 'off') throw new ConcordError('InvalidOption', 'Overlay annotation sources require cache: off');
   const current = sources(repo, sourceMode); const key = cacheKey(repo, current);
-  if (mode === 'off') { const value = compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'off', hits: 0, misses: 1, path }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
+  if (mode === 'off') { const value = await compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'off', hits: 0, misses: 1, path }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
   if (mode === 'use') try {
     const cached = readCache(repo, key);
-    if (cached) return unchanged(repo, current, sourceMode) ? snapshot(cached, { status: 'hit', hits: 1, misses: 0, path }) : sourceChanged(compile(current), { status: 'source-changed', hits: 0, misses: 1, path });
-  } catch (cause) { const value = compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cacheFailureDetail(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
-  const value = compile(current);
+    if (cached) return unchanged(repo, current, sourceMode) ? snapshot(cached, { status: 'hit', hits: 1, misses: 0, path }) : sourceChanged(await compile(current), { status: 'source-changed', hits: 0, misses: 1, path });
+  } catch (cause) { const value = await compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cacheFailureDetail(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
+  const value = await compile(current);
   if (!unchanged(repo, current, sourceMode)) return sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path });
   try { writeCache(repo, key, value); return snapshot(value, { status: 'miss', hits: 0, misses: 1, path }); }
   catch (cause) { return snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cacheFailureDetail(cause) }); }

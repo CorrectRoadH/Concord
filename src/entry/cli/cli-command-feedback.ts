@@ -25,7 +25,7 @@ const feedbackConnection = Command.make('connection').pipe(Command.withDescripti
     owner: optional('owner'),
     repo: optional('repo'),
     team: optional('team'),
-  }, args => withRepo((local, settings) => sync(() => {
+  }, args => withRepo((local, settings) => sync(async () => {
     const owner = Option.getOrUndefined(args.owner), repo = Option.getOrUndefined(args.repo), team = Option.getOrUndefined(args.team);
     const transport = Option.getOrUndefined(args.transport) ?? 'api';
     const credentialEnv = Option.getOrUndefined(args.credentialEnv);
@@ -39,7 +39,7 @@ const feedbackConnection = Command.make('connection').pipe(Command.withDescripti
       : { id: args.id, provider: args.provider, credentialEnv, team }, 'feedback connection');
     const current = showConfig(local);
     if ((current.config.feedbackConnections ?? []).some(item => item.id === connection.id)) throw new ConcordError('FeedbackConnectionExists', `Feedback connection ${connection.id} already exists`);
-    return setConfig(local, { ...current.config, feedbackConnections: [...(current.config.feedbackConnections ?? []), connection] }, current.digest, settings.dryRun);
+    return (await setConfig(local, { ...current.config, feedbackConnections: [...(current.config.feedbackConnections ?? []), connection] }, current.digest, settings.dryRun));
   }))),
   Command.make('check', { id }, args => Effect.gen(function* () {
     const settings = yield* root;
@@ -47,11 +47,11 @@ const feedbackConnection = Command.make('connection').pipe(Command.withDescripti
     const result = yield* executeViewAction((yield* viewRoot(settings)), { action: 'feedback.check', connection: args.id });
     yield* emit(result, settings.json);
   })),
-  Command.make('remove', { id }, args => withRepo((local, settings) => sync(() => {
+  Command.make('remove', { id }, args => withRepo((local, settings) => sync(async () => {
     const current = showConfig(local);
     const connections = current.config.feedbackConnections ?? [];
     if (!connections.some(connection => connection.id === args.id)) throw new ConcordError('FeedbackConnectionNotFound', `No feedback connection has ID ${args.id}`);
-    return setConfig(local, { ...current.config, feedbackConnections: connections.filter(connection => connection.id !== args.id) }, current.digest, settings.dryRun);
+    return (await setConfig(local, { ...current.config, feedbackConnections: connections.filter(connection => connection.id !== args.id) }, current.digest, settings.dryRun));
   }))),
 ]));
 

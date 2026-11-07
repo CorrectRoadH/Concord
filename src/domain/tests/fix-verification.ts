@@ -24,13 +24,13 @@ import { RuntimeEnvironment } from '../../base/environment/index.ts';
 import { adapterFor } from './test-adapters.ts';
 
 type Verification = typeof FixVerificationSchema.Type;
-const sync = <A>(f: () => A) => Effect.try({ try: f, catch: failure });
+const sync = <A>(f: () => A | Promise<A>) => Effect.tryPromise({ try: async () => await f(), catch: failure }).pipe(Effect.uninterruptible);
 function unavailable(message: string): never { throw new ConcordError('FixUnverifiable', message); }
 
 const verificationFailure = (error: ConcordError): ConcordError => ['InvalidData', 'GitFailed', 'InvalidFile', 'OperationFailed', 'InvalidRunner', 'CleanupFailed', 'CleanupUnknown'].includes(error.code) ? new ConcordError('FixUnverifiable', error.message) : error;
 
-function selectedTests(repo: Repository, issue: string, testId?: string): readonly AnnotatedCase[] {
-  const scan = scanAnnotations(repo, { cache: 'off', sourceMode: 'overlay' });
+async function selectedTests(repo: Repository, issue: string, testId?: string): Promise<readonly AnnotatedCase[]> {
+  const scan = (await scanAnnotations(repo, { cache: 'off', sourceMode: 'overlay' }));
   if (scan.findings.length) unavailable('Test markers cannot be decoded');
   const tests = scan.cases.filter(test => test.status === 'active' && !test.skipped && (testId === undefined ? test.issues.includes(issue) : test.id === testId)).sort((a, b) => a.id.localeCompare(b.id));
   if (!tests.length) unavailable(`No runnable @issue markers reference ${issue}`);
@@ -48,8 +48,8 @@ function frozenInputs(repo: Repository, tests: readonly AnnotatedCase[], commit:
     return { path, digest: digest(commit === undefined ? snapshotBytes(repo, path)! : gitBlobBytes(repo.root, commit, path, environment)) };
   }) };
 }
-function freeze(repo: Repository, issue: string, defectInput: string | undefined, fix: string, testId: string | undefined, environment: Readonly<Record<string, string | undefined>>) {
-  const tests = selectedTests(repo, issue, testId);
+async function freeze(repo: Repository, issue: string, defectInput: string | undefined, fix: string, testId: string | undefined, environment: Readonly<Record<string, string | undefined>>) {
+  const tests = (await selectedTests(repo, issue, testId));
   const inputs = frozenInputs(repo, tests, fix, environment);
   let defect: string;
   if (defectInput) defect = resolveCommit(repo.root, defectInput, 'FixUnverifiable', environment);
@@ -59,8 +59,8 @@ function freeze(repo: Repository, issue: string, defectInput: string | undefined
     const first = new Map<string, string>();
     for (const commit of history) {
       if (!git(repo.root, ['ls-tree', '-r', '--name-only', commit, '--', ...tests.map(test => test.file)], environment)) continue;
-      const historical = commitRepository(repo, commit, environment);
-      const scan = scanAnnotations(historical, { cache: 'off', sourceMode: 'overlay' });
+      const historical = await commitRepository(repo, commit, environment);
+      const scan = (await scanAnnotations(historical, { cache: 'off', sourceMode: 'overlay' }));
       for (const test of scan.cases) if (tests.some(selected => selected.id === test.id) && test.issues.includes(issue) && !first.has(test.id)) first.set(test.id, commit);
       if (first.size === tests.length) break;
     }
@@ -71,8 +71,8 @@ function freeze(repo: Repository, issue: string, defectInput: string | undefined
   const interval = firstParentPath(repo.root, defect, fix, environment);
   if (interval.length < 2) unavailable('Fix must be after the defect commit');
   for (const commit of interval) {
-    const historical = commitRepository(repo, commit, environment);
-    const historicTests = selectedTests(historical, issue, testId);
+    const historical = await commitRepository(repo, commit, environment);
+    const historicTests = (await selectedTests(historical, issue, testId));
     if (canonical(frozenInputs(historical, historicTests, commit, environment)) !== canonical(inputs)) unavailable(`Frozen tests, runner inputs, or referenced Spec changed in ${commit}`);
   }
   return { tests, inputs, defect, fix, runner: inputs.runner, nativeTests: tests.filter(test => adapterFor(repo, test.file)).map(test => test.id) };
@@ -100,7 +100,7 @@ const inWorktree = <A>(repo: LocalRepository, commit: string, cleanupUnknown: ()
 const assertFrozenRoot = Effect.fn('fixVerification.assertFrozenRoot')(function*(root: string, inputs: ReturnType<typeof frozenInputs>, code: string) {
   const sources = yield* Sources;
   const config = yield* sources.readAt(root, inputs.configuration).pipe(Effect.mapError(error => new ConcordError(code, error.message)));
-  const configDigest = yield* sync(() => objectDigest(configurationWithoutPreparation(config === undefined ? {} : parseTypeScriptConfig(config, inputs.configuration))));
+  const configDigest = yield* sync(async () => objectDigest(configurationWithoutPreparation(config === undefined ? {} : (await parseTypeScriptConfig(config, inputs.configuration)))));
   if (configDigest !== inputs.runner) return yield* Effect.fail(new ConcordError(code, `Materialized project configuration changed: ${inputs.configuration}`));
   for (const file of inputs.files) {
     const bytes = yield* sources.readBytesAt(root, file.path).pipe(Effect.mapError(error => new ConcordError(code, error.message.includes('Symbolic') ? `Frozen input became a symbolic link: ${file.path}` : `Materialized frozen input is unavailable: ${file.path}`)));
@@ -129,7 +129,7 @@ const executeFrozenCase = Effect.fn('fixVerification.executeFrozenCase')(functio
   if (!native) return yield* executeCommand(root, runner!, test);
   const runtime = (yield* OwnedProcess).environment;
   const publication = yield* Publication;
-  const checkout = yield* Effect.acquireRelease(sync(() => new LocalRepository(root, { persistentCache: 'use', runtime }, publication.validation)), repo => Effect.sync(() => repo.close()));
+  const checkout = yield* Effect.acquireRelease(sync(() => LocalRepository.open(root, { persistentCache: 'use', runtime }, publication.validation)), repo => Effect.sync(() => repo.close()));
   yield* Effect.flatMap(PersistentCache, cache => cache.attach(checkout)).pipe(Effect.provide(PersistentCache.layer), Effect.provide(RuntimeEnvironment.layer(runtime)), Effect.mapError(failure));
   return yield* runCase(checkout, test, [], { requireNative: true }).pipe(Effect.mapError(error => new ConcordError('FixUnverifiable', error.message, error.details)));
 }, Effect.scoped);
@@ -138,11 +138,11 @@ const executeFrozenCase = Effect.fn('fixVerification.executeFrozenCase')(functio
 export const verifyTest = (repo: LocalRepository, testId: string, defectInput: string, fixInput: string) => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
   const runtime = (yield* OwnedProcess).environment;
   const environment = runtime.env;
-  const prepared = yield* sync(() => repo.snapshot(() => {
+  const prepared = yield* sync(async () => (await repo.snapshot(async () => {
     const fix = resolveCommit(repo.root, fixInput, 'FixUnverifiable', environment);
-    const target = commitRepository(repo, fix, environment);
-    return { ...freeze(target, '', defectInput, fix, testId, environment), runnerConfig: target.config.runner, preparation: commitRepository(repo, resolveCommit(repo.root, 'HEAD', 'FixUnverifiable', environment), environment).config.runner };
-  }));
+    const target = await commitRepository(repo, fix, environment);
+    return { ...(await freeze(target, '', defectInput, fix, testId, environment)), runnerConfig: target.config.runner, preparation: (await commitRepository(repo, resolveCommit(repo.root, 'HEAD', 'FixUnverifiable', environment), environment)).config.runner };
+  })));
   const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     yield* prepareCheckout(root, prepared.preparation, preserve);
@@ -160,20 +160,20 @@ export const verifyTest = (repo: LocalRepository, testId: string, defectInput: s
 export const closeFixedIssue = (repo: LocalRepository, selector: string, reason: string, defect?: string, fixInput?: string) => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
   const runtime = (yield* OwnedProcess).environment;
   const environment = runtime.env;
-  const prepared = yield* sync(() => repo.snapshot(() => {
+  const prepared = yield* sync(async () => (await repo.snapshot(async () => {
     const head = resolveCommit(repo.root, 'HEAD', 'FixUnverifiable', environment);
     const fix = fixInput === undefined ? head : resolveCommit(repo.root, fixInput, 'FixUnverifiable', environment);
     if (fixInput !== undefined && !git(repo.root, ['rev-list', '--first-parent', head], environment).split('\n').includes(fix)) unavailable('Fix must be a first-parent ancestor of HEAD');
     const issue = readDocumentSelector(repo, selector, 'issue');
     if (issue.metadata.kind !== 'issue') unavailable('Expected an Issue');
     if (git(repo.root, ['status', '--porcelain=v1', '--untracked-files=all', '--', issue.path], environment)) unavailable('Fix verification requires the Issue file to have no uncommitted changes');
-    const targetRepo = commitRepository(repo, fix, environment);
+    const targetRepo = await commitRepository(repo, fix, environment);
     const issueDigest = digest(snapshotBytes(repo, issue.path)!);
     if (issueDigest !== digest(gitBlobBytes(repo.root, head, issue.path, environment))) unavailable('Issue file differs from the captured HEAD');
-    const frozen = freeze(targetRepo, issue.path, defect, fix, undefined, environment);
+    const frozen = (await freeze(targetRepo, issue.path, defect, fix, undefined, environment));
     const testPreimages = [...new Set(frozen.tests.map(test => test.file))].map(path => ({ path, source: repo.read(path) }));
-    return { issue, ...frozen, testPreimages, runnerConfig: targetRepo.config.runner, preparation: commitRepository(repo, head, environment).config.runner, issueDigest };
-  }));
+    return { issue, ...frozen, testPreimages, runnerConfig: targetRepo.config.runner, preparation: (await commitRepository(repo, head, environment)).config.runner, issueDigest };
+  })));
   const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     yield* prepareCheckout(root, prepared.preparation, preserve);
@@ -187,18 +187,18 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
   const installation = yield* Installation;
   const concord = yield* installation.version;
   const publication = yield* Publication;
-  return yield* sync(() => {
+  return yield* sync(async () => {
     // Publication uses current configuration; runner inputs belong to the captured commit.
-    const publisher = new LocalRepository(repo.root, { persistentCache: 'off', runtime }, publication.validation);
-    try { return publisher.snapshot(() => {
+    const publisher = await LocalRepository.open(repo.root, { persistentCache: 'off', runtime }, publication.validation);
+    try { return (await publisher.snapshot(async () => {
       const issueBytes = snapshotBytes(publisher, prepared.issue.path);
       if (issueBytes === undefined || digest(issueBytes) !== prepared.issueDigest) throw new ConcordError('FileChangedSinceRead', 'Issue changed during verification');
       for (const file of prepared.testPreimages) if (publisher.read(file.path) !== file.source) throw new ConcordError('FileChangedSinceRead', `${file.path} changed during verification`);
       const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
       release();
-      const receipt = closeIssue(publisher, prepared.issue.path, reason);
+      const receipt = (await closeIssue(publisher, prepared.issue.path, reason));
       const conclusion = `Verified fix — ${prepared.issue.path}\nDefect: ${verification.defect} (runner exit ${red[0]?.exitCode})\nFix: ${verification.fix} (runner exit 0)\nTests: ${verification.tests.join(', ')}\nRunner: ${verification.runner}\nClosed ${prepared.issue.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
       return { ...receipt, conclusion, verification, red, green };
-    }); } finally { publisher.close(); }
+    })); } finally { publisher.close(); }
   });
 })).pipe(Effect.mapError(verificationFailure));

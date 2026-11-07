@@ -1,8 +1,8 @@
 // 跨进程保证：外部程序——真实gh子进程以stdin接收一次写入且隔离GH_REPO和GH_DEBUG环境。
 import { sourceCli, sourceRoot, prepareSourceConsumer, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, statSync, tmpdir, join, resolve, test, Effect, Schema, makeOwnedProcessService, LocalRepository, initialize, setConfig, showConfig, type Call, type Receipt, connection, issue, scratch, bin, scenarioFile, callsFile, packedCli, consumer, mode, calls, writes, cli, plan, execute, error, alterReceipt } from '../support/issue-remote-fixture.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed preview/apply binds authorization, consumes once, uses stdin and emits private outcome', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer('authorization'); mode();
+test('packed preview/apply binds authorization, consumes once, uses stdin and emits private outcome', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer('authorization')); mode();
   const receipt = plan(root, 'close', ['12', '--reason', 'completed']);
   const before = calls().length;
   error(execute(root, receipt, 'close:example/product#12@000000000000'), 'IssueAuthorizationMismatch');
@@ -19,9 +19,9 @@ test('packed preview/apply binds authorization, consumes once, uses stdin and em
 })));
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed apply rejects expired, drifted, corrupt and wrong repository plans without writes', () => Effect.runPromise(Effect.sync(() => {
+test('packed apply rejects expired, drifted, corrupt and wrong repository plans without writes', () => Effect.runPromise(Effect.tryPromise(async () => {
   for (const variant of ['expired', 'drifted', 'repository', 'corrupt']) {
-    const root = consumer(variant); mode(); const receipt = plan(root, 'close');
+    const root = (await consumer(variant)); mode(); const receipt = plan(root, 'close');
     if (variant === 'expired') alterReceipt(root, receipt, { expiresAt: 0 });
     if (variant === 'corrupt') alterReceipt(root, receipt, { unknown: true });
     if (variant === 'drifted') writeFileSync(scenarioFile, JSON.stringify({ issue: issue(12, { body: 'changed' }) }));

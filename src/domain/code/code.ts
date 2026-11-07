@@ -9,9 +9,9 @@ import { decode, canonical, digest, objectDigest, Text, type Finding, type Repos
 import { parseReference } from "../../model/index.ts";
 import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
 import { ContentCache } from "../../base/cache/index.ts";
-import { measureScan, type ScanTiming } from "../../base/sources/index.ts";
+import { measureScan, measureScanAsync, type ScanTiming } from "../../base/sources/index.ts";
 import * as ts from 'typescript/ast';
-import type { Diagnostic } from "typescript/sync";
+import type { Diagnostic } from "typescript/async";
 import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from "../../base/process/index.ts";
 
 export interface CodeCacheStatus {
@@ -128,9 +128,9 @@ function actualLineComments(source: ts.SourceFile): readonly LineComment[] {
 }
 
 /** Exact lexical parameters, shared by step maintenance and declaration discovery. */
-export function codeReferenceTokens(path: string, text: string, servers: readonly LanguageServer[] = []): readonly { readonly line: number; readonly reference: string }[] {
+export async function codeReferenceTokens(path: string, text: string, servers: readonly LanguageServer[] = []): Promise<readonly { readonly line: number; readonly reference: string }[]> {
   const server = servers.find(server => server.extensions.some(extension => path.endsWith(extension)));
-  const comments = SOURCE_EXTENSION.test(path) ? withTypeScriptSource(path, text, source => actualLineComments(source))
+  const comments = SOURCE_EXTENSION.test(path) ? await withTypeScriptSource(path, text, source => actualLineComments(source))
     : server === undefined ? [] : foreignLineComments(text, server.profile.commentPrefixes);
   return comments.filter(comment => comment.family === 'implements' && comment.argument !== undefined).map(comment => ({ line: comment.line, reference: comment.argument! }));
 }
@@ -330,8 +330,8 @@ function codeId(relativePath: string, scope: CodeDeclaration['scope'], locator: 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#声明规则
 
-function parseSource(input: Source): ParsedFile {
-  return withTypeScriptSource(input.path, input.text, (source, diagnostics) => parseSourceFile(input, source, diagnostics));
+async function parseSource(input: Source): Promise<ParsedFile> {
+  return (await withTypeScriptSource(input.path, input.text, (source, diagnostics) => parseSourceFile(input, source, diagnostics)));
 }
 
 function parseSourceFile(input: Source, source: ts.SourceFile, diagnostics: readonly Diagnostic[]): ParsedFile {
@@ -484,13 +484,13 @@ function mergeParsed(parsed: readonly ParsedFile[]): { readonly codes: readonly 
   }
   return { codes, findings };
 }
-function compileAstCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean, codeContentCache: ContentCache<ParsedFile>): CompiledFiles {
-  return withTypeScript(() => compileAstCachedInScope(repo, current, mode, skipCache, codeContentCache));
+async function compileAstCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean, codeContentCache: ContentCache<ParsedFile>): Promise<CompiledFiles> {
+  return (await withTypeScript(async () => (await compileAstCachedInScope(repo, current, mode, skipCache, codeContentCache))));
 }
-function compileAstCachedInScope(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean, codeContentCache: ContentCache<ParsedFile>): CompiledFiles {
+async function compileAstCachedInScope(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean, codeContentCache: ContentCache<ParsedFile>): Promise<CompiledFiles> {
   if (mode === 'off' || skipCache) {
     const inputs = current.map(source => ({ path: source.path, source: source.text }));
-    return { ...mergeParsed(codeContentCache.getMany(inputs, input => input.source.includes('@concord-') ? parseSource({ path: input.path, text: input.source, digest: digest(input.source) }) : { codes: [], findings: [] })), hits: 0, misses: current.length, rows: [] };
+    return { ...mergeParsed((await codeContentCache.getManyResultsAsync(inputs, async input => input.source.includes('@concord-') ? (await parseSource({ path: input.path, text: input.source, digest: digest(input.source) })) : { codes: [], findings: [] })).map(result => { if (!result.ok) throw result.cause; return result.value; })), hits: 0, misses: current.length, rows: [] };
   }
   let stored = new Map<string, string>();
   let readFailure: string | undefined;
@@ -515,7 +515,7 @@ function compileAstCachedInScope(repo: Repository, current: readonly Source[], m
     missesToParse.push(source);
     parsed.push({ codes: [], findings: [] });
   }
-  const freshValues = codeContentCache.getMany(missesToParse.map(source => ({ path: source.path, source: source.text })), input => input.source.includes('@concord-') ? parseSource({ path: input.path, text: input.source, digest: digest(input.source) }) : { codes: [], findings: [] });
+  const freshValues = (await codeContentCache.getManyResultsAsync(missesToParse.map(source => ({ path: source.path, source: source.text })), async input => input.source.includes('@concord-') ? (await parseSource({ path: input.path, text: input.source, digest: digest(input.source) })) : { codes: [], findings: [] })).map(result => { if (!result.ok) throw result.cause; return result.value; });
   for (let index = 0; index < pending.length; index++) {
     const item = pending[index]!;
     const fresh = freshValues[index]!;
@@ -572,8 +572,8 @@ function parseForeignSource(input: Source): ParsedFile {
 // @concord-end
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
-function compileCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean, codeContentCache: ContentCache<ParsedFile>): CompiledFiles {
-  const ast = compileAstCached(repo, current.filter(source => source.server === undefined), mode, skipCache, codeContentCache);
+async function compileCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean, codeContentCache: ContentCache<ParsedFile>): Promise<CompiledFiles> {
+  const ast = await compileAstCached(repo, current.filter(source => source.server === undefined), mode, skipCache, codeContentCache);
   const foreign = current.filter(source => source.server !== undefined).map(parseForeignSource);
   const merged = mergeParsed([ast, ...foreign]);
   return { ...ast, ...merged };
@@ -606,28 +606,28 @@ function finish(repo: Repository, compiled: CompiledFiles, current: readonly Sou
 // @concord-end
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#list
-export function scanCode(repo: Repository, options: { cache?: CodeMode; timing?: ScanTiming } = {}, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo), contentCache?: ContentCache<ParsedFile>): CodeSnapshot {
+export async function scanCode(repo: Repository, options: { cache?: CodeMode; timing?: ScanTiming } = {}, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo), contentCache?: ContentCache<ParsedFile>): Promise<CodeSnapshot> {
   const codeContentCache = contentCache ?? makeCodeContentCache(runtime);
   try {
-    const scan = () => scanCodeUnderSnapshot(repo, options, codeContentCache);
-    return repo.snapshot === undefined ? scan() : repo.snapshot(scan);
+    const scan = async () => (await scanCodeUnderSnapshot(repo, options, codeContentCache));
+    return await (repo.snapshot === undefined ? (await scan()) : repo.snapshot(scan));
   } finally { if (contentCache === undefined) codeContentCache.close(); }
 }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
-function scanCodeUnderSnapshot(repo: Repository, options: { cache?: CodeMode; timing?: ScanTiming }, codeContentCache: ContentCache<ParsedFile>): CodeSnapshot {
+async function scanCodeUnderSnapshot(repo: Repository, options: { cache?: CodeMode; timing?: ScanTiming }, codeContentCache: ContentCache<ParsedFile>): Promise<CodeSnapshot> {
   const mode = options.cache ?? 'use';
   const cachePath = cacheDatabasePath(repo.privateDir);
   let before: readonly Source[];
   let changed = false;
   try { before = measureScan(options.timing, 'code.readSources', () => readSources(repo)); }
   catch (cause) { if (cause instanceof CodeSourceReadChanged) { before = []; changed = true; } else throw cause; }
-  const initial = measureScan(options.timing, 'code.cacheAndParse', () => compileCached(repo, before, mode, changed, codeContentCache));
+  const initial = await measureScanAsync(options.timing, 'code.cacheAndParse', async () => (await compileCached(repo, before, mode, changed, codeContentCache)));
   let after: readonly Source[];
   try { after = measureScan(options.timing, 'code.verifySources', () => readSources(repo)); }
   catch (cause) { if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath, true); else throw cause; }
   if (sameSources(before, after)) return finish(repo, initial, before, changed, mode, cachePath, false);
-  const fresh = compileCached(repo, after, mode, true, codeContentCache);
+  const fresh = await compileCached(repo, after, mode, true, codeContentCache);
   try {
     const stable = readSources(repo);
     return sameSources(after, stable) ? finish(repo, fresh, after, true, mode, cachePath, false) : finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, stable, true, mode, cachePath, true);

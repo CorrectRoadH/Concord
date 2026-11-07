@@ -1,7 +1,8 @@
-import { constants, closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, readlinkSync } from 'node:fs';
+import { constants, closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, readlinkSync, realpathSync } from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
 import { ConcordError, digest, objectDigest } from '../../model/index.ts';
 import { packageRoot } from '../installation/index.ts';
+import { sourceInstallation } from '../installation/index.ts';
 
 function inputBytes(path: string): Buffer {
   const before = lstatSync(path);
@@ -18,16 +19,17 @@ function inputBytes(path: string): Buffer {
 }
 
 function implementation(): string {
+  if (!sourceInstallation) return digest(inputBytes(realpathSync(process.execPath)));
   const entries: { path: string; digest: string }[] = [];
   const walk = (directory: string, prefix: string): void => {
     for (const name of readdirSync(directory).sort()) {
       const target = join(directory, name), path = prefix ? `${prefix}/${name}` : name, stat = lstatSync(target);
       if (stat.isSymbolicLink()) throw new ConcordError('UnsafeToolInstallation', 'Concord implementation contains a symbolic link');
       if (stat.isDirectory()) walk(target, path);
-      else if (stat.isFile() && /\.[cm]?js$/u.test(name)) entries.push({ path, digest: digest(inputBytes(target)) });
+      else if (stat.isFile() && /\.[cm]?[jt]s$/u.test(name)) entries.push({ path, digest: digest(inputBytes(target)) });
     }
   };
-  walk(join(packageRoot, import.meta.url.endsWith('.ts') ? 'src/domain/tests' : 'dist/domain/tests'), '');
+  walk(join(packageRoot, 'src/domain/tests'), '');
   return objectDigest(entries);
 }
 
@@ -38,5 +40,5 @@ export function adapterRuntimeInputs(root: string, command: string, envNames: re
   const linked = candidates.find(path => { try { return readFileSync(path).length > 0; } catch { return false; } });
   if (!found && !linked) throw new ConcordError('CollectFailed', `Adapter executable is unavailable: ${command}`);
   const path = found ?? linked!;
-  return { executable: { path, digest: digest(readFileSync(path)) }, env: Object.fromEntries(envNames.map(name => [name, environment[name]])), implementation: implementation(), version: process.version };
+  return { executable: { path, digest: digest(readFileSync(path)) }, env: Object.fromEntries(envNames.map(name => [name, environment[name]])), implementation: implementation(), version: process.versions.bun ?? 'unavailable' };
 }

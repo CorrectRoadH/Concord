@@ -14,14 +14,14 @@ const parserRuntime = makeParserRuntime(process.cwd(), process.env);
 export const ownerPath = 'docs/feature/sample/README.md';
 export const flow = 'docs/feature/sample/use-case/flow.md';
 /** Real owner bytes shared by source facts and the worker publication boundary. */
-export function queryFactsConsumer(): string {
-  const root = createConsumer();
+export async function queryFactsConsumer(): Promise<string> {
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: ['test'], sourceRoots: ['src'] });
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'sample', title: 'Sample' });
-    createDocument(repo, 'issue', { id: 'remote', title: 'Remote', body: '# Remote\n\nPRIVATE_ISSUE_BODY_SENTINEL\n' });
-    createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample', body: '1. First {#first}\n2. Unmarked\n' });
+    (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }));
+    (await createDocument(repo, 'issue', { id: 'remote', title: 'Remote', body: '# Remote\n\nPRIVATE_ISSUE_BODY_SENTINEL\n' }));
+    (await createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample', body: '1. First {#first}\n2. Unmarked\n' }));
   } finally { repo.close(); }
   mkdirSync(join(root, 'src')); mkdirSync(join(root, 'test'));
   writeFileSync(join(root, 'src/000.ts'), '// @concord-file\n// @concord-implements docs/feature/sample/README.md\nexport const first = 1;\n');

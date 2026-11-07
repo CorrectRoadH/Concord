@@ -1,0 +1,1784 @@
+{
+  "version": "1.4.2",
+  "commit": "744846f844374847c902b5e7fd59b4342a51ef99",
+  "sources": [
+    {
+      "component": "blake2",
+      "evidence": "Full CC0 terms referenced by libarchive/archive_blake2*.h and *.c; original author notices retained in those source files",
+      "url": "https://raw.githubusercontent.com/BLAKE2/BLAKE2/ed1974ea83433eba7b2d95c5dcd9ac33cb847913/COPYING",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+    },
+    {
+      "component": "libjpeg-turbo",
+      "evidence": "Full SIMD copyright and zlib terms referenced by simd/jsimd.h in the Bun-pinned libjpeg-turbo source",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/e352b02f794f701407b39af08576035ba3360d60/simd/nasm/jsimdext.inc",
+      "sha256": "68c5d236785edf75344cebe8b9bec36568bd35c96eb72cc67ffecd66c17dbd74"
+    },
+    {
+      "component": "acorn",
+      "evidence": "Bun src/js/internal/repl/acorn*.js: vendored from Node 26.3.0",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v26.3.0/deps/acorn/acorn-walk/LICENSE",
+      "sha256": "c2d8184ea9becd063aa40be243e8c6ec2c4f72828fdfe4b0752664ef73e96ed3"
+    },
+    {
+      "component": "acorn",
+      "evidence": "Bun src/js/internal/repl/acorn*.js: vendored from Node 26.3.0",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v26.3.0/deps/acorn/acorn/LICENSE",
+      "sha256": "76a876cf886ff9be2a8b5e2e86514fed06223c8c9f0c1e9ee9606e93841e00b7"
+    },
+    {
+      "component": "boringssl",
+      "evidence": "Bun scripts/build/deps/boringssl.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/boringssl/41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f/LICENSE",
+      "sha256": "827c8d8fc207c2392794eef9e00fe246f9f61fdcc132556c275be3dd8c3cd97f"
+    },
+    {
+      "component": "brotli",
+      "evidence": "Bun scripts/build/deps/brotli.ts",
+      "url": "https://raw.githubusercontent.com/google/brotli/v1.1.0/LICENSE",
+      "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
+    },
+    {
+      "component": "bun",
+      "evidence": "Bun 1.4.2 official component inventory",
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/LICENSE.md",
+      "sha256": "b9caf52728691b4057e371232c221a132883198be2f3d2ddf92c90404c984b1a"
+    },
+    {
+      "component": "cares",
+      "evidence": "Bun scripts/build/deps/cares.ts",
+      "url": "https://raw.githubusercontent.com/c-ares/c-ares/c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab/LICENSE.md",
+      "sha256": "460f5e768fda3752ca2169a95df062578a10fb126bfd65f3b9b1a1bed2f84807"
+    },
+    {
+      "component": "esbuild",
+      "evidence": "Bun LICENSE.md additional credits; package.json pins esbuild 0.21.5",
+      "url": "https://raw.githubusercontent.com/evanw/esbuild/v0.21.5/LICENSE.md",
+      "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+    },
+    {
+      "component": "hdrhistogram",
+      "evidence": "Bun scripts/build/deps/hdrhistogram.ts",
+      "url": "https://raw.githubusercontent.com/HdrHistogram/HdrHistogram_c/be60a9987ee48d0abf0d7b6a175bad8d6c1585d1/COPYING.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+    },
+    {
+      "component": "hdrhistogram",
+      "evidence": "Bun scripts/build/deps/hdrhistogram.ts",
+      "url": "https://raw.githubusercontent.com/HdrHistogram/HdrHistogram_c/be60a9987ee48d0abf0d7b6a175bad8d6c1585d1/LICENSE.txt",
+      "sha256": "93a583ec58cd981232ec6fab797ff6f17f350c97b83ae0700b2d9350c91028af"
+    },
+    {
+      "component": "highway",
+      "evidence": "Bun scripts/build/deps/highway.ts",
+      "url": "https://raw.githubusercontent.com/google/highway/2607d3b5b0113992fe84d3848859eae13b3b52c1/LICENSE",
+      "sha256": "e340270d4f64384569a91d546acb5b094d69ce47f0c015db77abb74dc6f815af"
+    },
+    {
+      "component": "icu78",
+      "evidence": "Bun LICENSE.md specifies ICU 78; icu4c/LICENSE is a symlink to this root LICENSE",
+      "url": "https://raw.githubusercontent.com/unicode-org/icu/release-78.1/LICENSE",
+      "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+    },
+    {
+      "component": "javascriptcore",
+      "evidence": "Bun scripts/build/deps/webkit.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/COPYING.LIB",
+      "sha256": "5094ecb9c9dcd0eadc34f3c11511d9b5535063032bc150164ecd1a5d5a445547"
+    },
+    {
+      "component": "javascriptcore",
+      "evidence": "Bun scripts/build/deps/webkit.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WebCore/LICENSE-APPLE",
+      "sha256": "0b5d3a7cc325942567373b0ecd757d07c132e0ebd7c97bfc63f7e1a76094edb4"
+    },
+    {
+      "component": "javascriptcore",
+      "evidence": "Bun scripts/build/deps/webkit.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WebCore/LICENSE-LGPL-2",
+      "sha256": "7555fa34bc131a75ca56d65c40cc1ea8f9515d23e353d4c15d58573a042f7805"
+    },
+    {
+      "component": "javascriptcore",
+      "evidence": "Bun scripts/build/deps/webkit.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WebCore/LICENSE-LGPL-2.1",
+      "sha256": "f2b3bd09663381deb99721109d22b47af1213bb43007a8b56a06c6375c8050ce"
+    },
+    {
+      "component": "libarchive",
+      "evidence": "Bun scripts/build/deps/libarchive.ts",
+      "url": "https://raw.githubusercontent.com/libarchive/libarchive/ded82291ab41d5e355831b96b0e1ff49e24d8939/COPYING",
+      "sha256": "30e556b3959e3985d66efefec5eaac51d4995053caa1d3cffe6eb916f146f229"
+    },
+    {
+      "component": "libarchive",
+      "evidence": "Bun scripts/build/deps/libarchive.ts",
+      "url": "https://raw.githubusercontent.com/libarchive/libarchive/ded82291ab41d5e355831b96b0e1ff49e24d8939/libarchive/archive_blake2_impl.h",
+      "sha256": "2e285a36ccb7c41078514d31585a625c646dd233c940f90f698243ac915f425c"
+    },
+    {
+      "component": "libarchive",
+      "evidence": "Bun scripts/build/deps/libarchive.ts",
+      "url": "https://raw.githubusercontent.com/libarchive/libarchive/ded82291ab41d5e355831b96b0e1ff49e24d8939/libarchive/archive_blake2.h",
+      "sha256": "23f9d734a79558f0bd8bba5d0b742e65865b6deb003be39cea8ba8806de321bb"
+    },
+    {
+      "component": "libarchive",
+      "evidence": "Bun scripts/build/deps/libarchive.ts",
+      "url": "https://raw.githubusercontent.com/libarchive/libarchive/ded82291ab41d5e355831b96b0e1ff49e24d8939/libarchive/archive_blake2s_ref.c",
+      "sha256": "bd4217c21aa970cea07fb0a1209fa5370daa2935927b7273317bfbe715e003ca"
+    },
+    {
+      "component": "libarchive",
+      "evidence": "Bun scripts/build/deps/libarchive.ts",
+      "url": "https://raw.githubusercontent.com/libarchive/libarchive/ded82291ab41d5e355831b96b0e1ff49e24d8939/libarchive/archive_blake2sp_ref.c",
+      "sha256": "c3891562aa2e1bd043a71a0c7f0cca46378644e384cd65f078efd1d3ea363631"
+    },
+    {
+      "component": "libarchive",
+      "evidence": "Bun scripts/build/deps/libarchive.ts",
+      "url": "https://raw.githubusercontent.com/libarchive/libarchive/ded82291ab41d5e355831b96b0e1ff49e24d8939/libarchive/archive_read_support_filter_compress.c",
+      "sha256": "cc87b4de78b95dab5c2d189b8b7e4bb3e23f770a3d339f867e708f125e24b1f4"
+    },
+    {
+      "component": "libarchive",
+      "evidence": "Bun scripts/build/deps/libarchive.ts",
+      "url": "https://raw.githubusercontent.com/libarchive/libarchive/ded82291ab41d5e355831b96b0e1ff49e24d8939/libarchive/archive_write_add_filter_compress.c",
+      "sha256": "65247e80743a3ce9edc42ed6d33b4b9a3cc8ac0ea49426f7d22b7ca42763d68d"
+    },
+    {
+      "component": "libbase64",
+      "evidence": "Bun LICENSE.md upstream reference; no libbase64 pin in Bun 1.4.2 build graph",
+      "url": "https://raw.githubusercontent.com/aklomp/base64/5d5074cb856b9a53fe64f04ddf47812a85f4fb5a/LICENSE",
+      "sha256": "42871ad9f4e5e9255a4ec80b6c5ec9989bab6964693cf5fee6bb33f3afe39220"
+    },
+    {
+      "component": "libdeflate",
+      "evidence": "Bun scripts/build/deps/libdeflate.ts",
+      "url": "https://raw.githubusercontent.com/ebiggers/libdeflate/c8c56a20f8f621e6a966b716b31f1dedab6a41e3/COPYING",
+      "sha256": "4ad69099cb4374836fd27583d9991e2838cd86b6e4666ab26b2d32582c91e73a"
+    },
+    {
+      "component": "libjpeg-turbo",
+      "evidence": "Bun scripts/build/deps/libjpeg-turbo.ts",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/e352b02f794f701407b39af08576035ba3360d60/LICENSE.md",
+      "sha256": "e10114e6e40f3d0311c401ca25245ac5ef459a43c20f976fd63f03e816f5741f"
+    },
+    {
+      "component": "libjpeg-turbo",
+      "evidence": "Bun scripts/build/deps/libjpeg-turbo.ts",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/e352b02f794f701407b39af08576035ba3360d60/README.ijg",
+      "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+    },
+    {
+      "component": "libjpeg-turbo",
+      "evidence": "Bun scripts/build/deps/libjpeg-turbo.ts",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/e352b02f794f701407b39af08576035ba3360d60/simd/jsimd.h",
+      "sha256": "eb1e9293dc564006230b1fd6a182ba3fb63ea5f4f0df743d4934d62930306534"
+    },
+    {
+      "component": "libspng",
+      "evidence": "Bun scripts/build/deps/libspng.ts",
+      "url": "https://raw.githubusercontent.com/randy408/libspng/fb768002d4288590083a476af628e51c3f1d47cd/LICENSE",
+      "sha256": "0622b0794d0fecde47d743f1bb70a03e6fdf082be8e71f39de672ed995d96ff9"
+    },
+    {
+      "component": "libuv",
+      "evidence": "Bun scripts/build/deps/libuv.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/libuv/8023581113b276e7c1aee3f82da57ca0893faab1/LICENSE",
+      "sha256": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+    },
+    {
+      "component": "libwebp",
+      "evidence": "Bun scripts/build/deps/libwebp.ts",
+      "url": "https://chromium.googlesource.com/webm/libwebp/+/b7e29b9d75bd31422b00c2a446d49d7af06c328d/COPYING?format=TEXT",
+      "sha256": "cd38893a47087d081767960fb7269a1207296c8248da567ed0060a06c4a40c18",
+      "encoding": "base64"
+    },
+    {
+      "component": "libwebp",
+      "evidence": "Bun scripts/build/deps/libwebp.ts",
+      "url": "https://chromium.googlesource.com/webm/libwebp/+/b7e29b9d75bd31422b00c2a446d49d7af06c328d/PATENTS?format=TEXT",
+      "sha256": "161dd76ae97de98bd2989c5874137d6bae2a6f1edd05e1fc517a05ff30cbc3b5",
+      "encoding": "base64"
+    },
+    {
+      "component": "llvm-libcxxabi",
+      "evidence": "Bun LICENSE.md explicit source revision",
+      "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-19.1.0/libcxxabi/LICENSE.TXT",
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+    },
+    {
+      "component": "llvm-libcxxabi",
+      "evidence": "Bun LICENSE.md explicit source revision",
+      "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-19.1.0/libcxxabi/src/cxa_thread_atexit.cpp",
+      "sha256": "c7c563078dcaf2cd9a55052bac6eee82b511448f1590ce652962c4d7e39bfb81"
+    },
+    {
+      "component": "lolhtml",
+      "evidence": "Bun scripts/build/deps/lolhtml.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/lol-html/725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e/LICENSE",
+      "sha256": "e4ddaa9d7391bb9536fcb8c59b570a8b85a0bf6da54df5b3b26f098f6f99c9cc"
+    },
+    {
+      "component": "lshpack",
+      "evidence": "Bun scripts/build/deps/lshpack.ts",
+      "url": "https://raw.githubusercontent.com/litespeedtech/ls-hpack/8905c024b6d052f083a3d11d0a169b3c2735c8a1/LICENSE",
+      "sha256": "0490f9666828ad1b6b5503102e7ebbe491451b7174511f3b6255caa967caf955"
+    },
+    {
+      "component": "lsqpack",
+      "evidence": "Bun scripts/build/deps/lsqpack.ts",
+      "url": "https://raw.githubusercontent.com/litespeedtech/ls-qpack/1e9c5b8e59f8161c54f168a570c8bfdc59ded0c3/LICENSE",
+      "sha256": "6b1aded50331e34502c8d2b00238c6146b1a54314ce94a5c5feb5d340a6d00d6"
+    },
+    {
+      "component": "lsquic",
+      "evidence": "Bun scripts/build/deps/lsquic.ts",
+      "url": "https://raw.githubusercontent.com/litespeedtech/lsquic/3181911301b1aa4f54c1ed690901abc674ee08fb/LICENSE",
+      "sha256": "9bc22643b3ea2b55c547c83e332253d04ba3df4f26696091e6fa9f7a1ccc65ef"
+    },
+    {
+      "component": "lsquic",
+      "evidence": "Bun scripts/build/deps/lsquic.ts",
+      "url": "https://raw.githubusercontent.com/litespeedtech/lsquic/3181911301b1aa4f54c1ed690901abc674ee08fb/LICENSE.chrome",
+      "sha256": "85d5dcb0d30ea89fa5922451957ff2a1a2c3c24f1ad2bb9ab23b5d6080763fc9"
+    },
+    {
+      "component": "mimalloc",
+      "evidence": "Bun scripts/build/deps/mimalloc.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/mimalloc/6a64e1ba7f5b2130d4efccb67ec87fd0003f0f6a/LICENSE",
+      "sha256": "82ade5d7d9b029044b5fbbc326207fc47c2d44ee4dd71e8a559c36d728217de9"
+    },
+    {
+      "component": "npm-abort-controller@3.0.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz",
+      "sha256": "d2e249d5d010eb18e57c12c610d63e3ca3fa9dd0a5378009c1f465e21f50ab2f",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "dbbf03317f0101fed5643cd87ca80fb769e358fa4f428445bf2315deeb23a154"
+        }
+      ]
+    },
+    {
+      "component": "npm-asn1.js@4.10.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/asn1.js/-/asn1.js-4.10.1.tgz",
+      "sha256": "bda81e4bac55f74f62a1e9244017b80fcd1e1b7de947a9a67f3e37694fcf12d5",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "d370e2963b49b85d9a321d5c9973c372f0d212e87ba10009ab2c78683fb0cec3"
+        }
+      ]
+    },
+    {
+      "component": "npm-assert@2.1.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/assert/-/assert-2.1.0.tgz",
+      "sha256": "90027e5efd4bc03eabe781aa7a05d6bcef7098bf125f75c0452830558d66a054",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "6239c6144c31e58cf925c34483606969c555574d64ffa96518ab5d7f45c75d43"
+        }
+      ]
+    },
+    {
+      "component": "npm-available-typed-arrays@1.0.7",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/available-typed-arrays/-/available-typed-arrays-1.0.7.tgz",
+      "sha256": "8b140e0fa3fede3d81d1dffcc400c9755d7388e8a4add228487f5e20c9cf7863",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "6d0917530cf3b3dca12c1ab7798e4d38ad0a6798ecc1bd27849a3048ba91d265"
+        }
+      ]
+    },
+    {
+      "component": "npm-base64-js@1.5.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz",
+      "sha256": "b1b7a945b52685269083425216d6597e33d97bf21699d656e92fdb3eb5210a85",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1"
+        }
+      ]
+    },
+    {
+      "component": "npm-bn.js@4.12.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/bn.js/-/bn.js-4.12.2.tgz",
+      "sha256": "2f551372e49a2905d8915b2fd2252fdda0e12b46cde9a233f944b290a3a59a68",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "445739f5b5eb63e5aeff5aeb0f35a45080a421615dce0d97f9939aeea498acdd"
+        }
+      ]
+    },
+    {
+      "component": "npm-bn.js@5.2.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/bn.js/-/bn.js-5.2.2.tgz",
+      "sha256": "6c776e2fc33ea1eb38dd3d03cb532d27b4abcedc527c7f67961a323d0054cede",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "445739f5b5eb63e5aeff5aeb0f35a45080a421615dce0d97f9939aeea498acdd"
+        }
+      ]
+    },
+    {
+      "component": "npm-brorand@1.1.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/brorand/-/brorand-1.1.0.tgz",
+      "sha256": "6add0656db12f5694a96d922916edf764f1a52ee332e2773271733a38fa51225",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "d506a235e27d2912c7c93be50beaaffaa9cd11e5c3852acc08362005108b61dc"
+        }
+      ]
+    },
+    {
+      "component": "npm-browserify-aes@1.2.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/browserify-aes/-/browserify-aes-1.2.0.tgz",
+      "sha256": "9b64ba05c9ad861e2f61933cda370d031d0adcb0582428a212b6746c9ca2e168",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "82ba430b068b75a41438568e1e4ed1f96e02699c9b51735154af03e9b59d6b0d"
+        }
+      ]
+    },
+    {
+      "component": "npm-browserify-cipher@1.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/browserify-cipher/-/browserify-cipher-1.0.1.tgz",
+      "sha256": "2d28155c2ae999ae5b69a6223f591ffcced3985d607d5d63238327327c6a06e4",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "dc09aa476634db0dbae1a296f099d5bd39e27c96b876d4d20b236fa565002bb6"
+        }
+      ]
+    },
+    {
+      "component": "npm-browserify-des@1.0.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/browserify-des/-/browserify-des-1.0.2.tgz",
+      "sha256": "b7503b6a58abbd1a3b0f0aabfcd978edff54ad33ebf97a6f0bbdf45bebda9421",
+      "files": [
+        {
+          "path": "package/license",
+          "sha256": "e54f1a2edadb1d8d3a482bcd0712acad2947337ae35e40ca34b22eb77940863f"
+        }
+      ]
+    },
+    {
+      "component": "npm-browserify-rsa@4.1.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/browserify-rsa/-/browserify-rsa-4.1.1.tgz",
+      "sha256": "a08e2687fed5134712e22e814a3afcbcb9d6aa033259fd080824e0e46aeb0d46",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "d7314f44f0873f703b3cbaad5d60b947eb252a70072df586488e20a236c1223f"
+        }
+      ]
+    },
+    {
+      "component": "npm-browserify-sign@4.2.5",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/browserify-sign/-/browserify-sign-4.2.5.tgz",
+      "sha256": "b11875fb8c15cf5a26d459d9e084ab84a569e491b11031740253130a63fc5ae0",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "a0e06d86a5a17341fa6134ee30ef18d73251cf32b8a577cdfd6aad6ad34af61d"
+        }
+      ]
+    },
+    {
+      "component": "npm-browserify-zlib@0.2.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/browserify-zlib/-/browserify-zlib-0.2.0.tgz",
+      "sha256": "f6c4d0f3881e160ba83900fa38cfa22aec5073ee5d44950842495a1bb8bda36e",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "ddd770379e07bf0574dfaa4485be80a23b3248b36d09f33ec79276c09b829daf"
+        }
+      ]
+    },
+    {
+      "component": "npm-buffer-xor@1.0.3",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/buffer-xor/-/buffer-xor-1.0.3.tgz",
+      "sha256": "6befb068400e62690f9da28489425f3eaf6ef50f2943e49d0126969ed4c64f4a",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "51ad9defd71911dbe413daf277bcb2e1077743f5ee5ae48d0a3b90a5b7486f55"
+        }
+      ]
+    },
+    {
+      "component": "npm-buffer@5.0.5",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/buffer/-/buffer-5.0.5.tgz",
+      "sha256": "a088304aa705c94739533a8a83c7a1d40fe7577e9894d32eb76e715af9e864d8",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6"
+        }
+      ]
+    },
+    {
+      "component": "npm-buffer@6.0.3",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified); the separately inlined fallback has no explicit version pin",
+      "url": "https://registry.npmjs.org/buffer/-/buffer-6.0.3.tgz",
+      "sha256": "555b6f49224afcf6b2c5a9aea7cd34a7f443f395b10532bc5580022d57aa51f5",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6"
+        }
+      ]
+    },
+    {
+      "component": "npm-builtin-status-codes@3.0.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/builtin-status-codes/-/builtin-status-codes-3.0.0.tgz",
+      "sha256": "316e1896e859fcbfb492c4af3e7bf5d74e2443e98c04929b36e96c7541b79db8",
+      "files": [
+        {
+          "path": "package/license",
+          "sha256": "f057f36739d53d228a746de4440c1e0c644ecde06d6beab45337d39c9d12a393"
+        }
+      ]
+    },
+    {
+      "component": "npm-call-bind-apply-helpers@1.0.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+      "sha256": "073e9ff9dbabedf5c128020a677381e9f92c90188d118830b30a7656a7c37d2c",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+        }
+      ]
+    },
+    {
+      "component": "npm-call-bind@1.0.8",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/call-bind/-/call-bind-1.0.8.tgz",
+      "sha256": "30e2bdf3ce00c012527ae4161df4145cbf4c797e9fa30e43fc7324b2e07b0523",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416"
+        }
+      ]
+    },
+    {
+      "component": "npm-call-bound@1.0.4",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
+      "sha256": "32086f492fedf1b9b34811f2ee50ca2cca53da5c783f7cd5f939d3f1e86bbd32",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+        }
+      ]
+    },
+    {
+      "component": "npm-cipher-base@1.0.7",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/cipher-base/-/cipher-base-1.0.7.tgz",
+      "sha256": "ad2a22688accc96cd6a42624821931427b9f61d04f5e20ab11eb92928577044b",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "cf93ad78cfd5f3523248675aeb2a46e003367596883d4fa26a0c38d553ab0f61"
+        }
+      ]
+    },
+    {
+      "component": "npm-constants-browserify@1.0.0",
+      "evidence": "Bun LICENSE.md polyfill reference; upstream published license (inlined Bun fallback has no package version pin)",
+      "url": "https://registry.npmjs.org/constants-browserify/-/constants-browserify-1.0.0.tgz",
+      "sha256": "ea9307fd609ddce9497e3ca6b49e6102d7326bd337f66c10143b7b326f931f59",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "b06569bf170a015c56cbad9b45756519d0b8a682770fe30d66bc1e235e26196a"
+        }
+      ]
+    },
+    {
+      "component": "npm-core-util-is@1.0.3",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/core-util-is/-/core-util-is-1.0.3.tgz",
+      "sha256": "4430fdc71f2cf3b5e297113b9a692da2d6cff96cf84da00f0ecef5e5a6e74d0c",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "33b734d60042d0fe0c92dd1fc1e874193a1c899ec3e276a2eb935d2d0bf5b710"
+        }
+      ]
+    },
+    {
+      "component": "npm-create-ecdh@4.0.4",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/create-ecdh/-/create-ecdh-4.0.4.tgz",
+      "sha256": "990182d062df4f280785c5eac9cd0c28d10d0105b93fcf53e4580c3901713ce1",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "d4ad87ad0bb7d57c17ae73b46e064243b972edc3036c38c222172c9600a20b56"
+        }
+      ]
+    },
+    {
+      "component": "npm-create-hash@1.2.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/create-hash/-/create-hash-1.2.0.tgz",
+      "sha256": "fe4079490bd932ccf1f1530f49a88aaca57dbdb6f337c9144749a225e2014bad",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "cf93ad78cfd5f3523248675aeb2a46e003367596883d4fa26a0c38d553ab0f61"
+        }
+      ]
+    },
+    {
+      "component": "npm-create-hmac@1.1.7",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/create-hmac/-/create-hmac-1.1.7.tgz",
+      "sha256": "fd77daf860b84566d8ccc30561eaba00a9efc4fbba94d4a5f417f4f636337aa7",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "cf93ad78cfd5f3523248675aeb2a46e003367596883d4fa26a0c38d553ab0f61"
+        }
+      ]
+    },
+    {
+      "component": "npm-crypto-browserify@3.12.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/crypto-browserify/-/crypto-browserify-3.12.1.tgz",
+      "sha256": "ef67d3aa5192e1596bcabe5e7f3e76bca80f94584fe55a83c98e2d9bb7c1fe85",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "6134c69bc22c8289252e70de3af20bd67071233459055be74d83acfcc4865e7e"
+        }
+      ]
+    },
+    {
+      "component": "npm-define-data-property@1.1.4",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz",
+      "sha256": "16304ad73df1364ca8623c28a8969de01cd7189b4f9b05668fadb598f110e4d2",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "b41d08bc3624d8c436fc80237d73ebb361985a67f4504bbcd703e5ca2b27254c"
+        }
+      ]
+    },
+    {
+      "component": "npm-define-properties@1.2.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/define-properties/-/define-properties-1.2.1.tgz",
+      "sha256": "5de7e3804fadee9d773cd494b695e6efedfee8837e751fd9b9b77c3e9c6b40f4",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "00d402c2bbe7c67369bd01ce2c16b8ed46ccc949a1ee2d6bb8f9606afa8c7434"
+        }
+      ]
+    },
+    {
+      "component": "npm-des.js@1.1.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/des.js/-/des.js-1.1.0.tgz",
+      "sha256": "9a06b8294e38ca9bb70a6257290cc217e9172dfc0059f7639f59f074a924ef9d",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "7bd8e5c11d17eac3766b25d421e158cdb7bacb0bcc520ac4a614520b7fd56c08"
+        }
+      ]
+    },
+    {
+      "component": "npm-diffie-hellman@5.0.3",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/diffie-hellman/-/diffie-hellman-5.0.3.tgz",
+      "sha256": "67809ae0f25353a16b0dae4c4faffecf32525d238e45506fa27da6d2d4fbe53a",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "db6109f994692150ed82cd904bb053c73b97b23678bf52047f747bfec11e1934"
+        }
+      ]
+    },
+    {
+      "component": "npm-domain-browser@4.23.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/domain-browser/-/domain-browser-4.23.0.tgz",
+      "sha256": "7120ea4ac2e85039a17cb45f5987ee5b6741efc59853644de9c729a6138e0cf0",
+      "files": [
+        {
+          "path": "package/LICENSE.md",
+          "sha256": "4380ef327b7e7b1f291d74bdccc2995758d76d7f9d179ad1ac41c5fadea9feb5"
+        }
+      ]
+    },
+    {
+      "component": "npm-dunder-proto@1.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+      "sha256": "ed1342228c82c10df9921c59d684df516a0cd6ed25b61e5f9d6330895326cfdb",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1"
+        }
+      ]
+    },
+    {
+      "component": "npm-elliptic@6.6.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/elliptic/-/elliptic-6.6.1.tgz",
+      "sha256": "ae5132b694f62afc1738293c1b319be9a8822a4823fe15c515e39e7152a229c0",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "361389f7c5c5e493c2af0e89333b4dce12cf6f4c8901b30f035475d2c0215473"
+        }
+      ]
+    },
+    {
+      "component": "npm-es-define-property@1.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+      "sha256": "5986b8b13121340a8b0d5c7d8f0f961aa80ef3a74515ca9cb7a78d86ed0385f7",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+        }
+      ]
+    },
+    {
+      "component": "npm-es-errors@1.3.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
+      "sha256": "d14dd1c35b4bd3b8aca3219fd3627eb7f3eb49cf6b4c8a7ca58b91fd7a190993",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+        }
+      ]
+    },
+    {
+      "component": "npm-es-object-atoms@1.1.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz",
+      "sha256": "3e18e4d757818aee7bf1921686c6c3e7f9676d17c5c6fec560567c6beee579ce",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+        }
+      ]
+    },
+    {
+      "component": "npm-event-target-shim@5.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/event-target-shim/-/event-target-shim-5.0.1.tgz",
+      "sha256": "f0717da2cde5c703b92e66906623724959c23ac14e9439c436b84c8a4f5b26bc",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "97d87142793695cd73243de7258694abe85b3b6060fca7f247b0a2afa8219678"
+        }
+      ]
+    },
+    {
+      "component": "npm-events@3.3.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified); the separately inlined fallback has no explicit version pin",
+      "url": "https://registry.npmjs.org/events/-/events-3.3.0.tgz",
+      "sha256": "2c30dd630b58299bdfaac8688f763c6f312d29779c500b1e3701a1d4fb3b534b",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "631987b7616a325a5b97566c232418481ddf7dbb5ecadefb991e791876cc2599"
+        }
+      ]
+    },
+    {
+      "component": "npm-evp_bytestokey@1.0.3",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/evp_bytestokey/-/evp_bytestokey-1.0.3.tgz",
+      "sha256": "c10a145896ed84fb886f273bd583d3895390561d6b513b17f5cf70312f7c40e1",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "cf93ad78cfd5f3523248675aeb2a46e003367596883d4fa26a0c38d553ab0f61"
+        }
+      ]
+    },
+    {
+      "component": "npm-for-each@0.3.5",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/for-each/-/for-each-0.3.5.tgz",
+      "sha256": "4bd2cfc8e674c93cf7abb3bd3d6fd8e388fa10324bec011223a8fa4f287185d1",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "d07913d776eef217a95d7ee3ee83577fc3c365b9c870f5a3411f785b81090614"
+        }
+      ]
+    },
+    {
+      "component": "npm-function-bind@1.1.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+      "sha256": "704402651b02a1454f17d445fc7dd716efc282d059407126d58ef30a47e807aa",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "773e131a7684726005a7e4688a80b4620033bc08499bc1404dd1a1eb3bca725e"
+        }
+      ]
+    },
+    {
+      "component": "npm-generator-function@2.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/generator-function/-/generator-function-2.0.1.tgz",
+      "sha256": "817d539f17b5c53295c82f50380c4c79608a15d70f753d26496cdf1a194acb66",
+      "files": [
+        {
+          "path": "package/LICENSE.md",
+          "sha256": "1ac0263302bfb8eedc54a10a44175b0df51419306d5bc1539bfd7a7da121bd08"
+        }
+      ]
+    },
+    {
+      "component": "npm-get-intrinsic@1.3.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
+      "sha256": "662e27e54e00fe46fbb08f9f4aacb054e3695dbe72cc14b436613fbcfb780544",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416"
+        }
+      ]
+    },
+    {
+      "component": "npm-get-proto@1.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
+      "sha256": "eb2cc52afb1f1fd82c5fc2a58c2380f0f16fdcdb5631538f3c66887435d70681",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "be46ce1e3b0479af9ce82d22b465a6d7d2ff084fca0aaf3d54172da2b5eb5781"
+        }
+      ]
+    },
+    {
+      "component": "npm-gopd@1.2.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
+      "sha256": "d536d0de4dd285dc1468fbb7f39334a47ee0eec9c27f9b626a6e71466c9fda82",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5"
+        }
+      ]
+    },
+    {
+      "component": "npm-has-property-descriptors@1.0.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz",
+      "sha256": "0219bbd8f32e268eeb6efff55a2c6ff2d502098f49c583ff023b2d9d5a8bfa87",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "0f0ca96f50793990031ebc488a38f7292ff70bce8ab6a8e5eeda674abc32ccdf"
+        }
+      ]
+    },
+    {
+      "component": "npm-has-symbols@1.1.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
+      "sha256": "4460c7532f28b8df2ddc9a1ec17816d43c24d4b9591dc6c5936b82f7f86ae7c5",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "206c1adcf206dc0031b11232f5b054ec5f1662407ab1ca415247921cab2068ab"
+        }
+      ]
+    },
+    {
+      "component": "npm-has-tostringtag@1.0.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
+      "sha256": "dc1c74e3f1179a6271f84747d72c89f258aa46ad3e6464fae0e41737a7f0ef7b",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "e2560e002e13281578c75c850061d9255c33d16d732939e8c2db64c2506642fa"
+        }
+      ]
+    },
+    {
+      "component": "npm-hash-base@3.0.5",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/hash-base/-/hash-base-3.0.5.tgz",
+      "sha256": "879ae6664433339b002938a96b603e9cd7df5c92d857d93f3d802c40af0536ee",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "898f204abbbbde58c6230a31842c59aeb8040fbcffa924db28e6d0b1d7631a3a"
+        }
+      ]
+    },
+    {
+      "component": "npm-hash-base@3.1.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/hash-base/-/hash-base-3.1.2.tgz",
+      "sha256": "d953692177a8ca0513399bb009702cefd54cc62605ec2b4a99c2e1f092b4eb0d",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "898f204abbbbde58c6230a31842c59aeb8040fbcffa924db28e6d0b1d7631a3a"
+        }
+      ]
+    },
+    {
+      "component": "npm-hash.js@1.1.7",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/hash.js/-/hash.js-1.1.7.tgz",
+      "sha256": "8eadfe0cbd33052fedb65ed4bf9acfe4645eafaabf877d99e3b1d9d771668ca6",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "5df660fe115c8ddcdb81c5d733c117b94abb706b91c26dac3ab7dc817dd9ba71"
+        }
+      ]
+    },
+    {
+      "component": "npm-hasown@2.0.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz",
+      "sha256": "50cdc4d2cd11ae04b6ee29f328d09022244962e5dfab303c8fc223ff8dfa807d",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a"
+        }
+      ]
+    },
+    {
+      "component": "npm-hmac-drbg@1.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/hmac-drbg/-/hmac-drbg-1.0.1.tgz",
+      "sha256": "321370d938a49a55cbdfcef124f63cde6d3a947b7231aeab1a5ba0ca62e35962",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "31de905f4580f7a7f0eef6f2f09be85b261c64560bd072bc58d9b61ae225551f"
+        }
+      ]
+    },
+    {
+      "component": "npm-https-browserify@1.0.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/https-browserify/-/https-browserify-1.0.0.tgz",
+      "sha256": "d4f14d0676ed3c0c43a2cdd081bb2e2355db116d4c46e07493ea3d499c8107bc",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "ff151c00207c908581639851dd8504ce4255be0650b2b236edec2aa90342b0cd"
+        }
+      ]
+    },
+    {
+      "component": "npm-ieee754@1.2.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz",
+      "sha256": "8ef14b9b397e339db89db97881fb714f49319d8f0eb1275901f45567b28f9dac",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "18d45466ba3253deae04667e267a91ea8de8548f18c1125264d1c9db28194cc1"
+        }
+      ]
+    },
+    {
+      "component": "npm-inherits@2.0.4",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
+      "sha256": "d94dbc6c1bb3c5ac0fb12a73ade187108fc60de273a1b754f55044eb5e24afaf",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5ffe28e7ade7d8f10d85d5337a73fd793dac5c462fb9a28fbf8c5046c7fbca3b"
+        }
+      ]
+    },
+    {
+      "component": "npm-is-arguments@1.2.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/is-arguments/-/is-arguments-1.2.0.tgz",
+      "sha256": "476c29799ec4f51b694d576fc70a27631c8ffe00e4269b7608027e12c7b0e51c",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1"
+        }
+      ]
+    },
+    {
+      "component": "npm-is-callable@1.2.7",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/is-callable/-/is-callable-1.2.7.tgz",
+      "sha256": "1b5c6e4e8ab142a6857fca2fb79d880ba64f2c4ad87907b583934d04b503c3a1",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522"
+        }
+      ]
+    },
+    {
+      "component": "npm-is-generator-function@1.1.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/is-generator-function/-/is-generator-function-1.1.2.tgz",
+      "sha256": "11b6db078092427ac985003432e9ae1fad56d1df398ad87a02b8ce1b81d803d0",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1"
+        }
+      ]
+    },
+    {
+      "component": "npm-is-nan@1.3.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/is-nan/-/is-nan-1.3.2.tgz",
+      "sha256": "f0a66f9818c5cd398979ad3acc8fc21526c586622fb62697524c0e3f2a628653",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1"
+        }
+      ]
+    },
+    {
+      "component": "npm-is-regex@1.2.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/is-regex/-/is-regex-1.2.1.tgz",
+      "sha256": "a73e499153621af82d1f0f1ba77f21a01f95612b09d50d57253fc9e123a98b0d",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1"
+        }
+      ]
+    },
+    {
+      "component": "npm-is-typed-array@1.1.15",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/is-typed-array/-/is-typed-array-1.1.15.tgz",
+      "sha256": "d1ef6229208ce395c816f88637e45b970f6d742d616d3c980fb0dbb679cb7690",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522"
+        }
+      ]
+    },
+    {
+      "component": "npm-isarray@1.0.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/isarray/-/isarray-1.0.0.tgz",
+      "sha256": "e23c76f14f5222e07e39d89858b61e8e33f96956de9e0df3659cbdf8db950c87",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "ff138e683771b187f3629c383db72ee7d632009010a36d08e18e8d2a34222ec7"
+        }
+      ]
+    },
+    {
+      "component": "npm-isarray@2.0.5",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/isarray/-/isarray-2.0.5.tgz",
+      "sha256": "72bae463b81a604b4a118c00012c76ee9b8d155b9da62d1f362876c9f8b5f793",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "68f12f6e2c33688699249c01d8f9623c534da20aa71989c57b061b7bc1676d14"
+        }
+      ]
+    },
+    {
+      "component": "npm-math-intrinsics@1.1.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+      "sha256": "b8c2c35575493dc086df88cfc468a9e2651b6617336480ab3f00fcf853f443a7",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1"
+        }
+      ]
+    },
+    {
+      "component": "npm-md5.js@1.3.5",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/md5.js/-/md5.js-1.3.5.tgz",
+      "sha256": "06777b61b01229c755ab4c6f4208d8f692222db4201abc9263877e4415693d03",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "898f204abbbbde58c6230a31842c59aeb8040fbcffa924db28e6d0b1d7631a3a"
+        }
+      ]
+    },
+    {
+      "component": "npm-miller-rabin@4.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/miller-rabin/-/miller-rabin-4.0.1.tgz",
+      "sha256": "55bc46e7a4150804a546e634a971ea28844b47abbbe3136cb895951d84d6b8c9",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "cca039d99212195a60c68f10f717c22fb53089df8eefca0aaab77515e858019a"
+        }
+      ]
+    },
+    {
+      "component": "npm-minimalistic-assert@1.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/minimalistic-assert/-/minimalistic-assert-1.0.1.tgz",
+      "sha256": "f16522c947d6dbe3a99f5ff4296ccc253090b838959abdddc45fe81edb03f3a0",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "136fee1129ea96ce18b41c26a72f5d4ba196ee41bfd73b55d0b8509cdda148e9"
+        }
+      ]
+    },
+    {
+      "component": "npm-minimalistic-crypto-utils@1.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/minimalistic-crypto-utils/-/minimalistic-crypto-utils-1.0.1.tgz",
+      "sha256": "f35f6e02efe1b2d6e8764fea48ef6d1211693c838f54d6ef50f0bc9fe6fa9db3",
+      "files": [
+        {
+          "path": "package/README.md",
+          "sha256": "64608431631207282f74532d8b9eeda5cb42fced09c663f21e1462987270950c"
+        }
+      ]
+    },
+    {
+      "component": "npm-object-is@1.1.6",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/object-is/-/object-is-1.1.6.tgz",
+      "sha256": "ed20196adebc0396b4fa793a13730858771ff7ea4b6cce14e30442f1b75eea2c",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1"
+        }
+      ]
+    },
+    {
+      "component": "npm-object-keys@1.1.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/object-keys/-/object-keys-1.1.1.tgz",
+      "sha256": "9678d9055619767c8a134033709e88a6e0a19600f3d3f2cda40acdfd75e7f212",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5640e5cbe2e9f57f6ccfdd8dbfbeadb875495bdbcb69d2666ce3177ccd0942e4"
+        }
+      ]
+    },
+    {
+      "component": "npm-object.assign@4.1.7",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/object.assign/-/object.assign-4.1.7.tgz",
+      "sha256": "08e4dcd218f7ac619100ac3d3bb76b54c66257cabf0b2409dbfbb6dff01bfcf3",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "a596744eec6b05682ed972bf93937668bbc8da2caed93fbf6510389de019b5c0"
+        }
+      ]
+    },
+    {
+      "component": "npm-os-browserify@0.3.0",
+      "evidence": "Bun LICENSE.md polyfill reference; upstream published license (inlined Bun fallback has no package version pin)",
+      "url": "https://registry.npmjs.org/os-browserify/-/os-browserify-0.3.0.tgz",
+      "sha256": "7df96551e0d82458745fb7dea7e9c0739f5a0c06d20607592f9a0a00af60b738",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "d25d1d6d28c35cb6f358e2833e405c4e53fec2fa24d156323ddea5cd438d3407"
+        }
+      ]
+    },
+    {
+      "component": "npm-pako@1.0.11",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/pako/-/pako-1.0.11.tgz",
+      "sha256": "0d4028dc0352a740c30cbfd772917f2744986d42bfa0b06ec7642bffe7ad3941",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "a04665b3b2de56c66730c1f720f528175739e4104f79073614aa611da1e85539"
+        }
+      ]
+    },
+    {
+      "component": "npm-parse-asn1@5.1.9",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/parse-asn1/-/parse-asn1-5.1.9.tgz",
+      "sha256": "73b5e179260ce351067fba0cd28e9aeeeb2706ec3c99c0b1782d0aa43498a9f1",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "bc5ed4eed738303bf403ec3b7e0a8e76760ef60664ad050a0ff61db23da77e66"
+        }
+      ]
+    },
+    {
+      "component": "npm-path-browserify@1.0.1",
+      "evidence": "Bun LICENSE.md polyfill reference; upstream published license (inlined Bun fallback has no package version pin)",
+      "url": "https://registry.npmjs.org/path-browserify/-/path-browserify-1.0.1.tgz",
+      "sha256": "74ad6965c6f8cb61d17b1798d48095c3238eca5707b517640a12150f17b8f93d",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "a22b9d5763f574e5db347c30acc0b33eaf4846767c03d2e27d012e864e79a824"
+        }
+      ]
+    },
+    {
+      "component": "npm-pbkdf2@3.1.5",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/pbkdf2/-/pbkdf2-3.1.5.tgz",
+      "sha256": "f63117895bd2e95853d14bcb53735ce7fe163fd98aee7301d4e71f41cae9d669",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "a9667a8bf55e7f20cf894cb47774f94ebd4eb366408aafb980f1f6547bcdc10a"
+        }
+      ]
+    },
+    {
+      "component": "npm-possible-typed-array-names@1.1.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/possible-typed-array-names/-/possible-typed-array-names-1.1.0.tgz",
+      "sha256": "c29791211b8e2f181c049247214843292380e4134c140c5105376b7c6ae3e3c7",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+        }
+      ]
+    },
+    {
+      "component": "npm-process-nextick-args@2.0.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/process-nextick-args/-/process-nextick-args-2.0.1.tgz",
+      "sha256": "425bf8c725d23bc5ac76bcedd10d9cdbbd6354c7273dd7def44417cfbca8889b",
+      "files": [
+        {
+          "path": "package/license.md",
+          "sha256": "ecdccbcf39024f624ded480c01c0b25458e1eca8f26ecf040933865ce56d9a4f"
+        }
+      ]
+    },
+    {
+      "component": "npm-process@0.11.10",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified); the separately inlined fallback has no explicit version pin",
+      "url": "https://registry.npmjs.org/process/-/process-0.11.10.tgz",
+      "sha256": "7c10569b3c9cb056152ad630d40f9f4fcc321a0013c2bb8384f036aaa674e6bb",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "59a400d04c5078579acc27ddd6452c1bdf763f9506e01364700935fbb1a7c91b"
+        }
+      ]
+    },
+    {
+      "component": "npm-public-encrypt@4.0.3",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/public-encrypt/-/public-encrypt-4.0.3.tgz",
+      "sha256": "7f0eeca034a7bf643451b10706af9e3ac5f1501a7ab022db4d25bcf011c2014b",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "db6109f994692150ed82cd904bb053c73b97b23678bf52047f747bfec11e1934"
+        }
+      ]
+    },
+    {
+      "component": "npm-punycode@2.3.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+      "sha256": "e4ce59f9fbac44349abab87279ab658f6b4614916bec5e088ae3be9323e193bb",
+      "files": [
+        {
+          "path": "package/LICENSE-MIT.txt",
+          "sha256": "483acb265f182907d1caf6cff9c16c96f31325ed23792832cc5d8b12d5f88c8a"
+        }
+      ]
+    },
+    {
+      "component": "npm-querystring-es3@1.0.0-0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/querystring-es3/-/querystring-es3-1.0.0-0.tgz",
+      "sha256": "2f64c1d17723c8d1c6933fa9c5efcb31700072ba311de01a10254b5a1dbf0f12",
+      "files": [
+        {
+          "path": "package/License.md",
+          "sha256": "a2d84514bf60e8dab31c3db9b25bf2fcb644171ec91f3a7463173f3e9ac6b8b4"
+        }
+      ]
+    },
+    {
+      "component": "npm-randombytes@2.1.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/randombytes/-/randombytes-2.1.0.tgz",
+      "sha256": "b8a6d3e6532817912ad3dacbb0e64be75026941a5167549aa1d7fecbafd1bcaa",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "ddc0dd5947bd2966b9a4cfde098566b011de0acfbe7814536955636ce9e3eced"
+        }
+      ]
+    },
+    {
+      "component": "npm-randomfill@1.0.4",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/randomfill/-/randomfill-1.0.4.tgz",
+      "sha256": "3b0c2fec576a572e139563606102e0ffd9dc8a2853525eb7aa1a30e0de754fa6",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "ddc0dd5947bd2966b9a4cfde098566b011de0acfbe7814536955636ce9e3eced"
+        }
+      ]
+    },
+    {
+      "component": "npm-react-refresh@0.17.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.17.0.tgz",
+      "sha256": "40aa26f7cbb282b754ac0cdc7c5b6a1a1170c9cd74d61f863b8644397afec09f",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+        }
+      ]
+    },
+    {
+      "component": "npm-readable-stream@2.3.8",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/readable-stream/-/readable-stream-2.3.8.tgz",
+      "sha256": "1648613948f68ac9cbbe8f72a3f93a67ecdb862ffb57946a2c0bbb5a1479a532",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "ec62dc96da0099b87f4511736c87309335527fb7031639493e06c95728dc8c54"
+        }
+      ]
+    },
+    {
+      "component": "npm-readable-stream@3.6.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz",
+      "sha256": "edd866c05e318aa9c091763eebdd4207409b7a7648be19c5317a96047305ab5d",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "ec62dc96da0099b87f4511736c87309335527fb7031639493e06c95728dc8c54"
+        }
+      ]
+    },
+    {
+      "component": "npm-readable-stream@4.7.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/readable-stream/-/readable-stream-4.7.0.tgz",
+      "sha256": "0997e49cb71927b91714dad852147bacfe28bf8cd2f4e1b5a99959c3d0dde5fd",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "ec62dc96da0099b87f4511736c87309335527fb7031639493e06c95728dc8c54"
+        }
+      ]
+    },
+    {
+      "component": "npm-ripemd160@2.0.3",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/ripemd160/-/ripemd160-2.0.3.tgz",
+      "sha256": "2f5abb3220b688d2614da886d6d9f65f956c1aa103f5e21f0d329e0c61601f24",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "4847d2fd9ed54cc006dd79f5a14fa5dd35eb8274dca511418166e195e277c05b"
+        }
+      ]
+    },
+    {
+      "component": "npm-safe-buffer@5.1.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.1.2.tgz",
+      "sha256": "e09206c60fccafb952c854af7629cbb031a98d6da2e143fb3aa3c8a48402aa22",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "c7cc929b57080f4b9d0c6cf57669f0463fc5b39906344dfc8d3bc43426b30eac"
+        }
+      ]
+    },
+    {
+      "component": "npm-safe-buffer@5.2.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
+      "sha256": "5d181804516c4a693a384272a7bd0e42d17e0d4b301ccfbe408669ccafdcb3e8",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "c7cc929b57080f4b9d0c6cf57669f0463fc5b39906344dfc8d3bc43426b30eac"
+        }
+      ]
+    },
+    {
+      "component": "npm-safe-regex-test@1.1.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/safe-regex-test/-/safe-regex-test-1.1.0.tgz",
+      "sha256": "e92ad20e8549ef06adab664f8a6e9c0a349e38f34c9548ebb526f24f7d8cf12e",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5"
+        }
+      ]
+    },
+    {
+      "component": "npm-set-function-length@1.2.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/set-function-length/-/set-function-length-1.2.2.tgz",
+      "sha256": "a339df70dfa3507a3fe2137464915212d69a9585d201c253b90f0c13fd952b4a",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a"
+        }
+      ]
+    },
+    {
+      "component": "npm-sha.js@2.4.12",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/sha.js/-/sha.js-2.4.12.tgz",
+      "sha256": "c8c1e04584e822b3514907388030e3bc451293f5ead31d0bd076e56661ee9dc0",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "58dcf38be1438f739412b87eb70d64bf00e9976d529bb119f700d8b3167924f0"
+        }
+      ]
+    },
+    {
+      "component": "npm-stream-browserify@3.0.0",
+      "evidence": "Bun LICENSE.md polyfill reference; upstream published license (inlined Bun fallback has no package version pin)",
+      "url": "https://registry.npmjs.org/stream-browserify/-/stream-browserify-3.0.0.tgz",
+      "sha256": "376fa4c0ffd38961cf23c210f8a8dbcc46b00862c1d1bce1bbc66f7ea9a433cf",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "96e5193183476a03da6667d217ce14110191d26ee105338086e94339edf40d5a"
+        }
+      ]
+    },
+    {
+      "component": "npm-stream-http@3.2.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/stream-http/-/stream-http-3.2.0.tgz",
+      "sha256": "82bd244a642c4e7429531f314aef8c139f5f461464b4575882006d6a44cbb03c",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "a0e6357a5e8ea65827addeb383e0948a1874d2f46bc7feaf6349b7a376ed6e98"
+        }
+      ]
+    },
+    {
+      "component": "npm-string_decoder@1.1.1",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.1.1.tgz",
+      "sha256": "af8262434508fa8292407f7fef4690d19eabb73387ca230b41f2a1155216963a",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "11f2aafb37d06b3ee5bdaf06e9811141d0da05263c316f3d627f45c20d43261b"
+        }
+      ]
+    },
+    {
+      "component": "npm-string_decoder@1.3.0",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
+      "sha256": "7d036900940345e423538371ae45b23bfaf4b454bc398c6ba604063b0597b3ad",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "11f2aafb37d06b3ee5bdaf06e9811141d0da05263c316f3d627f45c20d43261b"
+        }
+      ]
+    },
+    {
+      "component": "npm-timers-browserify@2.0.12",
+      "evidence": "Bun LICENSE.md polyfill reference; upstream published license (inlined Bun fallback has no package version pin)",
+      "url": "https://registry.npmjs.org/timers-browserify/-/timers-browserify-2.0.12.tgz",
+      "sha256": "51d5ab28b1f36c565515a2a346e12b37f5ac053d9f6f9ddf34121a6d20791432",
+      "files": [
+        {
+          "path": "package/LICENSE.md",
+          "sha256": "d5f14c3258420dfe5a3b641a143d6e6dd90eabb5962244d937e25699c3a45ec9"
+        }
+      ]
+    },
+    {
+      "component": "npm-to-buffer@1.2.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/to-buffer/-/to-buffer-1.2.2.tgz",
+      "sha256": "fb7f547d563da95ad5f6ce742e28defe340ed78dfd6a0751cec3c9a441bbe73c",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "6a134e51aa31496c15a741592fc5d782b2dbf8d8b6b8524e15c8520ae0cd6374"
+        }
+      ]
+    },
+    {
+      "component": "npm-tty-browserify@0.0.1",
+      "evidence": "Bun LICENSE.md polyfill reference; upstream published license (inlined Bun fallback has no package version pin)",
+      "url": "https://registry.npmjs.org/tty-browserify/-/tty-browserify-0.0.1.tgz",
+      "sha256": "28c43ee36a83f988043256adb53da3fc76a4bae4783da70974e4fce7dbac0cf7",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b"
+        }
+      ]
+    },
+    {
+      "component": "npm-typed-array-buffer@1.0.3",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/typed-array-buffer/-/typed-array-buffer-1.0.3.tgz",
+      "sha256": "0feb415846d1ae52a89710494bfbabdef311988d9a239a29fa917d6663e561ad",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "b41d08bc3624d8c436fc80237d73ebb361985a67f4504bbcd703e5ca2b27254c"
+        }
+      ]
+    },
+    {
+      "component": "npm-url@0.11.4",
+      "evidence": "Bun LICENSE.md polyfill reference; upstream published license (inlined Bun fallback has no package version pin)",
+      "url": "https://registry.npmjs.org/url/-/url-0.11.4.tgz",
+      "sha256": "0fb0d60d58e26a9e5af8555f6baaa9c94f68416c6a399ad7470851aa65e4014a",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "00bfc53d658b2173d23e8c2a0f52332a5cfc6044525dafc5ecbe9a733bc3a49d"
+        }
+      ]
+    },
+    {
+      "component": "npm-util-deprecate@1.0.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
+      "sha256": "79a1de983c1b393180c47456d6b73caab278a00ea6e37d5c6675f2dcdec2a3e5",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "0154425673db15cdfa80ecba2c9b1f1a867f7197a006764712849bfc3a93cbb7"
+        }
+      ]
+    },
+    {
+      "component": "npm-util@0.12.5",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified); src/node-fallbacks/util.js explicitly identifies util 0.12.5",
+      "url": "https://registry.npmjs.org/util/-/util-0.12.5.tgz",
+      "sha256": "d3b9dac1449f7d6b6995355f5cc73179fec7b90bfa8967ff7d3c0654525ab282",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "6239c6144c31e58cf925c34483606969c555574d64ffa96518ab5d7f45c75d43"
+        }
+      ]
+    },
+    {
+      "component": "npm-vm-browserify@1.1.2",
+      "evidence": "Bun LICENSE.md polyfill reference; upstream published license (inlined Bun fallback has no package version pin)",
+      "url": "https://registry.npmjs.org/vm-browserify/-/vm-browserify-1.1.2.tgz",
+      "sha256": "56133f3423c06c08b780869f528d28cf11a192792bdc93f03f14630974630a46",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "3a62887f73cd035ac1068bc0127ce94291f7a03843391f56df3520e2ca2037f8"
+        }
+      ]
+    },
+    {
+      "component": "npm-which-typed-array@1.1.19",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.19.tgz",
+      "sha256": "aaccea91985a6e1731f84192d4682f474aea76f64a210982576e488732b0ad3f",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522"
+        }
+      ]
+    },
+    {
+      "component": "npm-xtend@4.0.2",
+      "evidence": "Bun src/node-fallbacks/bun.lock (tarball integrity verified)",
+      "url": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
+      "sha256": "bd22a01d43c799be7bb53dfa9e775b132045e39525e51efb977528a00041ba48",
+      "files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "82e67379203d5794e7c44549847d8d64ae6904591381682360470898bd306821"
+        }
+      ]
+    },
+    {
+      "component": "picohttpparser",
+      "evidence": "Bun scripts/build/deps/picohttpparser.ts",
+      "url": "https://raw.githubusercontent.com/h2o/picohttpparser/066d2b1e9ab820703db0837a7255d92d30f0c9f5/picohttpparser.h",
+      "sha256": "0113b9f8c6237f7163d99b320a2390983b27c6d56e32700682b73302e183b347"
+    },
+    {
+      "component": "rust-argon2",
+      "evidence": "Bun scripts/build/deps/rust-argon2.ts",
+      "url": "https://raw.githubusercontent.com/sru-systems/rust-argon2/ed81866f163f0c7026aa6fd8388adf37242eb32a/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+    },
+    {
+      "component": "rust-argon2",
+      "evidence": "Bun scripts/build/deps/rust-argon2.ts",
+      "url": "https://raw.githubusercontent.com/sru-systems/rust-argon2/ed81866f163f0c7026aa6fd8388adf37242eb32a/LICENSE-MIT",
+      "sha256": "26b997d1a1496df49cb1ad2cbe024714cd9126543c18e1bc6c7bbca1b3dc42b6"
+    },
+    {
+      "component": "tigerbeetle",
+      "evidence": "Bun LICENSE.md explicit source revision (Windows IO)",
+      "url": "https://raw.githubusercontent.com/tigerbeetle/tigerbeetle/532c8b70b9142c17e07737ab6d3da68d7500cbca/LICENSE",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+    },
+    {
+      "component": "tinycc",
+      "evidence": "Bun scripts/build/deps/tinycc.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/tinycc/05f0fafaa3be31e31d7b4b5c17dc60f62c991171/COPYING",
+      "sha256": "512d2d21b6b3384ba64781abb0208a1b87740bc31e2df48e2b206ddb7e4d5779"
+    },
+    {
+      "component": "tinycc",
+      "evidence": "Bun scripts/build/deps/tinycc.ts",
+      "url": "https://raw.githubusercontent.com/oven-sh/tinycc/05f0fafaa3be31e31d7b4b5c17dc60f62c991171/lib/libtcc1.c",
+      "sha256": "0e2eb64bc4607db08846a82df5d4f03ff3f0ce19f568bbf4db9a9729b8a9d630"
+    },
+    {
+      "component": "usockets",
+      "evidence": "Bun vendored source",
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/packages/bun-usockets/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "component": "uucode",
+      "evidence": "Additional upstream licenses referenced by the original Bun uucode import (not vendored in Bun)",
+      "url": "https://raw.githubusercontent.com/jacobsandlund/uucode/1fb73433bba5d93366c57f23ff2e9d7939746500/licenses/LICENSE_Bjoern_Hoehrmann",
+      "sha256": "de219cece932aad5a817bf763393d8d149d378a15d2ad5320e3331eac07626dd"
+    },
+    {
+      "component": "uucode",
+      "evidence": "Additional upstream licenses referenced by the original Bun uucode import (not vendored in Bun)",
+      "url": "https://raw.githubusercontent.com/jacobsandlund/uucode/1fb73433bba5d93366c57f23ff2e9d7939746500/licenses/LICENSE_unicode",
+      "sha256": "1eda5a3b026870c737b22e8bcd4954338612c790db688242e003f41a4fa95175"
+    },
+    {
+      "component": "uucode",
+      "evidence": "Original Bun uucode import; no uucode pin in Bun 1.4.2 Rust build graph",
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/86d4d87beb1703f220ffba776f10f383841aaeb0/src/deps/uucode/LICENSE.md",
+      "sha256": "75b52b07e8f6ed6b1700ca6e4bcff93a59258624d4fd1ab7eae4c071c860b69b"
+    },
+    {
+      "component": "uwebsockets",
+      "evidence": "Bun vendored source",
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/packages/bun-uws/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/disassembler/ARM64/LICENSE-binja.txt",
+      "sha256": "94c095293b051622c4279153e94f8f69e6e9fd41c2d6eef07ad9ea02c30fb4c0"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/disassembler/zydis/LICENSE-zycore.txt",
+      "sha256": "bad974d260b4697edfdf3a126c33d451a512947b5265f6014fb66173f42ccab3"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/disassembler/zydis/LICENSE-zydis.txt",
+      "sha256": "1218751ea297d1559d768da22dfb95248d6b7c6fdcf3aedecd53a818694b6bf9"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/runtime/temporal/core/LICENSE-icu4x.txt",
+      "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/runtime/temporal/core/LICENSE-temporal_rs.txt",
+      "sha256": "073d3574ac6389e263360572b331e045dda7ac5cdba239ce5bdb02f299ef47bb"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/icu/LICENSE",
+      "sha256": "de596f6e3482bab99d2425af16add38f959ebc17a5883c6302970355853b6539"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/LICENSE-dragonbox.txt",
+      "sha256": "9bb1036ef8dcb42c59e2a23c9e465f43e75003e06898faf0edd18de662f3ecb8"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/LICENSE-libc++.txt",
+      "sha256": "c1938c0e9e90639d1e8f5a7f6bebaab83a3642e0ee44295a4c69934686d0bda8"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/LICENSE-LLVM.txt",
+      "sha256": "f72b120d1385408e9e380acc020756eb6ba1b461d66c328ea67327ba08d7dcfd"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/LICENSE-simde.txt",
+      "sha256": "75ce0a8c5a7bff42fbd6f8f3b469b518132132c4f4948fb8d02b1ccb5d0df9d8"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/wtf/dtoa/COPYING",
+      "sha256": "4af93c12062c58058378de2397dc1c92bbff9ddfb1d583a01c84127557ce97ca"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/wtf/dtoa/LICENSE",
+      "sha256": "4af93c12062c58058378de2397dc1c92bbff9ddfb1d583a01c84127557ce97ca"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/wtf/fast_float/LICENSE",
+      "sha256": "097a889aa954d04e088b790b10a4014d6189561d0a6013935a73ce3d4ddaaf06"
+    },
+    {
+      "component": "webkit-additional",
+      "evidence": "Bun pinned WebKit source license files",
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/WTF/wtf/simdutf/LICENSE-simdutf.txt",
+      "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+    },
+    {
+      "component": "zlib",
+      "evidence": "Bun scripts/build/deps/zlib.ts",
+      "url": "https://raw.githubusercontent.com/zlib-ng/zlib-ng/12731092979c6d07f42da27da673a9f6c7b13586/LICENSE.md",
+      "sha256": "6c9f0d975b41afaa34d22f55bb8986ce69e5cb7ad327cb2b28820cd425edf5ee"
+    },
+    {
+      "component": "zstd",
+      "evidence": "Bun scripts/build/deps/zstd.ts",
+      "url": "https://raw.githubusercontent.com/facebook/zstd/f8745da6ff1ad1e7bab384bd1f9d742439278e99/COPYING",
+      "sha256": "f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505"
+    },
+    {
+      "component": "zstd",
+      "evidence": "Bun scripts/build/deps/zstd.ts",
+      "url": "https://raw.githubusercontent.com/facebook/zstd/f8745da6ff1ad1e7bab384bd1f9d742439278e99/LICENSE",
+      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+    },
+    {
+      "component": "bun-inlined-path",
+      "evidence": "Actual Bun 1.4.2 fallback with complete Joyent/Node copyright and MIT terms; npm path-browserify's James Halliday license is not a substitute",
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/src/node-fallbacks/path.js",
+      "sha256": "9c7af702fe76adad5a6309a0323fd81d9640780e9f0e0197960d0d8d15b28c0a"
+    },
+    {
+      "component": "bun-inlined-url",
+      "evidence": "Actual Bun 1.4.2 fallback with complete original Joyent/Node copyright and MIT terms",
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/src/node-fallbacks/url.js",
+      "sha256": "0d8d4b09bbee3d11c9af7775ae3a1dabcce909d463539cc41e580ca2d3c9e303"
+    },
+    {
+      "component": "bun-inlined-util",
+      "evidence": "Actual Bun 1.4.2 fallback identifies util 0.12.5 and retains complete original Joyent/Node copyright and MIT terms",
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/src/node-fallbacks/util.js",
+      "sha256": "bc9d062a2d2d7dbebb29664bc569e4819cb9af4946f873a76bd4f12279d6daa9"
+    },
+    {
+      "component": "bun-inlined-net",
+      "evidence": "Additional Bun 1.4.2 fallback retains complete original Joyent/Node copyright and MIT terms",
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/src/node-fallbacks/net.js",
+      "sha256": "e16a9c55052478574b3fcfbbfc6db467288f1fefce0314a13b4ead5f40da636d"
+    },
+    {
+      "component": "node-vendored-source",
+      "evidence": "Bun src/js/internal/repl/acorn*.js explicitly vendors Node 26.3.0; deps/nodejs-headers.ts pins the same source version; this is not the development Node host license",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v26.3.0/LICENSE",
+      "sha256": "148eacf7863ef4329224a29398623077200a27194aa075569faf4a0a85566ca5"
+    }
+  ]
+}

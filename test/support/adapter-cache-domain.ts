@@ -11,12 +11,12 @@ import { sourceRoot } from './source-consumer.ts';
 import { configure, text } from './test-adapters-consumer-fixture.ts';
 
 export const adapterConsumer = Effect.gen(function* () {
-  const root = yield* Effect.acquireRelease(Effect.sync(createConsumer), path => Effect.sync(() => rmSync(path, { recursive: true, force: true })));
-  yield* Effect.sync(() => {
-    const repo = new LocalRepository(root);
+  const root = yield* Effect.acquireRelease(Effect.tryPromise(createConsumer), path => Effect.sync(() => rmSync(path, { recursive: true, force: true })));
+  yield* Effect.tryPromise(async () => {
+    const repo = (await LocalRepository.open(root));
     try {
-      createDocument(repo, 'feature', { id: 'example', title: 'Example' });
-      createDocument(repo, 'issue', { id: 'problem', title: 'Problem' });
+      (await createDocument(repo, 'feature', { id: 'example', title: 'Example' }));
+      (await createDocument(repo, 'issue', { id: 'problem', title: 'Problem' }));
     } finally { repo.close(); }
     text(root, 'package.json', '{"private":true,"type":"module"}');
     symlinkSync(join(sourceRoot, 'node_modules'), join(root, 'node_modules'), 'dir');
@@ -24,7 +24,7 @@ export const adapterConsumer = Effect.gen(function* () {
     copyFileSync(join(sourceRoot, 'test/fixtures/process-adapter.ts'), join(root, 'adapter.ts'));
     text(root, 'fixture.txt', 'original'); text(root, 'fixture.lock', 'locked'); text(root, 'mode.txt', 'green');
     text(root, 'test/sample.ts', '// @feature docs/feature/example/README.md\n// @name parameter-group\n// @issue docs/issues/problem.md\n');
-    configure(root, [{ id: 'external', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: ['fixture.lock'], envNames: ['NODE_OPTIONS', 'PATH'], collectTimeoutMs: 1000, budgets: { reportFileBytes: 128 } }]);
+    (await configure(root, [{ id: 'external', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: ['fixture.lock'], envNames: ['NODE_OPTIONS', 'PATH'], collectTimeoutMs: 1000, budgets: { reportFileBytes: 128 } }]));
   });
   return root;
 });
@@ -40,7 +40,7 @@ export const adapterSuccess = Effect.fn('adapterCache.success')(function* (root:
   return result.value;
 });
 
-const repository = (root: string) => Effect.acquireRelease(Effect.sync(() => new LocalRepository(root)), repo => Effect.sync(() => {
+const repository = (root: string) => Effect.acquireRelease(Effect.tryPromise(async () => (await LocalRepository.open(root))), repo => Effect.sync(() => {
   try { closeRepositoryCache(repo); } finally { repo.close(); }
 }));
 

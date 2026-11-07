@@ -3,8 +3,8 @@ import { sourceCli, sourceRoot, prepareSourceConsumer, assert, execFileSync, spa
 
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed create scans both states, narrows preimage and checks machine origin conflicts', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer('create'); const body = join(root, 'body.txt'); writeFileSync(body, 'manual body'); mode({ list: [issue(2, { title: 'other' })] });
+test('packed create scans both states, narrows preimage and checks machine origin conflicts', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer('create')); const body = join(root, 'body.txt'); writeFileSync(body, 'manual body'); mode({ list: [issue(2, { title: 'other' })] });
   const receipt = plan(root, 'create', ['--title', 'Planned title', '--body', body]);
   writeFileSync(scenarioFile, JSON.stringify({ issue: issue(), list: [issue(2, { title: 'changed unrelated' })] }));
   assert.equal(execute(root, receipt).status, 0); assert.equal(writes().length, 1);
@@ -19,9 +19,9 @@ test('packed create scans both states, narrows preimage and checks machine origi
 
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed rejected and uncertain writes remain consumed and are never retried', () => Effect.runPromise(Effect.sync(() => {
+test('packed rejected and uncertain writes remain consumed and are never retried', () => Effect.runPromise(Effect.tryPromise(async () => {
   for (const kind of ['reject', 'invalidWrite', 'signalWrite']) {
-    const root = consumer(`write-${kind}`); mode({ [kind]: kind === 'reject' ? 403 : true }); const receipt = plan(root, 'close'); const result = execute(root, receipt);
+    const root = (await consumer(`write-${kind}`)); mode({ [kind]: kind === 'reject' ? 403 : true }); const receipt = plan(root, 'close'); const result = execute(root, receipt);
     error(result, kind === 'reject' ? 'IssueRemoteRejected' : 'IssueMutationUncertain'); assert.equal(writes().length, 1);
     const details = (JSON.parse(result.stderr) as { details: Readonly<Record<string, unknown>> }).details;
     if (kind === 'reject') { assert.equal(details.status, 403); const outcome = JSON.parse(readFileSync(join(root, '.git/concord/issue-plan/v1/consumed', `${receipt.receiptId}.outcome.json`), 'utf8')) as { state: string; status: number }; assert.equal(outcome.state, 'rejected'); assert.equal(outcome.status, 403); }
@@ -34,10 +34,10 @@ test('packed rejected and uncertain writes remain consumed and are never retried
 
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed apply rejects another connection and another payload authorization before gh calls', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer('binding'); mode();
-  const repository = new LocalRepository(root);
-  try { const config = showConfig(repository); setConfig(repository, { ...config.config, feedbackConnections: [connection, { ...connection, id: 'alias-gh' }] }, config.digest); } finally { repository.close(); }
+test('packed apply rejects another connection and another payload authorization before gh calls', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer('binding')); mode();
+  const repository = (await LocalRepository.open(root));
+  try { const config = showConfig(repository); (await setConfig(repository, { ...config.config, feedbackConnections: [connection, { ...connection, id: 'alias-gh' }] }, config.digest)); } finally { repository.close(); }
   const body = join(root, 'body.txt'); writeFileSync(body, 'first');
   const first = plan(root, 'body-set', ['12', '--body', body]); writeFileSync(body, 'second');
   const second = plan(root, 'body-set', ['12', '--body', body]);

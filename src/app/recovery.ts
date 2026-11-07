@@ -60,7 +60,7 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
     }
     return yield* Effect.scoped(Effect.acquireUseRelease(
       openWriteRepository(selected.root, { recover: true, reclaimPublication: false }),
-      repo => Effect.try({ try: () => repo.recover(), catch: failure }),
+      repo => Effect.tryPromise({ try: async () => (await repo.recover()), catch: failure }).pipe(Effect.uninterruptible),
       repo => Effect.sync(() => repo.close()),
     ));
   });

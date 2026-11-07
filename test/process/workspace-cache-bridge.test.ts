@@ -7,7 +7,7 @@ import { command, fixture, record, rpcModule, stop } from '../support/workspace-
 
 // @feature docs/feature/local-data-engine/README.md
 test('local cache derivations cross real frames, abandon disconnected input, and cannot replace historical results', { timeout: 30_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     assert.equal((await command(root, ['check'])).status, 0);
     const running = record(root), rpc = await rpcModule();

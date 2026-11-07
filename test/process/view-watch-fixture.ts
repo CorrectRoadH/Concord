@@ -36,12 +36,12 @@ const fixture = Effect.fn('viewWatchFixture')(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), 'concord-view-watch-'))),
     value => Effect.sync(() => rmSync(value, { recursive: true, force: true })),
   );
-  yield* Effect.sync(() => {
+  yield* Effect.tryPromise(async () => {
     execFileSync('git', ['init', '-q', root]);
-    const repo = new LocalRepository(root, { initialize: true });
+    const repo = (await LocalRepository.open(root, { initialize: true }));
     try {
-      initialize(repo, false, { testRoots: [], sourceRoots: ['src'] });
-      createDocument(repo, 'feature', { id: 'projected', title: 'Projected feature', pages: ['architecture'] });
+      (await initialize(repo, false, { testRoots: [], sourceRoots: ['src'] }));
+      (await createDocument(repo, 'feature', { id: 'projected', title: 'Projected feature', pages: ['architecture'] }));
     } finally { repo.close(); }
     write(root, 'src/main.ts', mainSource);
   });
@@ -50,7 +50,7 @@ const fixture = Effect.fn('viewWatchFixture')(function* () {
 
 const closeServer = (server: ViewServerHandle) => Effect.tryPromise({ try: () => server.close(), catch: failure }).pipe(Effect.timeout(10_000));
 const startServer = (root: string) => Effect.acquireRelease(
-  Effect.tryPromise({ try: () => startViewServer({ root, host: '127.0.0.1', port: 0 }), catch: failure }),
+  Effect.tryPromise({ try: async () => startViewServer({ root, host: '127.0.0.1', port: 0 }), catch: failure }),
   server => closeServer(server).pipe(Effect.orDie),
 );
 
@@ -80,7 +80,7 @@ const waitForPublished = Effect.fn('waitForWatchedProjection')(function* (
 const sourceDigest = (value: WorkspaceProjection, path: string): string | undefined => value.snapshot.sources.find(source => source.path === path)?.digest;
 const waitForSource = (root: string, path: string, source: string) => waitForPublished(root, `source ${path}`, value => sourceDigest(value, path) === digest(source));
 
-const workspaceProjectionContext = (...args: Parameters<typeof identifyProjection>) => Effect.runSync(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env))));
+const workspaceProjectionContext = async (...args: Parameters<typeof identifyProjection>) => Effect.runPromise(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env))));
 
 export { readWorkspaceProjection, createDocument, initialize, Workspace, NodeServices, installedConcordCli, parseWorkspaceProjectionOutput, genericPrivateDirectorySync, spawnSync, assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, tmpdir, dirname, join, test, Effect, Schema, ConcordError, digest, failure, LocalRepository, startViewServer, identifyProjection, readProjectConfig, writeProjectConfig, ownerPath, mainSource, busyDetails, write, fixture, closeServer, startServer, readPublished, waitForPublished, sourceDigest, waitForSource, workspaceProjectionContext };
 export type { WorkspaceProjection, ViewServerHandle };

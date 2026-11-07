@@ -123,8 +123,8 @@ test('default writing uses main CLI rules on item paths and default finalizer ca
   const root = fixture(undefined, false);
   try {
     // `init` creates valid project contract owners for the aggregate finalizer.
-    const repository = new LocalRepository(root, { initialize: true });
-    try { initialize(repository, false, { testRoots: [] }); } finally { repository.close(); }
+    const repository = (await LocalRepository.open(root, { initialize: true }));
+    try { (await initialize(repository, false, { testRoots: [] })); } finally { repository.close(); }
     writeFileSync(join(root, 'docs/writing.md'), renderWritingPolicy({ roots: ['docs/a', 'docs/b'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'Fixture rule' }] }));
     git(root, 'add', "."); git(root, 'commit', '-qm', 'initialized');
     const run = (await prepare(root, { runId: 'builtin', scopes: ['docs/a/'] }));

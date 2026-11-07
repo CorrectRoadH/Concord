@@ -119,7 +119,7 @@ export class ViewJobManager {
       await this.withWriter(this.root, async (repo, sources, publication) => {
       if (job.cancelRequested) await Effect.runPromise(job.process.requestStop('SIGTERM'));
       job.state = job.cancelRequested ? 'cancelling' : 'running';
-      const trace = repo.snapshot(() => buildTrace(repo, 'off', { includeCode: false }));
+      const trace = (await repo.snapshot(async () => (await buildTrace(repo, 'off', { includeCode: false }))));
       requireValidTrace(trace);
       const selected = selectCase(trace.annotations.cases, job.caseId);
       const exit = await Effect.runPromiseExit(runCase(repo, selected, trace.documents).pipe(Effect.provideService(OwnedProcess, job.process), Effect.provideService(Sources, sources), Effect.provideService(Publication, publication), Effect.provideService(RuntimeEnvironment, this.runtime)));

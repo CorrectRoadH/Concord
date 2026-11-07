@@ -11,7 +11,7 @@ import { startViewServer } from '../e2e/server.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 test('HTTP operations verify the held server lock before handing a write to the idle process', { timeout: 15_000 }, async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeProjectConfig(root, { sourceRoots: ['src'] });
   mkdirSync(join(root, 'src'), { recursive: true });
   const path = 'src/authority.ts', before = 'export const original = true;\n';

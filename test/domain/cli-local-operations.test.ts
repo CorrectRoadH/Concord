@@ -22,17 +22,17 @@ function write(root: string, path: string, source: string): void {
   writeFileSync(join(root, path), source);
 }
 
-function owner(root: string, kind: 'feature' | 'issue', id: string): void {
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, kind, { id, title: id }); }
+async function owner(root: string, kind: 'feature' | 'issue', id: string): Promise<void> {
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, kind, { id, title: id })); }
   finally { repo.close(); }
 }
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('partial relationships never assign a malformed nested owner page to its healthy ancestor', async () => {
-  const root = createConsumer();
-  owner(root, 'feature', 'parent');
-  writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'] });
+  const root = (await createConsumer());
+  (await owner(root, 'feature', 'parent'));
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceRoots: ['src'] });
   write(root, 'docs/feature/parent/nested/README.md', '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
   const reference = 'docs/feature/parent/nested/page.md';
   write(root, reference, '# Page\n');
@@ -53,8 +53,8 @@ test('partial relationships never assign a malformed nested owner page to its he
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('feedback show carries completeness for healthy and partial relationships', async () => {
-  const root = createConsumer();
-  owner(root, 'issue', 'feedback');
+  const root = (await createConsumer());
+  (await owner(root, 'issue', 'feedback'));
   const request = { name: 'feedback.show', input: { id: 'feedback' } } as const;
   const healthy = Schema.decodeUnknownSync(Feedback)((await runApplication(executeQuery(root, request, 'off'))).value);
   assert.equal(healthy.complete, true);
@@ -66,7 +66,7 @@ test('feedback show carries completeness for healthy and partial relationships',
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('scoped Markdown owners are discovered after direct editing', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const ownerPath = 'docs/feature/sample/writing.md';
   const catalogPath = 'docs/feature/sample/concepts.md';
   const missing = await runApplication(executeQuery(root, { name: 'writing.show', input: { path: ownerPath } }, 'off'));
@@ -86,15 +86,15 @@ test('scoped Markdown owners are discovered after direct editing', async () => {
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('Roadmap adoption retains selected pages and Memory supports Engineering', async () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'engineering', { id: 'release', title: 'Release' });
-    createDocument(repo, 'roadmap', { id: 'session', title: 'Session', pages: ['architecture'] });
-    assert.ok(adoptRoadmap(repo, 'session').changedPaths.includes('docs/feature/session/architecture.md'));
+    (await createDocument(repo, 'engineering', { id: 'release', title: 'Release' }));
+    (await createDocument(repo, 'roadmap', { id: 'session', title: 'Session', pages: ['architecture'] }));
+    assert.ok((await adoptRoadmap(repo, 'session')).changedPaths.includes('docs/feature/session/architecture.md'));
     assert.equal(existsSync(join(root, 'docs/feature/session/architecture.md')), true);
-    createDocument(repo, 'memory', { id: 'release-owner', title: 'Release owner' });
-    linkMemory(repo, 'release-owner', 'docs/engineering/release/README.md', 'supports');
+    (await createDocument(repo, 'memory', { id: 'release-owner', title: 'Release owner' }));
+    (await linkMemory(repo, 'release-owner', 'docs/engineering/release/README.md', 'supports'));
   } finally { repo.close(); }
   const shown = await runApplication(executeQuery(root, { name: 'documents.show', input: { id: 'session' } }, 'off'));
   assert.equal(Schema.decodeUnknownSync(Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }))(shown.value).document.path, 'docs/feature/session/README.md');

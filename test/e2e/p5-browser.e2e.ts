@@ -38,14 +38,14 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
   let server: ViewServerHandle | undefined;
 
   const write = (path: string, value: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), value); };
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   const body = '# Interactive sketches\n\n```p5 css="./demo/style.css"\n' + inline + '\n```\n\n```p5 mode="global"\nfunction setup() { createCanvas(40, 40, WEBGL); background(0, 255, 0); noLoop(); createSpan("global ready"); }\n```\n';
   try {
-    createDocument(repo, 'feature', { id: 'sketch', title: 'Interactive sketches', body });
-    createDocument(repo, 'feature', { id: 'sketch-webgl', title: 'Brush sketch', body: '# Brush sketch\n\n```p5 src="../sketch/demo/main.js"\n```\n' });
+    (await createDocument(repo, 'feature', { id: 'sketch', title: 'Interactive sketches', body }));
+    (await createDocument(repo, 'feature', { id: 'sketch-webgl', title: 'Brush sketch', body: '# Brush sketch\n\n```p5 src="../sketch/demo/main.js"\n```\n' }));
   }
   finally { repo.close(); }
-  writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound'] } });
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), p5: { libraries: ['p5.sound'] } });
   write('vendor/addon.js', 'window.localAddon = "local extension ready";');
   write('docs/feature/sketch/demo/main.js', external);
   write('docs/feature/sketch/demo/style.css', '.restart { background: rgb(1, 2, 3); color: white; padding: 12px; border-radius: 8px; }');
@@ -109,7 +109,7 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
   await page.reload();
   await expect(blocks.nth(0).frameLocator('iframe').locator('#ticks')).toHaveText(/[1-9]\d*/, { timeout: 20000 });
   await expect(blocks.nth(1).frameLocator('iframe').getByText('global ready')).toBeVisible({ timeout: 20000 });
-  writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound', 'p5.brush', './vendor/addon.js'] } });
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), p5: { libraries: ['p5.sound', 'p5.brush', './vendor/addon.js'] } });
   await page.goto(`${address}/features/sketch-webgl`);
   // A changed config invalidates navigation until its asynchronous projection is rebuilt.
   await expect(blocks).toHaveCount(1, { timeout: 60000 });
@@ -140,7 +140,7 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
   const p5Saved = browserActionReceipt(page, 'config.set', input => JSON.stringify(input.config).includes('p5.sound') && !JSON.stringify(input.config).includes('p5.brush'));
   await page.getByRole('textbox', { name: 'p5 扩展库' }).fill('p5.sound');
   await p5Saved;
-  await expect.poll(() => readProjectConfig(root).p5?.libraries).toEqual(['p5.sound']);
+  await expect.poll(async () => (await readProjectConfig(root)).p5?.libraries).toEqual(['p5.sound']);
   assert.deepEqual(pageErrors, []);
 
 })));

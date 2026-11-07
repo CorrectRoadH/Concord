@@ -7,7 +7,7 @@ import { optional, sync, cached } from "./cli-base.ts";
 import { withReadRepo } from "./cli-repository.ts";
 
 const review = Command.make('review', { ref: Argument.String('reference').pipe(Argument.optional) }, args =>
-  withReadRepo((repo, settings) => sync(() => renderReview(repo, Option.getOrUndefined(args.ref), cached(settings.dryRun))),
+  withReadRepo((repo, settings) => sync(async () => (await renderReview(repo, Option.getOrUndefined(args.ref), cached(settings.dryRun)))),
     Option.isSome(args.ref) ? ['review', args.ref.value] : ['review'])
 ).pipe(Command.withDescription('Generate local review material from current contracts and history; optionally select one Feature.'));
 

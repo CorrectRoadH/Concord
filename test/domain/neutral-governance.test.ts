@@ -12,19 +12,19 @@ import { writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
 test('neutral static checks and trace derive source relations without executing the configured runner', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
-    const writer = new LocalRepository(root);
-    try { createDocument(writer, 'feature', { id: 'cart', title: 'Cart' }); } finally { writer.close(); }
+    const writer = (await LocalRepository.open(root));
+    try { (await createDocument(writer, 'feature', { id: 'cart', title: 'Cart' })); } finally { writer.close(); }
     writeProjectConfig(root, { testRoots: ['spec'], sourceRoots: ['lib'], runner: {
       kind: 'command', argv: ['node', '-e', 'require("node:fs").writeFileSync("EXECUTED", "bad")'], sourceFiles: [], timeoutMs: 1000,
     } });
     mkdirSync(join(root, 'spec')); mkdirSync(join(root, 'lib'));
     writeFileSync(join(root, 'spec/cart.test.ts'), '// @feature docs/feature/cart/README.md\n');
     writeFileSync(join(root, 'lib/cart.ts'), '// @concord-file\n// @concord-implements docs/feature/cart/README.md\nexport const quantity = 1;\n');
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
-      const trace = traceShow(repo, 'cart', 'off');
+      const trace = (await traceShow(repo, 'cart', 'off'));
       assert.equal(trace.tests.length, 1);
       assert.deepEqual(trace.codeDeclarations.map(item => item.file), ['lib/cart.ts']);
       assert.equal('commandOutcome' in trace.tests[0]!, false, 'a declaration does not acquire an execution verdict');

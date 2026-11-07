@@ -35,21 +35,21 @@ test('source config initialization supplies the shipped writing policy', () => E
 })));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('prepared config recovery restores the frozen source bytes', () => Effect.runPromise(Effect.sync(() => {
+test('prepared config recovery restores the frozen source bytes', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-config-recovery-'));
   let repo: LocalRepository | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
-    repo = new LocalRepository(root, { initialize: true }); initialize(repo, false, { testRoots: [] }); repo.close(); repo = undefined;
+    repo = (await LocalRepository.open(root, { initialize: true })); (await initialize(repo, false, { testRoots: [] })); repo.close(); repo = undefined;
     const path = 'concord.config.ts', before = readFileSync(join(root, path), 'utf8');
-    const config = parseTypeScriptConfig(before);
+    const config = (await parseTypeScriptConfig(before));
     const after = `// normalized later\n${renderTypeScriptConfig({ ...config, testRoots: [] })}`;
     const privateDir = join(root, '.git', 'concord');
     const journal = { format: 'concord.journal', root, privateDir, operation: 'set-config', phase: 'prepared', directories: [], scope: { kind: 'documents', configPath: path, configSource: before, configDigest: digest(before) }, changes: [{ path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }] };
     writeFileSync(join(root, path), after);
     writeFileSync(join(privateDir, 'journal.json'), `${JSON.stringify(journal)}\n`);
-    repo = new LocalRepository(root, { recover: true });
-    assert.equal(repo.recover().status, 'rolled-back');
+    repo = (await LocalRepository.open(root, { recover: true }));
+    assert.equal((await repo.recover()).status, 'rolled-back');
     assert.equal(readFileSync(join(root, path), 'utf8'), before);
   } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
 })));

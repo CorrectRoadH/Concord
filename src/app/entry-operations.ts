@@ -77,5 +77,8 @@ export const recordProcessEvent: typeof Module15.recordProcessEvent = (...args) 
 export const awaitCacheMaintenance: typeof Module16.awaitCacheMaintenance = (...args) => Module16.awaitCacheMaintenance(...args);
 
 export function createReadRepository(root: string | undefined, options: WorkspaceTypes.ReadRepositoryOptions) {
-  return new Module0.LocalRepository(root, options);
+  return Module0.LocalRepository.open(root, options);
 }
+
+export const makeProcessGroupCpuReader: typeof Module15.makeProcessGroupCpuReader = (...args) => Module15.makeProcessGroupCpuReader(...args);
+export type ProcessGroupCpu = Module15.ProcessGroupCpu;

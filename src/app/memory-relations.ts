@@ -8,13 +8,13 @@ import { readDocumentSelector } from "../domain/documents/index.ts";
 
 
 /** Lifecycle-independent relation helper used by the current Memory command surface. */
-export function linkMemory(repo: Repository, selector: string, target: string, role: 'supports' = 'supports', dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export async function linkMemory(repo: Repository, selector: string, target: string, role: 'supports' = 'supports', dryRun = false): Promise<MutationReceipt> {
+  return (await inRepositorySnapshot(repo, async () => {
     const record = readDocumentSelector(repo, selector, 'memory');
     const metadata = memory(record);
     const canonical = parseReference(target).ref;
     readDocumentReference(repo, canonical, CONTRACT_KINDS);
     if (metadata.relations.some(relation => relation.role === role && relation.target === canonical)) throw new ConcordError('DuplicateLink', `${role}: ${canonical}`);
-    return changed(repo, 'link-memory', record, { ...metadata, relations: [...metadata.relations, { role, target: canonical }] }, record.body, dryRun);
-  });
+    return (await changed(repo, 'link-memory', record, { ...metadata, relations: [...metadata.relations, { role, target: canonical }] }, record.body, dryRun));
+  }));
 }

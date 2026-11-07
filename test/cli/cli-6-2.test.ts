@@ -15,7 +15,7 @@ test('installed init previews configuration, preserves existing docs, and never 
  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
  assert.equal(existsSync(join(root, '.git/concord')), false);
  (await call(root, args, Ack));
- const config = readProjectConfig(root);
+ const config = (await readProjectConfig(root));
  assert.deepEqual(config.testRoots, ['spec']);
  assert.deepEqual(config.runner, runner);
  assert.equal((await call(root, ['init'], ErrorOutput, '', 1)).error, 'ProjectExists');
@@ -24,7 +24,7 @@ test('installed init previews configuration, preserves existing docs, and never 
 
 // @feature docs/feature/taste/cli.md
 test('current-format query commands map named errors without rewriting inputs', () => Effect.runPromise(Effect.promise(async () => {
- const root = consumer('format-error-mapping');
+ const root = (await consumer('format-error-mapping'));
  write(root, 'docs/taste.md', '---\nstatus: active\n---\n# Taste\n');
  assert.equal((await call(root, ['taste'], ErrorOutput, '', 1)).error, 'TasteEntryInvalid');
 })));

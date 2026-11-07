@@ -36,15 +36,15 @@ const issueRemoteCommands = issueRemoteContribution.makeIssueRemoteSubcommands(
 const issue = Command.make('issue').pipe(Command.withDescription('Maintain local Issue owners; remote GitHub writes through remote preview and apply.'), Command.withSubcommands([
   Command.make('remote').pipe(Command.withSubcommands(issueRemoteCommands)),
   Command.make('search', { query: Argument.String('query') }, args => withQuery({ name: 'issue.search', input: { query: args.query } })).pipe(Command.withDescription('Recall local Issues.')),
-  Command.make('link', { id, target: Argument.String('target'), role: Flag.Literals('role', [...MEMORY_RELATION_KINDS, 'spec']).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(() => linkIssue(repo,args.id,args.target,s.dryRun,args.role)))).pipe(Command.withDescription('Relate an Issue to Memory or Spec.')),
-  Command.make('unlink', { id, target: Argument.String('target'), role: Flag.Literals('role', [...MEMORY_RELATION_KINDS, 'spec']).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(() => unlinkIssue(repo,args.id,args.target,s.dryRun,args.role)))),
+  Command.make('link', { id, target: Argument.String('target'), role: Flag.Literals('role', [...MEMORY_RELATION_KINDS, 'spec']).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(async () => (await linkIssue(repo,args.id,args.target,s.dryRun,args.role))))).pipe(Command.withDescription('Relate an Issue to Memory or Spec.')),
+  Command.make('unlink', { id, target: Argument.String('target'), role: Flag.Literals('role', [...MEMORY_RELATION_KINDS, 'spec']).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(async () => (await unlinkIssue(repo,args.id,args.target,s.dryRun,args.role))))),
   Command.make('close', { id, reason: optional('reason'), fixed: Flag.Boolean('fixed').pipe(Flag.withDefault(false)), defect: optional('defect'), fix: optional('fix') }, args => withRepo((repo,s) => Effect.gen(function* () {
     if (args.fixed) {
       if (s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','fixed verification does not accept --dry-run'));
       return yield* closeFixedIssue(repo,args.id,Option.getOrUndefined(args.reason) ?? 'Verified fix',Option.getOrUndefined(args.defect),Option.getOrUndefined(args.fix));
     }
     if (Option.isSome(args.defect) || Option.isSome(args.fix)) return yield* Effect.fail(new ConcordError('InvalidOption','--defect and --fix require --fixed'));
-    return yield* sync(() => closeIssue(repo,args.id,Option.getOrUndefined(args.reason),s.dryRun));
+    return yield* sync(async () => (await closeIssue(repo,args.id,Option.getOrUndefined(args.reason),s.dryRun)));
   }), { unlocked: true })).pipe(Command.withDescription('Delete a handled Issue and print its conclusion; --fixed first verifies the regression.')),
 ]));
 

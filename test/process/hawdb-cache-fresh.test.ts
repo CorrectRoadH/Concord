@@ -6,8 +6,8 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh Git consumers start a cache owner for checks and explicit rebuild keeps persistent hits available', () => runApplication(Effect.sync(() => {
-  const root = freshConsumer();
+test('fresh Git consumers start a cache owner for checks and explicit rebuild keeps persistent hits available', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await freshConsumer());
   try {
     const cold = cli(root, 'check');
     const first = Schema.decodeUnknownSync(Schema.fromJsonString(ScanReport))(cold.stdout);
@@ -29,8 +29,8 @@ test('fresh Git consumers start a cache owner for checks and explicit rebuild ke
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh cache rebuild produces ready projections and reports busy rebuilds as named failures', () => runApplication(Effect.sync(() => {
-  const root = freshConsumer();
+test('fresh cache rebuild produces ready projections and reports busy rebuilds as named failures', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await freshConsumer());
   try {
     const rebuilt = cli(root, 'cache', 'rebuild');
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
@@ -51,8 +51,8 @@ test('fresh cache rebuild produces ready projections and reports busy rebuilds a
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh status, cache-off checks and dry-run previews leave Git-private state absent', () => runApplication(Effect.sync(() => {
-  const root = freshConsumer();
+test('fresh status, cache-off checks and dry-run previews leave Git-private state absent', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await freshConsumer());
   try {
     for (const args of [['cache', 'status'], ['--dry-run', 'check'], ['--dry-run', 'docs', 'check'], ['--dry-run', 'writing', 'check'], ['--dry-run', 'cache', 'clear'], ['--dry-run', 'cache', 'rebuild']]) {
       const result = cli(root, ...args);

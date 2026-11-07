@@ -36,14 +36,14 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('workspace projection survives query-cache eviction pressure in its own namespace', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try { await waitForWorkspaceProjection(baseOf(server)); }
   finally { await server.close(); }
   // Shutdown can finish an already queued refresh; freeze the durable generation
   // before applying query-cache pressure.
   const built = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));
-  const path = cacheDatabasePath(genericPrivateDirectorySync(root));
+  const path = cacheDatabasePath(genericPrivateDirectorySync(root, process.env));
   const database = openHawdb(path, { readOnly: false, create: false }, nativeRuntime);
   try {
     for (let index = 0; index < 64; index++) {
@@ -62,15 +62,15 @@ test('workspace projection survives query-cache eviction pressure in its own nam
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a corrupt workspace row is reported unavailable without falling back to a source scan', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try { await waitForWorkspaceProjection(baseOf(server)); }
   finally { await server.close(); }
-  const path = cacheDatabasePath(genericPrivateDirectorySync(root));
+  const path = cacheDatabasePath(genericPrivateDirectorySync(root, process.env));
   const database = openHawdb(path, { readOnly: false, create: false }, nativeRuntime);
   try { database.put('workspace_projection', [{ key: 'workspace', payload: 'corrupt-not-json{' }]); }
   finally { database.close(); }
-  assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionUnavailable' });
+  (await assert.rejects(async () => readWorkspaceProjection((await workspaceProjectionContext(root))), { code: 'WorkspaceProjectionUnavailable' }));
   // The current-source entry point still works; unavailability never authorizes a scan to satisfy navigation.
   assert.ok((await runApplication(getWorkspaceSnapshot(root, 'off'))).documents.length > 0);
   rmSync(root, { recursive: true, force: true });

@@ -17,7 +17,7 @@ export interface ConfigurationInspection {
   readonly diagnostic?: ConcordError;
 }
 
-function inspectNow(root: string, runtime?: RuntimeEnvironmentSnapshot): ConfigurationInspection {
+async function inspectNow(root: string, runtime?: RuntimeEnvironmentSnapshot): Promise<ConfigurationInspection> {
   const path = 'concord.config.ts';
   const absolute = join(root, path);
   const unavailable = (cause: unknown, source?: string): ConfigurationInspection => ({ path, source, digest: source === undefined ? null : digest(source), diagnostic: failure(cause) });
@@ -34,15 +34,15 @@ function inspectNow(root: string, runtime?: RuntimeEnvironmentSnapshot): Configu
     source = readFileSync(absolute, 'utf8');
   } catch (cause) { return unavailable(cause); }
   try {
-    const parsed = snapshot(path, source, undefined, false, runtime);
+    const parsed = await snapshot(path, source, undefined, false, runtime);
     return { path, source, digest: parsed.digest, snapshot: parsed };
   } catch (cause) { return unavailable(cause, source); }
 }
 
 /** Reread the current bytes, including malformed configurations for inspection. */
-export const inspectConfiguration = Effect.fn('Workspace.inspectConfiguration')((input: string, runtime?: RuntimeEnvironmentSnapshot) => Effect.try({ try: () => {
+export const inspectConfiguration = Effect.fn('Workspace.inspectConfiguration')((input: string, runtime?: RuntimeEnvironmentSnapshot) => Effect.tryPromise({ try: async () => {
   const root = discoverRoot(input, false, runtime);
   return inspectNow(root, runtime === undefined ? undefined : inheritContentCacheOwner(runtime, runtime, root));
-}, catch: failure }));
+}, catch: failure }).pipe(Effect.uninterruptible));
 
 export { identifyWorkspace, locateWorkspace } from './identity.ts';

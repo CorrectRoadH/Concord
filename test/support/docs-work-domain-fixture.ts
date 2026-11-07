@@ -27,11 +27,11 @@ const outcome = async (operation: Parameters<typeof runApplication>[0], expected
   return value;
 };
 export const readPlan = (path: string): unknown => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(readFileSync(path, 'utf8'));
-export const prepare = (root: string, input: Omit<Parameters<typeof prepareDocsWork>[0], 'root' | 'scopes'> & { scopes?: readonly string[] }, status = 0) => outcome(prepareDocsWork({ root, scopes: [], ...input }), status !== 0);
-export const plan = (root: string, items: unknown[], runId: string) => prepare(root, { plan: { format: 'concord.docs-work-plan/v1', items }, runId });
-export const check = (root: string, runId: string, itemId: string, mode: Parameters<typeof checkDocsWork>[2], status = 0) => outcome(checkDocsWork(runId, itemId, mode, root), status !== 0);
-export const report = (root: string, runId: string, itemId: string) => check(root, runId, itemId, { report: true });
-export const verify = (root: string, runId: string, itemId: string, digest: string) => check(root, runId, itemId, { report: false, verify: digest });
-export const finalize = (root: string, runId: string, status = 0) => outcome(finalizeDocsWork(runId, root), status !== 0);
-export const show = (root: string, runId: string) => outcome(showDocsWork(runId, root));
+export const prepare = async (root: string, input: Omit<Parameters<typeof prepareDocsWork>[0], 'root' | 'scopes'> & { scopes?: readonly string[] }, status = 0) => outcome(prepareDocsWork({ root, scopes: [], ...input }), status !== 0);
+export const plan = async (root: string, items: unknown[], runId: string) => (await prepare(root, { plan: { format: 'concord.docs-work-plan/v1', items }, runId }));
+export const check = async (root: string, runId: string, itemId: string, mode: Parameters<typeof checkDocsWork>[2], status = 0) => outcome(checkDocsWork(runId, itemId, mode, root), status !== 0);
+export const report = async (root: string, runId: string, itemId: string) => (await check(root, runId, itemId, { report: true }));
+export const verify = async (root: string, runId: string, itemId: string, digest: string) => (await check(root, runId, itemId, { report: false, verify: digest }));
+export const finalize = async (root: string, runId: string, status = 0) => outcome(finalizeDocsWork(runId, root), status !== 0);
+export const show = async (root: string, runId: string) => outcome(showDocsWork(runId, root));
 export const item = (id: string, write: string[], rest: Record<string, unknown> = {}) => ({ id, goal: `Update ${id}`, write, checks: ['ok'], ...rest });

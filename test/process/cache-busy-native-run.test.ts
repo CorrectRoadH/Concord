@@ -8,7 +8,7 @@ import { command, fixture, record, stop } from '../support/workspace-server-fixt
 
 // @feature docs/feature/local-data-engine/architecture.md#句柄与打开模式
 test('native test execution completes while the workspace service owns the persistent cache', { timeout: 60_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   const source = fileURLToPath(new URL('../..', import.meta.url));
   try {
     mkdirSync(join(root, 'test'));

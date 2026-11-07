@@ -11,13 +11,13 @@ import { readProjectConfig, writeProjectConfig, waitForWorkspaceProjection } fro
 // @use-case docs/feature/web-workbench/use-case/inspect-implementation-and-tests.md#run
 test('browser cancels a real runner and runs the same declaration again without persisting a result', async ({ page, workspace }) => {
   const root = workspace.root;
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'run', title: 'Real runner' }); } finally { repo.close(); }
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'run', title: 'Real runner' })); } finally { repo.close(); }
   mkdirSync(join(root, 'test'), { recursive: true });
   // The pending timer belongs only to the consumer fixture and is ended by real cancellation.
   writeFileSync(join(root, 'test/run.test.ts'), "// @feature docs/feature/run/README.md\n// @name real-runner\nimport { test } from 'node:test';\nimport { readFileSync, writeFileSync } from 'node:fs';\nimport assert from 'node:assert/strict';\ntest('real-runner', async () => {\n  const mode = readFileSync('runner-mode.txt', 'utf8');\n  writeFileSync('runner-started.txt', mode);\n  if (mode === 'wait') await new Promise<void>(() => { setInterval(() => {}, 1000); });\n  assert.equal(mode, 'pass');\n});\n");
   writeFileSync(join(root, 'runner-mode.txt'), 'wait');
-  writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
   const before = gitCommand(root, 'status', '--porcelain=v1', '--untracked-files=all').split('\n');
   const server = await workspace.ready();
   const origin = `http://127.0.0.1:${server.port}`;

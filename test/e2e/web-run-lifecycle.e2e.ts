@@ -11,11 +11,11 @@ import type { ViewJob } from '../../src/model/index.ts';
 // @use-case docs/feature/web-workbench/use-case/inspect-implementation-and-tests.md#run
 test('test entries run and cancel their latest job and keep status and diagnostics inside the matching entry', async ({ page, workspace }) => {
   const root = workspace.root;
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'run', title: 'Runner controls' }); } finally { repo.close(); }
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'run', title: 'Runner controls' })); } finally { repo.close(); }
   mkdirSync(join(root, 'test'), { recursive: true });
   writeFileSync(join(root, 'test/run.test.ts'), "// @feature docs/feature/run/README.md\n// @name runnable\nimport { test } from 'node:test';\ntest('runnable', () => {});\n\n// @feature docs/feature/run/README.md\n// @name independent\ntest('independent', () => {});\n");
-  writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
   const server = await workspace.ready();
   const origin = `http://127.0.0.1:${server.port}`;
   const projection = await waitForWorkspaceProjection(origin);
@@ -64,11 +64,11 @@ test('test entries run and cancel their latest job and keep status and diagnosti
 
 // @use-case docs/feature/web-workbench/use-case/handle-lifecycle-in-workbench.md
 test('Design and inactive Roadmap show lifecycle state without empty actions while other owners fall back to metadata', async ({ page, workspace }) => {
-  const repo = new LocalRepository(workspace.root);
+  const repo = (await LocalRepository.open(workspace.root));
   try {
-    createDocument(repo, 'design', { id: 'choice', title: 'Open choice' });
-    createDocument(repo, 'roadmap', { id: 'cancelled', title: 'Cancelled direction' });
-    createDocument(repo, 'feature', { id: 'ordinary', title: 'Ordinary feature' });
+    (await createDocument(repo, 'design', { id: 'choice', title: 'Open choice' }));
+    (await createDocument(repo, 'roadmap', { id: 'cancelled', title: 'Cancelled direction' }));
+    (await createDocument(repo, 'feature', { id: 'ordinary', title: 'Ordinary feature' }));
   } finally { repo.close(); }
   const server = await workspace.ready();
   const origin = `http://127.0.0.1:${server.port}`;

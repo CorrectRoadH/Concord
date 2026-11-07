@@ -3,7 +3,7 @@ import type { GitEntry, GitStatus, GitArea, GitDiff } from "../model/index.ts";
 import { Effect, Schema } from "effect";
 import { parseTestDeclarations } from "../domain/tests/index.ts";
 import { createMemoryHawdb, verifyHawdbArtifact, type HawdbDatabase } from "../base/cache/index.ts";
-import { ConcordError, decode, objectDigest } from "../model/index.ts";
+import { ConcordError, decode, failure, objectDigest } from "../model/index.ts";
 import { typescriptPackageVersion } from "../base/process/index.ts";
 import { OUTPUT_LIMIT } from "../base/git/index.ts";
 import { runGit } from "../base/git/index.ts";
@@ -72,7 +72,7 @@ export const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(roo
         if (testRoots !== undefined && !testRoots.some(root => root === '.' || path === root || path.startsWith(root.replace(/\/$/u, '') + '/'))) continue;
         const source = yield* runGit(root, ['show', object]);
         if (source.truncated) return yield* Effect.fail(new ConcordError('GitOutputLimit', 'A test baseline source exceeds the preview limit.'));
-        const parsed = parseTestDeclarations(path, source.stdout);
+        const parsed = yield* Effect.tryPromise({ try: () => parseTestDeclarations(path, source.stdout), catch: failure }).pipe(Effect.uninterruptible);
         if (parsed.findings.length) return yield* Effect.fail(new ConcordError('GitTestBaselineInvalid', 'The HEAD test declarations have findings; repair the baseline before comparing added cases.'));
         baselineCaseIds.push(...parsed.cases.map(item => item.id));
       }

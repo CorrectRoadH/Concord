@@ -11,6 +11,7 @@ import { LocalRepository } from "./repository.ts";
 
 let temporary: string | undefined;
 let template: string | undefined;
+let preparing: Promise<void> | undefined;
 const finalizers = new Set<() => Promise<void>>();
 const retained = new Set<string>();
 
@@ -23,21 +24,22 @@ export function retainConsumer(root: string): void {
 }
 
 /** One initialized consumer per test process, cloned with its real Git metadata. */
-export function createConsumer(): string {
-  if (template === undefined) {
+export async function createConsumer(): Promise<string> {
+  preparing ??= (async () => {
     temporary = mkdtempSync(join(tmpdir(), 'concord-consumers-'));
     template = join(temporary, 'template'); mkdirSync(template);
     execFileSync('git', ['init', '-q', template]);
-    const repo = new LocalRepository(template, { initialize: true });
-    try { initialize(repo); } finally { repo.close(); }
-  }
-  const root = mkdtempSync(join(temporary!, 'consumer-')); cpSync(template, root, { recursive: true });
+    const repo = (await LocalRepository.open(template, { initialize: true }));
+    try { await initialize(repo); } finally { repo.close(); }
+  })();
+  await preparing;
+  const root = mkdtempSync(join(temporary!, 'consumer-')); cpSync(template!, root, { recursive: true });
   return root;
 }
 
-export function withConsumer(run: (repo: LocalRepository, root: string) => void): void {
-  const root = createConsumer(); const repo = new LocalRepository(root);
-  try { run(repo, root); } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
+export async function withConsumer(run: (repo: LocalRepository, root: string) => void): Promise<void> {
+  const root = (await createConsumer()); const repo = (await LocalRepository.open(root));
+  try { await run(repo, root); } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 }
 
 after(async () => {
@@ -47,4 +49,4 @@ after(async () => {
   if (failures.length || roots.length) throw new AggregateError(failures, `Consumer cleanup unconfirmed; retained roots: ${roots.join(', ')}`);
   if (temporary !== undefined) rmSync(temporary, { recursive: true, force: true });
 });
-before(() => { const root = createConsumer(); rmSync(root, { recursive: true, force: true }); });
+before(async () => { const root = (await createConsumer()); rmSync(root, { recursive: true, force: true }); });

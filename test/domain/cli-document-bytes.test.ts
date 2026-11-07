@@ -16,9 +16,9 @@ const Check = Schema.Struct({ ok: Schema.Boolean });
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('concepts actions preserve Markdown bytes and reject a stale whole-file save', async () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'catalog', title: 'Catalog' }); }
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'catalog', title: 'Catalog' })); }
   finally { repo.close(); }
   const path = 'docs/feature/catalog/concepts.md';
   const source = '# Terms\r\n\r\n## Memory {#memory}\r\n\r\nA durable finding.\r\n\r\n<!-- Author spacing -->\r\n';
@@ -40,11 +40,11 @@ test('concepts actions preserve Markdown bytes and reject a stale whole-file sav
 
 // @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
 test('a configless neutral consumer supports static checks and trace', async () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'static', title: 'Static contract' });
-    createDocument(repo, 'issue', { id: 'missing-runner', title: 'Missing runner' });
+    (await createDocument(repo, 'feature', { id: 'static', title: 'Static contract' }));
+    (await createDocument(repo, 'issue', { id: 'missing-runner', title: 'Missing runner' }));
   } finally { repo.close(); }
   mkdirSync(join(root, 'test'), { recursive: true });
   writeFileSync(join(root, 'test/static.test.ts'), '// @feature docs/feature/static/README.md\n// @issue docs/issues/missing-runner.md\n');

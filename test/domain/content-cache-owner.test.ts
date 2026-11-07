@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { cpSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from '../support/builtin-mocks.ts';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { mock } from 'node:test';

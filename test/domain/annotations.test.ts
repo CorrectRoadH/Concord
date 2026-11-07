@@ -13,19 +13,19 @@ import { openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
-function consumer() {
-  const root = createConsumer();
+async function consumer() {
+  const root = (await createConsumer());
   execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
   execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord test']);
-  const initial = new LocalRepository(root); try { PersistentCache.repository(initial).prepareWrite({ create: true }); } finally { initial.close(); }
+  const initial = (await LocalRepository.open(root)); try { PersistentCache.repository(initial).prepareWrite({ create: true }); } finally { initial.close(); }
   return root;
 }
 function write(root: string, relative: string, contents: string) { const path = join(root, relative); mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, contents); }
-function scan(root: string, options?: Parameters<typeof scanAnnotations>[1]) { const repo = new LocalRepository(root); try { return options === undefined ? scanAnnotations(repo) : scanAnnotations(repo, options); } finally { repo.close(); } }
+async function scan(root: string, options?: Parameters<typeof scanAnnotations>[1]) { const repo = (await LocalRepository.open(root)); try { return options === undefined ? (await scanAnnotations(repo)) : (await scanAnnotations(repo, options)); } finally { repo.close(); } }
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-test('indexes real runner imports and safely rebuilds HawDB projections', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
+test('indexes real runner imports and safely rebuilds HawDB projections', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer());
   try {
     write(root, 'test/example.test.mjs', `import spec from 'node:test';
 // @feature docs/feature/parser/README.md
@@ -42,29 +42,29 @@ const contract = 'feature/template';
 const interpolatedFixture = \`// @feature \${contract}
 // @issue \${caseId}\`;
 `);
-    const cold = scan(root);
+    const cold = (await scan(root));
     assert.equal(cold.cache.status, 'miss'); assert.equal(cold.cases.length, 2);
     assert.deepEqual(cold.findings, []);
     assert.equal(cold.cases.find(item => item.status === 'retired')?.skipped, false);
     assert.equal(cold.cases.find(item => item.status === 'retired')?.status, 'retired');
     assert.equal(cold.cases.every(item => item.framework === 'marker'), true);
-    const warm = scan(root); assert.equal(warm.cache.status, 'hit'); assert.equal(warm.digest, cold.digest);
+    const warm = (await scan(root)); assert.equal(warm.cache.status, 'hit'); assert.equal(warm.digest, cold.digest);
     write(root, 'test/example.test.mjs', `import { test } from 'vitest';
 // @feature docs/feature/new-parser/README.md
 test('parses comments v2', { skip: true }, () => {});
 `);
-    const modified = scan(root); assert.equal(modified.cache.status, 'miss'); assert.equal(modified.cases[0]?.contract, 'docs/feature/new-parser/README.md');
+    const modified = (await scan(root)); assert.equal(modified.cache.status, 'miss'); assert.equal(modified.cases[0]?.contract, 'docs/feature/new-parser/README.md');
     renameSync(join(root, 'test/example.test.mjs'), join(root, 'test/renamed.test.mjs'));
-    const renamed = scan(root); assert.equal(renamed.cases[0]?.file, 'test/renamed.test.mjs');
+    const renamed = (await scan(root)); assert.equal(renamed.cases[0]?.file, 'test/renamed.test.mjs');
     rmSync(join(root, 'test/renamed.test.mjs'));
-    const deleted = scan(root); assert.equal(deleted.cases.length, 0);
-    const repo = new LocalRepository(root); try { assert.equal(clearCache(repo, undefined, nativeRuntime).status, 'cleared'); assert.equal(cacheStatus(repo, nativeRuntime).status, 'empty'); } finally { repo.close(); }
+    const deleted = (await scan(root)); assert.equal(deleted.cases.length, 0);
+    const repo = (await LocalRepository.open(root)); try { assert.equal(clearCache(repo, undefined, nativeRuntime).status, 'cleared'); assert.equal(cacheStatus(repo, nativeRuntime).status, 'empty'); } finally { repo.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-test('indexes comment markers in any language and ignores host test syntax', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
+test('indexes comment markers in any language and ignores host test syntax', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer());
   try {
     write(root, 'test/session_failure.py', '# @use-case docs/feature/session/use-case/failure.md\ndef test_session():\n    assert True\n');
     write(root, 'test/session_failure_test.go', '// @name fails closed\n// @feature docs/feature/session/README.md\nfunc TestSession(t *testing.T) {}\n');
@@ -78,7 +78,7 @@ test.describe('session', () => {
 test.each([])('dynamic', () => {});
 const fake = \`// @feature docs/feature/template/README.md\`;
 `);
-    const scanned = scan(root);
+    const scanned = (await scan(root));
     assert.equal(scanned.cases.length, 3);
     assert.ok(scanned.cases.some(item => item.file === 'test/session_failure.py' && item.contractKind === 'use-case'));
     assert.equal(scanned.cases.find(item => item.file.endsWith('.go'))?.name, 'fails closed');
@@ -90,8 +90,8 @@ const fake = \`// @feature docs/feature/template/README.md\`;
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-test('reports malformed markers and a corrupt cache without trusting it', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
+test('reports malformed markers and a corrupt cache without trusting it', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer());
   try {
     write(root, 'test/findings.test.ts', `import * as nodeTest from 'node:test';
 // @feature docs/feature/a/README.md
@@ -103,31 +103,31 @@ const value = 1;
 nodeTest.test.each([])('dynamic', () => {});
 const fake = ` + '`ordinary text: @feature template-fake`' + `;
 `);
-    const first = scan(root);
+    const first = (await scan(root));
     assert.equal(first.findings.some(item => item.code === 'UnsupportedTestDeclaration'), false);
     assert.equal(first.cases.length, 3);
-    const repo = new LocalRepository(root); let path: string;
+    const repo = (await LocalRepository.open(root)); let path: string;
     try { path = repo.privateDir + '/cache.hawdb'; } finally { repo.close(); }
     rmSync(path, { recursive: true });
     writeFileSync(path, 'not a HawDB directory');
-    const damaged = new LocalRepository(root);
+    const damaged = (await LocalRepository.open(root));
     try { assert.equal(cacheStatus(damaged, nativeRuntime).status, 'unavailable'); }
     finally { damaged.close(); }
-    const recovered = scan(root);
+    const recovered = (await scan(root));
     assert.equal(recovered.cache.status, 'unavailable');
     assert.equal(recovered.cases.length, 3);
     rmSync(path);
-    const rebuild = new LocalRepository(root);
+    const rebuild = (await LocalRepository.open(root));
     try { PersistentCache.repository(rebuild).prepareWrite({ create: true }); } finally { rebuild.close(); }
     const source = `import { test } from 'node:test';\n// @feature docs/feature/a/README.md\ntest('valid', () => {});\n`;
     write(root, 'test/findings.test.ts', source);
-    const seeded = scan(root); assert.equal(seeded.cases.length, 1);
+    const seeded = (await scan(root)); assert.equal(seeded.cases.length, 1);
     const cache = openHawdb(path, { readOnly: false, create: false }, nativeRuntime); try {
       const row = cache.scan('annotation_cache')[0];
       assert.ok(row);
       cache.put('annotation_cache', [{ key: row.key, payload: JSON.stringify({ cases: [], findings: [], files: [], digest: 'sha256:not-a-real-digest' }) }]);
     } finally { cache.close(); }
-    const digestRecovered = scan(root);
+    const digestRecovered = (await scan(root));
     assert.equal(digestRecovered.cache.status, 'unavailable');
     assert.equal(digestRecovered.cases.length, 1);
   } finally { rmSync(root, { recursive: true, force: true }); }

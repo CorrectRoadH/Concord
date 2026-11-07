@@ -15,8 +15,8 @@ import { pollUntil } from '../support/support.ts';
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#historical
 // @issue docs/issues/warm-reads-over-budget.md
 test('historical reads finish while the requested diagnostic scan is blocked', { timeout: 60_000 }, async () => {
-  const root = createConsumer(), repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); }
+  const root = (await createConsumer()), repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' })); }
   finally { repo.close(); }
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src/refresh-gate.ts'), '// @concord-file\n// @concord-implements docs/feature/sample/README.md\nexport const sample = true;\n');
@@ -24,7 +24,8 @@ test('historical reads finish while the requested diagnostic scan is blocked', {
   // Delay only the external filesystem boundary. The real scanner, projection,
   // transport and cache remain in use on both sides of the process boundary.
   writeFileSync(hook, `import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { mock as bunMock } from 'bun:test';
+const syncBuiltinESMExports = () => bunMock.module('node:fs', () => ({ ...fs, default: fs }));
 const original = fs.openSync;
 fs.openSync = function(path, ...args) {
   if (String(path).endsWith('/src/refresh-gate.ts') && fs.existsSync(${JSON.stringify(hold)})) {
@@ -35,20 +36,20 @@ fs.openSync = function(path, ...args) {
 };
 syncBuiltinESMExports();
 `);
-  const env = { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${pathToFileURL(hook).href}` };
-  const invoke = (signal?: AbortSignal) => runCli({ argv: ['--root', root, '--json', 'trace', 'gaps'], cwd: root, env, signal });
+  const env = { ...process.env, BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${pathToFileURL(hook).href}` };
+  const invoke = async (signal?: AbortSignal) => runCli({ argv: ['--root', root, '--json', 'trace', 'gaps'], cwd: root, env, signal });
   let pending: ReturnType<typeof invoke> | undefined;
   try {
     const first = await invoke();
     assert.equal(first.exitCode, 0, first.stdout + first.stderr);
     await pollUntil(async () => {
       const value = await runCli({ argv: ['--root', root, '--json', 'workspace', 'projection'], cwd: root, env });
-      return value.exitCode === 0;
+      return value.exitCode === 0 ? true : undefined;
     }, { description: 'workspace startup scan completes', timeoutMs: 20_000 });
     writeFileSync(hold, 'hold');
     const trigger = await invoke();
     assert.equal(trigger.exitCode, 0, trigger.stdout + trigger.stderr);
-    await pollUntil(async () => existsSync(reached), { description: 'diagnostic scanner reaches the held source file', timeoutMs: 20_000 });
+    await pollUntil(async () => existsSync(reached) ? true : undefined, { description: 'diagnostic scanner reaches the held source file', timeoutMs: 20_000 });
     pending = invoke(AbortSignal.timeout(5000));
     const result = await pending;
     assert.equal(result.exitCode, 0, result.stdout + result.stderr);

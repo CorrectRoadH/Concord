@@ -9,7 +9,7 @@ import { sourceCli, createDocument, createConsumer, installedConcordCli, assert,
 // @name native-analysis-range-integration
 // LSP C13: a real external adapter boundary supplies ranges; analysis and invalidation remain production code.
 test('native manifests constrain LSP roots and changed observations invalidate identical repository inputs', () => Effect.runPromise(Effect.promise(async () => {
-  const root = consumer(), external = mkdtempSync(join(tmpdir(), 'concord-analysis-provider-'));
+  const root = (await consumer()), external = mkdtempSync(join(tmpdir(), 'concord-analysis-provider-'));
   const statePath = join(external, 'state');
   const env = { ...process.env, ANALYSIS_ADAPTER_STATE: statePath };
   const invoke = async <A>(args: readonly string[], schema: Schema.ConstraintDecoder<A, never>): Promise<A> => {
@@ -21,7 +21,7 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     buildSync({ entryPoints: ['test/fixtures/analysis-adapter.ts'], bundle: true, platform: 'node', format: 'esm', outfile: join(root, 'analysis-adapter.mjs'), logLevel: 'silent' });
     write(root, 'test/sample.py', `# @use-case ${target}\n# @name native-sample\n# @native fixture:selected\ndef test_sample():\n    helper()\n\ndef unrelated():\n    return 0\n`);
     writeFileSync(statePath, 'first');
-    writeProjectConfig(root, { ...readProjectConfig(root), testAdapters: [{ id: 'range-fixture', include: ['test/sample.py'], argv: [process.execPath, 'analysis-adapter.mjs'], implementationFiles: ['analysis-adapter.mjs'], inputRoots: [], lockFiles: [], frameworkVersion: 'fixture/v1', envNames: ['ANALYSIS_ADAPTER_STATE'] }] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), testAdapters: [{ id: 'range-fixture', include: ['test/sample.py'], argv: [process.execPath, 'analysis-adapter.mjs'], implementationFiles: ['analysis-adapter.mjs'], inputRoots: [], lockFiles: [], frameworkVersion: 'fixture/v1', envNames: ['ANALYSIS_ADAPTER_STATE'] }] });
     const baseline = (await invoke(['check'], projectCheck));
     const initial = (await invoke(['code', 'analyze'], analysis)).observations.find(item => item.value.analyzer === 'python-fixture')!;
     assert.equal(initial.value.dependencies[0]!.scope, 'file');
@@ -46,7 +46,7 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     assert.deepEqual(second.value.dependencies[0]!.declarations, []);
     assert.equal((await invoke(['code', 'list'], codeList)).analysis.relevance[0]!.relevance.verdict, 'not-observed');
     stopWorkspaceServer(root);
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try { repo.snapshot(() => withPersistentCache(repo, true, database => {
       const row = database!.get('annotation_cache', ['native-inputs/v1/range-fixture'])[0]!;
       const payload = JSON.parse(row.payload) as { versions: { runtime: string } };

@@ -62,8 +62,8 @@ export function inspectDocumentRecords(inputs: readonly { readonly path: string;
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
-export function changed(repo: Repository, operation: string, record: DocumentRecord, metadata: DocumentMeta, body = record.body, dryRun = false): MutationReceipt {
-  return repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, body) }], dryRun);
+export async function changed(repo: Repository, operation: string, record: DocumentRecord, metadata: DocumentMeta, body = record.body, dryRun = false): Promise<MutationReceipt> {
+  return (await repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, body) }], dryRun));
 }
 
 function preimage(repo: Repository, record: DocumentRecord): string {
@@ -281,11 +281,11 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#edit
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
-export function setAuthor(repo: Repository, ref: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export async function setAuthor(repo: Repository, ref: string, body: string, expectedDigest: string, dryRun = false): Promise<MutationReceipt> {
+  return (await inRepositorySnapshot(repo, async () => {
   const record = readDocumentReference(repo, ref);
   if (record.path !== parseReference(ref).path) throw new ConcordError('InvalidReferenceTarget', 'Author body belongs to an exact Concord owner, not supporting Markdown');
   if (record.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; use its current digest`);
-  return changed(repo, 'set-author', record, record.metadata, authorBody(body), dryRun);
-  });
+  return (await changed(repo, 'set-author', record, record.metadata, authorBody(body), dryRun));
+  }));
 }

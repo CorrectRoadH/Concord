@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/engineering/testing/README.md#成本与稳定
 import childProcess from 'node:child_process';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from './builtin-mocks.ts';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';

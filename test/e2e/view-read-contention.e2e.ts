@@ -12,7 +12,7 @@ import { waitForWorkspaceProjection } from '../support/support.ts';
 
 async function hold(root: string): Promise<ChildProcess> {
   // A real independent process owns the portable lease until stdin closes.
-  const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease=acquireTraceLeaseSync(process.argv[1], 'exclusive', 'contention'); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'contention'));", root], { stdio: ['pipe', 'pipe', 'inherit'] });
+  const child = spawn('bun', ['--no-env-file', '--config=/dev/null', '--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease=acquireTraceLeaseSync(process.argv[1], 'exclusive', 'contention', true, false, process.env); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'contention'));", root], { stdio: ['pipe', 'pipe', 'inherit'] });
   await once(child.stdout!, 'data');
   return child;
 }
@@ -29,9 +29,9 @@ test('file reads and navigation remain available with live or dead publication o
 
   let holder: ChildProcess | undefined;
   try {
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
-      createDocument(repo, 'feature', { id: 'lease', title: 'Lease', pages: ['architecture'], body: '# Lease content' });
+      (await createDocument(repo, 'feature', { id: 'lease', title: 'Lease', pages: ['architecture'], body: '# Lease content' }));
     } finally { repo.close(); }
     mkdirSync(join(root, 'docs/feature/lease/pages'), { recursive: true });
     writeFileSync(join(root, 'docs/feature/lease/pages/nested.md'), '# Nested supporting page\n');

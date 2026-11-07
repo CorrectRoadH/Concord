@@ -43,17 +43,17 @@ test('code operations preserve scope, reference, trace and cache invalidation gu
     const feature = 'docs/feature/orders/README.md';
     const useCase = 'docs/feature/orders/use-case/create-order.md';
     (await action({ action: 'init', docsOnly: true, sourceRoots: ['src', 'test'] }, ack));
-    const config = readProjectConfig(root);
+    const config = (await readProjectConfig(root));
     assert.deepEqual(config.sourceRoots, ['src', 'test']);
     assert.deepEqual(config.testRoots, []);
     assert.deepEqual((await action({ action: 'doctor' }, Schema.Struct({ missingSourceRoots: Schema.Array(Schema.String) }))).missingSourceRoots, ['src', 'test']);
-    const owner = (kind: DocumentKind, input: CreateDocumentInput) => {
-      const repo = new LocalRepository(root);
-      try { createDocument(repo, kind, input); } finally { repo.close(); }
+    const owner = async (kind: DocumentKind, input: CreateDocumentInput) => {
+      const repo = (await LocalRepository.open(root));
+      try { (await createDocument(repo, kind, input)); } finally { repo.close(); }
     };
-    owner('feature', { id: 'orders', title: 'Orders' });
-    owner('use-case', { id: 'create-order', feature, title: 'Create order' });
-    owner('engineering', { id: 'tooling', title: 'Tooling' });
+    (await owner('feature', { id: 'orders', title: 'Orders' }));
+    (await owner('use-case', { id: 'create-order', feature, title: 'Create order' }));
+    (await owner('engineering', { id: 'tooling', title: 'Tooling' }));
     writeFileSync(join(root, 'docs/feature/orders/architecture.md'), '# Architecture\n\n## Normalize\n\n## Validate\n');
     const engineering = 'docs/engineering/tooling/README.md';
     const engineeringPage = 'docs/engineering/tooling/architecture.md';
@@ -64,7 +64,7 @@ test('code operations preserve scope, reference, trace and cache invalidation gu
     assert.ok(engineeringOwnerSnippet.includes(`// @concord-implements ${engineering}`));
     assert.ok(engineeringPageSnippet.includes(`// @concord-implements ${engineeringPage}#overview`));
     assert.equal((await action({ action: 'code.marker', scope: 'node', contracts: [`${engineeringPage}#missing`] }, error, 1)).error, 'AnchorNotFound');
-    owner('roadmap', { id: 'roadmap-target', title: 'Roadmap target' });
+    (await owner('roadmap', { id: 'roadmap-target', title: 'Roadmap target' }));
     assert.equal((await action({ action: 'code.marker', scope: 'node', contracts: ['docs/research/research-target/README.md'] }, error, 1)).error, 'ReferenceNotFound');
     assert.equal((await action({ action: 'code.marker', scope: 'node', contracts: ['docs/roadmap/roadmap-target/README.md'] }, error, 1)).error, 'InvalidReferenceTarget');
     const snippet = (await action({ action: 'code.marker', scope: 'node', contracts: [useCase, `${feature}#orders`] }, Schema.Struct({ snippet: Schema.String }))).snippet;

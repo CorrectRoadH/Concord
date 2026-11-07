@@ -17,7 +17,7 @@ async function call(root: string, args: string[], status = 0): Promise<Record<st
 }
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md
 test('local Issue links and deletion preserve inbound reference guards', async t => {
-  const root = createConsumer(); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = (await createConsumer()); t.after(() => rmSync(root, { recursive: true, force: true }));
   await call(root, ['new', 'memory', 'investigation', '--title', 'Investigation']);
   for (const id of ['canonical', 'observation']) await call(root, ['new', 'issue', id]);
   const path = 'docs/issues/observation.md';

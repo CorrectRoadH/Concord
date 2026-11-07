@@ -73,7 +73,7 @@ flowchart TD
   Profile --> Process
   Profile --> Cpu
   Process --> Runs
-  Process -->|NODE_OPTIONS| Counter
+  Process -->|编译时固定 preload| Counter
   Counter --> Out
   Src --> Process
   Base --> Process
@@ -93,11 +93,11 @@ flowchart TD
 - `consumer.ts` 准备 `self`、`scale`、fixture 与路径消费者，返回带 commit 的冻结描述，并在每次 `beforeEach` 后恢复冻结状态。
 - `artifact.ts` 读取产物 commit、源码是否有未提交改动及安装目录摘要，摘要覆盖 `.js`、`.node` 与 `artifact.json`。
 - `cpu-profile.ts` 严格解码 `.cpuprofile` 并按函数和层汇总自身耗时。
-- `fs-counter.ts` 由 `NODE_OPTIONS` 预加载，包装 `node:fs` 调用后执行 `syncBuiltinESMExports()`，退出时按 pid 写出计数与 `process.resourceUsage()`；它不改变调用结果，未设置输出目录环境变量时不做任何事。
+- `fs-counter.ts` 由 profile 专用可执行文件的固定 preload 预加载，包装 `node:fs` 调用，退出时按 pid 写出计数与 `process.resourceUsage()`；它不改变调用结果，未设置输出目录环境变量时不做任何事。
 
 `scripts/bench.ts`、`scripts/profile.ts` 与 `scripts/perf/*.ts` 是严格 TypeScript，由 Node 自带的类型擦除直接执行，副作用通过 Effect 管理；`bench/` 与 `scripts/` 一同纳入 `tsconfig.scripts.json` 的严格类型检查。不新增 JavaScript 脚本或测量依赖。
 
-消费者准备与 cli/view 路径走公开 CLI；刷新测量调用构建产物中的内部 query-scan-worker，并以 `src/query-scan-protocol` 的 Schema 解码其消息。fs 计数模块与 CPU profiler 只在 profile 路径注入，bench 样本不带任何注入。profile 通过 `NODE_OPTIONS` 注入 `--cpu-prof` 与计数模块。
+消费者准备与 cli/view 路径走公开 CLI；刷新测量调用构建产物中的内部 query-scan-worker，并以 `src/query-scan-protocol` 的 Schema 解码其消息。fs 计数模块与 CPU profiler 只在 profile 路径注入，bench 样本不带任何注入。profile 先复制归档到自己的临时目录，再用同一 Bun 编译参数重新生成其中的可执行文件，通过 `--compile-exec-argv` 固定 `--cpu-prof`、输出目录与计数模块。内部子进程复用这个可执行文件，因此一同采样；共享归档与 bench 产物不被改写。记录绑定 profile 专用产物摘要，收尾停止自有服务后读取所有进程证据。
 
 ## 测试
 

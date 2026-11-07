@@ -2,10 +2,10 @@ import { RuntimeEnvironment, runtimePath, runtimeTemporaryDirectory } from '../e
 import { Context, Effect, FileSystem, Layer, Path, Result, Stdio, Stream, type Scope } from 'effect';
 import { failure, ConcordError } from '../../model/index.ts';
 import { inspectPendingJournals, waitForPublication } from '../publication/index.ts';
-import { readRepositoryBytesSync, readRepositoryFileSync, WorkspaceContext, LocalRepository, type WorkspaceMetadata } from '../workspace/index.ts';
+import { readRepositoryBytes, readRepositoryFileSync, WorkspaceContext, LocalRepository, type WorkspaceMetadata } from '../workspace/index.ts';
 import { SourceSnapshot } from './source-snapshot.ts';
 import { SourcePublication } from './publication-view.ts';
-import { withOperationCache } from '../cache/operation-cache.ts';
+import { withOperationCache } from '../cache/index.ts';
 import { NodeSourceWatch } from './source-watch.ts';
 import { readReportFiles } from './report-files.ts';
 import { untrackedFile } from './untracked-file.ts';
@@ -182,7 +182,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         // The descriptor adapter supplies no publication capability. Every
         // independent operation owns its own reader, even for the same root.
         return yield* Effect.acquireUseRelease(
-          waitForPublication(() => Effect.try({ try: () => new LocalRepository(workspace.root, { access: 'read', optimistic: true, persistentCache: 'off', reclaimPublication: false, runtime }), catch: failure })),
+          waitForPublication(() => Effect.tryPromise({ try: () => LocalRepository.open(workspace.root, { access: 'read', optimistic: true, persistentCache: 'off', reclaimPublication: false, runtime }), catch: failure })),
           repo => Effect.gen(function*() {
             if (repo.privateDir !== workspace.privateDir || repo.configSnapshot.digest !== workspace.configuration.digest || repo.configSnapshot.source !== workspace.configuration.source) {
               return yield* Effect.fail(new ConcordError('FileChangedSinceRead', 'Project configuration changed; open a fresh workspace context', 'source-observation'));
@@ -211,7 +211,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
     return Sources.of({
       untrackedFile: (root, relative, limit) => untrackedFile(runtimePath(runtime, root), relative, limit),
       createReportDirectory: path => fs.makeDirectory(runtimePath(runtime, path), { mode: 0o700 }).pipe(Effect.mapError(failure)),
-      readBytesAt: (root, relative) => Effect.try({ try: () => readRepositoryBytesSync(runtimePath(runtime, root), relative, runtime), catch: failure }),
+      readBytesAt: (root, relative) => Effect.tryPromise({ try: () => readRepositoryBytes(runtimePath(runtime, root), relative, runtime), catch: failure }),
       readBytes: path => observed(repo => repo.readBytes(path)),
       read: path => observed(repo => repo.read(path)),
       files: (prefix, scope) => observed(repo => repo.files(prefix, scope)),

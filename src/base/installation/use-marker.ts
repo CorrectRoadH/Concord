@@ -9,14 +9,13 @@ import { makeRuntimeEnvironment, runtimePath, type RuntimeEnvironmentSnapshot } 
 import { sourceInstallation } from './runtime.ts';
 
 /** The server scope owns the marker, including interrupted or failed startup.
- * Node's exclusive create and inode check keep cleanup from removing a replacement.
+ * Exclusive create and inode check keep cleanup from removing a replacement.
  */
 export const installationUseMarker = (applicationRoot = packageRoot, source = sourceInstallation, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) => Effect.acquireRelease(
   Effect.try({ try: () => {
     if (source) return undefined;
     const root = dirname(runtimePath(runtime, applicationRoot));
-    if (!lstatSync(join(root, 'runtime/node'), { throwIfNoEntry: false })?.isFile()
-      || !lstatSync(join(root, 'bin/concord'), { throwIfNoEntry: false })?.isFile()) return undefined;
+    if (!lstatSync(join(root, 'bin/concord'), { throwIfNoEntry: false })?.isFile()) return undefined;
     try { accessSync(root, constants.W_OK); }
     catch (cause) {
       const code = (cause as NodeJS.ErrnoException).code;

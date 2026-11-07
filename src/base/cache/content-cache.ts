@@ -52,6 +52,54 @@ export class ContentCache<A> {
     });
   }
 
+  async getAsync(path: string, source: string, parse: (previous?: A) => A | Promise<A>, rebuild = false, accept?: (value: A) => boolean): Promise<A> {
+    const result = (await this.getManyResultsAsync([{ path, source }], (_input, previous) => parse(previous), rebuild, accept))[0]!;
+    if (!result.ok) throw result.cause;
+    return result.value;
+  }
+
+  /** No native handle is borrowed across a parser suspension. */
+  async getManyResultsAsync(inputs: readonly { readonly path: string; readonly source: string }[], parse: (input: { readonly path: string; readonly source: string }, previous?: A) => A | Promise<A>, rebuild = false, accept?: (value: A) => boolean): Promise<ContentResult<A>[]> {
+    if (inputs.length === 0) return [];
+    const identities = inputs.map(input => {
+      const sourceDigest = digest(input.source);
+      return { input, sourceDigest, key: objectDigest({ parser: this.parser, path: input.path, sourceDigest }) };
+    });
+    let found = new Map<string, string>();
+    if (!rebuild) try {
+      const database = this.engine();
+      if (database !== undefined) found = new Map(readCachePayloads(database, this.namespace, identities.map(item => item.key)));
+    } catch { /* damaged or unavailable cache is a miss */ }
+    const writes: HawdbEntry[] = [];
+    const values: ContentResult<A>[] = [];
+    for (const { input, key, sourceDigest } of identities) {
+      const payload = found.get(key);
+      let previous: A | undefined;
+      if (payload !== undefined) try {
+        const envelope = decode(EnvelopeSchema, JSON.parse(payload), 'content cache');
+        if (envelope.parser === this.parser && envelope.sourceDigest === sourceDigest && (envelope.present || envelope.value === undefined)) {
+          const value = decode(this.valueSchema, envelope.present ? envelope.value : undefined, 'content cache value');
+          if (accept === undefined || accept(value)) { values.push({ ok: true, value }); continue; }
+          previous = value;
+        }
+      } catch { /* damaged cache is a miss */ }
+      let value: A;
+      try { value = await parse(input, previous); }
+      catch (cause) { values.push({ ok: false, cause }); continue; }
+      try {
+        const payload = canonical({ parser: this.parser, sourceDigest, present: value !== undefined, ...(value === undefined ? {} : { value }) });
+        writes.push({ key, payload });
+        found.set(key, payload);
+      } catch { /* uncacheable parse output is still returned */ }
+      values.push({ ok: true, value });
+    }
+    try {
+      const database = this.engine();
+      if (database !== undefined) writeCachePayloads(database, this.namespace, writes, this.limits);
+    } catch { /* parsing remains authoritative */ }
+    return values;
+  }
+
   /** Batch diagnostics without caching failures or hiding other files. */
   getManyResults(inputs: readonly { readonly path: string; readonly source: string }[], parse: (input: { readonly path: string; readonly source: string }, previous?: A) => A, rebuild = false, accept?: (value: A) => boolean): ContentResult<A>[] {
     if (inputs.length === 0) return [];

@@ -34,7 +34,7 @@ cacheTest('digest includes untracked resources and build configuration while exc
     yield* fs.writeFileString(join(checkout, path), 'ignored');
   }
   assert.equal(yield* gateBuildDigest(checkout), original);
-  for (const path of ['src/input.ts', 'web/new.ts', 'scripts/new.ts', 'docs/new.md', 'templates/new.md', 'skills/new.md', 'README.md', 'pnpm-lock.yaml', 'tsconfig.web.json', 'vite.preview.config.ts', '.node-version', 'runtime-deps.json']) {
+  for (const path of ['src/input.ts', 'web/new.ts', 'scripts/new.ts', 'patches/typescript.patch', 'docs/new.md', 'templates/new.md', 'skills/new.md', 'README.md', 'pnpm-lock.yaml', 'tsconfig.web.json', 'vite.preview.config.ts', '.bun-version', '.node-version', 'runtime-deps.json']) {
     yield* fs.makeDirectory(resolve(checkout, path, '..'), { recursive: true });
     const before = yield* gateBuildDigest(checkout);
     yield* fs.writeFileString(join(checkout, path), 'uncommitted bytes');

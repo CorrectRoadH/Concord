@@ -1,4 +1,6 @@
 import { createRequire } from "node:module";
+import { join } from "node:path";
+import { packageRoot } from "../installation/index.ts";
 import type { Nodes } from "mdast";
 import type * as Esbuild from "esbuild";
 import { ConcordError } from "../../model/index.ts";
@@ -32,7 +34,7 @@ export function mdxProse(source: string): string {
   };
   protect(fromMarkdown(source));
   const parses = (code: string): boolean => {
-    javascript ??= createRequire(import.meta.url)('esbuild') as typeof Esbuild;
+    javascript ??= createRequire(join(packageRoot, 'package.json'))('esbuild') as typeof Esbuild;
     try { javascript.transformSync(code, { loader: 'jsx', logLevel: 'silent' }); return true; }
     catch (cause) {
       if (!(cause instanceof Error) || !('errors' in cause)) throw cause;

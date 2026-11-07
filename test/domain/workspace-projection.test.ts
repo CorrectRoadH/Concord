@@ -36,11 +36,11 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a completed workspace scan survives brief contention at publication', async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
     const candidate = makeWorkspaceProjectionCandidate(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
-    const context = workspaceProjectionContext(root);
+    const context = (await workspaceProjectionContext(root));
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const owner = yield* PersistentCache.owner(context.privateDir);
       yield* owner.open;
@@ -57,11 +57,11 @@ test('a completed workspace scan survives brief contention at publication', asyn
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a recovery failure preserves the exact previously accepted persistent generation', async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
     const candidate = makeWorkspaceProjectionCandidate(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
-    const context = workspaceProjectionContext(root);
+    const context = (await workspaceProjectionContext(root));
     storeWorkspaceProjection(context, candidate);
     const previous = readWorkspaceProjection(context);
     storeWorkspaceProjection(context, undefined, new ConcordError('RecoveryRequired', 'An interrupted publication exists'));
@@ -74,9 +74,9 @@ test('a recovery failure preserves the exact previously accepted persistent gene
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a drifted candidate retains the last consistent generation and reports the attempt without failing', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
-  const context = workspaceProjectionContext(root);
+  const context = (await workspaceProjectionContext(root));
   try {
     storeWorkspaceProjection(context, makeWorkspaceProjectionCandidate(snapshot, { files: [], directories: [], publicationChanged: false }, new Date(Date.now() - 1000).toISOString(), 'fixture-sources'));
     const healthy = readWorkspaceProjection(context);
@@ -92,9 +92,9 @@ test('a drifted candidate retains the last consistent generation and reports the
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('observeProjection reports observed file drift without throwing the candidate away', () => {
-  const root = fixture();
-  const repo = new LocalRepository(root, { optimistic: true, access: 'read' });
+test('observeProjection reports observed file drift without throwing the candidate away', async () => {
+  const root = (await fixture());
+  const repo = (await LocalRepository.open(root, { optimistic: true, access: 'read' }));
   try {
     const target = 'docs/feature/projected/README.md';
     const original = readFileSync(join(root, target), 'utf8');
@@ -112,12 +112,12 @@ test('observeProjection reports observed file drift without throwing the candida
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a first drifting candidate stores only its attempt and remains pending without a sourceDigest', async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
     const candidate = makeWorkspaceProjectionCandidate(snapshot, { files: ['src/main.ts'], directories: [], publicationChanged: false }, new Date().toISOString(), 'must-not-publish');
     assert.equal(candidate.sourceDigest, undefined);
-    const context = workspaceProjectionContext(root);
+    const context = (await workspaceProjectionContext(root));
     storeWorkspaceProjection(context, candidate);
     assert.throws(() => readWorkspaceProjection(context), { code: 'WorkspaceProjectionPending' });
   } finally { rmSync(root, { recursive: true, force: true }); }

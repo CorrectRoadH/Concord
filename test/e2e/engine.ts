@@ -59,7 +59,7 @@ export const engine: EngineHandle = defineEngine({
     endExecution = undefined;
     try {
       const stop = async () => { await webEngine.endAttempt?.(context); };
-      await closeBrowserAttempt(() => timer ? timer.measure('engine-stop', stop) : stop());
+      await closeBrowserAttempt(async () => timer ? timer.measure('engine-stop', stop) : stop());
     } finally {
       await timer?.persist(true);
       if (timer) browserWorkerFixture().timer = undefined;

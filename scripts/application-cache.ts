@@ -29,12 +29,12 @@ const pruneApplications = Effect.fn('archive.pruneApplications')(function*(cache
 /** Hash the actual byte inputs, including untracked files and linked tools. */
 export const archivePartInput = Effect.fn('archive.partInput')(function*(repository: string, paths: readonly string[], identity: unknown = null) {
   const entries = yield* buildCacheTree(repository, path => !paths.some(input => path === input || path.startsWith(`${input}/`) || input.startsWith(`${path}/`)), true);
-  return sha256(JSON.stringify({ entries, identity, node: process.version, platform: process.platform, arch: process.arch }));
+  return sha256(JSON.stringify({ entries, identity, node: process.version, bun: process.versions.bun ?? null, platform: process.platform, arch: process.arch }));
 });
 
 /** The caller retains a recoverable use lease through the private copy. Cache
  * bytes are verified before every use and published by one atomic rename. */
-export const cachedArchivePart = Effect.fn('archive.partCache')(function*(name: string, input: string, compile: (root: string) => Effect.Effect<void, unknown, FileSystem.FileSystem | Scope.Scope | ChildProcessSpawner.ChildProcessSpawner>, verifyInput?: () => Effect.Effect<string, unknown, FileSystem.FileSystem>, cacheHome = process.env.XDG_CACHE_HOME || join(homedir(), '.cache')) {
+export const cachedArchivePart = Effect.fn('archive.partCache')(function*(name: string, input: string, compile: (root: string) => Effect.Effect<void, unknown, FileSystem.FileSystem | Scope.Scope | ChildProcessSpawner.ChildProcessSpawner>, verifyInput?: () => Effect.Effect<string, unknown, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner>, cacheHome = process.env.XDG_CACHE_HOME || join(homedir(), '.cache')) {
   const fs = yield* FileSystem.FileSystem;
   const digest = sha256(input);
   const cache = join(cacheHome, 'concord', 'parts', name);

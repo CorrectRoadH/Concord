@@ -19,23 +19,23 @@ import { openHawdb } from "../../src/base/cache/index.ts";
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const policy = '# Rules\n\n句子不超过 5 个字符。\n';
-function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeof checkWriting>) => void) {
+async function fixture(run: (root: string, scan: (cache?: boolean) => Promise<ReturnType<typeof checkWriting>>) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-cache-'));
   execFileSync('git', ['init', '-q', root]);
-  const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
+  const initial = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(initial, false, { testRoots: [] })); } finally { initial.close(); }
   writeFileSync(join(root, 'docs/writing.md'), policy);
   writeFileSync(join(root, 'docs/corpus.md'), 'One two three.\n');
   openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }, nativeRuntime).close();
-  const scan = (cache = true) => {
-    const repo = new LocalRepository(root, { access: 'read' });
-    try { return checkWriting(repo, undefined, cache); } finally { repo.close(); }
+  const scan = async (cache = true) => {
+    const repo = (await LocalRepository.open(root, { access: 'read' }));
+    try { return await checkWriting(repo, undefined, cache); } finally { repo.close(); }
   };
-  try { run(root, scan); } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }
+  try { await run(root, scan); } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }
 }
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
-test('public CLI uses current prose without cache and reuses service-owned writing findings', () => Effect.runPromise(Effect.sync(() => fixture((root, scan) => {
+test('public CLI uses current prose without cache and reuses service-owned writing findings', () => Effect.runPromise(Effect.tryPromise(async () => (await fixture(async (root, scan) => {
   const loaded = join(root, 'loaded.json'), counts = join(root, 'parse-counts.jsonl');
   const modules = (dryRun = false) => {
     let output = ''; writeFileSync(counts, '');
@@ -58,5 +58,5 @@ test('public CLI uses current prose without cache and reuses service-owned writi
   assert.equal(warm.parses.length, 0, 'validated cache hit must perform no Markdown parsing');
   assert.equal(warm.output, cold.output, 'cache reuse preserves public output bytes');
   stopWorkspaceServer(root);
-  assert.deepEqual(scan(false), scan(), 'cache-disabled overlay analysis has identical findings');
-}))));
+  assert.deepEqual((await scan(false)), (await scan()), 'cache-disabled overlay analysis has identical findings');
+})))));

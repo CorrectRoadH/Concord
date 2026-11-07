@@ -8,12 +8,12 @@ import { createServer } from 'node:http';
 import { expect } from '@playwright/test';
 import { test } from './fixtures.ts';
 
-import { sourceCli } from '../support/source-consumer.ts';
+import { sourceCliCommand } from '../support/source-consumer.ts';
 
 
 
 import { decodeChangePreview } from '../../src/model/index.ts';
-const cli=sourceCli();
+const [cliRuntime, ...cliPrefix] = sourceCliCommand();
 const write=(root:string,path:string,source:string)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),source);};
 
 // @use-case docs/feature/web-workbench/use-case/review-pull-request.md
@@ -37,7 +37,7 @@ test('packed PR export compares the actual target and serves a safe static revie
  write(root,'.gitattributes','* -diff\n'); write(root,'concord.config.ts','throw new Error("must not execute configuration");\n');
  git('config','diff.external','must-not-run'); git('config','diff.ignoreSubmodules','all');
  const out = join(scratch,'exported-pr');
- const result = spawnSync(process.execPath,['--no-addons',cli,'--root',join(root,'docs'),'--json','view','export','--base',base,'--head',head,'--base-label','release','--out',out],{encoding:'utf8',timeout:120000});
+ const result = spawnSync(cliRuntime,['--no-addons',...cliPrefix,'--root',join(root,'docs'),'--json','view','export','--base',base,'--head',head,'--base-label','release','--out',out],{encoding:'utf8',timeout:120000});
  assert.equal(result.status,0,result.stderr + result.stdout);
  const data = decodeChangePreview(JSON.parse(readFileSync(join(out,'changes.json'),'utf8')));
  assert.deepEqual(data.comparison,{base,head,mergeBase:ancestor,baseLabel:'release'});
@@ -48,7 +48,7 @@ test('packed PR export compares the actual target and serves a safe static revie
  assert.doesNotMatch(JSON.stringify(data),/PRIVATE DIRTY|target-only/u);
  assert.throws(()=>decodeChangePreview({...data,unrecognized:true}));
  assert.throws(()=>decodeChangePreview({...data,entries:[...data.entries,data.entries[0]]}));
- const again = spawnSync(process.execPath,[cli,'--root',root,'--json','view','export','--base',base,'--head',head,'--out',out],{encoding:'utf8'});
+ const again = spawnSync(cliRuntime,[...cliPrefix,'--root',root,'--json','view','export','--base',base,'--head',head,'--out',out],{encoding:'utf8'});
  assert.equal(again.status,1); assert.match(again.stderr,/PreviewOutputExists/u);
  const server = createServer((request,response)=>{
   const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;

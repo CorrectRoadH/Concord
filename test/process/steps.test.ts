@@ -4,7 +4,7 @@ import { sourceCli } from '../support/source-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from '../support/builtin-mocks.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test, { before, after } from 'node:test';
@@ -35,17 +35,17 @@ after(() => rmSync(packedRoot, { recursive: true, force: true }));
 function document(body: string, kind: 'use-case' | 'feature' = 'use-case') {
   return renderDocument(kind === 'use-case' ? { format: 'concord.document/v1', kind, id: 'flow', title: 'Flow', feature: 'docs/feature/sample/README.md' } : { format: 'concord.document/v1', kind, id: 'sample', title: 'Sample' }, body);
 }
-function consumer(run: (repo: LocalRepository, root: string) => void) {
+async function consumer(run: (repo: LocalRepository, root: string) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-steps-'));
   let repo: LocalRepository | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
-    repo = new LocalRepository(root, { initialize: true });
-    initialize(repo, false, { sourceRoots: ['src'], testRoots: ['test'] });
-    createDocument(repo, 'feature', { id: 'sample', title: 'Sample', pages: [] });
-    createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample' });
+    repo = (await LocalRepository.open(root, { initialize: true }));
+    (await initialize(repo, false, { sourceRoots: ['src'], testRoots: ['test'] }));
+    (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample', pages: [] }));
+    (await createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample' }));
     for (const dir of ['src', 'test']) mkdirSync(join(root, dir));
-    run(repo, root);
+    await run(repo, root);
   } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
 }
 function write(root: string, file: string, source: string) { mkdirSync(resolve(root, file, ".."), { recursive: true }); writeFileSync(join(root, file), source); }
@@ -57,15 +57,15 @@ function cli(root: string, args: readonly string[], status = 0) {
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#rename-step
 // @name steps-process-death-and-recovery
-test('steps C19 second CLI blocks interrupted work and recovers prepared and committed journals without overwriting unknown edits', () => Effect.runPromise(Effect.sync(() => {
-  for (const phase of ['prepared', 'committed', 'unknown'] as const) consumer((repo, root) => {
+test('steps C19 second CLI blocks interrupted work and recovers prepared and committed journals without overwriting unknown edits', () => Effect.runPromise(Effect.tryPromise(async () => {
+  for (const phase of ['prepared', 'committed', 'unknown'] as const) (await consumer((repo, root) => {
     write(root, path, document('1. A {#old}\n'));
     write(root, 'test/flow.ts', `// @use-case ${path}#old\n`);
     const before = repo.read(path)!;
     repo.close();
     const child = spawnSync(process.execPath, ['--import', resolve('test/support/step-interruption.ts'), entry, '--root', root, '--json', 'use-case', 'rename-step', path, 'old', 'new'], { encoding: 'utf8', timeout: 20000, env: { ...process.env, STEP_ROOT: root, STEP_INTERRUPT: phase === 'committed' ? 'committed' : 'prepared' } });
     assert.equal(child.signal, 'SIGKILL', child.stdout + child.stderr);
-    const journal = join(genericPrivateDirectorySync(root), 'journal.json');
+    const journal = join(genericPrivateDirectorySync(root, process.env), 'journal.json');
     assert.ok(existsSync(journal));
     const error = Schema.Struct({ error: Schema.String });
     assert.equal(Schema.decodeUnknownSync(error)(cli(root, ['use-case', 'steps', path], 1)).error, 'RecoveryRequired');
@@ -82,5 +82,5 @@ test('steps C19 second CLI blocks interrupted work and recovers prepared and com
       assert.equal(existsSync(journal), false);
       cli(root, ['use-case', 'steps', path]);
     }
-  });
+  }));
 })));

@@ -56,7 +56,8 @@ else process.exitCode = result.status ?? 1;
   chmodSync(auditedGit, 0o755);
   const loader = join(directory, 'native-audit.ts');
   writeFileSync(loader, `import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { mock as bunMock } from 'bun:test';
+const syncBuiltinESMExports = () => bunMock.module('node:fs', () => ({ ...fs, default: fs }));
 const append = fs.appendFileSync;
 const record = (binary: string, operation: string) => append(${JSON.stringify(audit)}, JSON.stringify({ kind: 'native', pid: process.pid, ppid: process.ppid, cwd: process.cwd(), entry: process.argv[1], args: process.argv.slice(2), binary, operation }) + '\\n');
 fs.statSync = new Proxy(fs.statSync, { apply(target, receiver, args) {
@@ -82,7 +83,7 @@ syncBuiltinESMExports();
   });
   const base: NodeJS.ProcessEnv = {
     ...process.env, PATH: gitAndNative ? `${bin}${delimiter}${process.env.PATH ?? ''}` : process.env.PATH,
-    NODE_OPTIONS: gitAndNative ? `${process.env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(loader).href}`.trim() : process.env.NODE_OPTIONS,
+    BUN_OPTIONS: gitAndNative ? `${process.env.BUN_OPTIONS ?? ''} --preload=${pathToFileURL(loader).href}`.trim() : process.env.BUN_OPTIONS,
     NO_COLOR: '1', TERM: 'dumb', FORCE_COLOR: undefined,
   };
   const environment = (index: number): NodeJS.ProcessEnv => {
@@ -124,7 +125,7 @@ async function ready(root: string, signal: AbortSignal): Promise<void> {
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('live queries and independent historical scans preserve A→B→A caller environments and cwd', async t => {
-  const root = createConsumer(), fixture = auditFixture();
+  const root = (await createConsumer()), fixture = auditFixture();
   const startup = { ...fixture.base, HOME: join(fixture.directory, 'service-home'), CONCORD_CALLER_VALUE: 'service-owner', XDG_CACHE_HOME: fixture.callers[0]!.cache };
   try {
     writeProjectConfig(root, { testRoots: [], sourceRoots: [] });
@@ -201,7 +202,7 @@ test('live queries and independent historical scans preserve A→B→A caller en
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('outbound LSP receives each code analyze caller allowlist without restoring HOME or other host fields', async t => {
-  const root = lspConsumer(), fixture = auditFixture(false);
+  const root = (await lspConsumer()), fixture = auditFixture(false);
   const startup = { ...fixture.base, XDG_CACHE_HOME: fixture.callers[0]!.cache };
   try {
     renameSync(join(root, 'server.mjs'), join(root, 'server-actual.mjs'));
@@ -209,7 +210,7 @@ test('outbound LSP receives each code analyze caller allowlist without restoring
 appendFileSync(${JSON.stringify(fixture.audit)}, JSON.stringify({ kind: 'lsp', pid: process.pid, ppid: process.ppid, cwd: process.cwd(), value: process.env.LANG ?? null, home: process.env.HOME ?? null, forbidden: process.env.CONCORD_NOT_FOR_LSP ?? null, language: process.env.LANG ?? null, locale: process.env.LC_ALL ?? null }) + '\\n');
 await import('./server-actual.mjs');
 `);
-    const config = readProjectConfig(root), server = config.languageServers![0]!;
+    const config = (await readProjectConfig(root)), server = config.languageServers![0]!;
     writeProjectConfig(root, { ...config, languageServers: [{ ...server, argv: [process.execPath, 'lsp-audit.ts'], environment: ['LANG', 'LC_ALL'], implementationFiles: ['lsp-audit.ts', 'server-actual.mjs'] }] });
     for (const index of [0, 1, 0]) {
       const caller = fixture.callers[index]!, offset = fixture.records().length;

@@ -18,14 +18,14 @@ import { editorLimits, type Computed, type Job } from "../model/editor/index.ts"
 
 const range = (line: number, character = 0, end = character) => ({ start: { line: Math.max(0, line - 1), character }, end: { line: Math.max(0, line - 1), character: end } });
 
-const referenceTokens: (path: string, text: string, languageServers?: Repository['config']['languageServers']) => ReturnType<typeof codeReferenceTokens> = codeReferenceTokens;
+const referenceTokens = codeReferenceTokens;
 
 
 /** One disposable thread owns domain parser caches and exactly one optimistic source snapshot. */
 export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
   return yield* Effect.acquireUseRelease(
     openReadRepository(job.root, { access: 'read', optimistic: true, persistentCache: 'off' }),
-    local => Effect.try({ try: (): Computed => local.snapshot(() => {
+    local => Effect.tryPromise({ try: async (): Promise<Computed> => (await local.snapshot(async () => {
       if (local.configSnapshot.digest !== job.config) throw new ConcordError('ContentModified', 'Configuration changed before computation');
       const reads = new Map<string, readonly [string | null, string | null]>();
       const listings = new Map<string, Computed['listings'][number]>();
@@ -76,8 +76,8 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
       };
       for (const document of job.overlays) repo.read(document.path);
       const inventory = diagnoseDocuments(repo);
-      const annotations = scanAnnotations(repo, { cache: 'off', sourceMode: 'overlay' });
-      const code = scanCode(repo, { cache: 'off' });
+      const annotations = (await scanAnnotations(repo, { cache: 'off', sourceMode: 'overlay' }));
+      const code = (await scanCode(repo, { cache: 'off' }));
       const trace = { documents: inventory.documents, annotations, codeDeclarations: code.codes };
       const findings: Finding[] = [...inventory.findings, ...annotations.findings, ...code.findings];
       if (!inventory.complete || code.relationsUnknown) gaps.add('IncompleteRelations');
@@ -160,7 +160,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
             for (const item of trace.annotations.cases) if (item.status === 'active' && item.contract === selected) locations.push({ uri: uri(item.file), range: range(item.line) });
             const implementations = trace.codeDeclarations.filter(item => item.contracts.includes(selected));
             for (const file of new Set(implementations.map(item => item.file))) {
-              const tokens = referenceTokens(file, repo.read(file)!, repo.config.languageServers).filter(token => token.reference === selected);
+              const tokens = (await referenceTokens(file, repo.read(file)!, repo.config.languageServers)).filter(token => token.reference === selected);
               // A clean scanner result authorizes its exact lexical markers, including
               // node/region comments outside the declaration's executable range.
               if (tokens.length > 0 && !code.findings.some(finding => finding.path === file)) {
@@ -180,7 +180,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
         ...([...gaps].length ? [{ range: range(1), severity: 2, code: 'EditorInputsIncomplete', source: 'concord' as const, message: `Input incomplete: ${[...gaps].join(', ')}. No complete-project conclusion is available.` }] : []),
       ] }));
       return { session: job.session, config: local.configSnapshot.digest, complete: gaps.size === 0, gaps: [...gaps], value, diagnostics, reads: [...reads].map(([path, values]) => [path, ...values] as const), listings: [...listings.values()] };
-    }), catch: failure }),
+    })), catch: failure }).pipe(Effect.uninterruptible),
     local => Effect.sync(() => local.close()),
   ).pipe(Effect.scoped);
 });

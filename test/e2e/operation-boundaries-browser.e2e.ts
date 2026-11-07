@@ -17,11 +17,11 @@ test('browser preserves blocked recovery and labels incomplete workspace relatio
   let server: ViewServerHandle | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
-    const repo = new LocalRepository(root, { initialize: true });
+    const repo = (await LocalRepository.open(root, { initialize: true }));
     try {
-      initialize(repo, false, { testRoots: [] });
-      const run = repo.snapshot(() => beginRun(root));
-      repo.snapshot(() => finalizeRun(root, run, false));
+      (await initialize(repo, false, { testRoots: [] }));
+      const run = repo.snapshot(() => beginRun(root, process.env));
+      repo.snapshot(() => finalizeRun(root, run, false, process.env));
     } finally { repo.close(); }
     mkdirSync(join(root, 'docs/feature/broken'), { recursive: true });
     writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');

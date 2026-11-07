@@ -19,12 +19,12 @@ test('issue close refuses with a named error and exit 1', async t => {
     ['another Issue links it', true, 'IssueReferenced'],
     ['the Issue does not exist', false, 'DocumentNotFound'],
   ] as const) await t.test(row, async () => {
-    const root = createConsumer();
+    const root = (await createConsumer());
     try {
-      if (linked) withRepository(root, repo => {
-        for (const id of ['one', 'two']) createDocument(repo, 'issue', { id, title: id });
-        linkIssue(repo, 'two', 'docs/issues/one.md', false, 'related');
-      });
+      if (linked) (await withRepository(root, async repo => {
+        for (const id of ['one', 'two']) (await createDocument(repo, 'issue', { id, title: id }));
+        (await linkIssue(repo, 'two', 'docs/issues/one.md', false, 'related'));
+      }));
       assert.equal((await call(root, ['issue', 'close', 'one', '--reason', 'Done'], 1)).error, expected);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });

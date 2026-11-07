@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "rootDir": ".",
+    "types": ["node", "bun"],
     "noEmit": true
   },
   "include": ["scripts/**/*.ts", "bench/**/*.ts", "vite*.config.ts", "e2e*.config.ts"]

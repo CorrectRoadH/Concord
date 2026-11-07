@@ -1,6 +1,8 @@
 // @concord-file
-// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-import { Effect } from 'effect';
-import { runReaderMain } from './main.ts';
-import { scanQueryProcess } from "../../app/index.ts";
-runReaderMain(scanQueryProcess(process.argv[2], process.argv[3]).pipe(Effect.flatMap(message => Effect.sync(() => process.stdout.write(`${JSON.stringify(message)}\n`)))));
+// @concord-implements docs/engineering/build/architecture.md#编译入口
+import { pathToFileURL } from 'node:url';
+import { run } from './query-scan-worker-main.ts';
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await run();
+}

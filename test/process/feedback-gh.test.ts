@@ -77,11 +77,11 @@ const { syncFeedback } = await import("../../src/domain/feedback/feedback.ts");
 const { startViewServer } = await import('../e2e/server.ts');
 const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
 
-function configure(): void {
-  const initial = new LocalRepository(consumer, { initialize: true });
-  try { initialize(initial); } finally { initial.close(); }
-  const repo = new LocalRepository(consumer);
-  try { const current = showConfig(repo); setConfig(repo, { ...current.config, feedbackConnections: [connection] }, current.digest); }
+async function configure(): Promise<void> {
+  const initial = (await LocalRepository.open(consumer, { initialize: true }));
+  try { await initialize(initial); } finally { initial.close(); }
+  const repo = (await LocalRepository.open(consumer));
+  try { const current = showConfig(repo); await setConfig(repo, { ...current.config, feedbackConnections: [connection] }, current.digest); }
   finally { repo.close(); }
 }
 
@@ -108,7 +108,7 @@ async function waitForSlot(): Promise<void> {
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('real gh process fixture uses isolated scope, fixed requests, strict identity, and atomic publication', async () => {
   try {
-    configure();
+    (await configure());
     const checked = await runApplication(checkGhConnection(consumer, connection));
     assert.equal(checked.target, 'acme/widgets');
     assert.equal(existsSync(join(consumer, 'docs/issues/feedback-github-101.md')), false, 'check must not import or bind');
@@ -131,14 +131,14 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     writeFileSync(scenario, JSON.stringify({ badScope: true }));
     await assert.rejects(runApplication(fetchGhFeedback(consumer, connection)), (cause) => errorCode(cause, 'FeedbackScopeMismatch'));
     writeFileSync(scenario, JSON.stringify({ repositoryId: 43 }));
-    await assert.rejects(runApplication(syncFeedback(consumer, connection.id)), (cause) => errorCode(cause, 'ConnectionIdentityMismatch'));
-    const configured = new LocalRepository(consumer);
+    await assert.rejects((runApplication(syncFeedback(consumer, connection.id))), (cause) => errorCode(cause, 'ConnectionIdentityMismatch'));
+    const configured = (await LocalRepository.open(consumer));
     try { assert.equal(configured.config.feedbackConnections?.[0]?.provider === 'github' ? configured.config.feedbackConnections[0].repositoryId : undefined, '42'); }
     finally { configured.close(); }
     writeFileSync(scenario, JSON.stringify({ wrongName: true }));
-    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhTargetInaccessible'));
+    await assert.rejects((runApplication(checkGhConnection(consumer, connection))), (cause) => errorCode(cause, 'GhTargetInaccessible'));
     writeFileSync(scenario, JSON.stringify({ auth: true }));
-    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhNotAuthenticated') && !String(cause).includes('SECRET-DO-NOT-PRINT'));
+    await assert.rejects((runApplication(checkGhConnection(consumer, connection))), (cause) => errorCode(cause, 'GhNotAuthenticated') && !String(cause).includes('SECRET-DO-NOT-PRINT'));
     writeFileSync(scenario, '{}');
     const entry = installedConcordCli();
     const cli = (...args: readonly string[]): unknown => JSON.parse(execFileSync(process.execPath, [entry, '--root', consumer, '--json', ...args], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 })) as unknown;
@@ -153,7 +153,7 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     assert.notEqual(rejected.status, 0);
     assert.equal((JSON.parse(rejected.stderr.trim()) as { error: string }).error, 'InvalidOption');
     writeFileSync(scenario, JSON.stringify({ oversize: true }));
-    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhLimitExceeded'));
+    await assert.rejects((runApplication(checkGhConnection(consumer, connection))), (cause) => errorCode(cause, 'GhLimitExceeded'));
     writeFileSync(scenario, JSON.stringify({ totalLimit: true }));
     await assert.rejects(runApplication(fetchGhFeedback(consumer, connection)), (cause) => errorCode(cause, 'GhLimitExceeded'));
     writeFileSync(scenario, JSON.stringify({ hang: true }));
@@ -183,7 +183,7 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
       await waitForSlot();
       writeFileSync(scenario, JSON.stringify({ hang: true }));
       const beforeShutdown = readCalls().length;
-      const pendingShutdown = post().then(response => ({ kind: 'response' as const, response }), error => ({ kind: 'disconnected' as const, error }));
+      const pendingShutdown = (post()).then(response => ({ kind: 'response' as const, response }), error => ({ kind: 'disconnected' as const, error }));
       await waitForCall(beforeShutdown + 2);
       await server.close();
       const shutdownResponse = await pendingShutdown;
@@ -192,9 +192,9 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     } finally { await server.close(); }
     process.env.TMPDIR = isolatedTmp;
     writeFileSync(scenario, JSON.stringify({ lockCleanup: true }));
-    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhCleanupUnconfirmed'));
+    await assert.rejects((runApplication(checkGhConnection(consumer, connection))), (cause) => errorCode(cause, 'GhCleanupUnconfirmed'));
     const count = readCalls().length;
-    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhCleanupUnconfirmed'));
+    await assert.rejects((runApplication(checkGhConnection(consumer, connection))), (cause) => errorCode(cause, 'GhCleanupUnconfirmed'));
     assert.equal(readCalls().length, count, 'poisoned slot must not start another process');
   } finally {
     try { const { chmodSync } = await import('node:fs'); chmodSync(isolatedTmp, 0o700); } catch { /* fixture may already be removed */ }

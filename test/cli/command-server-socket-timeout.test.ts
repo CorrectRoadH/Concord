@@ -7,14 +7,14 @@ import { fixture, record, recordPath } from '../support/workspace-server-fixture
 
 // @feature docs/feature/local-data-engine/README.md
 test('parallel command CLIs include stalled socket opens in their ten-second startup deadline', { timeout: 45_000 }, async t => {
-  const roots = Array.from({ length: 3 }, () => fixture());
+  const roots = await Promise.all(Array.from({ length: 3 }, () => fixture()));
   const sockets: Socket[] = [];
   t.mock.method(Socket.prototype, 'connect', function(this: Socket) {
     sockets.push(this);
     return this;
   });
   try {
-    const results = await Promise.all(roots.map(root => runCli({
+    const results = await Promise.all(roots.map(async root => runCli({
       argv: ['--root', root, '--json', '--server', 'command', 'test', 'list'], cwd: root, env: process.env,
     })));
     assert.ok(sockets.length >= roots.length, 'each command attempted its own real client socket');

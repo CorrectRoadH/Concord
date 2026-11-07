@@ -33,11 +33,11 @@ export const listDocuments = Command.make('list', { category: category.pipe(Argu
 
 export function docsGroup(kind: Extract<DocumentKind, 'use-case' | 'roadmap'>) {
   const commands = kind === 'roadmap' ? [
-    Command.make('start', { id, feature: optional('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, Option.getOrUndefined(args.feature), s.dryRun)))).pipe(Command.withDescription('Start a Roadmap as a Feature; --feature optionally selects a different Feature ID.')),
+    Command.make('start', { id, feature: optional('feature') }, args => withRepo((repo, s) => sync(async () => (await adoptRoadmap(repo, args.id, Option.getOrUndefined(args.feature), s.dryRun))))).pipe(Command.withDescription('Start a Roadmap as a Feature; --feature optionally selects a different Feature ID.')),
   ] : [
-    Command.make('steps', { id }, args => withReadRepo(repo => sync(() => useCaseSteps(repo, args.id)))),
-    Command.make('format', { id, seed: Flag.Boolean('seed').pipe(Flag.withDefault(false)), list: Flag.Int('list').pipe(Flag.optional) }, args => withRepo((repo, s) => sync(() => formatUseCase(repo, args.id, args.seed, Option.getOrUndefined(args.list), s.dryRun)))),
-    Command.make('rename-step', { id, oldId: Argument.String('old-id'), newId: Argument.String('new-id') }, args => withRepo((repo, s) => sync(() => renameUseCaseStep(repo, args.id, args.oldId, args.newId, s.dryRun)))),
+    Command.make('steps', { id }, args => withReadRepo(repo => sync(async () => (await useCaseSteps(repo, args.id))))),
+    Command.make('format', { id, seed: Flag.Boolean('seed').pipe(Flag.withDefault(false)), list: Flag.Int('list').pipe(Flag.optional) }, args => withRepo((repo, s) => sync(async () => (await formatUseCase(repo, args.id, args.seed, Option.getOrUndefined(args.list), s.dryRun))))),
+    Command.make('rename-step', { id, oldId: Argument.String('old-id'), newId: Argument.String('new-id') }, args => withRepo((repo, s) => sync(async () => (await renameUseCaseStep(repo, args.id, args.oldId, args.newId, s.dryRun))))),
   ];
   return Command.make(kind).pipe(Command.withDescription(`Maintain ${kind} documents.`), Command.withSubcommands(commands));
 }

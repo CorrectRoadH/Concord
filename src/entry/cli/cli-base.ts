@@ -53,7 +53,7 @@ const emit = Effect.fn('CliOutput.emit')(function*(value: unknown, json: boolean
   yield* writeStdout(output.endsWith('\n') ? output : `${output}\n`);
 });
 
-const sync = <A>(fn: () => A) => Effect.try({ try: fn, catch: failure });
+const sync = <A>(fn: () => A | Promise<A>) => Effect.tryPromise({ try: async () => await fn(), catch: failure }).pipe(Effect.uninterruptible);
 
 const cached = (dry: boolean) => dry ? 'off' as const : 'use' as const;
 

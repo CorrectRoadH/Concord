@@ -43,13 +43,13 @@ function writeCase(root: string, slow: boolean): void {
   writeFileSync(join(root, 'test/view-case.test.js'), `import test from 'node:test';\nimport assert from 'node:assert/strict';\n// @feature docs/feature/web/README.md\ntest('view job case', async () => { ${slow ? "await new Promise(resolve => setTimeout(resolve, 10000));" : 'assert.equal(1, 1);'} });\n`);
 }
 
-function initializedJobFixture(): string {
+async function initializedJobFixture(): Promise<string> {
   const { root } = fixture();
-  let repo = new LocalRepository(root, { initialize: true });
-  initialize(repo, false, { testRoots: ['test'], runner: { kind: 'command', argv: [process.execPath, '--test', '{file}'], timeoutMs: 15000, sourceFiles: [] } });
+  let repo = (await LocalRepository.open(root, { initialize: true }));
+  (await initialize(repo, false, { testRoots: ['test'], runner: { kind: 'command', argv: [process.execPath, 'test', '--no-env-file', '--config=/dev/null', '--timeout=15000', '{file}'], timeoutMs: 15000, sourceFiles: [] } }));
   repo.close();
-  repo = new LocalRepository(root);
-  createDocument(repo, 'feature', { id: 'web', title: 'Web' });
+  repo = (await LocalRepository.open(root));
+  (await createDocument(repo, 'feature', { id: 'web', title: 'Web' }));
   repo.close();
   writeCase(root, false);
   return root;
@@ -57,7 +57,7 @@ function initializedJobFixture(): string {
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('HTTP jobs run, cancel, and run again without credentials', async () => {
-  const root = initializedJobFixture();
+  const root = (await initializedJobFixture());
   let server: ViewServerHandle | undefined;
   try {
     writeCase(root, true);
@@ -97,7 +97,7 @@ test('HTTP jobs run, cancel, and run again without credentials', async () => {
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view jobs preserve pre-spawn cancellation, serialize repository ownership, and clean shutdown', async () => {
-  const root = initializedJobFixture();
+  const root = (await initializedJobFixture());
   let held: LocalRepository | undefined;
   try {
     const manager = new ViewJobManager(root, () => {}, (selected, use) => runApplication(Effect.scoped(Effect.gen(function*() {
@@ -115,7 +115,7 @@ test('view jobs preserve pre-spawn cancellation, serialize repository ownership,
     assert.equal(completedResult.state, 'completed', JSON.stringify(completedResult.error));
     assert.equal(completedResult.evidence?.commandOutcome, 'pass', JSON.stringify(completedResult));
 
-    held = new LocalRepository(root);
+    held = (await LocalRepository.open(root));
     held.beginSnapshot();
     const blocked = manager.start(viewJobCase);
     const blockedResult = await waitFor(manager, blocked.id, ['failed']);
@@ -138,7 +138,7 @@ test('view jobs preserve pre-spawn cancellation, serialize repository ownership,
     await waitFor(manager, shutdown.id, ['running']);
     await manager.close();
     assert.equal((await waitFor(manager, shutdown.id, ['cancelled'])).state, 'cancelled');
-    const unlocked = new LocalRepository(root);
+    const unlocked = (await LocalRepository.open(root));
     unlocked.close();
     assert.equal(readFileSync(join(root, 'test/view-case.test.js'), 'utf8').includes('10000'), true);
   } finally {

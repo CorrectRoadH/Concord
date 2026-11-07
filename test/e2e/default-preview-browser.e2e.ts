@@ -7,10 +7,10 @@ import { waitForWorkspaceProjection } from '../support/support.ts';
 
 // @feature docs/feature/web-workbench/ui.md
 test('a selection made before the category default preview stays selected', async ({ page, workspace }) => {
-  const repo = new LocalRepository(workspace.root);
+  const repo = (await LocalRepository.open(workspace.root));
   try {
-    createDocument(repo, 'memory', { id: 'first-memory', title: 'First memory', body: 'First memory content.' });
-    createDocument(repo, 'memory', { id: 'second-memory', title: 'Second memory', body: 'Second memory content.' });
+    (await createDocument(repo, 'memory', { id: 'first-memory', title: 'First memory', body: 'First memory content.' }));
+    (await createDocument(repo, 'memory', { id: 'second-memory', title: 'Second memory', body: 'Second memory content.' }));
   } finally { repo.close(); }
   const server = await workspace.ready();
   const base = `http://127.0.0.1:${server.port}`;

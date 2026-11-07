@@ -1,0 +1,22 @@
+diff --git a/dist/api/async/client.js b/dist/api/async/client.js
+index c655734e307730a687a3946cd5197fe8fcff7d4d..3d653f5364ebd9ef662845de357f621c50d5c8be 100644
+--- a/dist/api/async/client.js
++++ b/dist/api/async/client.js
+@@ -71,6 +71,8 @@ export class Client {
+             const reader = new StreamMessageReader(this.process.stdout);
+             const writer = new StreamMessageWriter(this.process.stdin);
+             this.connection = createMessageConnection(reader, writer);
++            const connection = this.connection;
++            connection.onClose(() => connection.dispose());
+             this.registerFSCallbacks(this.connection, options.fs, fsConfiguration);
+             this.connection.listen();
+         });
+@@ -82,6 +84,8 @@ export class Client {
+                 const reader = new SocketMessageReader(this.socket);
+                 const writer = new SocketMessageWriter(this.socket);
+                 this.connection = createMessageConnection(reader, writer);
++                const connection = this.connection;
++                connection.onClose(() => connection.dispose());
+                 this.connection.listen();
+                 this.connected = true;
+                 resolve();

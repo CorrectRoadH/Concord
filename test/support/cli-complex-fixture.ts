@@ -6,11 +6,11 @@ import { runCli } from './cli.ts';
 import { tmpdir } from './temporary.ts';
 
 /** Keep the offline gh protocol at the external executable boundary. */
-export function ghFixture(createConsumer: () => string): { scratch: string; consumer: string; env: NodeJS.ProcessEnv } {
+export async function ghFixture(createConsumer: () => Promise<string>): Promise<{ scratch: string; consumer: string; env: NodeJS.ProcessEnv }> {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-gh-packed-'));
   try {
     const consumer = join(scratch, 'consumer');
-    const template = createConsumer();
+    const template = await createConsumer();
     try { cpSync(template, consumer, { recursive: true }); } finally { rmSync(template, { recursive: true, force: true }); }
     const fakeBin = join(scratch, 'bin');
     mkdirSync(fakeBin);

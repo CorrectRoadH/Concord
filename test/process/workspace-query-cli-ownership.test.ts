@@ -4,8 +4,8 @@ import { assert, spawn, copyFileSync, existsSync, mkdirSync, readFileSync, rmSyn
 
 // @feature docs/feature/local-data-engine/README.md
 test('inherited command scopes reject other roots and HTTP, and parent disconnect releases the instance', { timeout: 30_000 }, async () => {
-  const root = fixture(), other = fixture();
-  const scope = { root, privateDir: genericPrivateDirectorySync(root), key: crypto.randomUUID() };
+  const root = (await fixture()), other = (await fixture());
+  const scope = { root, privateDir: genericPrivateDirectorySync(root, process.env), key: crypto.randomUUID() };
   const env = { ...process.env, CONCORD_SERVER_SCOPE: JSON.stringify(scope) };
   const server = launch(root, ['server', 'run', '--root', root], env, true);
   try {
@@ -35,10 +35,10 @@ test('inherited command scopes reject other roots and HTTP, and parent disconnec
 
 // @feature docs/feature/local-data-engine/README.md
 test('killing the owning CLI ends its command service through IPC even while a query waits on publication', { timeout: 30_000 }, async () => {
-  const root = fixture();
-  const lease = acquireTraceLeaseSync(root, 'exclusive', 'query-scope-test')!;
+  const root = (await fixture());
+  const lease = acquireTraceLeaseSync(root, 'exclusive', 'query-scope-test', undefined, undefined, process.env)!;
   const owner = launch(root, ['--json', '--server=command', 'check']);
-  let running: ReturnType<typeof record> | undefined;
+  let running: Awaited<ReturnType<typeof record>> | undefined;
   try {
     await pollUntil(async () => existsSync(recordPath(root)) ? true : undefined, { description: 'owned command service starts', timeoutMs: 10_000 });
     running = record(root);
@@ -56,7 +56,7 @@ test('killing the owning CLI ends its command service through IPC even while a q
 
 // @feature docs/feature/local-data-engine/README.md
 test('a warm query process checks native observation identity against each client environment without inheriting credentials', { timeout: 40_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   const source = fileURLToPath(new URL('../..', import.meta.url));
   const secret = `query-environment-${crypto.randomUUID()}`;
   const env = { ...process.env, CONCORD_QUERY_FIXTURE: secret };

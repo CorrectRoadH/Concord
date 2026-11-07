@@ -17,19 +17,19 @@ const Inventory = Schema.Struct({
 const decode = Schema.decodeUnknownSync(Inventory, { onExcessProperty: 'error' });
 
 async function consumer(run: (root: string) => Promise<void>): Promise<void> {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
-      createDocument(repo, 'issue', { id: 'healthy', title: 'Healthy issue' });
-      createDocument(repo, 'memory', { id: 'healthy', title: 'Healthy memory' });
+      (await createDocument(repo, 'issue', { id: 'healthy', title: 'Healthy issue' }));
+      (await createDocument(repo, 'memory', { id: 'healthy', title: 'Healthy memory' }));
     } finally { repo.close(); }
     await run(root);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
 // @use-case docs/feature/document-packages/use-case/discover-managed-documents.md#partial-list
-test('list preserves healthy rows and reports malformed documents without rewriting them', () => consumer(async root => {
+test('list preserves healthy rows and reports malformed documents without rewriting them', async () => consumer(async root => {
   for (const kind of ['issue', 'memory', undefined] as const) {
     const request = { name: 'documents.list' as const, input: { kind } };
     const baseline = await runApplication(executeQuery(root, request, 'off'));
@@ -51,7 +51,7 @@ test('list preserves healthy rows and reports malformed documents without rewrit
 }));
 
 // @use-case docs/feature/document-packages/use-case/discover-managed-documents.md#partial-list
-test('list and knowledge indexes return explicit completeness and isolate their scan kinds', () => consumer(async root => {
+test('list and knowledge indexes return explicit completeness and isolate their scan kinds', async () => consumer(async root => {
   for (const kind of ['issue', 'memory'] as const) {
     const request = { name: 'documents.list' as const, input: { kind } };
     const reply = await runApplication(executeQuery(root, request, 'off'));
@@ -80,7 +80,7 @@ test('list and knowledge indexes return explicit completeness and isolate their 
 }));
 
 // @use-case docs/feature/document-packages/use-case/discover-managed-documents.md#partial-list
-test('list retains hard failure for unsafe document paths', () => consumer(async root => {
+test('list retains hard failure for unsafe document paths', async () => consumer(async root => {
   mkdirSync(join(root, 'docs/issues'), { recursive: true });
   symlinkSync(join(root, 'memory/healthy.md'), join(root, 'docs/issues/unsafe.md'));
   const result = await runApplication(executeQuery(root, { name: 'documents.list', input: { kind: 'issue' } }, 'off').pipe(Effect.result));

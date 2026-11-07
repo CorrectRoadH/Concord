@@ -8,14 +8,14 @@ test('C3 internal short deadline preserves timeout details with and without a ge
   for (const warm of [false, true]) {
     const root = packedConsumer();
     try {
-      const context = queryContext(root, ['trace', 'gaps']);
+      const context = (await queryContext(root, ['trace', 'gaps']));
       if (warm) await runApplication(refreshQuery(root, ['trace', 'gaps'], Date.now()).pipe(Effect.scoped));
       const previous = readQuery(context).record;
       const scannedAt = Date.now(), started = performance.now();
       const result = await runApplication(makeOwnedProcessService().run([process.execPath, '--import', pathToFileURL(resolve('test/fixtures/stall-process.ts')).href,
         installationResources(installationRootForBin(installedCli)).worker('query-scan-worker'), root, JSON.stringify(['trace', 'gaps'])],
         { cwd: root, timeoutMs: 100, outputLimitBytes: 4 * 1024 * 1024 }).pipe(Effect.scoped));
-      const update = classifyQueryRefresh(context.key, queryContext(root, ['trace', 'gaps']).key, result, scannedAt, performance.now() - started, 100);
+      const update = classifyQueryRefresh(context.key, (await queryContext(root, ['trace', 'gaps'])).key, result, scannedAt, performance.now() - started, 100);
       if (update.kind === 'identity-changed') assert.fail('Fixture installation changed during the stopped scan');
       await runApplication(persist(context, update));
       const timedOut = readQuery(context);

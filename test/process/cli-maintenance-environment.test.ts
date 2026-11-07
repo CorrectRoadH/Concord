@@ -3,8 +3,8 @@
 // @concord-file
 // @concord-implements docs/engineering/testing/architecture.md#进程内-cli
 import assert from 'node:assert/strict';
-import { ChildProcess } from 'node:child_process';
-import { tracingChannel } from 'node:diagnostics_channel';
+import childProcess, { type ChildProcess } from 'node:child_process';
+import { syncBuiltinMocks } from '../support/builtin-mocks.ts';
 import { mkdirSync, realpathSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -15,9 +15,7 @@ import { CACHE_MAINTENANCE_THRESHOLD_BYTES } from '../../src/base/installation/i
 import { runCli } from '../support/cli.ts';
 import { createConsumer, retainConsumer } from '../support/consumer.ts';
 
-const Spawned = Schema.Struct({ process: Schema.instanceOf(ChildProcess) });
-const SpawnOptions = Schema.Struct({ cwd: Schema.String, envPairs: Schema.Array(Schema.String), detached: Schema.Literal(true) });
-const Starting = Schema.Struct({ ...Spawned.fields, options: SpawnOptions });
+const SpawnOptions = Schema.Struct({ cwd: Schema.String, env: Schema.Record(Schema.String, Schema.UndefinedOr(Schema.String)), detached: Schema.Literal(true) });
 const SpawnIdentity = Schema.Struct({ pid: Schema.Int.check(Schema.isGreaterThan(0)), spawnargs: Schema.Array(Schema.String) });
 interface WorkerExit { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly error?: Error }
 interface MaintenanceChild { readonly child: ChildProcess; readonly closed: Promise<WorkerExit> }
@@ -37,7 +35,7 @@ function closedChild(child: ChildProcess): Promise<WorkerExit> {
 }
 
 async function waitForExit(closed: Promise<WorkerExit>, timeoutMs: number): Promise<WorkerExit | undefined> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: Awaited<ReturnType<typeof setTimeout>> | undefined;
   try {
     return await Promise.race([closed, new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), timeoutMs); })]);
   } finally { clearTimeout(timer); }
@@ -74,47 +72,30 @@ function padCache(root: string, cwd: string, env: Readonly<NodeJS.ProcessEnv>): 
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('CLI awaits the real maintenance spawn decision with each invocation environment', { timeout: 60_000 }, async t => {
-  const roots: readonly [string, string] = [realpathSync(createConsumer()), realpathSync(createConsumer())];
+  const roots: readonly [string, string] = [realpathSync((await createConsumer())), realpathSync((await createConsumer()))];
   const [rootA, rootB] = roots;
   const cwdA = join(rootA, 'invocation-a'), cwdB = join(rootB, 'invocation-b');
   const cacheHome = runtimeCacheHome(makeRuntimeEnvironment(process.cwd(), process.env));
   const envA = Object.freeze({ PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, XDG_CACHE_HOME: cacheHome, CONCORD_NATIVE_TEST_HOOKS: process.env.CONCORD_NATIVE_TEST_HOOKS, NODE_OPTIONS: '--conditions=concord-source', CONCORD_MAINTENANCE_INVOCATION: 'A' });
   const envB = Object.freeze({ ...envA, CONCORD_MAINTENANCE_INVOCATION: 'B' });
-  const starts = new WeakMap<ChildProcess, typeof SpawnOptions.Type>();
   const children: MaintenanceChild[] = [], observed: MaintenanceSpawn[] = [], observationFailures: unknown[] = [];
-  const spawning = tracingChannel('child_process.spawn');
-  const starting = (value: unknown) => {
-    try {
-      const child = Schema.decodeUnknownSync(Spawned, { onExcessProperty: 'ignore' })(value).process;
-      if (workerRoot(child, roots) === undefined) return;
-      const decoded = Schema.decodeUnknownSync(Starting, { onExcessProperty: 'ignore' })(value);
-      starts.set(child, decoded.options);
-    } catch (cause) { observationFailures.push(cause); }
-  };
-  const spawned = (value: unknown) => {
-    try {
-      const child = Schema.decodeUnknownSync(Spawned, { onExcessProperty: 'ignore' })(value).process;
-      const root = workerRoot(child, roots);
-      if (root === undefined) return;
+  const originalSpawn = childProcess.spawn;
+  // Observe the public spawn boundary and forward the real process unchanged.
+  childProcess.spawn = new Proxy(originalSpawn, { apply(target, receiver, args) {
+    const child = Reflect.apply(target, receiver, args) as ChildProcess;
+    const root = workerRoot(child, roots);
+    if (root !== undefined) {
       children.push({ child, closed: closedChild(child) });
-      // Node publishes spawn:end before assigning pid; this observes the completed OS spawn.
-      queueMicrotask(() => {
-        try {
-          const identity = Schema.decodeUnknownSync(SpawnIdentity, { onExcessProperty: 'ignore' })(child);
-          const options = starts.get(child);
-          assert.ok(options, 'the real spawn must retain its decoded cwd and environment');
-          const env = Object.fromEntries(options.envPairs.map(pair => {
-            const separator = pair.indexOf('=');
-            assert.ok(separator > 0, 'spawn environment must contain named entries');
-            return [pair.slice(0, separator), pair.slice(separator + 1)];
-          }));
-          observed.push({ root, pid: identity.pid, cwd: options.cwd, env });
-        } catch (cause) { observationFailures.push(cause); }
-      });
-    } catch (cause) { observationFailures.push(cause); }
-  };
-  spawning.start.subscribe(starting);
-  spawning.end.subscribe(spawned);
+      try {
+        const options = Schema.decodeUnknownSync(SpawnOptions, { onExcessProperty: 'ignore' })(args[2]);
+        const identity = Schema.decodeUnknownSync(SpawnIdentity, { onExcessProperty: 'ignore' })(child);
+        const env = Object.fromEntries(Object.entries(options.env).filter((row): row is [string, string] => row[1] !== undefined));
+        observed.push({ root, pid: identity.pid, cwd: options.cwd, env });
+      } catch (cause) { observationFailures.push(cause); }
+    }
+    return child;
+  } });
+  syncBuiltinMocks();
   try {
     mkdirSync(cwdA); mkdirSync(cwdB);
     padCache(rootA, cwdA, envA); padCache(rootB, cwdB, envB);
@@ -146,8 +127,8 @@ test('CLI awaits the real maintenance spawn decision with each invocation enviro
       }
       for (const root of roots) rmSync(root, { recursive: true, force: true });
     } finally {
-      spawning.start.unsubscribe(starting);
-      spawning.end.unsubscribe(spawned);
+      childProcess.spawn = originalSpawn;
+      syncBuiltinMocks();
     }
   }
 });

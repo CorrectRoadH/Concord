@@ -8,7 +8,7 @@ import { prepareAuthoringFixture } from './authoring-fixture.ts';
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser navigates owner directories and preserves implementation and document layouts', async ({ page, workspace }) => {
   const root = workspace.root;
-  prepareAuthoringFixture(root);
+  (await prepareAuthoringFixture(root));
   let server: ViewServerHandle | undefined;
 
   server = await workspace.ready();
@@ -90,7 +90,7 @@ test('browser navigates owner directories and preserves implementation and docum
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md#页面选择
 test('browser creates Engineering with all nine optional page kinds', async ({ page, workspace }) => {
   const root = workspace.root;
-  prepareAuthoringFixture(root);
+  (await prepareAuthoringFixture(root));
   let server: ViewServerHandle | undefined;
 
   server = await workspace.ready();

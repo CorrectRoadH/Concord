@@ -5,8 +5,8 @@ import { readAnalysisObservations } from "./code-analysis.ts";
 import type { AnnotatedCase, DocumentRecord, Repository } from "../model/index.ts";
 import type { CodeDeclaration } from "../model/index.ts";
 import { extractSteps } from "../domain/documents/index.ts";
-export function analysisView(repo: Repository, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[], documents: readonly DocumentRecord[], references = referenceResolver(repo, documents)): AnalysisView {
-  const observations = readAnalysisObservations(repo);
+export async function analysisView(repo: Repository, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[], documents: readonly DocumentRecord[], references = referenceResolver(repo, documents)): Promise<AnalysisView> {
+  const observations = (await readAnalysisObservations(repo));
   const stepRefs = new Set(documents.filter(document => document.metadata.kind === 'use-case').flatMap(document =>
     extractSteps(document.path, repo.read(document.path) ?? '', repositoryRuntime(repo)).steps.map(step => `${document.path}#${step.id}`)));
   const targets = new Map<string, DocumentRecord>();

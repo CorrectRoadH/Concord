@@ -55,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ['1/16', '2/16', '3/16', '4/16', '5/16', '6/16', '7/16', '8/16', '9/16', '10/16', '11/16', '12/16', '13/16', '14/16', '15/16', '16/16', package]
+        shard: ['1/16', '2/16', '3/16', '4/16', '5/16', '6/16', '7/16', '8/16', '9/16', '10/16', '11/16', '12/16', '13/16', '14/16', '15/16', '16/16']
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -81,9 +81,8 @@ jobs:
           version: '0.12.5'
       - name: Prepare the pinned offline pytest adapter
         run: uv run --no-project --with pytest==9.1.1 pytest --version
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep patchelf binutils
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec vp exec playwright install --with-deps chromium
-        if: matrix.shard != 'package'
       - uses: actions/download-artifact@v4
         with:
           name: gate-native

@@ -19,11 +19,11 @@ import { pollUntil } from '../support/support.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
-function fixture() {
+async function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-maintenance-')));
   execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [], sourceRoots: [] }); } finally { repo.close(); }
+  const repo = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(repo, false, { testRoots: [], sourceRoots: [] })); } finally { repo.close(); }
   const path = join(root, '.git/concord/cache.hawdb');
   const db = openHawdb(path, { readOnly: false, create: true }, nativeRuntime);
   db.put('config_cache', [{ key: 'retained', payload: 'a current logical value' }]); db.close();
@@ -47,7 +47,7 @@ async function settle(root: string) {
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('maintenance competing with another process holding and writing a handle exits without deletion', () => Effect.runPromise(Effect.tryPromise({ try: async () => {
-  const f = fixture();
+  const f = (await fixture());
   let holder: ChildProcess | undefined;
   try {
     pad(f.padding, CACHE_MAINTENANCE_THRESHOLD_BYTES * 2 + 1);
@@ -77,7 +77,7 @@ test('maintenance competing with another process holding and writing a handle ex
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('a query service maintains an oversized cache while retaining ownership and accepting later queries', () => Effect.runPromise(Effect.tryPromise({ try: async () => {
-  const f = fixture(), install = join(f.root, 'installation');
+  const f = (await fixture()), install = join(f.root, 'installation');
   let installedEntry: string | undefined;
   try {
     mkdirSync(install);
@@ -85,8 +85,8 @@ test('a query service maintains an oversized cache while retaining ownership and
     const entry = sourceCli();
     installedEntry = entry;
     const trace = join(f.root, 'reclamation-trace.jsonl');
-    const env = { ...process.env, CONCORD_TEST_RECLAIM_TRACE: trace, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${fileURLToPath(new URL('../fixtures/cache-maintenance-preload.ts', import.meta.url))}`.trim() };
-    const events = () => existsSync(trace) ? readFileSync(trace, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as { kind: string; pid: number }) : [];
+    const env = { ...process.env, CONCORD_TEST_RECLAIM_TRACE: trace, BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${fileURLToPath(new URL('../fixtures/cache-maintenance-preload.ts', import.meta.url))}`.trim() };
+    const events = () => existsSync(trace) ? readFileSync(trace, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as { kind: string; pid: number; argv: string[] }) : [];
     const command = (...args: string[]) => spawnSync(process.execPath, [entry, '--root', f.root, '--json', ...args], { cwd: install, env, encoding: 'utf8', timeout: 30_000 });
     const rebuild = () => {
       const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'cache', 'rebuild'], { cwd: install, env, encoding: 'utf8', timeout: 30_000 });
@@ -115,7 +115,7 @@ test('a query service maintains an oversized cache while retaining ownership and
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     assert.equal(JSON.parse(rebuilt.stdout).ok, true);
     assert.equal(existsSync(f.padding), true);
-    assert.equal(events().filter(event => event.kind === 'compute-start').length, 2);
+    assert.equal(events().filter(event => event.kind === 'compute-start').length, 2, JSON.stringify(events().filter(event => event.kind === 'compute-start')));
   } finally {
     if (installedEntry) {
       const stopped = spawnSync(process.execPath, [installedEntry, '--root', f.root, '--json', 'server', 'stop'], { encoding: 'utf8', timeout: 30_000 });

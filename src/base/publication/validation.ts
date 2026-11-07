@@ -6,7 +6,7 @@ import { acquireTraceLease, releaseTraceLease, type TraceLease } from './coordin
 import { makePublicationReceiptStore } from './issue-receipts.ts';
 import { inspectExportAncestors, publishExport } from './preview-tree.ts';
 import { scratchDirectory } from './scratch.ts';
-import { OperationCache } from '../cache/operation-cache.ts';
+import { OperationCache } from '../cache/index.ts';
 
 export interface PublicationCatalog {
   readonly operation: string;
@@ -27,8 +27,8 @@ export interface IssueClosePlan {
 export class PublicationValidation extends Context.Service<PublicationValidation, {
   readonly validateWriting: (source: string, path: string) => void;
   readonly validateCatalog: (repo: Repository, journal: PublicationCatalog, fail: (message: string) => never) => void;
-  readonly planIssueClose: (repo: Repository, request: { readonly issue: string }) => IssueClosePlan;
-  readonly planStepRename: (repo: Repository, request: StepRename) => StepRenamePlan;
+  readonly planIssueClose: (repo: Repository, request: { readonly issue: string }) => Promise<IssueClosePlan>;
+  readonly planStepRename: (repo: Repository, request: StepRename) => Promise<StepRenamePlan>;
 }>()('concord/PublicationValidation') {}
 
 /** A writer can only be constructed from a Publication layer with validation. */
@@ -39,7 +39,7 @@ export class Publication extends Context.Service<Publication, {
   readonly inspectExportAncestors: typeof inspectExportAncestors;
   readonly publishExport: (out: string, data: string, chain: Parameters<typeof publishExport>[2]) => ReturnType<typeof publishExport>;
   readonly lease: (root: string, operation: string, create?: boolean, reclaimDead?: boolean) => Effect.Effect<TraceLease | undefined, ConcordError, Scope.Scope>;
-  readonly publish: (repo: Repository, operation: string, changes: readonly Change[], dryRun?: boolean) => Effect.Effect<ReturnType<Repository['publish']>, ConcordError>;
+  readonly publish: (repo: Repository, operation: string, changes: readonly Change[], dryRun?: boolean) => Effect.Effect<Awaited<ReturnType<Repository['publish']>>, ConcordError>;
 }>()('concord/Publication') {
   static readonly layer = Layer.effect(Publication, Effect.gen(function*() {
     const validation = yield* PublicationValidation;
@@ -64,7 +64,7 @@ export class Publication extends Context.Service<Publication, {
         );
       }),
       publish: Effect.fn('Publication.publish')((repo: Repository, operation: string, changes: readonly Change[], dryRun = false) =>
-        Effect.try({ try: () => repo.publish(operation, changes, dryRun), catch: failure })),
+        Effect.tryPromise({ try: () => repo.publish(operation, changes, dryRun), catch: failure }).pipe(Effect.uninterruptible)),
     });
   }));
 }

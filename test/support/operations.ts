@@ -7,12 +7,12 @@ import * as application from '../../src/app/index.ts';
 import * as documents from '../../src/domain/documents/index.ts';
 
 /** Fixture composition root: execute real template operations against installed resources. */
-const run = <A, E>(operation: Effect.Effect<A, E, Installation | RuntimeEnvironment>): A => Effect.runSync(operation.pipe(Effect.provide(Installation.layer), Effect.provide(RuntimeEnvironment.layer(makeRuntimeEnvironment(process.cwd(), process.env)))));
-export const initialize = (...args: Parameters<typeof application.initialize>) => run(application.initialize(...args));
-export const createDocument = (...args: Parameters<typeof application.createDocument>) => run(application.createDocument(...args));
-export const addPage = (...args: Parameters<typeof documents.addPage>) => run(documents.addPage(...args));
-export const templateBody = (...args: Parameters<typeof documents.templateBody>) => run(documents.templateBody(...args));
-export const listTemplates = () => run(documents.listTemplates());
+const run = <A, E>(operation: Effect.Effect<A, E, Installation | RuntimeEnvironment>): Promise<A> => Effect.runPromise(operation.pipe(Effect.provide(Installation.layer), Effect.provide(RuntimeEnvironment.layer(makeRuntimeEnvironment(process.cwd(), process.env)))));
+export const initialize = async (...args: Parameters<typeof application.initialize>) => run(application.initialize(...args));
+export const createDocument = async (...args: Parameters<typeof application.createDocument>) => run(application.createDocument(...args));
+export const addPage = async (...args: Parameters<typeof documents.addPage>) => run(documents.addPage(...args));
+export const templateBody = async (...args: Parameters<typeof documents.templateBody>) => run(documents.templateBody(...args));
+export const listTemplates = async () => run(documents.listTemplates());
 
 const runCache = <A, E>(operation: Effect.Effect<A, E, CacheTypes.PersistentCache | RuntimeEnvironment>): A => Effect.runSync(operation.pipe(Effect.provide(PersistentCache.layer), Effect.provide(RuntimeEnvironment.layer(makeRuntimeEnvironment(process.cwd(), process.env)))));
 export const readQuery = (...args: Parameters<typeof application.readQuery>) => runCache(application.readQuery(...args));

@@ -20,11 +20,11 @@ import { ensureGenericPrivateDirectorySync } from "../../src/base/publication/in
 const CacheReport = Schema.Struct({ status: Schema.String });
 const ScanReport = Schema.Struct({ cache: CacheReport, codeCache: CacheReport });
 
-function freshConsumer(): string {
+async function freshConsumer(): Promise<string> {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-fresh-cache-')));
   execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: ['test'], sourceRoots: ['src'] }); }
+  const repo = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(repo, false, { testRoots: ['test'], sourceRoots: ['src'] })); }
   finally { repo.close(); }
   // A fresh clone carries these source owners, but none of init's Git-private state.
   rmSync(join(root, '.git/concord'), { recursive: true, force: true });

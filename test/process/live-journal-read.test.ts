@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from '../support/builtin-mocks.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createConsumer } from '../support/consumer.ts';
@@ -11,17 +11,18 @@ import { runCli } from '../support/cli.ts';
 
 // @feature docs/feature/local-sdlc/architecture.md#写入管线
 test('a current read waits for a live journal publisher and observes its completed publication', { timeout: 20_000 }, async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const document = join(root, 'docs/feature/live/README.md');
   fs.mkdirSync(join(root, 'docs/feature/live'), { recursive: true });
   fs.writeFileSync(document, '# Before publication\n');
   const journal = join(root, '.git/concord/journal.json');
   const writer = spawn(process.execPath, ['--conditions=concord-source', '--input-type=module', '-e', `
     import fs from 'node:fs';
-    import { syncBuiltinESMExports } from 'node:module';
+    import { mock as bunMock } from 'bun:test';
+const syncBuiltinESMExports = () => bunMock.module('node:fs', () => ({ ...fs, default: fs }));
     import { LocalRepository } from './test/support/repository.ts';
     const root = process.argv[1];
-    const repo = new LocalRepository(root, { optimistic: true, persistentCache: 'off' });
+    const repo = await LocalRepository.open(root, { optimistic: true, persistentCache: 'off' });
     const rename = fs.renameSync;
     let paused = false;
     fs.renameSync = (from, to) => {
@@ -33,7 +34,7 @@ test('a current read waits for a live journal publisher and observes its complet
       }
     };
     syncBuiltinESMExports();
-    try { repo.publish('live-read', [{ path: 'docs/feature/live/README.md', before: repo.read('docs/feature/live/README.md'), after: '# Published architecture\\n' }]); }
+    try { await repo.publish('live-read', [{ path: 'docs/feature/live/README.md', before: repo.read('docs/feature/live/README.md'), after: '# Published architecture\\n' }]); }
     finally { repo.close(); }
   `, root], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
   const exited = once(writer, 'exit');

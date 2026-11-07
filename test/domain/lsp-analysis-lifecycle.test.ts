@@ -22,19 +22,19 @@ import { collectNativeTests } from "../../src/domain/tests/index.ts";
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const target = 'docs/feature/sample/use-case/sample.md';
-function consumer(): string {
-  const root = createConsumer();
+async function consumer(): Promise<string> {
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: ['test'], sourceRoots: ['src'] });
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'sample', title: 'Sample' });
-    createDocument(repo, 'use-case', { id: 'sample', feature: 'sample', title: 'Sample' });
+    (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }));
+    (await createDocument(repo, 'use-case', { id: 'sample', feature: 'sample', title: 'Sample' }));
   } finally { repo.close(); }
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src/sample.ts'), `// @concord-file\n// @concord-implements ${target}\nexport const sample = 1;\n`);
   writeFileSync(join(root, 'src/sample.py'), `# @concord-code\n# @concord-implements ${target}\ndef implementation():\n    return 1\n`);
   buildSync({ entryPoints: ['test/fixtures/lsp-server.ts'], bundle: true, platform: 'node', format: 'esm', outfile: join(root, 'server.mjs'), logLevel: 'silent' });
-  writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [{
     id: 'fixture', languageId: 'python', extensions: ['.py'], argv: [process.execPath, 'server.mjs'], cwd: ".", environment: [],
     initializationOptions: { mode: 'normal', auditPath: join(root, '.git/server-audit'), gatePath: join(root, '.git/server-continue') },
     implementationFiles: ['server.mjs'], sourceFiles: [], budgets: { totalMs: 30000, requestMs: 10000 },
@@ -43,7 +43,7 @@ function consumer(): string {
   return root;
 }
 async function analyze(root: string) {
-  const repo = new LocalRepository(root, { optimistic: true });
+  const repo = (await LocalRepository.open(root, { optimistic: true }));
   try { return await runApplication(analyzeCode(repo).pipe(Effect.provide(OwnedProcessLive))); }
   finally { repo.close(); }
 }
@@ -62,16 +62,16 @@ async function blocked(root: string) {
   return { result, release: () => writeFileSync(join(root, '.git/server-continue'), 'continue') };
 }
 function clean(root: string): void {
-  assert.equal(inspectRunner(root).status, 'absent');
-  assert.equal(existsSync(join(tracePrivateDirectorySync(root), 'publication.lease')), false);
+  assert.equal(inspectRunner(root, process.env).status, 'absent');
+  assert.equal(existsSync(join(tracePrivateDirectorySync(root, process.env), 'publication.lease')), false);
 }
 
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
 test('analysis releases persistent readers and publication ownership while its external server runs', async () => {
-  const root = consumer();
+  const root = (await consumer());
   const running = await blocked(root);
   try {
-    assert.equal(existsSync(join(tracePrivateDirectorySync(root), 'publication.lease')), false);
+    assert.equal(existsSync(join(tracePrivateDirectorySync(root, process.env), 'publication.lease')), false);
     const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }, nativeRuntime);
     database.close();
     running.release();
@@ -92,7 +92,7 @@ test('analysis refuses changed source, membership, contract, configuration and c
     ['candidate', (root: string) => writeFileSync(join(root, 'candidate.txt'), 'new candidate member\n')],
   ] as const;
   for (const [name, edit] of edits) await t.test(name, async () => {
-    const root = consumer(), running = await blocked(root);
+    const root = (await consumer()), running = await blocked(root);
     const rejected = assert.rejects(running.result, error => error instanceof ConcordError && error.code === 'AnalysisSourceChanged');
     try { edit(root); running.release(); await rejected; clean(root); }
     finally { running.release(); await running.result.catch(() => undefined); rmSync(root, { recursive: true, force: true }); }
@@ -102,7 +102,7 @@ test('analysis refuses changed source, membership, contract, configuration and c
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
 // @name native-analysis-publication-inputs
 test('analysis refuses ignored adapter inputs changed while its external server runs', async () => {
-  const root = consumer(), previous = process.env.ANALYSIS_ADAPTER_STATE;
+  const root = (await consumer()), previous = process.env.ANALYSIS_ADAPTER_STATE;
   let running: Awaited<ReturnType<typeof blocked>> | undefined;
   try {
     mkdirSync(join(root, 'fixtures')); mkdirSync(join(root, 'test'));
@@ -110,9 +110,9 @@ test('analysis refuses ignored adapter inputs changed while its external server 
     writeFileSync(join(root, '.gitignore'), 'fixtures/\n');
     writeFileSync(join(root, 'test/sample.py'), `# @use-case ${target}\n# @name selected\n# @native fixture:selected\ndef selected():\n    return 1\n`);
     buildSync({ entryPoints: ['test/fixtures/analysis-adapter.ts'], bundle: true, platform: 'node', format: 'esm', outfile: join(root, 'analysis-adapter.mjs'), logLevel: 'silent' });
-    writeProjectConfig(root, { ...readProjectConfig(root), testAdapters: [{ id: 'fixture', include: ['test/sample.py'], argv: [process.execPath, 'analysis-adapter.mjs'], implementationFiles: ['analysis-adapter.mjs'], inputRoots: ['fixtures'], lockFiles: [], frameworkVersion: 'fixture/v1', envNames: ['ANALYSIS_ADAPTER_STATE'] }] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), testAdapters: [{ id: 'fixture', include: ['test/sample.py'], argv: [process.execPath, 'analysis-adapter.mjs'], implementationFiles: ['analysis-adapter.mjs'], inputRoots: ['fixtures'], lockFiles: [], frameworkVersion: 'fixture/v1', envNames: ['ANALYSIS_ADAPTER_STATE'] }] });
     process.env.ANALYSIS_ADAPTER_STATE = state;
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try { await runApplication(collectNativeTests(repo, ['test/sample.py']).pipe(Effect.provide(OwnedProcessLive))); } finally { repo.close(); }
     running = await blocked(root);
     const rejected = assert.rejects(running.result, error => error instanceof ConcordError && error.code === 'AnalysisSourceChanged');

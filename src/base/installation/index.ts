@@ -5,10 +5,9 @@ export { nativeArtifactRoot, verifySourceNativeArtifact, nativeFileDigest, nativ
 export * from './hawdb-native-contract.ts';
 export { readNativeRelease, decodeNativeRelease, nativeReleaseAsset, NativeReleaseSchema, type NativeRelease } from './native-release.ts';
 export { nativeCacheRoot, nativeSourceFiles } from './native-artifact.ts';
-export { installationResources, installationRootForBin } from './resources.ts';
+export { installationResources, installationRootForBin, resourcePath } from './resources.ts';
 export { Installation } from './service.ts';
 export { sourceWebServer, sourceP5Runtime, sourcePreviewFiles } from './source-web.ts';
-export { SourceWebBuilder, SourceWebBuilderLive, buildSourceWebArtifact } from './source-web-builder.ts';
 export { sourceWebArtifact, sourceWebDigest, sourceWebCacheDirectory, SourceWebCacheError, readWebReceipt, runSourceWeb } from './source-web-cache.ts';
 export { sourceWebInputDigest, sourceWebRuntimeImports } from './source-web-inputs.ts';
 export type { TemplateResources } from './service.ts';
@@ -16,3 +15,4 @@ export type { HerdrModReceipt } from './herdr-mod.ts';
 export { installedConcordVersion } from './library-version.ts';
 export { installationUseMarker } from './use-marker.ts';
 export { applicationRoot, archiveRootForApplication, packagedRuntimeForApplication } from './archive-location.ts';
+export { compiledInstallation } from './compilation.ts';

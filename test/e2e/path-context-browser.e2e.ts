@@ -14,10 +14,10 @@ test('file context menus copy repository paths without navigating or changing fi
 
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: '菜单', title: '文件菜单', pages: ['architecture', 'use-case'] });
-    createDocument(repo, 'feature', { id: 'another', title: '另一项', pages: [] });
+    (await createDocument(repo, 'feature', { id: '菜单', title: '文件菜单', pages: ['architecture', 'use-case'] }));
+    (await createDocument(repo, 'feature', { id: 'another', title: '另一项', pages: [] }));
   } finally { repo.close(); }
   server = await workspace.ready();
   const origin = `http://127.0.0.1:${server.port}`;

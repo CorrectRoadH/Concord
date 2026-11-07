@@ -17,8 +17,8 @@ test('owned process transports stdin and preserves default ignored stdin', async
 
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed writes fix PATCH fields, encode labels, retain literal @ bodies and preview no change', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer('operations'); const body = join(root, 'body.txt'); writeFileSync(body, '@secret-path\n你好');
+test('packed writes fix PATCH fields, encode labels, retain literal @ bodies and preview no change', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer('operations')); const body = join(root, 'body.txt'); writeFileSync(body, '@secret-path\n你好');
   for (const [operation, args, expected] of [
     ['body-set', ['12', '--body', body], { body: '@secret-path\n你好' }],
     ['comment-add', ['12', '--body', body], { body: '@secret-path\n你好' }],

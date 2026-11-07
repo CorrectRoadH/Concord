@@ -76,26 +76,26 @@ test('taste Memory rendering uses the same AST heading validation as other Memor
 });
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#路径与身份
-test('same Use Case filename in different Features requires an exact selector', () => Effect.runPromise(Effect.sync(() => consumer(repo => {
-  for (const id of ['one', 'two']) { createDocument(repo, 'feature', { id, title: id }); createDocument(repo, 'use-case', { id: 'create', title: '创建', feature: id }); }
+test('same Use Case filename in different Features requires an exact selector', () => Effect.runPromise(Effect.tryPromise(async () => (await consumer(async repo => {
+  for (const id of ['one', 'two']) { (await createDocument(repo, 'feature', { id, title: id })); (await createDocument(repo, 'use-case', { id: 'create', title: '创建', feature: id })); }
   const documents = loadDocuments(repo);
   assert.throws(() => findDocument(documents, 'create', 'use-case'), code('AmbiguousDocument'));
   assert.equal(findDocument(documents, 'docs/feature/two/use-case/create.md', 'use-case').path, 'docs/feature/two/use-case/create.md');
   assert.deepEqual(checkDocuments(repo, documents), []);
-}))));
+})))));
 
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#adopt
-test('Roadmap adoption moves the package and rewrites inbound and outbound Markdown links', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
-  createDocument(repo, 'feature', { id: 'existing', title: 'Existing' });
-  createDocument(repo, 'roadmap', { id: 'future', title: 'Future', body: '# Future\n\n[guide](guide.md) [existing](../../feature/existing/README.md)\n' });
+test('Roadmap adoption moves the package and rewrites inbound and outbound Markdown links', () => Effect.runPromise(Effect.tryPromise(async () => (await consumer(async (repo, root) => {
+  (await createDocument(repo, 'feature', { id: 'existing', title: 'Existing' }));
+  (await createDocument(repo, 'roadmap', { id: 'future', title: 'Future', body: '# Future\n\n[guide](guide.md) [existing](../../feature/existing/README.md)\n' }));
   write(root, 'docs/roadmap/future/guide.md', '# Guide\n\n[owner](README.md)\n');
   write(root, 'docs/feature/existing/inbound.md', '# Inbound\n\n[future](../../roadmap/future/guide.md)\n');
-  adoptRoadmap(repo, 'future', 'future');
+  (await adoptRoadmap(repo, 'future', 'future'));
   assert.equal(repo.read('docs/roadmap/future/README.md'), undefined);
   assert.equal(repo.read('docs/roadmap/future/guide.md'), undefined);
   assert.equal(existsSync(join(root, 'docs/roadmap/future')), false);
   assert.equal(repo.read('docs/feature/future/guide.md'), '# Guide\n\n[owner](README.md)\n');
   assert.match(repo.read('docs/feature/existing/inbound.md')!, /\]\(\.\.\/future\/guide\.md\)/u);
   assert.match(repo.read('docs/feature/future/README.md')!, /\]\(\.\.\/existing\/README\.md\)/u);
-}))));
+})))));

@@ -18,21 +18,21 @@ const source = '// @feature docs/feature/example/README.md\n// @name parameter-g
 for (const mode of ['green', 'wrong-echo', 'extra-envelope'] as const) {
   // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
   test(`real adapter consumer validates ${mode} response and observation publication`, async () => {
-    const root = createConsumer();
+    const root = (await createConsumer());
     let repo: LocalRepository | undefined;
     try {
-      const initial = new LocalRepository(root);
+      const initial = (await LocalRepository.open(root));
       try {
-        createDocument(initial, 'feature', { id: 'example', title: 'Example' });
-        createDocument(initial, 'issue', { id: 'problem', title: 'Problem' });
+        (await createDocument(initial, 'feature', { id: 'example', title: 'Example' }));
+        (await createDocument(initial, 'issue', { id: 'problem', title: 'Problem' }));
       } finally { initial.close(); }
       mkdirSync(join(root, 'test'), { recursive: true });
       writeFileSync(join(root, 'test/sample.ts'), source);
       copyFileSync(new URL('../fixtures/process-adapter.ts', import.meta.url), join(root, 'adapter.ts'));
       writeFileSync(join(root, 'fixture.txt'), 'original');
       writeFileSync(join(root, 'fixture.lock'), 'locked');
-      writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], testAdapters: [{ id: 'external', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: ['fixture.lock'], envNames: ['NODE_OPTIONS', 'PATH'], collectTimeoutMs: 1000, budgets: { reportFileBytes: 128 } }] });
-      repo = new LocalRepository(root);
+      writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], testAdapters: [{ id: 'external', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: ['fixture.lock'], envNames: ['NODE_OPTIONS', 'PATH'], collectTimeoutMs: 1000, budgets: { reportFileBytes: 128 } }] });
+      repo = (await LocalRepository.open(root));
       // Only external process bytes are simulated; the application owns request
       // identity, strict response decoding, publication and session cleanup.
       const owner = {
@@ -55,7 +55,7 @@ for (const mode of ['green', 'wrong-echo', 'extra-envelope'] as const) {
         assert.deepEqual(result.observations[0]!.observation.value.cases.map(item => item.nativeId), ['fake:binary-a:one', 'fake:binary-b:two']);
         assert.deepEqual(readNativeObservations(repo).map(item => item.adapterId), ['external']);
       } else {
-        await assert.rejects(collect(), { code: 'AdapterProtocolInvalid' }, mode);
+        await assert.rejects((collect()), { code: 'AdapterProtocolInvalid' }, mode);
         assert.deepEqual(readNativeObservations(repo), [], 'Rejected envelopes cannot publish a current inventory');
       }
       assert.equal(readFileSync(join(root, 'test/sample.ts'), 'utf8'), source);

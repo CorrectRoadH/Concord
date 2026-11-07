@@ -16,7 +16,7 @@ const caps = { realCollection: true, leaf: true, parameterGroups: true, exactSel
 const config = { testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } };
 const adapter = { id: 'fixture', include: ['test'], argv: ['node', 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: [], envNames: ['PATH'] };
 const source = '// @feature docs/feature/sample/README.md\n// @name named\nconst placeholder = true;\n';
-const marker = parseTestDeclarations('test/sample.ts', source).cases[0]!;
+const marker = (await parseTestDeclarations('test/sample.ts', source)).cases[0]!;
 const repo = { read: () => source } as unknown as Repository;
 const manifest = (ranges = [{ startLine: 3, endLine: 3, sourceDigest: digest(source) }]): NativeManifest => protocolDecode(ManifestSchema, { cases: ranges.flatMap((range, index) => ['one', 'two'].map(id => ({ nativeId: `fixture:${index}:${id}`, file: marker.file, project: 'test', kind: 'leaf', group: `group-${index}`, range, selection: { opaqueId: id, capabilityVersion: 'v1' }, tags: {}, provenance: 'fixture' }))), capabilities: caps, completeness: { complete: true, gaps: [] } });
 const status: ProcessStatus = { invocationId: 'one', exitCode: 0, signal: null, timedOut: false, cancelled: false, outputTruncated: false, cleanup: 'complete' };
@@ -31,18 +31,18 @@ test('adapter config validates path segments, overlap and hard budgets (C17)', (
 
 // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 // @name native-selector-v1-c15
-test('native selectors preserve v1 identity and reject duplicate metadata (C7 C15)', () => Effect.runPromise(Effect.sync(() => {
-  const before = parseTestDeclarations(marker.file, source).cases[0]!;
-  const after = parseTestDeclarations(marker.file, source.replace('// @name named', '// @name named\n// @native fixture:one')).cases[0]!;
+test('native selectors preserve v1 identity and reject duplicate metadata (C7 C15)', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const before = (await parseTestDeclarations(marker.file, source)).cases[0]!;
+  const after = (await parseTestDeclarations(marker.file, source.replace('// @name named', '// @name named\n// @native fixture:one'))).cases[0]!;
   assert.equal(before.id, after.id); assert.equal(after.native, 'fixture:one');
-  assert.ok(parseTestDeclarations(marker.file, source.replace('// @name named', '// @native one\n// @native two')).findings.length);
-  assert.equal(parseTestDeclarations(marker.file, '// @tag arbitrary\n').cases.length, 0);
-  assert.equal(parseTestDeclarations(marker.file, 'const x = "// @native fake:one";\n').cases.length, 0);
+  assert.ok((await parseTestDeclarations(marker.file, source.replace('// @name named', '// @native one\n// @native two'))).findings.length);
+  assert.equal((await parseTestDeclarations(marker.file, '// @tag arbitrary\n')).cases.length, 0);
+  assert.equal((await parseTestDeclarations(marker.file, 'const x = "// @native fake:one";\n')).cases.length, 0);
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 // @name native-binding-c1-c8
-test('range binding expands parameter groups, detects overlap and explicit conflict (C1 C2 C8)', () => Effect.runPromise(Effect.sync(() => {
+test('range binding expands parameter groups, detects overlap and explicit conflict (C1 C2 C8)', () => Effect.runPromise(Effect.tryPromise(async () => {
   const current = manifest();
   assert.deepEqual(bindNative(repo, marker, current), ['fixture:0:one', 'fixture:0:two']);
   assert.deepEqual(bindNative(repo, { ...marker, native: 'fixture:0:one' }, current), ['fixture:0:one', 'fixture:0:two']);
@@ -53,7 +53,7 @@ test('range binding expands parameter groups, detects overlap and explicit confl
   const another = { ...current.cases[0]!, nativeId: 'fixture:outside', group: 'outside', range: undefined };
   assert.throws(() => bindNative(repo, { ...marker, native: another.nativeId }, { ...current, cases: [...current.cases, another] }), { code: 'NativeSelectorConflict' });
   const commentSource = '// @feature docs/feature/sample/README.md\n// ordinary comment outside the marker metadata\nconst test = true;\n';
-  const commentMarker = parseTestDeclarations(marker.file, commentSource).cases[0]!;
+  const commentMarker = (await parseTestDeclarations(marker.file, commentSource)).cases[0]!;
   const commentManifest = { ...current, cases: current.cases.map(item => ({ ...item, range: { startLine: 3, endLine: 3, sourceDigest: digest(commentSource) } })) };
   assert.equal(bindNative({ read: () => commentSource } as unknown as Repository, commentMarker, commentManifest), undefined);
 })));
@@ -94,9 +94,9 @@ test('report ownership rejects path escape, symlinks, hardlinks, old files and b
     rmSync(join(root, 'link.json')); linkSync(join(root, 'new.json'), join(root, 'alias.json'));
     await assert.rejects(runApplication(readReports(root, ['new.json', 'alias.json'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
     rmSync(join(root, 'alias.json')); writeFileSync(join(root, 'old.json'), '{}');
-    await assert.rejects(runApplication(readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
+    await assert.rejects((runApplication(readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 }))), { code: 'ReportUnsafe' });
     rmSync(join(root, 'old.json')); writeFileSync(join(root, 'new.json'), '<!DOCTYPE x><x/>');
-    await assert.rejects(runApplication(readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
+    await assert.rejects((runApplication(readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 }))), { code: 'ReportUnsafe' });
     mkdirSync(join(root, 'actual', 'invocation'), { recursive: true });
     writeFileSync(join(root, 'actual', 'invocation', 'result.json'), '{}');
     symlinkSync(join(root, 'actual'), join(root, 'alias'), 'dir');

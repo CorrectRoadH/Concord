@@ -9,26 +9,26 @@ import type { CodeDeclaration } from "../../model/index.ts";
 import { checkDocuments, diagnoseDocuments, inspectDocumentRecords, type DocumentInventory } from "../documents/index.ts";
 import { ConcordError, type AnnotatedCase, type Finding, type Repository } from "../../model/index.ts";
 import { TASTE_PATH, inspectTaste } from "../taste/index.ts";
-import { measureScan, type ScanTiming } from "../../base/sources/index.ts";
+import { measureScan, measureScanAsync, type ScanTiming } from "../../base/sources/index.ts";
 import { referenceResolver } from "../documents/index.ts";
 import { resolveCommit } from "../../base/git/index.ts";
 import { extractSteps } from "../documents/index.ts";
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
-export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' } = {}) {
-  const read = () => buildUnderSnapshot(repo, cache, options).trace;
-  return repo.snapshot === undefined ? read() : repo.snapshot(read);
+export async function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' } = {}) {
+  const read = async () => (await buildUnderSnapshot(repo, cache, options)).trace;
+  return repo.snapshot === undefined ? (await read()) : repo.snapshot(read);
 }
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 // @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
-export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' }) {
+export async function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' }) {
   const runtime = repositoryRuntime(repo);
   const contentCache = makeDocumentProjectionCache(runtime);
   try {
   const inventory = options.inventory ?? diagnoseDocuments(repo);
   const documents = inventory.documents;
-  const annotations = measureScan(options.timing, 'trace.annotations', () => scanAnnotations(repo, { cache, sourceMode: options.annotationSourceMode }));
+  const annotations = (await measureScanAsync(options.timing, 'trace.annotations', async () => (await scanAnnotations(repo, { cache, sourceMode: options.annotationSourceMode }))));
   // Steps and taste links share one read of each docs page.
   const pages = new Map<string, { readonly source?: string; readonly cause?: unknown }>();
   const readPage = (path: string): string | undefined => {
@@ -91,7 +91,7 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
     }
   }
   // Implementation associations are independent of test declarations and fixed evidence.
-  const code = options.includeCode === false ? undefined : measureScan(options.timing, 'trace.code', () => scanCode(repo, { cache, timing: options.timing }));
+  const code = options.includeCode === false ? undefined : (await measureScanAsync(options.timing, 'trace.code', async () => (await scanCode(repo, { cache, timing: options.timing }))));
   const codeDeclarations: readonly CodeDeclaration[] = code?.codes ?? [];
   findings.push(...(code?.findings ?? []));
   for (const item of codeDeclarations) for (const target of item.contracts) {
@@ -105,7 +105,7 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
   return { trace, references };
   } finally { contentCache.close(); }
 }
-export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
+export function requireValidTrace(trace: Awaited<ReturnType<typeof buildTrace>>): void {
   if (!trace.complete || trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);
 }
 

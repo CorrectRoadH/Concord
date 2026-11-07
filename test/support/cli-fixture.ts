@@ -64,15 +64,15 @@ export async function call<A>(root: string,args: readonly string[],schema: Schem
  assert.equal(result.exitCode,status,JSON.stringify({args,stdout:result.stdout,stderr:result.stderr}));
  return Schema.decodeUnknownSync(Schema.fromJsonString(schema), { onExcessProperty: 'ignore', errors: 'all' })(status===0||result.stdout.trim()?result.stdout:result.stderr);
 }
-export function callString(root: string,args: readonly string[],input='Contract body.\n',status=0): Promise<string> {
+export async function callString(root: string,args: readonly string[],input='Contract body.\n',status=0): Promise<string> {
  return call(root, args, Schema.String, input, status);
 }
 export function readPage(root: string, path: string) { const body = readFileSync(join(root, path), 'utf8'); return { body, digest: digest(body) }; }
-export function savePage(root: string, path: string, body: string, expectedDigest: string, status = 0) {
+export async function savePage(root: string, path: string, body: string, expectedDigest: string, status = 0) {
  return call(root, ['action', '--input', '-'], status === 0 ? Ack : ErrorOutput, JSON.stringify({ action: 'document.set', path, body, expectedDigest }), status) as Promise<{ error?: string }>;
 }
-export function consumer(name: string){
- const root=join(scratch,name);cpSync(createConsumer(),root,{recursive:true});
+export async function consumer(name: string){
+ const root=join(scratch,name);cpSync((await createConsumer()),root,{recursive:true});
  consumers.add(root);
  writeProjectConfig(root,{testRoots:['test','tests']});
  openHawdb(join(root,'.git/concord/cache.hawdb'),{readOnly:false,create:true}, nativeRuntime).close();

@@ -1,9 +1,9 @@
-import { createConsumer } from '../support/consumer.ts';
+import type { LocalRepository as Repository } from '../support/repository.ts';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,8 +89,13 @@ async function child(scenario: Scenario): Promise<void> {
   const evilMarker = join(temporary, 'evil-marker');
   const readyPath = join(temporary, 'ready');
   const releasePath = join(temporary, 'release');
-  const template = createConsumer();
-  try { cpSync(template, consumer, { recursive: true }); } finally { rmSync(template, { recursive: true, force: true }); }
+  mkdirSync(consumer);
+  execFileSync('git', ['init', '-q', consumer]);
+  try {
+    const { LocalRepository, initialize } = await import('../support/repository.ts');
+    const initial = await LocalRepository.open(consumer, { initialize: true });
+    try { await initialize(initial); } finally { initial.close(); }
+  } catch (cause) { rmSync(temporary, { recursive: true, force: true }); throw cause; }
   mkdirSync(join(consumer, 'bin'));
   mkdirSync(trusted);
   mkdirSync(gitBin);
@@ -112,15 +117,15 @@ async function child(scenario: Scenario): Promise<void> {
     const [{ syncFeedback, listFeedback }, { LocalRepository, runApplication }, { setConfig, showConfig }, { ConcordError }] = await Promise.all([
       import("../../src/domain/feedback/feedback.ts"), import("../support/repository.ts"), import("../../src/app/editing.ts"), import("../../src/model/index.ts"),
     ]);
-    const withRepo = <A>(use: (repo: InstanceType<typeof LocalRepository>) => A): A => {
-      const repo = new LocalRepository(consumer);
-      try { return use(repo); } finally { repo.close(); }
+    const withRepo = async <A>(use: (repo: Repository) => A): Promise<A> => {
+      const repo = (await LocalRepository.open(consumer));
+      try { return await use(repo); } finally { repo.close(); }
     };
-    const configure = (next: FeedbackConnection): void => withRepo(repo => {
+    const configure = async (next: FeedbackConnection): Promise<void> => (await withRepo(async repo => {
       const current = showConfig(repo);
-      setConfig(repo, { ...current.config, feedbackConnections: [next] }, current.digest);
-    });
-    configure(connection);
+      await setConfig(repo, { ...current.config, feedbackConnections: [next] }, current.digest);
+    }));
+    (await configure(connection));
     const configPath = join(consumer, 'concord.config.ts');
     const originalConfig = readFileSync(configPath, 'utf8');
     const issuePath = join(consumer, 'docs', 'issues', 'feedback-github-1001.md');
@@ -140,36 +145,36 @@ async function child(scenario: Scenario): Promise<void> {
       }
     } else if (scenario === 'switch') {
       const api: FeedbackTransport = request => Effect.succeed({ status: 200, headers: {}, body: request.url.endsWith('/widgets') ? { id: 42 } : [issue(1)] });
-      configure({ id: connection.id, provider: 'github', transport: 'api', credentialEnv: 'FIXTURE_TOKEN', owner: 'acme', repo: 'widgets' });
+      (await configure({ id: connection.id, provider: 'github', transport: 'api', credentialEnv: 'FIXTURE_TOKEN', owner: 'acme', repo: 'widgets' }));
       const initial = await runApplication(syncFeedback(consumer, connection.id, { transport: api, credential: 'fixture-token' }));
       assert.equal(initial.imported, 1);
       const originalIssue = readFileSync(issuePath, 'utf8');
-      configure({ ...connection, repositoryId: '42' });
+      (await configure({ ...connection, repositoryId: '42' }));
       const repeat = await runApplication(syncFeedback(consumer, connection.id));
       assert.equal(repeat.imported, 0);
       assert.equal(repeat.connection.provider === 'github' ? repeat.connection.repositoryId : undefined, '42');
       assert.equal(readFileSync(issuePath, 'utf8'), originalIssue);
-      assert.equal(withRepo(repo => listFeedback(repo).filter(item => item.document.metadata.source !== undefined).length), 1);
+      assert.equal((await withRepo(repo => listFeedback(repo).filter(item => item.document.metadata.source !== undefined).length)), 1);
     } else if (scenario === 'cas') {
       const running = runApplication(syncFeedback(consumer, connection.id));
       try {
         for (let attempt = 0; attempt < 300 && !existsSync(readyPath); attempt++) await new Promise(resolve => setTimeout(resolve, 10));
         assert.equal(existsSync(readyPath), true, 'fixture did not reach page read');
-        withRepo(repo => {
+        (await withRepo(async repo => {
           const current = showConfig(repo);
-          setConfig(repo, { ...current.config, sourceRoots: ['src'] }, current.digest);
-        });
+          await setConfig(repo, { ...current.config, sourceRoots: ['src'] }, current.digest);
+        }));
       } finally { writeFileSync(releasePath, 'release'); }
       await assert.rejects(running, cause => expectCode(cause, 'FileChangedSinceRead'));
       assert.notEqual(readFileSync(configPath, 'utf8'), originalConfig);
       assert.equal(existsSync(issuePath), false);
-      assert.equal(withRepo(repo => repo.config.feedbackConnections?.[0]?.provider === 'github' ? repo.config.feedbackConnections[0].repositoryId : undefined), undefined);
+      assert.equal((await withRepo(repo => repo.config.feedbackConnections?.[0]?.provider === 'github' ? repo.config.feedbackConnections[0].repositoryId : undefined)), undefined);
     } else {
       const code = scenario === 'missing' ? 'GhUnavailable' : scenario === 'old-version' || scenario === 'bad-help' || scenario === 'bad-protocol' ? 'GhProtocolInvalid' : scenario === 'budget' ? 'GhLimitExceeded' : 'ProviderRequestFailed';
-      await assert.rejects(runApplication(syncFeedback(consumer, connection.id)), cause => cause instanceof ConcordError && cause.code === code);
+      await assert.rejects((runApplication(syncFeedback(consumer, connection.id))), cause => cause instanceof ConcordError && cause.code === code);
       assert.equal(readFileSync(configPath, 'utf8'), originalConfig, 'failure must not bind the connection');
       assert.equal(existsSync(issuePath), false, 'failure must not publish the first page');
-      assert.equal(withRepo(repo => listFeedback(repo).filter(item => item.document.metadata.source !== undefined).length), 0);
+      assert.equal((await withRepo(repo => listFeedback(repo).filter(item => item.document.metadata.source !== undefined).length)), 0);
       if (scenario === 'budget') {
         const pageCalls = calls(callsPath).filter(call => call.args.at(-1)?.includes('/issues?'));
         assert.ok(pageCalls.length >= 9, 'cumulative budget must span many valid pages');

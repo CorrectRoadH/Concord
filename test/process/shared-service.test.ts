@@ -2,10 +2,10 @@
 // 跨进程保证：进程终止与信号——失败、取消与 Scope 关闭确认 PID 和 socket 回收，清理未确认时保留消费者。
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { tracingChannel } from 'node:diagnostics_channel';
+import childProcess from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import { Cause, Deferred, Effect, Schema, Stream, type Exit } from 'effect';
 import { requestWorkspace } from '../../src/entry/server/index.ts';
 import { ViewServerStartupFailed } from '../e2e/server.ts';
@@ -13,6 +13,7 @@ import { acquireSharedWorkspace, closeSharedWorkspace, sharedWorkspace, type Sha
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { fetchFresh, parseWorkspaceProjection } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
+import { syncBuiltinMocks } from '../support/builtin-mocks.ts';
 
 const git = (root: string, ...argv: string[]) => execFileSync('git', ['-C', root, ...argv]);
 
@@ -166,33 +167,28 @@ for (const outcome of ['failure', 'cancellation'] as const) {
   }))));
 }
 
-const SpawnedView = Schema.Struct({ process: Schema.Struct({ pid: Schema.Int, spawnargs: Schema.Array(Schema.String) }) });
-
 for (const outcome of ['failure', 'cancellation'] as const) {
   // @feature docs/engineering/testing/architecture.md#共享服务
   test(`shared service startup ${outcome} removes the consumer after confirmed cleanup`, () => Effect.runPromise(Effect.gen(function*() {
     const controller = new AbortController();
-    const previous = process.env.NODE_OPTIONS;
-    const spawning = tracingChannel('child_process.spawn');
     let startupPid: number | undefined;
-    const spawned = (value: unknown) => {
-      // Node publishes spawn:end before assigning child.pid; the microtask sees the completed spawn.
-      queueMicrotask(() => {
-        const decoded = Schema.decodeUnknownExit(SpawnedView, { onExcessProperty: 'ignore' })(value);
-        if (decoded._tag !== 'Success' || !decoded.value.process.spawnargs.includes('server') || !decoded.value.process.spawnargs.includes('run')) return;
-        startupPid = decoded.value.process.pid;
+    const original = childProcess.spawn;
+    const probe = mock.method(childProcess, 'spawn', function(...args: unknown[]) {
+      const child = Reflect.apply(original, childProcess, args) as childProcess.ChildProcess;
+      if (child.spawnargs.includes('server') && child.spawnargs.includes('run')) {
+        startupPid = child.pid;
+        if (outcome === 'failure') child.kill('SIGTERM');
         if (outcome === 'cancellation') controller.abort(new Error('cancel during startup'));
-      });
-    };
-    spawning.end.subscribe(spawned);
+      }
+      return child;
+    });
+    syncBuiltinMocks();
     let exit: Exit.Exit<SharedWorkspace, unknown>;
     try {
-      if (outcome === 'failure') process.env.NODE_OPTIONS = '--concord-intentional-invalid-startup-option';
       exit = yield* Effect.exit(Effect.scoped(acquireSharedWorkspace(controller.signal)));
     } finally {
-      spawning.end.unsubscribe(spawned);
-      if (previous === undefined) delete process.env.NODE_OPTIONS;
-      else process.env.NODE_OPTIONS = previous;
+      probe.mock.restore();
+      syncBuiltinMocks();
     }
     assert.equal(exit._tag, 'Failure');
     if (exit._tag !== 'Failure') return;
@@ -210,22 +206,35 @@ for (const outcome of ['failure', 'cancellation'] as const) {
 test('unconfirmed real service cleanup preserves the consumer and its diagnostic bytes', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const workspace = yield* acquireSharedWorkspace();
   const instance = workspace.instance;
-  const path = join(workspace.root, '.git/concord/server/current.json');
-  const record = readFileSync(path);
-  const diagnostic = Buffer.from('unreadable instance record retained for diagnosis\n');
+  const path = join(workspace.root, '.git/concord/cleanup-diagnostic.txt');
+  const diagnostic = Buffer.from('unconfirmed service cleanup retained for diagnosis\n');
   yield* Effect.tryPromise(async () => {
+    const intended = new Error('intentional failure with stop subprocess unavailable');
+    const original = childProcess.spawnSync;
+    let blockedStops = 0;
+    const probe = mock.method(childProcess, 'spawnSync', function(...args: unknown[]) {
+      const argv = args[1];
+      if (Array.isArray(argv) && argv[argv.indexOf('--root') + 1] === workspace.root && argv.at(-2) === 'server' && argv.at(-1) === 'stop') {
+        blockedStops++;
+        const stderr = 'intentional server stop subprocess failure\n';
+        return { pid: 0, output: [null, '', stderr], stdout: '', stderr, status: 1, signal: null };
+      }
+      return Reflect.apply(original, childProcess, args);
+    });
     try {
+      syncBuiltinMocks();
       await assert.rejects(workspace.run(async () => {
-        // Corruption is private to this lifecycle test; the real stop command must refuse it.
         writeFileSync(path, diagnostic);
-        throw new Error('intentional failure with unreadable cleanup record');
-      }));
+        throw intended;
+      }), cause => cause instanceof AggregateError && cause.errors.includes(intended));
+      assert.equal(blockedStops, 1, 'cleanup reaches the real stop subprocess boundary');
       assert.equal(existsSync(workspace.root), true, 'unconfirmed service cleanup must retain the root');
       assert.deepEqual(readFileSync(path), diagnostic);
       assert.doesNotThrow(() => process.kill(instance.pid, 0), 'the actual service remains alive until explicit recovery');
     } finally {
+      probe.mock.restore();
+      syncBuiltinMocks();
       if (existsSync(workspace.root)) {
-        writeFileSync(path, record);
         stopWorkspaceServer(workspace.root);
         assertExited(instance.pid);
         rmSync(workspace.root, { recursive: true, force: true });
@@ -238,7 +247,7 @@ test('unconfirmed real service cleanup preserves the consumer and its diagnostic
 const ChildRecord = Schema.Struct({ root: Schema.String, pid: Schema.Int, instance: Schema.Struct({ pid: Schema.Int, socket: Schema.Struct({ path: Schema.String }) }) });
 
 // @feature docs/engineering/testing/architecture.md#共享服务
-test('the real Node file after hooks stop the singleton before consumer template cleanup', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('the real Bun file after hooks stop the singleton before consumer template cleanup', () => Effect.runPromise(Effect.tryPromise(async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-shared-after-'));
   const marker = join(scratch, 'instance.json');
   const entry = join(scratch, 'after.test.ts');
@@ -259,7 +268,7 @@ test('the real Node file after hooks stop the singleton before consumer template
     const env = { ...process.env };
     // The nested runner is a separate lifecycle subject, not another file of its parent runner.
     delete env.NODE_TEST_CONTEXT;
-    const child = spawn(process.execPath, ['--conditions=concord-source', '--import', new URL('../support/source-runtime.ts', import.meta.url).href, '--test', entry], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, ['test', '--no-env-file', '--config=/dev/null', '--conditions=concord-source', '--preload', new URL('../support/source-runtime.ts', import.meta.url).pathname, '--timeout=60000', entry], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
     child.stdout.on('data', data => { stdout += String(data); });
     child.stderr.on('data', data => { stderr += String(data); });
@@ -268,7 +277,7 @@ test('the real Node file after hooks stop the singleton before consumer template
       child.once('close', (code, signal) => resolve({ code, signal }));
     });
     if (existsSync(marker)) owned = Schema.decodeUnknownSync(Schema.fromJsonString(ChildRecord), { onExcessProperty: 'error' })(readFileSync(marker, 'utf8'));
-    assert.deepEqual(status, { code: 0, signal: null }, `child Node runner: ${stdout}\n${stderr}`);
+    assert.deepEqual(status, { code: 0, signal: null }, `child Bun runner: ${stdout}\n${stderr}`);
     assert.ok(owned, `child did not reach its ready singleton: ${stdout}\n${stderr}`);
     assert.equal(existsSync(owned.root), false);
     assert.equal(existsSync(owned.instance.socket.path), false);

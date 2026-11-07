@@ -1,20 +1,8 @@
 // @concord-file
-// @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
-import { runCacheMaintenance } from "../../app/index.ts";
+// @concord-implements docs/engineering/build/architecture.md#编译入口
+import { pathToFileURL } from 'node:url';
+import { run } from './cache-maintenance-worker-main.ts';
 
-import { runWriterMain } from "./main.ts";
-
-import { realpathSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
-
-
-
-
-
-
-
-
-if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  runWriterMain(runCacheMaintenance(process.argv[2]));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await run();
 }

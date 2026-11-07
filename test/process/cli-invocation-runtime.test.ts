@@ -22,7 +22,7 @@ const plainEnvironment = (): NodeJS.ProcessEnv => ({ ...process.env, NO_COLOR: '
 // @feature docs/feature/local-sdlc/architecture.md#入口与命令加载
 // @issue docs/issues/test-architecture-gaps.md
 test('real skill startup reads its guide without loading repository command services', async t => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const modules = join(root, 'loaded.json');
   try {
     const child = spawn(process.execPath, ['--conditions=concord-source', '--import', fileURLToPath(new URL('../support/cli-load-probe.ts', import.meta.url)), entry, '--skill'], {
@@ -66,7 +66,7 @@ async function runEntry(argv: readonly string[], cwd: string, env: NodeJS.Proces
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('real startup output agrees byte for byte with the captured full command program', async t => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     const env = plainEnvironment();
     const rows = [
@@ -122,7 +122,7 @@ const signalListeners = () => Object.fromEntries(Object.keys(constants.signals).
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
 test('abort awaits the real runner and descendant sockets and releases host signal listeners', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const sockets = new Set<Socket>();
   const records = new Map<Ready['role'], Ready>();
   let resolveReady!: () => void;
@@ -166,15 +166,15 @@ server.listen(0, '127.0.0.1', () => {
   handshake.end(JSON.stringify(report));
 });
 `;
-    const repo = new LocalRepository(root);
-    try { createDocument(repo, 'feature', { id: 'invocation', title: 'Invocation runtime' }); }
+    const repo = (await LocalRepository.open(root));
+    try { (await createDocument(repo, 'feature', { id: 'invocation', title: 'Invocation runtime' })); }
     finally { repo.close(); }
     mkdirSync(join(root, 'test'), { recursive: true });
     const file = 'test/invocation.test.ts';
     writeFileSync(join(root, file), "import test from 'node:test';\n// @feature docs/feature/invocation/README.md\n// @name invocation-runtime\ntest('invocation-runtime', () => {});\n");
     writeFileSync(join(root, 'invocation-runner.ts'), childSource('runner'));
     writeFileSync(join(root, 'invocation-child.ts'), childSource('descendant'));
-    writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], sourceRoots: [], runner: {
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], sourceRoots: [], runner: {
       kind: 'command', argv: [process.execPath, 'invocation-runner.ts'], sourceFiles: ['invocation-runner.ts', 'invocation-child.ts'], timeoutMs: 5000,
     } });
     const env: NodeJS.ProcessEnv = { ...plainEnvironment(), USERPROFILE: join(root, 'profile'), XDG_CACHE_HOME: process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), CONCORD_ISOLATION_VALUE: 'invocation-only-🧭' };

@@ -27,7 +27,7 @@ test('workspace server status observes absence without starting a service', () =
 
 // @feature docs/feature/local-data-engine/README.md
 test('workspace service publishes its initial computation and serves the accepted projection to CLI readers', { timeout: 25_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const started = await command(root, ['server', 'start']);
     assert.equal(started.status, 0, started.stderr);
@@ -44,9 +44,9 @@ test('workspace service publishes its initial computation and serves the accepte
 
 // @feature docs/feature/local-data-engine/README.md
 test('concurrent starters share one real service and shutdown removes its record and socket', { timeout: 30_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
-    const starts = await Promise.all([command(root, ['server', 'start']), command(root, ['server', 'start'])]);
+    const starts = await Promise.all([(await command(root, ['server', 'start'])), (await command(root, ['server', 'start']))]);
     for (const result of starts) assert.equal(result.status, 0, result.stderr);
     const tokens = starts.map(result => JSON.parse(result.stdout).token);
     assert.equal(tokens[0], tokens[1]);

@@ -16,31 +16,31 @@ const parserRuntime = makeParserRuntime(process.cwd(), process.env);
 
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md#link
-test('spec relations round-trip contract paths and anchors and enforce target and duplicate rules', () => withConsumer(repo => {
-  createDocument(repo, 'feature', { id: 'target', title: 'Target', body: '# Target\n\n## Step {#step}\n' });
-  createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'target' });
-  createDocument(repo, 'engineering', { id: 'rules', title: 'Rules' });
-  createDocument(repo, 'memory', { id: 'notes', title: 'Notes' });
-  createDocument(repo, 'issue', { id: 'observation', title: 'Observation' });
+test('spec relations round-trip contract paths and anchors and enforce target and duplicate rules', async () => (await withConsumer(async repo => {
+  (await createDocument(repo, 'feature', { id: 'target', title: 'Target', body: '# Target\n\n## Step {#step}\n' }));
+  (await createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'target' }));
+  (await createDocument(repo, 'engineering', { id: 'rules', title: 'Rules' }));
+  (await createDocument(repo, 'memory', { id: 'notes', title: 'Notes' }));
+  (await createDocument(repo, 'issue', { id: 'observation', title: 'Observation' }));
   const path = 'docs/issues/observation.md';
   const targets = ['docs/feature/target/README.md#step', 'docs/feature/target/use-case/flow.md', 'docs/engineering/rules/README.md'];
   const before = repo.read(path);
-  linkIssue(repo, 'observation', targets[0]!, true, 'spec');
+  (await linkIssue(repo, 'observation', targets[0]!, true, 'spec'));
   assert.equal(repo.read(path), before, 'dry run preserves the authored file');
-  for (const target of targets) linkIssue(repo, 'observation', target, false, 'spec');
+  for (const target of targets) (await linkIssue(repo, 'observation', target, false, 'spec'));
   const record = readDocumentReference(repo, path, ['issue']);
   assert.deepEqual(record.metadata.kind === 'issue' && record.metadata.relations, targets.map(target => ({ role: 'spec', target })));
-  assert.throws(() => linkIssue(repo, 'observation', targets[0]!, false, 'spec'), { code: 'DuplicateLink' });
-  assert.throws(() => linkIssue(repo, 'observation', 'memory/notes.md', false, 'spec'), { code: 'InvalidReferenceTarget' });
-  assert.throws(() => linkIssue(repo, 'observation', 'docs/feature/target/README.md#missing', false, 'spec'), { code: 'AnchorNotFound' });
-  for (const target of targets) unlinkIssue(repo, 'observation', target, false, 'spec');
+  (await assert.rejects(async () => (await linkIssue(repo, 'observation', targets[0]!, false, 'spec')), { code: 'DuplicateLink' }));
+  (await assert.rejects(async () => (await linkIssue(repo, 'observation', 'memory/notes.md', false, 'spec')), { code: 'InvalidReferenceTarget' }));
+  (await assert.rejects(async () => (await linkIssue(repo, 'observation', 'docs/feature/target/README.md#missing', false, 'spec')), { code: 'AnchorNotFound' }));
+  for (const target of targets) (await unlinkIssue(repo, 'observation', target, false, 'spec'));
   assert.equal(repo.read(path), before);
-  assert.throws(() => unlinkIssue(repo, 'observation', targets[0]!, false, 'spec'), { code: 'LinkNotFound' });
-}));
+  (await assert.rejects(async () => (await unlinkIssue(repo, 'observation', targets[0]!, false, 'spec')), { code: 'LinkNotFound' }));
+})));
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md#link
-test('invalid Issue roles remain per-file findings and cannot authorize close from a partial graph', () => withConsumer((repo, root) => {
-  createDocument(repo, 'issue', { id: 'healthy', title: 'Healthy' });
+test('invalid Issue roles remain per-file findings and cannot authorize close from a partial graph', async () => (await withConsumer(async (repo, root) => {
+  (await createDocument(repo, 'issue', { id: 'healthy', title: 'Healthy' }));
   const paths = ['docs/issues/retired.md', 'docs/issues/unknown.md'];
   const sources = ['adopts', 'anything'].map(role => `---\nrelations:\n  - role: ${role}\n    target: docs/feature/target/README.md\n---\n\n# Invalid role\n`);
   paths.forEach((path, index) => writeFileSync(join(root, path), sources[index]!));
@@ -58,23 +58,23 @@ test('invalid Issue roles remain per-file findings and cannot authorize close fr
   assert.deepEqual(index.documents.map(record => record.path), ['docs/issues/healthy.md']);
   assert.deepEqual(index.findings, inventory.findings);
   assert.equal(readDocumentReference(repo, 'docs/issues/healthy.md').metadata.id, 'healthy');
-  const diagnostic = checkProject(repo, 'off');
+  const diagnostic = (await checkProject(repo, 'off'));
   assert.equal(diagnostic.complete, false);
   assert.ok(paths.every(path => diagnostic.findings.some(finding => finding.path === path && finding.code === 'InvalidData')));
-  assert.throws(() => closeIssue(repo, 'healthy'), { code: 'InvalidData' });
+  (await assert.rejects(async () => (await closeIssue(repo, 'healthy')), { code: 'InvalidData' }));
   assert.ok(repo.read('docs/issues/healthy.md'));
   paths.forEach((path, index) => assert.equal(readFileSync(join(root, path), 'utf8'), sources[index]));
-}));
+})));
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md#link
 test('action uses memory as its target field with spec and retains the default investigation role', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
-      createDocument(repo, 'feature', { id: 'target', title: 'Target' });
-      createDocument(repo, 'memory', { id: 'notes', title: 'Notes' });
-      createDocument(repo, 'issue', { id: 'observation', title: 'Observation' });
+      (await createDocument(repo, 'feature', { id: 'target', title: 'Target' }));
+      (await createDocument(repo, 'memory', { id: 'notes', title: 'Notes' }));
+      (await createDocument(repo, 'issue', { id: 'observation', title: 'Observation' }));
     } finally { repo.close(); }
     const input = { action: 'issue.link', id: 'observation', memory: 'docs/feature/target/README.md', role: 'spec', dryRun: true };
     const action = decode(ViewActionSchema, input, 'action');
@@ -102,10 +102,10 @@ test('action uses memory as its target field with spec and retains the default i
 });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('warm document and repository caches never authorize invalid relation bytes', () => withConsumer((repo, root) => {
-  createDocument(repo, 'feature', { id: 'target', title: 'Target' });
-  createDocument(repo, 'issue', { id: 'observation', title: 'Observation' });
-  linkIssue(repo, 'observation', 'docs/feature/target/README.md', false, 'spec');
+test('warm document and repository caches never authorize invalid relation bytes', async () => (await withConsumer(async (repo, root) => {
+  (await createDocument(repo, 'feature', { id: 'target', title: 'Target' }));
+  (await createDocument(repo, 'issue', { id: 'observation', title: 'Observation' }));
+  (await linkIssue(repo, 'observation', 'docs/feature/target/README.md', false, 'spec'));
   PersistentCache.repository(repo).prepareWrite({ create: true });
   const path = 'docs/issues/observation.md';
   const valid = readFileSync(join(root, path), 'utf8');
@@ -123,14 +123,14 @@ test('warm document and repository caches never authorize invalid relation bytes
   }
   writeFileSync(join(root, path), valid);
   assert.equal(knowledgeIndex(repo, 'issue').complete, true);
-}));
+})));
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md#link
 test('public exact Issue reads isolate unrelated invalid roles while diagnostic queries preserve findings', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
-    const repo = new LocalRepository(root);
-    try { createDocument(repo, 'issue', { id: 'healthy', title: 'Healthy' }); }
+    const repo = (await LocalRepository.open(root));
+    try { (await createDocument(repo, 'issue', { id: 'healthy', title: 'Healthy' })); }
     finally { repo.close(); }
     const path = join(root, 'docs/issues/invalid.md');
     const source = '---\nrelations:\n  - role: adopts\n    target: docs/feature/target/README.md\n---\n\n# Invalid\n';

@@ -12,15 +12,15 @@ import { readProjectConfig, writeProjectConfig, waitForWorkspaceProjection } fro
 test('Issue fixed form runs the frozen defect and fix before deleting the Issue and refuses a green defect', async ({ page, workspace }) => {
   const root = workspace.privateRoot();
   gitCommand(root, 'init', '-q');
-  const repo = new LocalRepository(root, { initialize: true });
+  const repo = (await LocalRepository.open(root, { initialize: true }));
   try {
-    initialize(repo, false, { testRoots: ['test'] });
-    createDocument(repo, 'feature', { id: 'cart', title: 'Cart' });
-    createDocument(repo, 'issue', { id: 'sku', title: 'Quantity defect' });
+    (await initialize(repo, false, { testRoots: ['test'] }));
+    (await createDocument(repo, 'feature', { id: 'cart', title: 'Cart' }));
+    (await createDocument(repo, 'issue', { id: 'sku', title: 'Quantity defect' }));
   } finally { repo.close(); }
   mkdirSync(join(root, 'src'), { recursive: true });
   mkdirSync(join(root, 'test'), { recursive: true });
-  writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), sourceRoots: ['src'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
   writeFileSync(join(root, 'src/cart.ts'), 'export const quantity = 1;\n');
   gitCommit(root, 'Initial behavior');
   writeFileSync(join(root, 'test/cart.test.ts'), "// @feature docs/feature/cart/README.md\n// @issue docs/issues/sku.md\nimport { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { quantity } from '../src/cart.ts';\ntest('quantity accumulates', () => assert.equal(quantity, 2));\n");

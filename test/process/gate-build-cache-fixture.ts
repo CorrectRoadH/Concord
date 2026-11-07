@@ -27,7 +27,7 @@ const fixture = Effect.fn('test.cache.fixture')(function*(root: string) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const checkout = join(root, 'checkout'), seedRoot = join(root, 'compiled-package'), seed = join(seedRoot, 'app'), cache = join(root, 'cache');
   yield* fs.makeDirectory(seed, { recursive: true });
-  for (const path of ['bin/concord', 'runtime/node', 'runtime/rg', 'licenses/NODE-LICENSE', 'concord-1.0.0-linux-x64.tar.gz']) {
+  for (const path of ['bin/concord', 'runtime/rg', 'licenses/BUN-LICENSE.md', 'concord-1.0.0-linux-x64.tar.gz']) {
     yield* fs.makeDirectory(resolve(seedRoot, path, '..'), { recursive: true });
     yield* fs.writeFileString(join(seedRoot, path), 'compiled archive fixture');
   }
@@ -38,12 +38,12 @@ const fixture = Effect.fn('test.cache.fixture')(function*(root: string) {
     yield* fs.makeDirectory(resolve(checkout, path, '..'), { recursive: true });
     yield* fs.writeFile(join(checkout, path), bytes);
   }
-  const pkg = { name: 'gate-cache-fixture', version: '1.0.0', type: 'module', bin: { concord: 'dist/entry/cli/entry.js' }, dependencies: {} };
+  const pkg = { name: 'gate-cache-fixture', version: '1.0.0', type: 'module', bin: { concord: '../bin/concord' }, dependencies: {} };
   yield* fs.writeFileString(join(seed, 'package.json'), JSON.stringify(pkg));
   const code = yield* spawner.exitCode(ChildProcess.make('pnpm', ['install', '--lockfile-only', '--ignore-scripts', '--offline'], { cwd: seed, stdout: 'ignore', stderr: 'inherit', stdin: 'ignore' }));
   assert.equal(Number(code), 0);
   yield* fs.writeFileString(join(seed, 'pnpm-workspace.yaml'), 'allowBuilds: {}\n');
-  for (const path of ['dist/entry/cli/entry.js', 'dist/entry/cli/cli.js', 'dist/web/index.html', 'dist/preview/index.html',
+  for (const path of ['dist/compiler.json', 'dist/web/index.html', 'dist/preview/index.html',
     'dist/herdr-mod/main.js', 'dist/herdr-mod/mod.json', 'dist/herdr-mod/preview.png', 'dist/build-identity.json',
     'docs/example.md', 'templates/example.md', 'skills/example.md', 'dist/p5-types/index.d.ts']) {
     yield* fs.makeDirectory(resolve(seed, path, '..'), { recursive: true });

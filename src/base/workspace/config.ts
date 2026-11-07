@@ -44,7 +44,7 @@ function literal(expression: ts.Expression, source: string): unknown {
   throw new ConcordError('InvalidConfigSyntax', `${source}: runtime expressions are not permitted in static configuration`);
 }
 
-export function parseTypeScriptConfig(source: string, path = 'concord.config.ts'): ProjectConfig {
+export async function parseTypeScriptConfig(source: string, path = 'concord.config.ts'): Promise<ProjectConfig> {
   return withTypeScriptSource(path, source, (file, diagnostics) => {
     if (diagnostics.length > 0) throw new ConcordError('InvalidConfigSyntax', `${path}: ${diagnostics.map(item => item.text).join('; ')}`);
     let exported: ts.ExportAssignment | undefined;
@@ -73,13 +73,13 @@ export function renderTypeScriptConfig(config: ProjectConfig): string {
 
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-export function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string, absent = false, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {}), contentCache?: ContentCache<ProjectConfig>): ConfigSnapshot {
+export async function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string, absent = false, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {}), contentCache?: ContentCache<ProjectConfig>): Promise<ConfigSnapshot> {
   if (path !== 'concord.config.ts') throw new ConcordError('InvalidData', 'Runtime configuration must be concord.config.ts');
   if (absent && source === '') return { path, source, digest: digest(source), config: {} };
   const sourceDigest = digest(source);
   const cache = contentCache ?? makeConfigContentCache(runtime);
   try {
-    const config = cache.get(path, source, () => {
+    const config = await cache.getAsync(path, source, () => {
       const cached = privateDir === undefined ? undefined : readCachedProjectConfig(privateDir, sourceDigest, runtime);
       return cached ?? parseTypeScriptConfig(source, path);
     });

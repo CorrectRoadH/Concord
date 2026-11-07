@@ -36,11 +36,11 @@ test('Markdown rules round-trip escaped cells, limits, roots and longer exceptio
 });
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
-test('scopes inherit declared lengths, accumulate bans and exclude rule files from prose and concept usage', () => {
-  const root = createConsumer();
+test('scopes inherit declared lengths, accumulate bans and exclude rule files from prose and concept usage', async () => {
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: [] });
   const write = (path: string, source: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), source); };
-  const check = () => { const repo = new LocalRepository(root, { persistentCache: 'off' }); try { return checkWriting(repo); } finally { repo.close(); } };
+  const check = async () => { const repo = (await LocalRepository.open(root, { persistentCache: 'off' })); try { return checkWriting(repo); } finally { repo.close(); } };
   try {
     write('docs/writing.md', renderWritingPolicy({ roots: ['docs/page.md', 'docs/cart'], sentenceLength: 8, paragraphLength: 12, bannedTerms: [{ term: 'bad', use: 'good', why: 'global', allowIn: ['badger'] }] }));
     write('docs/cart/writing.md', renderWritingPolicy({ bannedTerms: [{ term: 'old', use: 'new', why: 'RuleOnly forbidden bad', roots: ['docs/cart/deep'] }] }));
@@ -49,7 +49,7 @@ test('scopes inherit declared lengths, accumulate bans and exclude rule files fr
     write('docs/page.md', 'badger.\n');
     write('docs/cart/page.md', 'bad old.\n\nabcdefghij.\n');
     write('docs/cart/deep/page.md', 'bad old.\n\nabcdefghijklmn.\n');
-    const report = check();
+    const report = (await check());
     assert(!report.findings.some(item => item.file.endsWith('/writing.md')));
     assert(!report.findings.some(item => item.file === 'docs/page.md'));
     assert(report.findings.some(item => item.rule === 'unusedConcept' && item.file === 'docs/cart/concepts.md'));
@@ -62,9 +62,9 @@ test('scopes inherit declared lengths, accumulate bans and exclude rule files fr
     assert(deep.some(item => item.rule === 'paragraphLength' && item.source?.path === 'docs/writing.md'));
     write('docs/writing.md', renderWritingPolicy({ roots: ['docs/page.md'], bannedTerms: [] }));
     write('docs/page.md', 'a'.repeat(600) + '\n');
-    assert.deepEqual(check().findings, [], 'no declared limits means no length checks');
+    assert.deepEqual((await check()).findings, [], 'no declared limits means no length checks');
     write('docs/writing.md', renderWritingPolicy({ roots: ['docs/page.md'], sentenceLength: 3, paragraphLength: 3, bannedTerms: [{ term: 'bad', use: 'good', why: 'clear' }] }));
     write('docs/page.md', '# A very long heading\n\n| Heading |\n| --- |\n| a very long table cell |\n\nColumn | Another\n--- | ---\na very long cell | ok\n\n`bad bad bad`\n\n<!-- bad -->\n\n```\nbad\n```\n\n[ok](bad)\n');
-    assert.deepEqual(check().findings, [], 'code, comments and destinations are ignored; headings and tables have no length check');
+    assert.deepEqual((await check()).findings, [], 'code, comments and destinations are ignored; headings and tables have no length check');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

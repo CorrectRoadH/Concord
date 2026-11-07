@@ -28,7 +28,7 @@ test('PR export preserves Git object types and refuses unsafe or incomplete expo
  rmSync(join(root,'empty.md'));rmSync(join(root,'type.txt'));symlinkSync('/etc/passwd',join(root,'type.txt'));
  git('mv','old.md','空 白\n名.md');git('add',".");git('update-index','--chmod=+x','executable.sh');git('update-index','--add','--cacheinfo',`160000,${base},submodule`);
  git('commit','-qm','object types');const head=git('rev-parse','HEAD');git('replace',head,base);git('config','diff.ignoreSubmodules','all');
- const invoke = (out: string, baseline = base, candidate = head) => exportAt(root, out, baseline, candidate);
+ const invoke = async (out: string, baseline = base, candidate = head) => exportAt(root, out, baseline, candidate);
  const out=join(scratch,'types-preview');const success=await invoke(out);assert.equal(success.status,0,success.stderr);
  const data=decodeChangePreview(JSON.parse(readFileSync(join(out,'changes.json'),'utf8')));
  assert.equal(data.entries.find(entry=>entry.path==='submodule')?.after?.mode,'160000');

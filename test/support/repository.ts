@@ -18,23 +18,32 @@ export const withPublication = <A, E, R>(operation: Effect.Effect<A, E, R | Publ
   operation.pipe(Effect.provide(publicationBaseLayer), Effect.provide(RuntimeEnvironment.layer(captureRuntime())));
 
 /** Test composition root: real validation and the real workspace implementation. */
-export class LocalRepository extends RepositoryBase {
-  private cacheScope?: Scope.Closeable;
-  constructor(root?: string, options: RepositoryOptions = {}) {
+export type LocalRepository = RepositoryBase;
+export const LocalRepository = {
+  async open(root?: string, options: RepositoryOptions = {}): Promise<LocalRepository> {
     const captured = options.runtime ?? captureRuntime();
     const runtime = makeRuntimeEnvironment(captured.cwd, options.environment ?? captured.env);
-    const publication = Effect.runSync(Effect.gen(function*() { return yield* Publication; }).pipe(Effect.provide(publicationBaseLayer), Effect.provide(RuntimeEnvironment.layer(runtime))));
-    super(root, { ...options, runtime }, publication.validation);
-    this.cacheScope = Effect.runSync(Scope.make());
-    Effect.runSync(Effect.flatMap(PersistentCache, cache => cache.attach(this)).pipe(Scope.provide(this.cacheScope), Effect.provide(PersistentCache.layer), Effect.provide(RuntimeEnvironment.layer(runtime))));
-  }
-  override close(): void {
-    super.close();
-    if (this.cacheScope !== undefined) {
-      const scope = this.cacheScope; this.cacheScope = undefined; Effect.runSync(Scope.close(scope, Exit.void));
+    const publication = await Effect.runPromise(Effect.gen(function*() { return yield* Publication; }).pipe(Effect.provide(publicationBaseLayer), Effect.provide(RuntimeEnvironment.layer(runtime))));
+    const repo = await RepositoryBase.open(root, { ...options, runtime }, publication.validation);
+    let cacheScope: Scope.Closeable | undefined = Effect.runSync(Scope.make());
+    const close = repo.close.bind(repo);
+    repo.close = () => {
+      try { close(); }
+      finally {
+        if (cacheScope !== undefined) {
+          const scope = cacheScope; cacheScope = undefined; Effect.runSync(Scope.close(scope, Exit.void));
+        }
+      }
+    };
+    try {
+      await Effect.runPromise(Effect.flatMap(PersistentCache, cache => cache.attach(repo)).pipe(Scope.provide(cacheScope), Effect.provide(PersistentCache.layer), Effect.provide(RuntimeEnvironment.layer(runtime))));
+      return repo;
+    } catch (cause) {
+      repo.close();
+      throw cause;
     }
-  }
-}
+  },
+};
 export const runApplication = <A, E>(operation: Effect.Effect<A, E, RuntimeEnvironment | Publication | PersistentCache | Installation | Workspace | Sources | Git | OwnedProcess | NodeServices.NodeServices>, options?: Parameters<typeof Effect.runPromise>[1]) => {
   const runtime = captureRuntime();
   return Effect.runPromise(operation.pipe(Effect.provide(publicationBaseLayer), Effect.provide(Layer.mergeAll(PersistentCache.layer, Installation.layer, Workspace.layer, Sources.layer, Git.layer)), Effect.provide(OwnedProcessLive), Effect.provide(NodeServices.layer), Effect.provide(RuntimeEnvironment.layer(runtime)), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(runtime.env)))), options);

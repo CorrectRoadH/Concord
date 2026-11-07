@@ -1,10 +1,10 @@
 // 跨进程保证：原生模块与句柄——运行服务重验真实native工件后降级，修复后同token重新打开持久owner。
 import { privateSourceInstallation } from '../support/private-source.ts';
 import { installationResources } from '../support/source-resources.ts';
+import { hawdbTarget } from '../../src/base/installation/index.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readdirSync } from 'node:fs';
 import test from 'node:test';
 import { Effect, Schema, Stream } from 'effect';
 import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
@@ -14,14 +14,14 @@ import { command, fixture, record, rpcModule, stop } from '../support/workspace-
 
 // @feature docs/feature/local-data-engine/README.md
 test('runtime native validation degrades the locked service and a repaired artifact reopens its persistent owner', { timeout: 30_000 }, async () => {
-  const root = fixture(), install = mkdtempSync(join(tmpdir(), 'concord-server-native-'));
+  const root = (await fixture()), install = mkdtempSync(join(tmpdir(), 'concord-server-native-'));
   let metadata = '', hidden = '';
   try {
     privateSourceInstallation(install);
     const packageRoot = install;
     const entry = installationResources(packageRoot).bin;
     const native = installationResources(packageRoot).native;
-    metadata = join(native, readdirSync(native)[0]!, 'artifact.json'); hidden = `${metadata}.hidden`;
+    metadata = join(native, hawdbTarget(), 'artifact.json'); hidden = `${metadata}.hidden`;
     assert.equal((await command(root, ['server', 'start'], entry)).status, 0);
     const running = record(root), rpc = await rpcModule();
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {

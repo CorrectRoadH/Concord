@@ -24,8 +24,8 @@ function docsWorkCli(root: string, signal: AbortSignal) {
     writeFileSync(path, JSON.stringify({ format: 'concord.docs-work-plan/v1', items }));
     try { return await call(['prepare', '--plan', path, '--run-id', runId]); } finally { rmSync(path); }
   };
-  const report = (run: string, id: string) => call(['check', run, id, '--report']);
-  const verify = (run: string, id: string, digest: string) => call(['check', run, id, '--verify', digest]);
+  const report = async (run: string, id: string) => call(['check', run, id, '--report']);
+  const verify = async (run: string, id: string, digest: string) => call(['check', run, id, '--verify', digest]);
   return { call, plan, report, verify };
 }
 const item = (id: string, write: string[], rest: Record<string, unknown> = {}) => ({ id, goal: `Update ${id}`, write, checks: ['ok'], ...rest });
@@ -75,7 +75,7 @@ test('stdin plans and trailing shared CLI flags work; verification re-runs check
 
 test('cancelling public CLI reclaims the detached check group and releases the run lock', t => Effect.runPromise(Effect.gen(function*() {
   const root = yield* Effect.sync(() => fixture({ checks: { wait: { argv: [process.execPath, '-e', waitingProcess('cancel-child.pid', 'cancel-group.pid')] } }, finalizer: custom.finalizer }));
-  let child: ReturnType<typeof spawn> | undefined;
+  let child: Awaited<ReturnType<typeof spawn>> | undefined;
   try {
     const prepared = yield* Effect.promise(() => docsWorkCli(root, t.signal).plan([item('wait', ['docs/a/'], { checks: ['wait'] })], 'cancel'));
     child = yield* Effect.sync(() => spawn(process.execPath, [cli, '--root', root, '--json', 'docs', 'work', 'check', 'cancel', 'wait', '--report'], { cwd: root, stdio: 'ignore' }));

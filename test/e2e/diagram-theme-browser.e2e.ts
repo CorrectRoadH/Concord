@@ -29,10 +29,10 @@ test('Mermaid and p5 share live theme colors without rerendering or restarting a
   const root = workspace.root;
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'plain', title: 'Plain document' });
-    createDocument(repo, 'feature', { id: 'themed', title: 'Shared diagram theme', body });
+    (await createDocument(repo, 'feature', { id: 'plain', title: 'Plain document' }));
+    (await createDocument(repo, 'feature', { id: 'themed', title: 'Shared diagram theme', body }));
   } finally { repo.close(); }
   const file = join(root, 'docs/feature/themed/README.md');
   const before = readFileSync(file);

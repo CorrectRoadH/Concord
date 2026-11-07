@@ -4,7 +4,7 @@ import { assert, spawn, copyFileSync, existsSync, mkdirSync, readFileSync, rmSyn
 
 // @feature docs/feature/local-data-engine/README.md
 test('queries from two subdirectories automatically share one service and observe later source changes', { timeout: 30_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   mkdirSync(join(root, 'a')); mkdirSync(join(root, 'b'));
   try {
     const results = await Promise.all(['a', 'b'].map(directory => cli(join(root, directory), ['check'])));
@@ -25,7 +25,7 @@ test('queries from two subdirectories automatically share one service and observ
 
 // @feature docs/feature/local-data-engine/README.md
 test('command query cleanup precedes success and configuration failure, and never stops an existing service', { timeout: 30_000 }, async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     const success = await cli(root, ['--server=command', 'check']);
     assert.equal(success.status, 0, success.stderr);

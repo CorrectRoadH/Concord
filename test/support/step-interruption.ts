@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from './builtin-mocks.ts';
 import { Effect, Schema } from 'effect';
 
 // Inject a process death at the real atomic publication boundary, before loading the CLI.

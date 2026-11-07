@@ -4,7 +4,7 @@ import { assert, spawnSync, test, Schema, pollUntil, Ack, ErrorOutput, cli, call
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('packed diagnostic CLI refreshes after exit and marks cached output as historical', async () => {
- const root = consumer('async-query');
+ const root = (await consumer('async-query'));
  (await call(root, ['new', 'feature', 'cached', '--title', 'Cached'], Ack));
  const query = () => spawnSync(process.execPath, [cli, '--root', root, '--json', 'trace', 'gaps'], { encoding: 'utf8', timeout: 20000 });
  const first = query();

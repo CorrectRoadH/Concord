@@ -424,6 +424,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
   const jobs = hosted.jobs;
   const requestLog = new ViewRequestLog(write);
   let stopping = false;
+  const activeResponses = new Set<ServerResponse>();
   const feedbackControllers = new Set<AbortController>();
   const feedbackTasks = new Set<Promise<unknown>>();
   const runAction = (input: unknown, response: ServerResponse, timing: RequestTiming): Promise<unknown> => {
@@ -441,6 +442,9 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
     return task;
   };
   const server = createServer((request, response) => {
+    activeResponses.add(response);
+    response.once('close', () => activeResponses.delete(response));
+    response.once('finish', () => activeResponses.delete(response));
     const timing = requestLog.begin(request, response);
     void (async () => {
       try {
@@ -488,6 +492,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
     jobs,
     close: () => closing ??= (async () => {
       stopping = true;
+      for (const response of activeResponses) response.destroy();
       for (const controller of feedbackControllers) controller.abort();
       const closed = new Promise<void>((resolveClosed, reject) => server.close((cause) => cause ? reject(failure(cause)) : resolveClosed()));
       server.closeAllConnections();

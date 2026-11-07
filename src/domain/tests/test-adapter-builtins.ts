@@ -17,8 +17,8 @@ const VitestReport = Schema.Struct({ success: Schema.Boolean, testResults: Schem
 const GoEvent = Schema.Struct({ Action: Text, Test: Schema.optional(Text), Package: Schema.optional(Text), Output: Schema.optional(Schema.String), Time: Schema.optional(Schema.String), Elapsed: Schema.optional(Schema.Number), FailedBuild: Schema.optional(Schema.String) });
 export function builtinVersionCommand(adapter: TestAdapter): readonly string[] {
   switch (adapter.builtin) {
-    case 'node-test': return [process.execPath, '--version'];
-    case 'vitest': return [process.execPath, 'node_modules/vitest/vitest.mjs', '--version'];
+    case 'node-test': return ['node', '--version'];
+    case 'vitest': return ['node', 'node_modules/vitest/vitest.mjs', '--version'];
     case 'pytest': return [...PYTEST, '--version'];
     case 'go': return ['go', 'version'];
     case 'cargo': return ['cargo', '+stable', '--version'];
@@ -43,7 +43,7 @@ export const builtinCollectPlan = Effect.fn('Tests.builtinCollectPlan')(function
     const invocationId = `collect-${index}`;
     const base = { invocationId, cwd: '.', envNames: adapter.envNames, reports: [] as string[] };
     switch (adapter.builtin) {
-      case 'node-test': return { ...base, argv: [process.execPath, '--version'] as [string, ...string[]] };
+      case 'node-test': return { ...base, argv: ['node', '--version'] as [string, ...string[]] };
       case 'vitest': return { ...base, argv: [process.execPath, ...workerEntryArgv('test-adapter-vitest'), context.root, file, join(context.reportDirectory, invocationId, 'manifest.json')] as [string, ...string[]], reports: ['manifest.json'] };
       case 'pytest': return { ...base, argv: [...PYTEST, '--rootdir', context.root, '--collect-only', '-q', '--color=no', '-o', 'addopts=', '-p', 'no:cacheprovider', file] as [string, ...string[]] };
       case 'go': return { ...base, cwd: dirname(file), argv: ['go', 'test', '-list', '^Test', '.'] as [string, ...string[]] };
@@ -95,7 +95,7 @@ export const builtinSelectPlan = Effect.fn('Tests.builtinSelectPlan')(function*(
     const invocationId = `test-${index}`; const name = item.selection.opaqueId;
     const base = { invocationId, cwd: '.', envNames: adapter.envNames, reports: [] as string[], requested: [item.nativeId] };
     switch (adapter.builtin) {
-      case 'vitest': return { ...base, argv: [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', item.file, ...(item.project === 'default' ? [] : ['--project', item.project]), '-t', `^${regex(name)}$`, '--retry=0', '--reporter=json', '--outputFile', join(context.reportDirectory, invocationId, 'results.json'), '--no-color'] as [string, ...string[]], reports: ['results.json'] };
+      case 'vitest': return { ...base, argv: ['node', 'node_modules/vitest/vitest.mjs', 'run', item.file, ...(item.project === 'default' ? [] : ['--project', item.project]), '-t', `^${regex(name)}$`, '--retry=0', '--reporter=json', '--outputFile', join(context.reportDirectory, invocationId, 'results.json'), '--no-color'] as [string, ...string[]], reports: ['results.json'] };
       case 'pytest': return { ...base, argv: [...PYTEST, '--rootdir', context.root, '--color=no', '-o', 'addopts=', '-p', 'no:cacheprovider', '-v', '--tb=no', name] as [string, ...string[]] };
       case 'go': return { ...base, cwd: dirname(item.file), argv: ['go', 'test', '-count=1', '-json', '-run', `^${regex(name)}$`, '.'] as [string, ...string[]] };
       case 'cargo': { const target = yield* cargoTarget(context.root, item.file); return { ...base, cwd: target.cwd, argv: ['cargo', '+stable', 'test', '--offline', ...target.args, '--', '--exact', name, '--format=pretty', '--color=never'] as [string, ...string[]] }; }

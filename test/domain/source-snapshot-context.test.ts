@@ -13,7 +13,7 @@ const live = Layer.merge(Workspace.layer, Sources.layer).pipe(Layer.provide(Node
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('Effect projection observations retain an asynchronous candidate and collect drift before revoking its scope', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeFileSync(join(root, 'docs/README.md'), '# Captured\n');
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -53,7 +53,7 @@ test('Effect projection observations retain an asynchronous candidate and collec
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('projection observations preserve the independent snapshot requirement', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     await Effect.runPromise(Effect.gen(function*() {
       const sources = yield* Sources;
@@ -69,7 +69,7 @@ test('projection observations preserve the independent snapshot requirement', as
 
 // @feature docs/feature/local-data-engine/README.md
 test('Sources shares nested observations and revokes snapshot reads after success and failure', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeFileSync(join(root, 'docs/README.md'), '# Original\n');
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -105,7 +105,7 @@ test('Sources shares nested observations and revokes snapshot reads after succes
 
 // @feature docs/feature/local-data-engine/README.md
 test('Sources rejects stale workspace configuration before evaluating the operation', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     await Effect.runPromise(Effect.gen(function*() {
       const workspace = yield* Workspace;
@@ -126,7 +126,7 @@ test('Sources rejects stale workspace configuration before evaluating the operat
 
 // @feature docs/feature/local-data-engine/README.md
 test('Sources isolates concurrent operations on the same workspace and keeps a sibling alive after cancellation', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeFileSync(join(root, 'docs/README.md'), '# Independent\n');
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -158,7 +158,7 @@ test('Sources isolates concurrent operations on the same workspace and keeps a s
 
 // @feature docs/feature/local-data-engine/README.md
 test('Sources verifies inspected identities and absent paths before returning', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     await Effect.runPromise(Effect.gen(function*() {
       const sources = yield* Sources;
@@ -185,7 +185,7 @@ test('Sources verifies inspected identities and absent paths before returning', 
 
 // @feature docs/feature/local-data-engine/README.md
 test('Sources revokes interrupted observations before another snapshot can read', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const sources = yield* Sources;
@@ -210,7 +210,7 @@ test('Sources revokes interrupted observations before another snapshot can read'
 
 // @feature docs/feature/local-data-engine/README.md
 test('Sources keeps concurrent workspace observations isolated in one process layer', async () => {
-  const roots = [createConsumer(), createConsumer()];
+  const roots = [(await createConsumer()), (await createConsumer())];
   try {
     roots.forEach((root, index) => writeFileSync(join(root, 'docs/README.md'), `# Workspace ${index}\n`));
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {

@@ -18,10 +18,10 @@ import { pollUntil } from '../support/support.ts';
 const consumer = Effect.acquireRelease(Effect.gen(function* () {
   const root = yield* Effect.sync(() => mkdtempSync(join(tmpdir(), 'concord-adapter-coordination-')));
   yield* runOwnedProcess(['git', 'init', '-q', root], { cwd: root }).pipe(Effect.scoped);
-  yield* Effect.sync(() => {
-    const repo = new LocalRepository(root, { initialize: true }); try { initialize(repo); } finally { repo.close(); }
+  yield* Effect.tryPromise(async () => {
+    const repo = (await LocalRepository.open(root, { initialize: true })); try { (await initialize(repo)); } finally { repo.close(); }
     mkdirSync(join(root, 'test')); writeFileSync(join(root, 'test/sample.ts'), '// fixture\n'); writeFileSync(join(root, 'adapter.ts'), '// fixture adapter\n');
-    writeProjectConfig(root, { ...readProjectConfig(root), testAdapters: [{ id: 'fixture', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: [], envNames: [] }] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), testAdapters: [{ id: 'fixture', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: [], envNames: [] }] });
   });
   return root;
 }), root => Effect.sync(() => rmSync(root, { recursive: true, force: true })));
@@ -30,12 +30,12 @@ const consumer = Effect.acquireRelease(Effect.gen(function* () {
 // @name adapter-config-repository-paths-c17
 test('repository loading rejects symlinks in every configured adapter input path (C17)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
-  yield* Effect.sync(() => {
-    const config = readProjectConfig(root); const adapter = config.testAdapters![0]!;
+  yield* Effect.tryPromise(async () => {
+    const config = (await readProjectConfig(root)); const adapter = config.testAdapters![0]!;
     symlinkSync(root, join(root, 'test/escape'), 'dir');
     for (const field of ['include', 'inputRoots', 'implementationFiles', 'lockFiles'] as const) {
       writeProjectConfig(root, { ...config, testAdapters: [{ ...adapter, [field]: ['test/escape'] }] });
-      assert.throws(() => new LocalRepository(root), { code: 'UnsafePath' }, field);
+      (await assert.rejects(async () => (await LocalRepository.open(root)), { code: 'UnsafePath' }, field));
     }
   });
 })).pipe(Effect.provide(OwnedProcessLive))));
@@ -45,7 +45,7 @@ test('repository loading rejects symlinks in every configured adapter input path
 test('unknown adapter cleanup quarantines the same runner domain before another collect can start (C12)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   const environment = yield* RuntimeEnvironment;
-  const repo = yield* Effect.acquireRelease(Effect.sync(() => new LocalRepository(root)), repo => Effect.sync(() => repo.close()));
+  const repo = yield* Effect.acquireRelease(Effect.tryPromise(async () => (await LocalRepository.open(root))), repo => Effect.sync(() => repo.close()));
   // Only the OS permission boundary is injected. OwnedProcess still runs and
   // drains the real Node child, and the runner writes its actual quarantine.
   const owned = makeOwnedProcessService({ environment, groupPresence: { kill: () => { throw Object.assign(new Error('permission denied'), { code: 'EPERM' }); } } });
@@ -62,7 +62,7 @@ test('unknown adapter cleanup quarantines the same runner domain before another 
 test('an invalidated collect run cannot publish an otherwise successful observation (C10)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   const environment = yield* RuntimeEnvironment;
-  const repo = yield* Effect.acquireRelease(Effect.sync(() => new LocalRepository(root)), repo => Effect.sync(() => repo.close()));
+  const repo = yield* Effect.acquireRelease(Effect.tryPromise(async () => (await LocalRepository.open(root))), repo => Effect.sync(() => repo.close()));
   yield* Effect.sync(() => {
     mkdirSync(join(root, 'control'));
     writeFileSync(join(root, 'adapter.ts'), `import { existsSync, watch, writeFileSync } from 'node:fs';

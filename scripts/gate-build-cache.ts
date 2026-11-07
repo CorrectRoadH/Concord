@@ -66,15 +66,17 @@ export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout
   const fs = yield* FileSystem.FileSystem;
   // The build owns these trees (including its copied resources). File discovery,
   // rather than a second list of source files, includes new and untracked bytes.
-  const roots = new Set(['src', 'web', 'scripts', 'docs', 'templates', 'skills']);
+  const roots = new Set(['src', 'web', 'scripts', 'docs', 'templates', 'skills', 'patches']);
   const inputs = (yield* fs.readDirectory(checkout)).filter(name => roots.has(name)
-    || name === '.node-version' || name === 'runtime-deps.json' || name === 'native-release.json'
+    || name === '.bun-version' || name === '.node-version' || name === 'runtime-deps.json' || name === 'native-release.json'
     || /^(?:README(?:\..+)?\.md|package\.json|pnpm[^/]*\.yaml|tsconfig[^/]*\.json|vite[^/]*\.config\.ts)$/u.test(name));
   const entries = yield* buildCacheTree(checkout, path => {
     const parts = path.split('/');
     return !inputs.includes(parts[0]!) || parts.includes('node_modules') || parts.includes('.git');
   }, true);
-  if (!includeNative) return sha(JSON.stringify({ entries, node: process.version }));
+  const compiler = (yield* fs.exists(join(checkout, 'scripts/distribution.ts')))
+    ? yield* Effect.promise(() => import('./compile-application.ts')).pipe(Effect.flatMap(module => module.bunCompilerIdentity(checkout, target ?? archiveTarget()))) : null;
+  if (!includeNative) return sha(JSON.stringify({ entries, node: process.version, bun: process.versions.bun ?? null, compiler }));
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const commit = yield* spawner.string(ChildProcess.make('git', ['-C', checkout, 'rev-parse', 'HEAD'], { stderr: 'ignore' })).pipe(Effect.map(value => value.trim()), Effect.catch(() => Effect.succeed(null)));
   const libraryDirectory = process.env.CONCORD_LINUX_RUNTIME_LIBRARIES;
@@ -83,15 +85,15 @@ export const gateBuildDigest = Effect.fn('gate.cache.digest')(function*(checkout
       ? yield* Effect.promise(() => import('./archive-linux.ts')).pipe(Effect.flatMap(module => module.ubuntuRuntimeMetadata())) : null;
   const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
   const tools = (yield* fs.exists(join(checkout, 'scripts/distribution.ts')))
-    ? yield* Effect.forEach(process.platform === 'linux' ? ['pnpm', 'tar', 'patchelf', 'readelf'] : ['pnpm', 'tar'], tool =>
+    ? yield* Effect.forEach(process.platform === 'linux' ? ['bun', 'pnpm', 'tar', 'patchelf', 'readelf'] : ['bun', 'pnpm', 'tar'], tool =>
       spawner.string(ChildProcess.make(tool, ['--version'], { stderr: 'ignore' })).pipe(Effect.map(version => ({ tool, version })))) : [];
   if (process.platform === 'darwin' && tools.length > 0) tools.push({ tool: 'codesign', version: sha(yield* fs.readFile('/usr/bin/codesign')) });
   const cachedNative = join(yield* nativeInputCache(checkout), target === 'linux-x64' ? 'linux-x64-glibc' : target!);
   const native = prebuilt !== undefined ? yield* buildCacheTree(resolve(prebuilt), undefined, true)
     : (yield* fs.exists(cachedNative)) ? yield* buildCacheTree(cachedNative, undefined, true) : null;
   return sha(JSON.stringify({ entries, platform: process.platform, arch: process.arch, node: process.version,
-    abi: process.versions.modules, target, nativeAbi: HAWDB_ABI, nativeRevision: HAWDB_REVISION,
-    requirePortableNative: process.env.CONCORD_REQUIRE_PORTABLE_NATIVE ?? '', commit, linuxLibraries, native, tools }));
+    abi: process.versions.modules, bun: process.versions.bun ?? null, cpu: target === 'linux-x64' ? 'bun-linux-x64-baseline' : 'bun-darwin-arm64', target, nativeAbi: HAWDB_ABI, nativeRevision: HAWDB_REVISION,
+    requirePortableNative: process.env.CONCORD_REQUIRE_PORTABLE_NATIVE ?? '', commit, linuxLibraries, native, tools, compiler }));
 });
 
 // Reuse Concord's atomic, token-owned file lease. Recovery removes only the
@@ -125,10 +127,14 @@ const validatePackage = Effect.fn('gate.cache.validatePackage')(function*(archiv
   const filename = archiveFiles[0]!;
   const checksum = (yield* fs.readFileString(join(archiveRoot, filename + '.sha256'))).trim();
   if (checksum !== `${sha(yield* fs.readFile(join(archiveRoot, filename)))}  ${filename}`) return yield* new GateBuildCacheFailed({ message: 'Archive SHA-256 validation failed' });
-  for (const path of ['bin/concord', 'runtime/node', 'runtime/rg', 'licenses/NODE-LICENSE']) {
+  for (const path of ['bin/concord', 'runtime/rg', 'licenses/BUN-LICENSE.md']) {
     if (!(yield* inspect(join(archiveRoot, path))).isFile() || (yield* fs.readFile(join(archiveRoot, path))).length === 0) return yield* new GateBuildCacheFailed({ message: `Missing archive file: ${path}` });
   }
-  const required = [pkg.bin.concord, 'dist/entry/cli/cli.js', 'dist/web/index.html', 'dist/preview/index.html', 'dist/herdr-mod/main.js',
+  if (yield* fs.exists(join(archiveRoot, 'runtime/node'))) return yield* new GateBuildCacheFailed({ message: 'Archive must not contain a separate JS interpreter' });
+  for (const name of ['entry', 'app', 'base', 'domain', 'model']) {
+    if (yield* fs.exists(join(root, 'dist', name))) return yield* new GateBuildCacheFailed({ message: `Archive must not contain application modules: dist/${name}` });
+  }
+  const required = ['dist/compiler.json', 'dist/web/index.html', 'dist/preview/index.html', 'dist/herdr-mod/main.js',
     'dist/herdr-mod/mod.json', 'dist/herdr-mod/preview.png', 'dist/build-identity.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'];
   for (const path of required) {
     if (!(yield* inspect(join(root, path))).isFile() || (yield* fs.readFile(join(root, path))).length === 0) return yield* new GateBuildCacheFailed({ message: `Missing package file: ${path}` });

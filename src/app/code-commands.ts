@@ -7,20 +7,20 @@ import { ConcordError, digest, inRepositorySnapshot, type Repository } from "../
 // Code Declaration: an author's explicit implementation association, not evidence.
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#list
-export function listCode(repo: Repository) {
-  return inRepositorySnapshot(repo, () => {
-  const trace = buildTrace(repo, 'use'); requireValidTrace(trace);
-  return { operation: 'code-list', codes: trace.codeDeclarations, sourceRoots: repo.config.sourceRoots ?? [], analysis: analysisView(repo, trace.annotations.cases, trace.codeDeclarations, trace.documents) };
-  });
+export async function listCode(repo: Repository) {
+  return (await inRepositorySnapshot(repo, async () => {
+  const trace = (await buildTrace(repo, 'use')); requireValidTrace(trace);
+  return { operation: 'code-list', codes: trace.codeDeclarations, sourceRoots: repo.config.sourceRoots ?? [], analysis: (await analysisView(repo, trace.annotations.cases, trace.codeDeclarations, trace.documents)) };
+  }));
 }
 
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#locate
-export function locateCode(repo: Repository, file: string, line: number) {
+export async function locateCode(repo: Repository, file: string, line: number) {
   repo.absolute(file);
   if (!Number.isSafeInteger(line) || line < 1) throw new ConcordError('InvalidCodeLine', 'Source line must be a positive integer');
-  const trace = buildTrace(repo, 'use'); requireValidTrace(trace);
+  const trace = (await buildTrace(repo, 'use')); requireValidTrace(trace);
   const scanned = trace.codeFiles.find(item => item.path === file);
   if (!scanned) throw new ConcordError('CodeSourceNotScanned', `${file} is not a JS/TS file inside configured sourceRoots`);
   const text = repo.read(file);

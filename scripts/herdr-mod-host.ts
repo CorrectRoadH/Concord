@@ -4,7 +4,7 @@
 import { packageCommand } from './package-command.ts';
 // Only the external Herdr/GPUI boundary is replaced; this loads the source mod
 // and executes the public CLI. It does not measure native drawing.
-import { registerHooks } from 'node:module';
+import { plugin } from 'bun';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
@@ -123,16 +123,12 @@ const main = Effect.scoped(Effect.gen(function*() {
       return await new Promise(resolve => { state.resolve = resolve; });
     },
   };
-  const global = globalThis as typeof globalThis & { __concordHerdrBoundary?: typeof host };
-  global.__concordHerdrBoundary = host;
-  const exports: Record<string, readonly string[]> = { 'gpui-kit': ['View', 'div'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'props', 'theme'] };
-  const hooks = registerHooks({
-    resolve(specifier, context, next) { return exports[specifier] ? { url: `concord-host:${specifier}`, shortCircuit: true } : next(specifier, context); },
-    load(url, context, next) {
-      const names = exports[url.replace('concord-host:', '')];
-      return names ? { format: 'module', source: names.map(name => `export const ${name} = globalThis.__concordHerdrBoundary.${name};`).join('\n'), shortCircuit: true } : next(url, context);
-    },
-  });
+  const exports: Record<string, readonly (keyof typeof host)[]> = { 'gpui-kit': ['View', 'div'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'readTextFile', 'writeTextFile', 'watchFolder', 'pickFolder', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'props', 'theme'] };
+  plugin({ name: 'concord-herdr-host', setup(builder) {
+    for (const [specifier, names] of Object.entries(exports)) {
+      builder.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(names.map(name => [name, host[name]])) }));
+    }
+  } });
   const waitFor = (predicate: () => boolean) => Effect.runPromise(Effect.gen(function*() {
     while (!predicate()) {
       if (errors.length) return yield* Effect.fail(new HostFailure({ message: String(errors[0]) }));
@@ -195,7 +191,7 @@ const main = Effect.scoped(Effect.gen(function*() {
       const temporary = `${sourcePath}.restore.tmp`;
       await Effect.runPromise(fs.writeFileString(temporary, original).pipe(Effect.andThen(fs.rename(temporary, sourcePath))));
     }
-    hooks.deregister(); delete global.__concordHerdrBoundary;
+    plugin.clearAll();
   }
 }, catch: error => new HostFailure({ message: error instanceof Error ? error.message : String(error) }) });
 }));

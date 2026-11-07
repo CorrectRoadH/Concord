@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ArchiveFailed, command, readJson, run, sha256, verifiedDownload, type ArchiveTarget } from './archive-support.ts';
+import { ArchiveFailed, readJson, run, sha256, verifiedDownload, type ArchiveTarget } from './archive-support.ts';
+import { prepareBunLicenses } from './bun-licenses.ts';
 
 const Asset = Schema.Struct({ asset: Schema.String.check(Schema.isPattern(/^ripgrep-[0-9.]+-(?:x86_64-unknown-linux-musl|aarch64-apple-darwin)\.tar\.gz$/u)), sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)) });
 export const RuntimeDependencies = Schema.Struct({ ripgrep: Schema.Struct({ version: Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u)), targets: Schema.Struct({ 'linux-x64': Asset, 'darwin-arm64': Asset }) }) });
@@ -12,19 +13,12 @@ export const runtimeDependencies = (repository: string) => readJson(join(reposit
 
 export const prepareRuntime = Effect.fn('archive.runtime')(function*(root: string, repository: string, target: ArchiveTarget, nativeArtifacts?: string) {
   const fs = yield* FileSystem.FileSystem;
-  const version = (yield* fs.readFileString(join(repository, '.node-version'))).trim();
+  const version = (yield* fs.readFileString(join(repository, '.bun-version'))).trim();
   yield* Schema.decodeUnknownEffect(Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u)))(version);
-  const asset = `node-v${version}-${target}.tar.gz`;
-  const sums = yield* command('curl', ['--fail', '--location', '--silent', '--show-error', '--max-time', '60', `https://nodejs.org/dist/v${version}/SHASUMS256.txt`]);
-  const sum = sums.split('\n').map(line => line.trim().split(/\s+/u)).find(parts => parts[1] === asset)?.[0];
-  if (!sum) return yield* new ArchiveFailed({ message: `Official Node SHASUMS256.txt has no ${asset}` });
-  const archive = yield* verifiedDownload(`https://nodejs.org/dist/v${version}/${asset}`, sum);
   const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-runtime-' });
-  yield* run('tar', ['-xzf', archive, '-C', scratch, `node-v${version}-${target}/bin/node`, `node-v${version}-${target}/LICENSE`]);
   yield* fs.makeDirectory(join(root, 'runtime'), { recursive: true });
   yield* fs.makeDirectory(join(root, 'licenses'), { recursive: true });
-  yield* fs.copyFile(join(scratch, `node-v${version}-${target}/bin/node`), join(root, 'runtime/node'));
-  yield* fs.copyFile(join(scratch, `node-v${version}-${target}/LICENSE`), join(root, 'licenses/NODE-LICENSE'));
+  yield* prepareBunLicenses(root, version);
   const { ripgrep } = yield* runtimeDependencies(repository);
   const rg = ripgrep.targets[target];
   if (target === 'darwin-arm64') {
@@ -44,6 +38,5 @@ export const prepareRuntime = Effect.fn('archive.runtime')(function*(root: strin
     yield* fs.copyFile(join(scratch, directory, 'rg'), join(root, 'runtime/rg'));
     for (const license of ['COPYING', 'LICENSE-MIT']) yield* fs.copyFile(join(scratch, directory, license), join(root, `licenses/RIPGREP-${license}`));
   }
-  yield* fs.chmod(join(root, 'runtime/node'), 0o755);
   yield* fs.chmod(join(root, 'runtime/rg'), 0o755);
 });

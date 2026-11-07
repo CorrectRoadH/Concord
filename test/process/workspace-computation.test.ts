@@ -40,7 +40,7 @@ const projection = (rpc: Awaited<ReturnType<typeof rpcModule>>, connection: Effe
 // @name scan-child-termination-releases-exact-token
 test('cancelling a queued computation preserves the active child and cancelling its owner confirms group cleanup', { timeout: 30_000 }, async () => {
   const root = fixture();
-  const lease = acquireTraceLeaseSync(root, 'shared', 'unrelated-computation-reader')!;
+  const lease = acquireTraceLeaseSync(root, 'shared', 'unrelated-computation-reader', undefined, undefined, process.env)!;
   const controller = new AbortController();
   let server: Promise<Awaited<ReturnType<typeof runCli>> | undefined> | undefined;
   let serverFailure: unknown;

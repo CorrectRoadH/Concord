@@ -89,7 +89,7 @@ export interface Repository {
   environment?(names?: readonly string[]): Readonly<Record<string, string | undefined>>;
   files(prefix: string, scope?: 'source'): string[];
   absolute(path: string): string;
-  publish(operation: string, changes: readonly Change[], dryRun?: boolean): MutationReceipt;
+  publish(operation: string, changes: readonly Change[], dryRun?: boolean): Promise<MutationReceipt>;
 }
 
 /** Named operations own a coherent short snapshot; nested calls reuse it. */

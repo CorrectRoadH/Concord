@@ -76,7 +76,7 @@ export class SharedWorkspace {
 
   /** A new explicit refresh must finish after this request. */
   ready(): Promise<WorkspaceProjection> {
-    return this.track(async () => { await this.fixture.ready(this.controller?.signal); return this.projection(); });
+    return this.track(async () => { await this.fixture.ready(this.controller?.signal); return (await this.projection()); });
   }
 
   async restore(): Promise<void> {
@@ -108,7 +108,7 @@ export class SharedWorkspace {
     } catch (cause) {
       controller.abort(cause);
       this.stopped = true;
-      const requests = await Promise.allSettled([this.drain()]);
+      const requests = await Promise.allSettled([(await this.drain())]);
       const cleanup = [...requests, ...await Promise.allSettled([this.release()])];
       const failures = cleanup.flatMap(outcome => outcome.status === 'rejected' ? [outcome.reason] : []);
       if (failures.length > 0) throw new AggregateError([cause, ...failures], 'Shared workspace case and resource cleanup failed');
@@ -127,10 +127,10 @@ export const acquireSharedWorkspace = Effect.fn('test.acquireSharedWorkspace')(f
   const close = (scope: Scope.Closeable) => Scope.close(scope, Exit.void).pipe(Effect.onExit(exit =>
     Exit.isFailure(exit) && root !== undefined ? Effect.sync(() => retainConsumer(root!)) : Effect.void));
   const scope = yield* Effect.acquireRelease(Scope.make(), close);
-  const fixture = yield* acquireBrowserSharedFixture(signal, () => {
-    const directory = createConsumer();
+  const fixture = yield* acquireBrowserSharedFixture(signal, async () => {
+    const directory = (await createConsumer());
     root = directory;
-    try { writeProjectConfig(directory, { testRoots: [] }); return new FrozenBrowserRepository(directory); }
+    try { writeProjectConfig(directory, { testRoots: [] }); return await FrozenBrowserRepository.open(directory); }
     catch (cause) { rmSync(directory, { recursive: true, force: true }); throw cause; }
   }).pipe(Scope.provide(scope));
   const workspace = new SharedWorkspace(fixture, () => Effect.runPromise(close(scope)));

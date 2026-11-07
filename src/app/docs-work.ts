@@ -5,19 +5,12 @@ import { basename, join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { FinalizeSchema, model_PlanSchema as PlanSchema, ReceiptSchema, RunSchema, fail, problem, type Check, type Item, type Plan, type Problem, type Receipt, type Run } from "../model/index.ts";
 import { atomicJson, decode, digestPaths, expand, git, hash, matches, now, nul, objectHash, overlap, readJson, runProcess, safePath, statePath, snapshotPaths, tailSummary, withLock } from "../base/publication/index.ts";
-import type { shared_ProjectConfig as ProjectConfig, Repository } from "../model/index.ts";
+import type { shared_ProjectConfig as ProjectConfig } from "../model/index.ts";
 import * as storage from "../base/workspace/index.ts";
 import * as config from "../base/workspace/index.ts";
 import * as writing from "../domain/writing/index.ts";
 import * as project from "./index.ts";
 
-
-interface MainOwners {
-  storage: { discoverRoot: (input?: string) => string; LocalRepository: new (root: string, options: { access: 'read' }) => Repository & { close: () => void } };
-  config: { parseTypeScriptConfig: (source: string) => ProjectConfig };
-  writing: { checkWriting: (repo: Repository) => { ok: boolean; findings: readonly { file: string }[] } };
-  project: { checkProject: (repo: Repository) => { ok: boolean } };
-}
 
 const host = Effect.fn('DocsWork.host')(function*() { return { storage, config, writing, project }; });
 
@@ -29,7 +22,7 @@ const context = Effect.fn('DocsWork.context')(function*(input?: string, existing
   const source = yield* fs.readFileString(join(root, 'concord.config.ts')).pipe(Effect.catch(error => error.reason._tag === 'NotFound'
     ? Effect.succeed(undefined)
     : Effect.fail(fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', 'Cannot read project configuration'))));
-  const config: ProjectConfig = yield* Effect.try({ try: () => source === undefined ? {} : main.config.parseTypeScriptConfig(source), catch: cause => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', String(cause)) });
+  const config: ProjectConfig = yield* Effect.tryPromise({ try: async () => source === undefined ? {} : await main.config.parseTypeScriptConfig(source), catch: cause => fail(existing ? 'DocsWorkConfigChanged' : 'DocsWorkPlanInvalid', String(cause)) }).pipe(Effect.uninterruptible);
   return { root, config, configDigest: objectHash({ source: source ?? null, docsWork: config.docsWork ?? {} }), main, runtime };
 });
 
@@ -188,10 +181,10 @@ export const current = Effect.fn('DocsWork.current')(function*(ctx: Context, run
 
 const runBuiltin = Effect.fn('DocsWork.runBuiltin')(function*(ctx: Context, kind: 'writing' | 'finalizer', paths: readonly string[] = []) {
   return yield* Effect.acquireUseRelease(
-    Effect.try({ try: () => new ctx.main.storage.LocalRepository(ctx.root, { access: 'read', runtime: ctx.runtime }), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) }),
-    repo => Effect.try({ try: () => {
+    Effect.tryPromise({ try: () => ctx.main.storage.LocalRepository.open(ctx.root, { access: 'read', runtime: ctx.runtime }), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) }),
+    repo => Effect.tryPromise({ try: async () => {
       if (kind === 'finalizer') {
-        const result = ctx.main.project.checkProject(repo);
+        const result = await ctx.main.project.checkProject(repo);
         const output = JSON.stringify(result);
         return { exitCode: result.ok ? 0 : 1, outputDigest: hash(output), summary: tailSummary(output) };
       }
@@ -203,7 +196,7 @@ const runBuiltin = Effect.fn('DocsWork.runBuiltin')(function*(ctx: Context, kind
       const result = { ok: findings.length === 0, findings };
       const output = JSON.stringify(result);
       return { exitCode: result.ok ? 0 : 1, outputDigest: hash(output), summary: tailSummary(output) };
-    }, catch: cause => fail('DocsWorkPlanInvalid', String(cause)) }).pipe(Effect.catch(error => Effect.succeed({ exitCode: 1, outputDigest: hash(error.message), summary: tailSummary(error.message) }))),
+    }, catch: cause => fail('DocsWorkPlanInvalid', String(cause)) }).pipe(Effect.uninterruptible, Effect.catch(error => Effect.succeed({ exitCode: 1, outputDigest: hash(error.message), summary: tailSummary(error.message) }))),
     repo => Effect.sync(() => repo.close()),
   );
 });

@@ -27,7 +27,7 @@ function installation() {
   const tool = join(scratch, 'tool'), consumer = join(scratch, 'consumer');
   mkdirSync(tool); mkdirSync(consumer);
   // Copy a fixed source snapshot so concurrent edits cannot change worker identity.
-  for (const name of ['src', 'web', 'scripts', 'templates', 'skills', 'package.json', 'vite.config.ts', 'vite.source.config.ts', 'vite.preview.config.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) cpSync(join(checkout, name), join(tool, name), { recursive: true });
+  for (const name of ['src', 'web', 'scripts', 'templates', 'skills', 'patches', '.bun-version', 'tsconfig.json', 'package.json', 'vite.config.ts', 'vite.source.config.ts', 'vite.preview.config.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) cpSync(join(checkout, name), join(tool, name), { recursive: true });
   for (const file of nativeSourceFiles) { mkdirSync(dirname(join(tool, file)), { recursive: true }); cpSync(join(checkout, file), join(tool, file)); }
   const cache = join(scratch, 'cache');
   const native = join(cache, 'concord/native', basename(nativeArtifactRoot(runtime)));

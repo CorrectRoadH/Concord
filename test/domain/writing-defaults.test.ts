@@ -15,7 +15,7 @@ import { digest } from "../../src/model/index.ts";
 import { defaultWritingSource } from "../../src/model/index.ts";
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
-test('init adopts a complete writing preset, checks it immediately, and preserves existing policy bytes', () => Effect.runPromise(Effect.sync(() => {
+test('init adopts a complete writing preset, checks it immediately, and preserves existing policy bytes', () => Effect.runPromise(Effect.tryPromise(async () => {
   for (const existing of [false, true]) {
     const root = mkdtempSync(join(tmpdir(), 'concord-writing-preset-'));
     const custom = '# Custom rules\n\n句子不超过 75 个字符。\n';
@@ -25,21 +25,21 @@ test('init adopts a complete writing preset, checks it immediately, and preserve
         mkdirSync(join(root, 'docs'));
         writeFileSync(join(root, 'docs/writing.md'), custom);
       }
-      const initial = new LocalRepository(root, { initialize: true });
+      const initial = (await LocalRepository.open(root, { initialize: true }));
       try {
-        const preview = initialize(initial, true, { testRoots: [] });
+        const preview = (await initialize(initial, true, { testRoots: [] }));
         assert.equal(preview.createdPaths.includes('docs/writing.md'), !existing);
-        initialize(initial, false, { testRoots: [] });
+        (await initialize(initial, false, { testRoots: [] }));
       } finally { initial.close(); }
       if (!existing) {
-        const fresh = new LocalRepository(root);
+        const fresh = (await LocalRepository.open(root));
         try { assert.deepEqual(checkWriting(fresh).findings, []); } finally { fresh.close(); }
       }
       if (existing) {
         assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), custom);
       } else {
         writeFileSync(join(root, 'docs/sample.md'), '# 示例\n\n通过兜底处理。\n\n' + '长'.repeat(141) + '。\n');
-        const repo = new LocalRepository(root);
+        const repo = (await LocalRepository.open(root));
         try {
           const shown = showWriting(repo);
           assert.equal(shown.state, 'valid');
@@ -58,7 +58,7 @@ test('init adopts a complete writing preset, checks it immediately, and preserve
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
-test('init publication and recovery reject custom or local policies masquerading as the preset', () => Effect.runPromise(Effect.sync(() => {
+test('init publication and recovery reject custom or local policies masquerading as the preset', () => Effect.runPromise(Effect.tryPromise(async () => {
   for (const [path, after] of [
     ['docs/writing.md', '# Custom rules\n'],
     ['docs/feature/demo/writing.md', defaultWritingSource],
@@ -67,21 +67,21 @@ test('init publication and recovery reject custom or local policies masquerading
     const root = mkdtempSync(join(tmpdir(), 'concord-writing-init-guard-'));
     try {
       execFileSync('git', ['init', '-q', root]);
-      const repo = new LocalRepository(root, { initialize: true, dryRun: true });
-      const preview = initialize(repo, true, { testRoots: [] });
+      const repo = (await LocalRepository.open(root, { initialize: true, dryRun: true }));
+      const preview = (await initialize(repo, true, { testRoots: [] }));
       const configSource = renderTypeScriptConfig(preview.config);
       const changes = [
         { path: 'concord.config.ts', before: null, after: configSource, beforeDigest: null, afterDigest: digest(configSource), mode: 0o644 },
         { path, before: null, after, beforeDigest: null, afterDigest: digest(after), mode: 0o644 },
       ];
-      try { assert.throws(() => repo.publish('init', changes), { code: 'InvalidChange' }); }
+      try { (await assert.rejects(async () => (await repo.publish('init', changes)), { code: 'InvalidChange' })); }
       finally { repo.close(); }
       const privateDir = join(root, '.git/concord');
       mkdirSync(privateDir, { recursive: true });
       const journalPath = join(privateDir, 'journal.json');
       for (const phase of ['prepared', 'committed']) {
       writeFileSync(journalPath, JSON.stringify({ format: 'concord.journal', root, privateDir, operation: 'init', phase, directories: ['docs'], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') }, changes }));
-      assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
+      (await assert.rejects(async () => (await LocalRepository.open(root, { recover: true })), { code: 'RecoveryConflict' }));
       assert.equal(existsSync(journalPath), true);
       assert.equal(existsSync(join(root, path)), false);
       }

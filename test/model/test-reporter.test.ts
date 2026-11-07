@@ -7,7 +7,6 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { tmpdir } from '../support/temporary.ts';
-import { selectsPackagingTest } from '../../scripts/gate-package.ts';
 import { gateAdmissionHistoryPath } from '../../scripts/gate-admission-history.ts';
 import { GiB } from '../../scripts/gate-resources.ts';
 import { observeFixedGateMemory, observeTestProcessTree } from '../../scripts/gate-resource-processes.ts';
@@ -76,7 +75,7 @@ runnerTest('real cold and warm file runs use the previous PSS peak while keeping
   assert.equal(cold.code, 0, cold.text);
   const timingReport = yield* readTestTimingReport(cold.output);
   assert.ok(timingReport, 'the persisted admission budgets must decode into the gate report');
-  assert.equal(timingReport.admission?.budgets.archive, 2.5 * GiB);
+  assert.equal(timingReport.admission?.budgets.browser, 2.5 * GiB);
   const coldPeak = Schema.decodeUnknownSync(Schema.fromJsonString(Peak))((yield* fs.readFileString(join(cold.output, 'process-tree-peaks.jsonl'))).trim());
   assert.equal(coldPeak.admittedBytes, 2 * GiB);
   assert.equal(coldPeak.budgetBytes, 2 * GiB);
@@ -103,18 +102,16 @@ runnerTest('real cold and warm file runs use the previous PSS peak while keeping
 }));
 
 // @feature docs/engineering/testing/README.md#检查入口
-runnerTest('all Bun layers run source without a package and preserve the shared compile cache', root => Effect.gen(function*() {
+runnerTest('all Bun layers and their typed children run source without a package or V8 compile cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const source = join(root, 'test/model/source.test.ts'), cli = join(root, 'test/cli/source.test.ts');
   const child = join(root, 'typed-child.ts');
   const cacheHome = join(root, 'shared-cache'), compileCache = join(cacheHome, 'concord/node-compile');
   yield* fs.makeDirectory(join(root, 'test/model'), { recursive: true });
   yield* fs.makeDirectory(join(root, 'test/cli'), { recursive: true });
-  yield* fs.writeFileString(child, `const value: number = 42; console.log(JSON.stringify({value, options: process.env.NODE_OPTIONS, cache: process.env.NODE_COMPILE_CACHE}));\n`);
+  yield* fs.writeFileString(child, `const value: number = 42; console.log(JSON.stringify({value, bun: process.versions.bun, options: process.env.NODE_OPTIONS, cache: process.env.NODE_COMPILE_CACHE}));\n`);
   for (const file of [source, cli]) yield* fs.writeFileString(file, `import test from 'node:test'; import assert from 'node:assert/strict'; import { spawnSync } from 'node:child_process';
 test('source uses native type erasure', () => {
-  assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, undefined);
-  assert.equal(process.env.CONCORD_TEST_PACKAGE_BUILD_STATUS, undefined);
   assert.equal(process.versions.bun, '1.4.2');
   assert.ok(process.execArgv.every(arg => !arg.includes('tsx')));
   const child = spawnSync(process.execPath, [${JSON.stringify(child)}], { encoding: 'utf8' });
@@ -123,89 +120,36 @@ test('source uses native type erasure', () => {
   assert.equal(result.value, 42);
   assert.match(result.options, /--conditions=concord-source/u);
   assert.doesNotMatch(result.options, /tsx/u);
-  assert.equal(result.cache, ${JSON.stringify(compileCache)});
+  assert.equal(result.bun, process.versions.bun);
+  assert.equal(result.cache, undefined);
 });\n`);
-  yield* fs.writeFileString(join(root, 'absent-receipt'), '{"code":1}');
-  const env = { NODE_OPTIONS: '', XDG_CACHE_HOME: cacheHome, CONCORD_TEST_PACKAGE_ROOT: join(root, 'absent-package'), CONCORD_TEST_PACKAGE_BUILD_STATUS: join(root, 'absent-receipt') };
+  const env = { NODE_OPTIONS: '', XDG_CACHE_HOME: cacheHome };
   const result = yield* run(['--suite=node', source, cli], env, root);
   assert.equal(result.code, 0, result.text);
   assert.match(result.text, /# Source Bun tests:/u);
   assert.doesNotMatch(result.text, /# Installed Bun tests:/u);
   const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
   assert.deepEqual(timings.map(timing => timing.file).sort(), [source, cli].sort());
-  assert.equal(yield* fs.exists(compileCache), true);
-  const sentinel = join(compileCache, 'retained');
-  yield* fs.writeFileString(sentinel, 'shared cache survives runner lifetime');
+  assert.equal(yield* fs.exists(compileCache), false);
+  const sentinel = join(cacheHome, 'retained');
+  yield* fs.writeFileString(sentinel, 'unrelated cache survives runner lifetime');
   const again = yield* run(['--suite=node', source, cli], env, root);
   assert.equal(again.code, 0, again.text);
-  assert.equal(yield* fs.readFileString(sentinel), 'shared cache survives runner lifetime');
-}));
-
-// @feature docs/engineering/testing/README.md#打包测试
-runnerTest('archive preparation gates only packaging and preserves official shard and case reports', root => Effect.gen(function*() {
-  const fs = yield* FileSystem.FileSystem;
-  const source = join(root, 'test/model/source.test.ts'), packaging = join(root, 'test/process/release-package.test.ts');
-  const receipt = join(root, 'preparation.json'), sourceDone = join(root, 'source-done'), packageDone = join(root, 'package-done');
-  const sourceStarted = join(root, 'source-started'), sourceRelease = join(root, 'source-release');
-  yield* fs.makeDirectory(join(root, 'test/model'), { recursive: true });
-  yield* fs.makeDirectory(join(root, 'test/process'), { recursive: true });
-  yield* fs.writeFileString(receipt, JSON.stringify({ state: 'pending' }));
-  yield* fs.writeFileString(source, `import test from 'node:test'; import assert from 'node:assert/strict'; import {existsSync,writeFileSync,watchFile,unwatchFile} from 'node:fs';
-test('ordinary source starts before archive readiness', async () => {
-  assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, undefined); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined);
-  writeFileSync(${JSON.stringify(sourceStarted)}, 'started');
-  await new Promise(resolve => {
-    const release = () => { if (existsSync(${JSON.stringify(sourceRelease)})) { unwatchFile(${JSON.stringify(sourceRelease)}, release); resolve(); } };
-    watchFile(${JSON.stringify(sourceRelease)}, {interval: 10}, release); release();
-  });
-  writeFileSync(${JSON.stringify(sourceDone)}, 'done');
-});\n`);
-  yield* fs.writeFileString(packaging, `import test from 'node:test'; import assert from 'node:assert/strict'; import {existsSync,writeFileSync} from 'node:fs';
-test('packaging receives ready archive only', () => { assert.equal(process.env.CONCORD_TEST_PACKAGE_ROOT, ${JSON.stringify(join(root, 'archive'))}); assert.equal(process.env.CONCORD_GATE_PACKAGE_PREPARATION, undefined); assert.equal(existsSync(${JSON.stringify(sourceDone)}), false); writeFileSync(${JSON.stringify(packageDone)}, 'done'); });\n`);
-  assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=1/2'], root), false);
-  assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=2/2'], root), false);
-  assert.equal(selectsPackagingTest([source, packaging], ['--test-shard=package'], root), true);
-  assert.equal(selectsPackagingTest([source, packaging], ['--suite=e2e'], root), false);
-  let observed = '';
-  const running = yield* run(['--suite=node', source, packaging], {
-    CONCORD_GATE_PACKAGE_PREPARATION: receipt, CONCORD_TEST_PACKAGE_ROOT: undefined, CONCORD_TEST_CONCURRENCY: '2',
-    CONCORD_GATE_MEMORY_MAX: String(15 * 1024 ** 3),
-  }, root, chunk => {
-    observed += chunk;
-  }).pipe(Effect.forkScoped);
-  yield* Effect.gen(function*() {
-    while (!(yield* fs.exists(sourceStarted))) yield* Effect.sleep('10 millis');
-  }).pipe(Effect.timeout('20 seconds'));
-  assert.equal(yield* fs.exists(packageDone), false, 'pending archive must not start the packaging test process');
-  const temporary = `${receipt}.ready`;
-  yield* fs.writeFileString(temporary, JSON.stringify({ state: 'ready', code: 0, packageRoot: join(root, 'archive'), duration_ms: 12_345, digest: 'fixture', cache: 'hit' }));
-  yield* fs.rename(temporary, receipt);
-  yield* Effect.gen(function*() {
-    while (!(yield* fs.exists(packageDone))) yield* Effect.sleep('10 millis');
-  }).pipe(Effect.timeoutOrElse({ duration: '15 seconds', orElse: () => Effect.sync(() => assert.fail(`Ready packaging did not start beside active source work:\n${observed}`)) }));
-  assert.equal(yield* fs.exists(sourceDone), false, 'source work remains active while ready packaging runs');
-  yield* fs.writeFileString(sourceRelease, 'release');
-  const result = yield* Fiber.join(running);
-  assert.equal(result.code, 0, result.text);
-  assert.match(result.text, /# Packaging Bun tests:/u);
-  assert.equal(yield* fs.exists(packageDone), true);
-  const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String, cases: Schema.Number }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
-  assert.deepEqual(timings.map(row => row.file).sort(), [source, packaging].sort());
-  assert.equal(timings.reduce((sum, row) => sum + row.cases, 0), 2);
-  for (const group of ['node-source', 'node-package']) assert.equal(yield* fs.exists(join(result.output, group, 'node-timings.jsonl')), true);
+  assert.equal(yield* fs.readFileString(sentinel), 'unrelated cache survives runner lifetime');
+  assert.equal(yield* fs.exists(compileCache), false);
 }));
 
 // @feature docs/engineering/build/architecture.md#脚本只写项目特有的规则
-runnerTest('cancelling gate reaps static task groups and fixture scratch while preserving its shared cache', root => Effect.gen(function*() {
+runnerTest('cancelling gate reaps static task groups and fixture scratch without creating a V8 cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.String, cgroup: Schema.String, packageRoot: Schema.optional(Schema.String), fixtureRoot: Schema.optional(Schema.String), task: Schema.String }));
+  const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.optional(Schema.String), cgroup: Schema.String, packageRoot: Schema.optional(Schema.String), fixtureRoot: Schema.optional(Schema.String), task: Schema.String }));
   const fakePnpm = join(root, 'pnpm.ts');
   yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env node
 import { writeFileSync, readFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
 const task = process.argv.find(value => /^(?:gate:|test:)/.test(value)) ?? 'build';
-writeFileSync(${JSON.stringify(root)} + '/' + task + '.json', JSON.stringify({task, pid: process.pid, cache: process.env.CONCORD_TEST_COMPILE_CACHE, packageRoot: process.env.CONCORD_TEST_PACKAGE_ROOT, fixtureRoot: process.env.TMPDIR, cgroup: process.platform === 'linux' ? readFileSync('/proc/self/cgroup', 'utf8') : ''}));
+writeFileSync(${JSON.stringify(root)} + '/' + task + '.json', JSON.stringify({task, pid: process.pid, cache: process.env.CONCORD_TEST_COMPILE_CACHE, fixtureRoot: process.env.TMPDIR, cgroup: process.platform === 'linux' ? readFileSync('/proc/self/cgroup', 'utf8') : ''}));
 console.log('TASK_READY');
 setInterval(() => {}, 1000);
 `);
@@ -215,9 +159,8 @@ setInterval(() => {}, 1000);
   // Keep a failed cleanup regression from leaking the deliberately stubborn boundary.
   yield* Effect.addFinalizer(() => Effect.gen(function*() {
     for (const file of (yield* fs.readDirectory(root)).filter(file => file.endsWith('.json'))) {
-      const { pid, cache } = Schema.decodeUnknownSync(record)(yield* fs.readFileString(join(root, file)));
+      const { pid } = Schema.decodeUnknownSync(record)(yield* fs.readFileString(join(root, file)));
       yield* Effect.sync(() => { try { process.kill(-pid, 'SIGKILL'); } catch {} });
-      yield* fs.remove(cache, { recursive: true, force: true });
     }
   }).pipe(Effect.orDie));
   const child = yield* spawner.spawn(ChildProcess.make('node', [resolve('scripts/gate.ts'), 'test/model/test-reporter.test.ts'], {
@@ -249,8 +192,8 @@ setInterval(() => {}, 1000);
   assert.equal(yield* fs.exists(processes.find(process => process.task === 'test:source')!.fixtureRoot!), false, 'the gate owns and removes its fixture scratch directory');
   for (const { pid, cache } of processes) {
     assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `leaked task PID ${pid}\n${output}`);
-    assert.equal(cache, join(root, 'shared-cache/concord/node-compile'));
-    assert.equal(yield* fs.exists(cache), true, `shared compile cache removed ${cache}`);
+    assert.equal(cache, undefined);
+    assert.equal(yield* fs.exists(join(root, 'shared-cache/concord/node-compile')), false);
   }
 }));
 
@@ -371,7 +314,7 @@ runnerTest('Bun and browser failures leave the other suite running and retain of
   yield* fs.chmod(fakePnpm, 0o755);
   yield* fs.symlink(fakePnpm, join(root, 'pnpm'));
   yield* fs.symlink(fakePnpm, join(root, 'vp'));
-  const env = { PATH: `${root}:${process.env.PATH}`, CONCORD_GATE_MEMORY_MAX: String(7 * GiB), CONCORD_E2E_WORKERS: '2', CONCORD_TEST_PACKAGE_ROOT: root };
+  const env = { PATH: `${root}:${process.env.PATH}`, CONCORD_GATE_MEMORY_MAX: String(7 * GiB), CONCORD_E2E_WORKERS: '2' };
   yield* fs.writeFileString(node, `import test from 'node:test';\ntest('selected', () => { throw new Error('NODE_EXPECTED_FAILURE'); });\n`);
   const nodeFailed = yield* run(['--test-name-pattern=selected', '--test-shard=1/1', node, browser], { ...env, BROWSER_EXIT: '0' });
   assert.equal(nodeFailed.code, 1, nodeFailed.text);
@@ -478,40 +421,4 @@ test('official summary precedes final process drain', () => {});\n`);
   assert.equal(result.code, 0, result.text);
   assert.equal(yield* fs.readFileString(saved), 'normally drained');
   assert.doesNotMatch(result.text, /GateProcessCleanupFailed/u);
-}));
-
-// @feature docs/engineering/testing/cli.md#并发
-runnerTest('seven GiB pool never overlaps packaging with a browser even when both overrides permit it', root => Effect.gen(function*() {
-  const fs = yield* FileSystem.FileSystem;
-  const browser = join(root, 'route.e2e.ts'), packaging = join(root, 'test/process/release-package.test.ts');
-  const browserStarted = join(root, 'browser-started'), packageStarted = join(root, 'package-started');
-  yield* fs.makeDirectory(join(root, 'test/process'), { recursive: true });
-  yield* fs.writeFileString(browser, 'export {};\n');
-  const waitSource = (marker: string) => `await new Promise(resolve => { const ready = () => { if (existsSync(${JSON.stringify(marker + '.release')})) { unwatchFile(${JSON.stringify(marker + '.release')}, ready); resolve(); } }; watchFile(${JSON.stringify(marker + '.release')}, {interval:10}, ready); ready(); });`;
-  yield* fs.writeFileString(packaging, `import test from 'node:test'; import assert from 'node:assert/strict'; import {existsSync,writeFileSync,watchFile,unwatchFile} from 'node:fs';
-test('admitted packaging', async () => { assert.equal(existsSync(${JSON.stringify(browserStarted)}) && !existsSync(${JSON.stringify(browserStarted + '.done')}), false); writeFileSync(${JSON.stringify(packageStarted)}, 'started'); ${waitSource(packageStarted)} writeFileSync(${JSON.stringify(packageStarted + '.done')}, 'done'); });\n`);
-  const pnpm = join(root, 'pnpm');
-  yield* fs.writeFileString(pnpm, `#!/usr/bin/env node
-import assert from 'node:assert/strict'; import {existsSync,writeFileSync,watchFile,unwatchFile} from 'node:fs';
-assert.equal(existsSync(${JSON.stringify(packageStarted)}) && !existsSync(${JSON.stringify(packageStarted + '.done')}), false);
-assert.equal(process.argv[process.argv.indexOf('--workers')+1], '2');
-writeFileSync(${JSON.stringify(browserStarted)}, 'started'); ${waitSource(browserStarted)} writeFileSync(${JSON.stringify(browserStarted + '.done')}, 'done');\n`);
-  yield* fs.chmod(pnpm, 0o755);
-  const running = yield* run([packaging, browser], {
-    PATH: `${root}:${process.env.PATH}`, CONCORD_TEST_PACKAGE_ROOT: join(root, 'archive'),
-    CONCORD_TEST_CONCURRENCY: '8', CONCORD_E2E_WORKERS: '4', CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3),
-  }, root).pipe(Effect.forkScoped);
-  const waitFor = (paths: string[]) => Effect.gen(function*() {
-    for (;;) { for (const path of paths) if (yield* fs.exists(path)) return path; yield* Effect.sleep('10 millis'); }
-  }).pipe(Effect.timeout('15 seconds'));
-  const first = yield* waitFor([browserStarted, packageStarted]);
-  const second = first === browserStarted ? packageStarted : browserStarted;
-  assert.equal(yield* fs.exists(second), false, 'three plus two 2.5-GiB browser workers cannot enter a five-GiB pool together');
-  yield* fs.writeFileString(first + '.release', 'release');
-  yield* waitFor([second]);
-  assert.equal(yield* fs.exists(first + '.done'), true);
-  yield* fs.writeFileString(second + '.release', 'release');
-  const result = yield* Fiber.join(running);
-  assert.equal(result.code, 0, result.text);
-  assert.match(result.text, /e2e workers=2/u);
 }));

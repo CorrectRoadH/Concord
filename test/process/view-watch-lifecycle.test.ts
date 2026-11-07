@@ -38,9 +38,9 @@ test('cache publication settles and closing View stops updates and releases its 
   const closed = yield* Effect.sync(() => readPublished(root)!);
   assert.equal(closed.projection.refreshOwner, 'none');
   assert.equal((server.process.exitCode === null && server.process.signalCode === null), false);
-  yield* Effect.sync(() => {
-    assert.equal(existsSync(join(genericPrivateDirectorySync(root), 'workspace-refresh/current')), false);
-    const reopened = new LocalRepository(root);
+  yield* Effect.tryPromise(async () => {
+    assert.equal(existsSync(join(genericPrivateDirectorySync(root, process.env), 'workspace-refresh/current')), false);
+    const reopened = (await LocalRepository.open(root));
     try { assert.ok(reopened.read('concord.config.ts')); } finally { reopened.close(); }
     write(root, 'src/main.ts', mainSource.replace('1', '9'));
     write(root, 'src/after-close/deep/new.ts', mainSource);

@@ -20,23 +20,23 @@ import { digest } from "../../src/model/index.ts";
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 
-function withConsumer(run: (root: string) => void): void {
-  const root = createConsumer();
+async function withConsumer(run: (root: string) => void): Promise<void> {
+  const root = (await createConsumer());
   try {
-    run(root);
+    (await run(root));
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
 async function withConsumerAsync(run: (root: string) => Promise<void>): Promise<void> {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     await run(root);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
-function withRepo(root: string, run: (repo: LocalRepository) => void, access: 'read' | 'write' = 'write'): void {
-  const repo = new LocalRepository(root, { access });
-  try { run(repo); } finally { repo.close(); }
+async function withRepo(root: string, run: (repo: LocalRepository) => void, access: 'read' | 'write' = 'write'): Promise<void> {
+  const repo = (await LocalRepository.open(root, { access }));
+  try { await run(repo); } finally { repo.close(); }
 }
 
 function write(root: string, path: string, source: string): void {
@@ -45,57 +45,57 @@ function write(root: string, path: string, source: string): void {
   writeFileSync(absolute, source);
 }
 
-function throwsCode(code: string, operation: () => unknown): void {
-  assert.throws(operation, error => typeof error === 'object' && error !== null && 'code' in error && error.code === code);
+async function throwsCode(code: string, operation: () => unknown): Promise<void> {
+  await assert.rejects(async () => await operation(), error => typeof error === 'object' && error !== null && 'code' in error && error.code === code);
 }
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('exact references derive identity from paths and reject malformed owners', () => runApplication(Effect.sync(() => withConsumer(root => {
-  withRepo(root, repo => {
-    createDocument(repo, 'feature', { id: 'alpha', title: 'Alpha', pages: [] });
-    createDocument(repo, 'feature', { id: 'beta', title: 'Beta', pages: [] });
-    createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'alpha' });
+test('exact references derive identity from paths and reject malformed owners', () => runApplication(Effect.tryPromise(async () => (await withConsumer(async root => {
+  (await withRepo(root, async repo => {
+    (await createDocument(repo, 'feature', { id: 'alpha', title: 'Alpha', pages: [] }));
+    (await createDocument(repo, 'feature', { id: 'beta', title: 'Beta', pages: [] }));
+    (await createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'alpha' }));
     const alpha = readDocumentReference(repo, 'docs/feature/alpha/README.md', ['feature']);
     write(root, 'docs/feature/alpha/guide.md', renderDocument(alpha.metadata, '# Guide\n\n## Allowed anchor\n'));
     assert.equal(readDocumentReference(repo, 'docs/feature/alpha/guide.md#allowed-anchor', ['feature']).path, alpha.path);
 
     write(root, 'docs/feature/alpha/nested/README.md', '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken owner\n');
     write(root, 'docs/feature/alpha/nested/page.md', '# Nested page\n');
-    throwsCode('InvalidData', () => readDocumentReference(repo, 'docs/feature/alpha/nested/page.md', ['feature']));
-    throwsCode('InvalidData', () => readDocumentReference(repo, 'docs/feature/alpha/nested/README.md', ['feature']));
+    (await throwsCode('InvalidData', () => readDocumentReference(repo, 'docs/feature/alpha/nested/page.md', ['feature'])));
+    (await throwsCode('InvalidData', () => readDocumentReference(repo, 'docs/feature/alpha/nested/README.md', ['feature'])));
 
     write(root, 'memory/historical-feature.md', renderDocument(alpha.metadata, alpha.body));
-    throwsCode('InvalidReferenceTarget', () => readDocumentReference(repo, 'memory/historical-feature.md', ['feature']));
+    (await throwsCode('InvalidReferenceTarget', () => readDocumentReference(repo, 'memory/historical-feature.md', ['feature'])));
 
     const flow = readDocumentReference(repo, 'docs/feature/alpha/use-case/flow.md', ['use-case']);
     write(root, 'docs/feature/beta/use-case/misplaced.md', renderDocument(flow.metadata, flow.body));
     const moved = readDocumentReference(repo, 'docs/feature/beta/use-case/misplaced.md', ['use-case']);
     assert.equal(moved.metadata.kind === 'use-case' ? moved.metadata.feature : undefined, 'docs/feature/beta/README.md');
-  });
-}))));
+  }));
+})))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('canonical Issue edit ignores a malformed sibling while short IDs still require an unambiguous inventory', () => runApplication(Effect.sync(() => withConsumer(root => {
-  withRepo(root, repo => {
-    createDocument(repo, 'issue', { id: 'target', title: 'Target' });
+test('canonical Issue edit ignores a malformed sibling while short IDs still require an unambiguous inventory', () => runApplication(Effect.tryPromise(async () => (await withConsumer(async root => {
+  (await withRepo(root, async repo => {
+    (await createDocument(repo, 'issue', { id: 'target', title: 'Target' }));
     const path = 'docs/issues/target.md';
     const record = readDocumentSelector(repo, path, 'issue');
     write(root, 'docs/issues/broken.md', '---\nformat: concord.document/v1\nkind: issue\n---\n# Broken\n');
-    const receipt = editKnowledge(repo, 'issue', path, '# Updated issue\n', record.digest);
+    const receipt = (await editKnowledge(repo, 'issue', path, '# Updated issue\n', record.digest));
     assert.deepEqual(receipt.changedPaths, [path]);
     assert.match(readFileSync(join(root, path), 'utf8'), /Updated issue/u);
-    throwsCode('InvalidData', () => readDocumentSelector(repo, 'target', 'issue'));
+    (await throwsCode('InvalidData', () => readDocumentSelector(repo, 'target', 'issue')));
     rmSync(join(root, 'docs/issues/broken.md'));
     write(root, 'docs/issues/second.md', readFileSync(join(root, path), 'utf8'));
     assert.equal(readDocumentSelector(repo, 'target', 'issue').path, path);
     assert.equal(readDocumentSelector(repo, 'second', 'issue').path, 'docs/issues/second.md');
     assert.equal(readDocumentSelector(repo, path, 'issue').path, path);
-  });
-}))));
+  }));
+})))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('Web workspace retains complete=false, valid documents, and malformed owner findings', () => withConsumerAsync(async root => {
-    withRepo(root, repo => createDocument(repo, 'feature', { id: 'healthy', title: 'Healthy', pages: [] }));
+test('Web workspace retains complete=false, valid documents, and malformed owner findings', async () => withConsumerAsync(async root => {
+    (await withRepo(root, async repo => (await createDocument(repo, 'feature', { id: 'healthy', title: 'Healthy', pages: [] }))));
     const bad = 'docs/feature/broken/README.md';
     write(root, bad, '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
     const snapshot = await runApplication(getWorkspaceSnapshot(root));
@@ -105,36 +105,36 @@ test('Web workspace retains complete=false, valid documents, and malformed owner
   }));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('read access refuses publication but permits a dry-run preview without writing', () => runApplication(Effect.sync(() => withConsumer(root => {
-  withRepo(root, repo => {
-    throwsCode('ReadOnlyRepository', () => createDocument(repo, 'feature', { id: 'blocked', title: 'Blocked', pages: [] }));
+test('read access refuses publication but permits a dry-run preview without writing', () => runApplication(Effect.tryPromise(async () => (await withConsumer(async root => {
+  (await withRepo(root, async repo => {
+    (await throwsCode('ReadOnlyRepository', async () => (await createDocument(repo, 'feature', { id: 'blocked', title: 'Blocked', pages: [] }))));
     assert.equal(existsSync(join(root, 'docs/feature/blocked')), false);
-    const preview = createDocument(repo, 'feature', { id: 'preview', title: 'Preview', pages: [], dryRun: true });
+    const preview = (await createDocument(repo, 'feature', { id: 'preview', title: 'Preview', pages: [], dryRun: true }));
     assert.equal(preview.dryRun, true);
     assert.deepEqual(preview.changedPaths, ['docs/feature/preview/README.md']);
     assert.equal(existsSync(join(root, 'docs/feature/preview')), false);
-  }, 'read');
-}))));
+  }, 'read'));
+})))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('read access cannot publish source or invalidate a run while another reader holds ownership', () => runApplication(Effect.sync(() => withConsumer(root => {
+test('read access cannot publish source or invalidate a run while another reader holds ownership', () => runApplication(Effect.tryPromise(async () => (await withConsumer(async root => {
   writeProjectConfig(root, { testRoots: ['test'] });
   write(root, 'test/source.ts', 'export const value = 1;\n');
   let runToken = '';
-  withRepo(root, repo => { runToken = repo.snapshot(() => beginRun(root)).lease.owner.token; });
+  (await withRepo(root, repo => { runToken = repo.snapshot(() => beginRun(root, process.env)).lease.owner.token; }));
   const statePath = join(root, `.git/concord/run-${runToken}.json`);
   const state = readFileSync(statePath, 'utf8');
-  const lease = acquireTraceLeaseSync(root, 'shared', 'other-reader')!;
+  const lease = acquireTraceLeaseSync(root, 'shared', 'other-reader', undefined, undefined, process.env)!;
   try {
-    withRepo(root, repo => {
+    (await withRepo(root, async repo => {
       const before = readFileSync(join(root, 'test/source.ts'), 'utf8');
-      throwsCode('ReadOnlyRepository', () => setSource(repo, 'test/source.ts', 'changed\n', digest(before)));
-      assert.equal(setSource(repo, 'test/source.ts', 'changed\n', digest(before), true).dryRun, true);
+      (await throwsCode('ReadOnlyRepository', async () => (await setSource(repo, 'test/source.ts', 'changed\n', digest(before)))));
+      assert.equal((await setSource(repo, 'test/source.ts', 'changed\n', digest(before), true)).dryRun, true);
       assert.equal(readFileSync(join(root, 'test/source.ts'), 'utf8'), before);
       assert.equal(readFileSync(statePath, 'utf8'), state);
       assert.equal(existsSync(join(root, '.git/concord/journal.json')), false);
       assert.ok(existsSync(join(lease.path, `${lease.owner.token}.json`)));
-    }, 'read');
+    }, 'read'));
   } finally { releaseTraceLeaseSync(lease, 'other-reader'); }
-}))));
+})))));
 

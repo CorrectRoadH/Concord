@@ -23,7 +23,7 @@ pnpm exec vp run gate
 
 Concord 运行在 Bun 上。开发、测试、CI 与发版归档使用同一个 Bun 精确版本，唯一记录在仓库根目录的 `.bun-version` 中；`package.json` 不声明 `engines`。启动与模块加载是高频 CLI 的成本，交付按真实命令测量，不以空进程或模块加载的耗时代替产品性能验收（[快到每次都愿意跑](../../taste.md#t-7)）。
 
-产品代码可以使用该版本 Bun 的 API，以及它实现的 Node.js 兼容 API。pnpm 与 Vite+ 等开发工具仍运行在 `.node-version` 固定的 Node.js 上；测试工具宿主与被测 Concord 进程分开，Concord 代码使用 Bun。升级产品运行时更新 `.bun-version`，交付前跑完整门禁与打包测试。
+产品代码可以使用该版本 Bun 的 API，以及它实现的 Node.js 兼容 API。pnpm 与 Vite+ 等开发工具仍运行在 `.node-version` 固定的 Node.js 上；测试工具宿主与被测 Concord 进程分开，Concord 代码使用 Bun。升级产品运行时更新 `.bun-version`，交付前跑完整门禁与 CI 归档验收。
 
 只交付 Herdr mod 时运行 `pnpm build:herdr`，生成目录直接随 Git 提交分发，不需要完整归档或 CLI Release，见[独立交付 Concord mod](use-case/share-herdr-mod.md)。
 
@@ -33,7 +33,7 @@ Concord 运行在 Bun 上。开发、测试、CI 与发版归档使用同一个 
 
 `pnpm concord <参数>` 直接运行当前 worktree 的源码 CLI，不需要构建，也不需要全局安装的 Concord。源码模式与安装模式的差别见[从源码运行](architecture.md#从源码运行)。
 
-本机目标平台的[归档](../../feature/cross-platform-release/cli.md#发布资产)只在 worktree 之外构建。打包测试与性能对照使用共享构建缓存，同一份源码在同一台机器上只构建一次；发版流程为每个目标单独构建到自己的临时目录。命令与错误见[构建命令](cli.md)。
+本机目标平台的[归档](../../feature/cross-platform-release/cli.md#发布资产)只在 worktree 之外构建。性能对照使用共享构建缓存，同一份源码在同一台机器上只构建一次；发版流程为每个目标单独构建到自己的临时目录。命令与错误见[构建命令](cli.md)。
 
 ## 技术栈
 
@@ -55,4 +55,4 @@ pnpm concord docs check --json
 pnpm concord trace show local-sdlc --json
 ```
 
-`vp build --outDir <临时目录>` 产出的本机目标归档由[打包测试](../testing/README.md#检查入口)解压，并在没有系统 Node.js、Bun 与 pnpm 的 `PATH` 中启动。
+`vp build --outDir <临时目录>` 产出的本机目标归档由[CI 归档验收](../testing/README.md#归档验收)解压，并在没有系统 Node.js、Bun 与 pnpm 的 `PATH` 中启动。

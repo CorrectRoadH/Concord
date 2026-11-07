@@ -40,7 +40,8 @@ export function validateElfInspection(file: string, root: string, inspection: st
       if (!/^\$ORIGIN(?:\/|$)/u.test(path) || resolve(dirname(file), path.replace('$ORIGIN', '.')) !== join(root, 'runtime/lib')) reject(`RPATH must point to runtime/lib: ${path}`);
     }
   }
-  if (/\(NEEDED\)/u.test(inspection) && !/\((?:RPATH|RUNPATH)\)/u.test(inspection)) reject('Dynamic ELF lacks an archive RPATH');
+  const needsRuntime = [...inspection.matchAll(/\(NEEDED\).*\[([^\]]+)\]/gu)].some(match => !baseLibraries.has(match[1]!));
+  if (needsRuntime && !/\((?:RPATH|RUNPATH)\)/u.test(inspection)) reject('Non-glibc ELF dependency lacks an archive RPATH');
 }
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md#verify
@@ -87,8 +88,6 @@ export const verifyReleaseArchive = Effect.fn('release.verifyArchive')(function*
     for (const file of files) {
       if (machoMagic.has(yield* binaryMagic(file))) yield* run(['codesign', '--verify', '--strict', file]);
     }
-    const signature = yield* run(['codesign', '-dvv', join(root, 'runtime/node')]);
-    if (!/Authority=.*(?:Node\.js|OpenJS)/u.test(signature.stderr) || /Signature=adhoc/u.test(signature.stderr)) return yield* new ReleaseArchiveInvalid({ message: 'Bundled Node must retain its official signature' });
     if ((yield* run(['xattr', '-lr', root])).stdout.includes('com.apple.quarantine')) return yield* new ReleaseArchiveInvalid({ message: 'Quarantined archive contents' });
   }
   const manifest = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: Version, gitHead: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)) })), { onExcessProperty: 'ignore' })(yield* fs.readFileString(join(root, 'app/package.json')));
@@ -102,11 +101,6 @@ export const verifyReleaseArchive = Effect.fn('release.verifyArchive')(function*
       if (yield* fs.exists(join(entry, tool))) { yield* fs.symlink(resolve(entry, tool), join(bin, tool)); break; }
     }
   }
-  const marker = join(scratch, 'unexpected-path-tool');
-  for (const tool of ['node', 'rg', 'pnpm']) {
-    yield* fs.writeFileString(join(bin, tool), `#!/bin/sh\nprintf '%s\\n' '${tool}' >> '${marker}'\nexit 97\n`);
-    yield* fs.chmod(join(bin, tool), 0o755);
-  }
   const env: NodeJS.ProcessEnv = { ...process.env, PATH: bin, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', NODE_OPTIONS: '', NODE_PATH: '', LD_LIBRARY_PATH: '' };
   for (const key of Object.keys(env)) if (key.startsWith('GIT_') && !['GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM','GIT_TERMINAL_PROMPT'].includes(key)) delete env[key];
   const cli = (args: readonly string[]) => mustRun([join(root, 'bin/concord'), ...args], { ...options, cwd: consumer, env }).pipe(Effect.mapError(error => error.message.includes('PackagedRuntimeUnavailable') ? new PackagedRuntimeUnavailable({ message: error.message }) : error));
@@ -115,8 +109,10 @@ export const verifyReleaseArchive = Effect.fn('release.verifyArchive')(function*
   yield* mustRun([join(bin, 'git'), 'init', '-q', consumer], { ...options, env });
   if ((yield* cli(['--version'])).stdout.trim() !== `concord v${version}`) return yield* new ReleaseArchiveInvalid({ message: 'CLI version differs' });
   yield* cli(['--help']);
-  const pinnedNode = (yield* fs.readFileString(resolve('.node-version'))).trim();
-  if ((yield* mustRun([join(root, 'runtime/node'), '--version'], { ...options, cwd: consumer, env })).stdout.trim() !== `v${pinnedNode}`) return yield* new ReleaseArchiveInvalid({ message: 'Bundled Node differs from .node-version' });
+  const compiler = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: Schema.String, target: Target, cpu: Schema.String })), { onExcessProperty: 'ignore' })(yield* fs.readFileString(join(root, 'app/dist/compiler.json')));
+  const pinnedBun = (yield* fs.readFileString(resolve('.bun-version'))).trim();
+  if (compiler.version !== pinnedBun || compiler.target !== target || compiler.cpu !== (target === 'linux-x64' ? 'bun-linux-x64-baseline' : 'bun-darwin-arm64')) return yield* new ReleaseArchiveInvalid({ message: 'Compiled runtime differs from pinned target' });
+  if (yield* fs.exists(join(root, 'runtime/node'))) return yield* new ReleaseArchiveInvalid({ message: 'Archive contains a separate JS interpreter' });
   yield* call(['init', '--docs-only']);
   yield* Effect.gen(function*() {
     yield* call(['check']);
@@ -128,7 +124,6 @@ export const verifyReleaseArchive = Effect.fn('release.verifyArchive')(function*
   const status = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ state: Schema.Literal('absent') })), { onExcessProperty: 'ignore' })((yield* cli(['--root', consumer, '--json', 'server', 'status'])).stdout);
   const processes = (yield* run(['ps', '-axo', 'pid=,command='])).stdout;
   if (processes.split('\n').some(line => line.includes(consumer))) return yield* new ReleaseArchiveInvalid({ message: 'Candidate service process remains after cleanup' });
-  if (yield* fs.exists(marker)) return yield* new ReleaseArchiveInvalid({ message: 'Application invoked a PATH runtime probe' });
   return { target, version, digest, native: 'loaded', service: status.state };
 }, Effect.scoped);
 

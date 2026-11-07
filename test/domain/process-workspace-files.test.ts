@@ -12,11 +12,11 @@ import { writeProjectConfig } from '../support/support.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
-function fixture(): string {
-  const root = createConsumer();
+async function fixture(): Promise<string> {
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: [], sourceRoots: ['src'] });
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'cached', title: 'Cached', pages: ['architecture'] }); }
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'cached', title: 'Cached', pages: ['architecture'] })); }
   finally { repo.close(); }
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src/main.ts'), '// @concord-code\n// @concord-implements docs/feature/cached/README.md\nexport function cachedCode() { return true; }\n');
@@ -24,9 +24,9 @@ function fixture(): string {
 }
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('direct file reads preserve owner diagnostics and inspect only the target and ancestors', () => runApplication(Effect.sync(() => {
-  const root = fixture();
-  const repo = new LocalRepository(root);
+test('direct file reads preserve owner diagnostics and inspect only the target and ancestors', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await fixture());
+  const repo = (await LocalRepository.open(root));
   try {
     for (let index = 0; index < 120; index += 1) writeFileSync(join(root, `docs/feature/other-${index}.md`), '# Unrelated\n');
     mkdirSync(join(root, 'docs/feature/cached/nested'));
@@ -61,7 +61,7 @@ test('direct file reads preserve owner diagnostics and inspect only the target a
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('warm workspace caches observe changed bytes with unchanged timestamps and removed paths', async () => {
-  const root = fixture();
+  const root = (await fixture());
   try {
     openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }, nativeRuntime).close();
     await runApplication(getWorkspaceSnapshot(root, 'use'));
@@ -96,9 +96,9 @@ test('warm workspace caches observe changed bytes with unchanged timestamps and 
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('supporting-page saves avoid inventory scans and preserve conflict checks', () => runApplication(Effect.sync(() => {
-  const root = fixture();
-  const repo = new LocalRepository(root);
+test('supporting-page saves avoid inventory scans and preserve conflict checks', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await fixture());
+  const repo = (await LocalRepository.open(root));
   try {
     for (let index = 0; index < 120; index += 1) writeFileSync(join(root, `docs/feature/other-${index}.md`), '# Unrelated\n');
     const path = 'docs/feature/cached/architecture.md';
@@ -106,9 +106,9 @@ test('supporting-page saves avoid inventory scans and preserve conflict checks',
     let walks = 0;
     const files = repo.files.bind(repo);
     repo.files = path => { walks += 1; return files(path); };
-    setMarkdown(repo, path, '# Saved\n', page.digest);
+    (await setMarkdown(repo, path, '# Saved\n', page.digest));
     assert.equal(readFileSync(join(root, path), 'utf8'), '# Saved\n');
     assert.equal(walks, 0, 'saving one supporting page must not enumerate unrelated documents');
-    assert.throws(() => setMarkdown(repo, path, '# Stale\n', page.digest), { code: 'FileChangedSinceRead' });
+    (await assert.rejects(async () => (await setMarkdown(repo, path, '# Stale\n', page.digest)), { code: 'FileChangedSinceRead' }));
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 })));

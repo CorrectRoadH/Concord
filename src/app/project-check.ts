@@ -11,8 +11,8 @@ import { inspectWorkflowSkills } from './workflow-skills.ts';
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的合并检查
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#update
-export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
-  const trace = buildTrace(repo, cache);
+export async function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
+  const trace = (await buildTrace(repo, cache));
   const unreadablePaths = new Set<string>();
   const conceptLinks: { code: string; path: string; line: number; message: string; category: 'relation' }[] = [];
   let conceptLinksComplete = true;

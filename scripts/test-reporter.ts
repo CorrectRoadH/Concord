@@ -59,7 +59,7 @@ export const runNodeTests = Effect.fn('test.bun')(function*(options: SourceTestO
     yield* fs.writeFileString(config, '');
     const id = createHash('sha256').update(file).digest('hex');
     const log = join(logs, `${basename(file)}-${id}.log`);
-    const observation = yield* observeTestProcessTree(file, admission?.history ? gateMemoryBudgets.node : admission?.bytes ?? gateMemoryBudgets.packaging, []);
+    const observation = yield* observeTestProcessTree(file, admission?.history ? gateMemoryBudgets.node : admission?.bytes ?? gateMemoryBudgets.node, []);
     let finished = false;
     const finish = Effect.uninterruptible(Effect.gen(function*() {
       if (finished) return;

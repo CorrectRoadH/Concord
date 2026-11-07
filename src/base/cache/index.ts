@@ -44,3 +44,5 @@ export { makePersistentCacheOwner } from './owner.ts';
 export { FeedbackCacheWriter } from './feedback-writer.ts';
 export { inspectCacheStatus } from './cache-status.ts';
 export type { CacheStatus } from './cache-status.ts';
+
+export { OperationCache, withOperationCache } from './operation-cache.ts';

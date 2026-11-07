@@ -16,11 +16,11 @@ import { writeProjectConfig } from '../support/support.ts';
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
 const candidate = (marker = 'original', scannedAt = Date.now()) => ({ kind: 'candidate' as const, message: { format: 'concord.query-scan/v1' as const, ok: true as const, scannedAt, finishedAt: Date.now(), value: gaps(marker), complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } } });
-function consumer() { const root = createConsumer(); writeProjectConfig(root, { testRoots: [], sourceRoots: ['src'] }); const repo = new LocalRepository(root); try { createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); } finally { repo.close(); } return root; }
+async function consumer() { const root = (await createConsumer()); writeProjectConfig(root, { testRoots: [], sourceRoots: ['src'] }); const repo = (await LocalRepository.open(root)); try { (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' })); } finally { repo.close(); } return root; }
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('failed refresh retains a full oldest snapshot at namespace capacity and success clears its error', () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = consumer();
+  const root = (await consumer());
   try {
     const context = await runApplication(queryContext(root, ['trace', 'gaps']));
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -43,16 +43,16 @@ test('failed refresh retains a full oldest snapshot at namespace capacity and su
 }).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('source reads do not own a lease and detect a concurrent successful publication', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
-  const reader = new LocalRepository(root, { access: 'read' });
+test('source reads do not own a lease and detect a concurrent successful publication', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer());
+  const reader = (await LocalRepository.open(root, { access: 'read' }));
   try {
     reader.beginSnapshot();
     const path = 'docs/feature/sample/README.md';
     const before = reader.read(path)!;
     assert.equal(existsSync(join(root, '.git/concord/trace/publication.lease')), false);
-    const writer = new LocalRepository(root, { optimistic: true });
-    try { setAuthor(writer, path, '# Changed\n', digest(before)); }
+    const writer = (await LocalRepository.open(root, { optimistic: true }));
+    try { (await setAuthor(writer, path, '# Changed\n', digest(before))); }
     finally { writer.close(); }
     assert.match(readFileSync(join(root, path), 'utf8'), /Changed/);
     assert.throws(() => reader.verifySnapshot(), { code: 'SourceChanged' });
@@ -60,17 +60,17 @@ test('source reads do not own a lease and detect a concurrent successful publica
 }).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('a complete A-B-A publication preserves the same source result', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
-  const writer = new LocalRepository(root);
-  const reader = new LocalRepository(root, { access: 'read' });
+test('a complete A-B-A publication preserves the same source result', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await consumer());
+  const writer = (await LocalRepository.open(root));
+  const reader = (await LocalRepository.open(root, { access: 'read' }));
   const path = 'docs/feature/sample/README.md';
   try {
     writer.beginSnapshot();
     reader.beginSnapshot();
     const before = reader.read(path)!;
-    writer.publish('test-edit', [{ path, before, after: `${before}\nchanged\n` }]);
-    writer.publish('test-edit', [{ path, before: `${before}\nchanged\n`, after: before }]);
+    (await writer.publish('test-edit', [{ path, before, after: `${before}\nchanged\n` }]));
+    (await writer.publish('test-edit', [{ path, before: `${before}\nchanged\n`, after: before }]));
     assert.equal(readFileSync(join(root, path), 'utf8'), before);
     assert.doesNotThrow(() => reader.verifySnapshot());
     assert.ok(existsSync(join(root, '.git/concord/trace/publication.lease')));

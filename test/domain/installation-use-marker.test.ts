@@ -10,8 +10,8 @@ import { installationUseMarker } from '../../src/base/installation/index.ts';
 test('installation use markers follow normal, failed and cancelled scopes, and source installs never write them', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-install-marker-'));
   const app = join(root, 'app'), marker = join(root, '.in-use', String(process.pid));
-  mkdirSync(app); mkdirSync(join(root, 'runtime')); mkdirSync(join(root, 'bin'));
-  writeFileSync(join(root, 'runtime/node'), ''); writeFileSync(join(root, 'bin/concord'), '');
+  mkdirSync(app); mkdirSync(join(root, 'bin'));
+  writeFileSync(join(root, 'bin/concord'), '');
   try {
     await Effect.runPromise(Effect.scoped(installationUseMarker(app, true)));
     assert.equal(existsSync(join(root, '.in-use')), false);
@@ -45,8 +45,8 @@ test('installation use markers follow normal, failed and cancelled scopes, and s
 // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md
 test('read-only installation roots do not acquire a marker', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-readonly-marker-'));
-  mkdirSync(join(root, 'runtime')); mkdirSync(join(root, 'bin')); mkdirSync(join(root, 'app'));
-  writeFileSync(join(root, 'runtime/node'), ''); writeFileSync(join(root, 'bin/concord'), '');
+  mkdirSync(join(root, 'bin')); mkdirSync(join(root, 'app'));
+  writeFileSync(join(root, 'bin/concord'), '');
   chmodSync(root, 0o555);
   try {
     await Effect.runPromise(Effect.scoped(installationUseMarker(join(root, 'app'), false)));

@@ -21,9 +21,9 @@ const fixture = async (body: (root: string) => Promise<void>) => {
 };
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('packed config commands reject non-current data and syntax without rewriting the source', () => Effect.runPromise(Effect.promise(() => fixture(async root => {
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+test('packed config commands reject non-current data and syntax without rewriting the source', () => Effect.runPromise(Effect.promise(async () => fixture(async root => {
+  const repo = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(repo, false, { testRoots: [] })); } finally { repo.close(); }
   const path = join(root, 'concord.config.ts');
   const current = readFileSync(path, 'utf8');
   for (const [source, code] of [['export default { format: \"concord.project/v1\" };', 'InvalidData'], ['export default { ...{} };\n', 'InvalidConfigSyntax']] as const) {

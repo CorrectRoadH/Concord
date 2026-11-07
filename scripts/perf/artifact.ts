@@ -1,7 +1,7 @@
-import { packConcord } from '../release-package.ts';
 import { workspaceInstallationIdentity, installationRootForBin, archiveRootForApplication } from '../../src/base/installation/index.ts';
 import { createHash } from 'node:crypto';
-import { cpus, totalmem, tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { cpus, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import { packageBin } from '../package-location.ts';
 import { Effect, FileSystem, Schema } from 'effect';
@@ -42,22 +42,11 @@ const digestInstallation = Effect.fn('perf.digestInstallation')(function*(entry:
   return `sha256:${hash.digest('hex')}`;
 });
 
-const installArtifact = Effect.fn('perf.installArtifact')(function*(repository: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const scratch = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-bench-install-' });
-  const artifact = yield* packConcord(scratch, repository);
-  yield* fs.writeFileString(join(scratch, 'package.json'), '{"private":true}');
-  yield* fs.copyFile(join(repository, 'pnpm-workspace.yaml'), join(scratch, 'pnpm-workspace.yaml'));
-  yield* mustRun(['pnpm', 'add', '--ignore-scripts', '--prefer-offline', '--save-exact', artifact.filename], { cwd: scratch, outputDir: scratch, timeoutMs: 120_000 });
-  return yield* packageBin(join(scratch, 'node_modules/concord-sdlc'));
-});
-
 /** Identify the supplied installation; retain its source repository for consumer fixtures. */
 export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string, installedEntry?: string) {
   const fs = yield* FileSystem.FileSystem;
   const dir = yield* fs.realPath(resolve(path));
-  const built = yield* packageBin(dir);
-  const entry = installedEntry ?? (label === 'candidate' ? built : ((yield* fs.exists(built)) ? yield* installArtifact(dir) : built));
+  const entry = installedEntry ?? (yield* packageBin(dir));
   if (!(yield* fs.exists(entry))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
   const git = (...args: string[]) => mustRun(['git', '-C', dir, ...args], { cwd: dir, outputDir: dir }).pipe(Effect.map(result => result.stdout.trim()));
   const source = entry.endsWith('.ts');
@@ -80,5 +69,5 @@ export const verifyArtifact = Effect.fn('perf.verifyArtifact')(function*(artifac
 });
 
 export function environment() {
-  return { node: process.version, platform: process.platform, arch: process.arch, cpu: cpus()[0]?.model ?? 'unknown', cpuCount: cpus().length, memoryBytes: totalmem() };
+  return { node: process.version, bun: execFileSync('bun', ['--version'], { encoding: 'utf8', timeout: 10_000 }).trim(), platform: process.platform, arch: process.arch, cpu: cpus()[0]?.model ?? 'unknown', cpuCount: cpus().length, memoryBytes: totalmem() };
 }

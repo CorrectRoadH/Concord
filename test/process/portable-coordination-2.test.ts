@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { syncBuiltinMocks as syncBuiltinESMExports } from '../support/builtin-mocks.ts';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
@@ -47,8 +47,8 @@ function holder(root: string, recover = false): ChildProcess {
   return spawn(process.execPath, ['--input-type=module', '-e', `
     import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts';
     try {
-      if (process.argv[2] === 'recover') recoverPublicationLeaseSync(process.argv[1]);
-      const lease = acquireTraceLeaseSync(process.argv[1], 'exclusive', 'consumer');
+      if (process.argv[2] === 'recover') recoverPublicationLeaseSync(process.argv[1], process.env);
+      const lease = acquireTraceLeaseSync(process.argv[1], 'exclusive', 'consumer', undefined, undefined, process.env);
       console.log('held');
       process.stdin.once('data', () => { releaseTraceLeaseSync(lease, 'consumer'); process.exit(0); });
     } catch (error) { console.log('refused:' + error.message); process.exit(0); }
@@ -63,13 +63,14 @@ async function stop(child: ChildProcess): Promise<void> {
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name recover-interrupted-reader-admission
 test('recover reclaims a real reader killed after linking beside a dead writer', async t => {
-  const root = fixture(t);
-  const original = acquireTraceLeaseSync(root, 'shared', 'original')!;
+  const root = (await fixture(t));
+  const original = acquireTraceLeaseSync(root, 'shared', 'original', undefined, undefined, process.env)!;
   // A source consumer pauses only at the filesystem boundary;
   // production lease code creates and validates every owner record.
   const reader = spawn(process.execPath, ['--input-type=module', '-e', `
     import fs from 'node:fs';
-    import { syncBuiltinESMExports } from 'node:module';
+    import { mock as bunMock } from 'bun:test';
+const syncBuiltinESMExports = () => bunMock.module('node:fs', () => ({ ...fs, default: fs }));
     import { acquireTraceLeaseSync } from './src/base/publication/index.ts';
     const link = fs.linkSync;
     fs.linkSync = (source, target) => {
@@ -80,7 +81,7 @@ test('recover reclaims a real reader killed after linking beside a dead writer',
       fs.readSync(0, Buffer.alloc(1), 0, 1, null);
     };
     syncBuiltinESMExports();
-    acquireTraceLeaseSync(process.argv[1], 'shared', 'interrupted-reader');
+    acquireTraceLeaseSync(process.argv[1], 'shared', 'interrupted-reader', undefined, undefined, process.env);
   `, root], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'inherit'] });
   let writer: ChildProcess | undefined;
   try {
@@ -94,7 +95,7 @@ test('recover reclaims a real reader killed after linking beside a dead writer',
     const tokens = readdirSync(original.path).map(name => name.slice(0, -5)).sort();
     assert.equal(tokens.length, 2);
     await stop(reader);
-    assert.throws(() => recoverPublicationLeaseSync(root), /busy/);
+    assert.throws(() => recoverPublicationLeaseSync(root, process.env), /busy/);
     assert.deepEqual(readdirSync(original.path).map(name => name.slice(0, -5)).sort(), tokens);
     await stop(writer);
     const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'recover'], { encoding: 'utf8', timeout: 15000 });
@@ -104,8 +105,8 @@ test('recover reclaims a real reader killed after linking beside a dead writer',
       coordination: Schema.Struct({ publication: Schema.Struct({ reclaimedTokens: Schema.Array(Schema.String) }), runner: Schema.Struct({ status: Schema.Literal('absent') }) }),
     })))(result.stdout);
     assert.deepEqual([...report.coordination.publication.reclaimedTokens].sort(), tokens);
-    const next = acquireTraceLeaseSync(root, 'exclusive', 'next-writer')!;
-    try { assert.throws(() => recoverPublicationLeaseSync(root), /busy/); }
+    const next = acquireTraceLeaseSync(root, 'exclusive', 'next-writer', undefined, undefined, process.env)!;
+    try { assert.throws(() => recoverPublicationLeaseSync(root, process.env), /busy/); }
     finally { releaseTraceLeaseSync(next, 'next-writer'); }
   } finally {
     await stop(reader);
@@ -116,12 +117,12 @@ test('recover reclaims a real reader killed after linking beside a dead writer',
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name cli-shared-operation-access
-test('ordinary CLI queries share ownership with a live reader', t => runApplication(Effect.sync(() => {
-  const root = fixture(t);
-  const setup = new LocalRepository(root);
-  try { setup.snapshot(() => createDocument(setup, 'feature', { id: 'target', title: 'Target' })); }
+test('ordinary CLI queries share ownership with a live reader', t => runApplication(Effect.tryPromise(async () => {
+  const root = (await fixture(t));
+  const setup = (await LocalRepository.open(root));
+  try { (await setup.snapshot(async () => (await createDocument(setup, 'feature', { id: 'target', title: 'Target' })))); }
   finally { setup.close(); }
-  const reader = acquireTraceLeaseSync(root, 'shared', 'query-observer')!;
+  const reader = acquireTraceLeaseSync(root, 'shared', 'query-observer', undefined, undefined, process.env)!;
   try {
     for (const args of [
       ['list', 'memory'], ['list', 'memory'], ['memory', 'search', 'missing'],
@@ -132,22 +133,22 @@ test('ordinary CLI queries share ownership with a live reader', t => runApplicat
       assert.equal(result.status, 0, `${args.join(' ')}: ${result.stderr}`);
     }
     assert.ok(existsSync(join(reader.path, `${reader.owner.token}.json`)), 'queries must not remove another live reader');
-    assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'blocked-writer'), /busy/);
+    assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'blocked-writer', undefined, undefined, process.env), /busy/);
   } finally { releaseTraceLeaseSync(reader, 'query-observer'); }
 })));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('recovery final verification reports a competing publication owner', async t => {
-  const root = fixture(t);
+  const root = (await fixture(t));
   const close = RepositoryBase.prototype.close;
-  let concurrent: ReturnType<typeof acquireTraceLeaseSync>;
+  let concurrent: Awaited<ReturnType<typeof acquireTraceLeaseSync>>;
   let closes = 0;
   RepositoryBase.prototype.close = function() {
     close.call(this);
-    if (++closes === 2) concurrent = acquireTraceLeaseSync(root, 'exclusive', 'between-recovery-and-verification');
+    if (++closes === 2) concurrent = acquireTraceLeaseSync(root, 'exclusive', 'between-recovery-and-verification', undefined, undefined, process.env);
   };
   try {
-    await assert.rejects(runApplication(recoverLocalState(root)), { code: 'RepositoryBusy' });
+    await assert.rejects((runApplication(recoverLocalState(root))), { code: 'RepositoryBusy' });
     assert.ok(concurrent);
     assert.ok(existsSync(join(concurrent.path, `${concurrent.owner.token}.json`)));
   } finally {
@@ -159,13 +160,13 @@ test('recovery final verification reports a competing publication owner', async 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('recovery preserves a new dead owner between dispatch and either recovery engine', async t => {
   for (const trace of [false, true]) {
-    const root = fixture(t);
+    const root = (await fixture(t));
     if (trace) {
       execFileSync('git', ['-C', root, 'add', 'concord.config.ts']);
       execFileSync('git', ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
       await assert.rejects(runApplication(mutateTraceFiles({ root, operation: 'stage-barrier', changes: [{ path: 'interrupted.md', bytes: 'planned\n' }], injectFailureAfterRename: 1 })), /injected interruption/);
     }
-    const publicationPath = join(tracePrivateDirectorySync(root), 'publication.lease');
+    const publicationPath = join(tracePrivateDirectorySync(root, process.env), 'publication.lease');
     const original = fs.rmdirSync;
     let token = '';
     fs.rmdirSync = (path) => {
@@ -176,7 +177,7 @@ test('recovery preserves a new dead owner between dispatch and either recovery e
         // resource and exits without releasing before the selected engine runs.
         const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
           import { acquireTraceLeaseSync } from './src/base/publication/index.ts';
-          console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'interstage-owner').owner.token);
+          console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'interstage-owner', undefined, undefined, process.env).owner.token);
         `, root], { cwd: process.cwd(), encoding: 'utf8', timeout: 15000 });
         assert.equal(child.status, 0, child.stderr);
         token = child.stdout.trim();
@@ -184,9 +185,9 @@ test('recovery preserves a new dead owner between dispatch and either recovery e
     };
     syncBuiltinESMExports();
     try {
-      await assert.rejects(runApplication(recoverLocalState(root)), { code: 'RepositoryBusy' });
+      await assert.rejects((runApplication(recoverLocalState(root))), { code: 'RepositoryBusy' });
       assert.ok(existsSync(join(publicationPath, `${token}.json`)), 'the selected engine must not perform an unreported second reclamation');
-      if (trace) assert.ok(existsSync(join(tracePrivateDirectorySync(root), 'multi-file-publication-journal.json')));
+      if (trace) assert.ok(existsSync(join(tracePrivateDirectorySync(root, process.env), 'multi-file-publication-journal.json')));
     } finally { fs.rmdirSync = original; syncBuiltinESMExports(); }
     const retried = await runApplication(recoverLocalState(root));
     assert.deepEqual(retried.coordination.publication.reclaimedTokens, [token]);
@@ -212,12 +213,12 @@ test('built CLI initializes and publishes with only Node and Git on PATH', t => 
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('a live but quarantined runner blocks publication without reclaiming its ownership', t => {
-  const root = fixture(t), repo = new LocalRepository(root);
+test('a live but quarantined runner blocks publication without reclaiming its ownership', async t => {
+  const root = (await fixture(t)), repo = (await LocalRepository.open(root));
   try {
-    const run = repo.snapshot(() => beginRun(root));
-    repo.snapshot(() => finalizeRun(root, run, false));
-    assert.throws(() => repo.publish('blocked', [{ path: 'memory/blocked.md', before: null, after: 'no' }]), { code: 'CleanupFailed' });
+    const run = repo.snapshot(() => beginRun(root, process.env));
+    repo.snapshot(() => finalizeRun(root, run, false, process.env));
+    (await assert.rejects(async () => (await repo.publish('blocked', [{ path: 'memory/blocked.md', before: null, after: 'no' }])), { code: 'CleanupFailed' }));
     assert.equal(existsSync(join(root, 'memory/blocked.md')), false);
     assert.ok(existsSync(run.lease.path));
   } finally { repo.close(); }
@@ -225,9 +226,9 @@ test('a live but quarantined runner blocks publication without reclaiming its ow
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('long command releases document ownership and cooperative A-B-A invalidates its receipt', async t => {
-  const root = fixture(t);
-  const setup = new LocalRepository(root);
-  setup.snapshot(() => createDocument(setup, 'feature', { id: 'example', title: 'Example' })); setup.close();
+  const root = (await fixture(t));
+  const setup = (await LocalRepository.open(root));
+  (await setup.snapshot(async () => (await createDocument(setup, 'feature', { id: 'example', title: 'Example' })))); setup.close();
   mkdirSync(join(root, 'test'));
   writeFileSync(join(root, 'test/example.test.mjs'), `import { test } from 'node:test';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -239,9 +240,9 @@ test('wait for editor', async () => {
 });\n`);
   // Change the fixture configuration before opening its execution snapshot.
   const config = join(root, 'concord.config.ts');
-  writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], runner: { kind: 'command', argv: [process.execPath, '--test', '{file}'], timeoutMs: 15000, sourceFiles: [] } });
-  const repo = new LocalRepository(root);
-  const trace = repo.snapshot(() => buildTrace(repo, 'off', { includeCode: false })); requireValidTrace(trace);
+  writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], runner: { kind: 'command', argv: [process.execPath, 'test', '--no-env-file', '--config=/dev/null', '--timeout=15000', '{file}'], timeoutMs: 15000, sourceFiles: [] } });
+  const repo = (await LocalRepository.open(root));
+  const trace = (await repo.snapshot(async () => (await buildTrace(repo, 'off', { includeCode: false })))); requireValidTrace(trace);
   const result = runApplication(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
   try {
     const deadline = Date.now() + 15000;
@@ -251,10 +252,10 @@ test('wait for editor', async () => {
     }
     const path = 'docs/feature/example/README.md';
     const original = readFileSync(join(root, path), 'utf8');
-    const editor = new LocalRepository(root);
+    const editor = (await LocalRepository.open(root));
     try {
-      editor.publish('edit', [{ path, before: original, after: `${original}\nTransient edit\n` }]);
-      editor.publish('revert-edit', [{ path, before: `${original}\nTransient edit\n`, after: original }]);
+      (await editor.publish('edit', [{ path, before: original, after: `${original}\nTransient edit\n` }]));
+      (await editor.publish('revert-edit', [{ path, before: `${original}\nTransient edit\n`, after: original }]));
     } finally { editor.close(); }
     writeFileSync(join(root, '.git/concord/test-continue'), 'continue');
     await assert.rejects(result, { code: 'FileChangedSinceRead' });

@@ -9,11 +9,11 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#verify
 test('explicit verification uses frozen D/F inputs and current preparation after Issue deletion', async () => {
-  const f = createFixConsumer({ runnerSource: true });
+  const f = (await createFixConsumer({ runnerSource: true }));
   const log = `${f.root}-runtime-prepare.log`;
   try {
     const fix = f.fix();
-    const closer = new LocalRepository(f.root, { optimistic: true });
+    const closer = (await LocalRepository.open(f.root, { optimistic: true }));
     const receipt = await runApplication(closeFixedIssue(closer, 'sku', 'Fix', f.defect)).finally(() => closer.close());
     assert.equal(existsSync(join(f.root, 'docs/issues/sku.md')), false);
     gitCommit(f.root, 'remove Issue');
@@ -21,10 +21,10 @@ test('explicit verification uses frozen D/F inputs and current preparation after
     writeFileSync(join(f.root, 'src/cart.ts'), 'export const quantity = -1;\n');
     writeFileSync(join(f.root, 'test/cart.test.ts'), '// Later test layout\n');
     writeFileSync(join(f.root, 'docs/feature/cart/README.md'), '# Cart\n\nAdditional behavior.\n');
-    const config = readProjectConfig(f.root);
+    const config = (await readProjectConfig(f.root));
     writeProjectConfig(f.root, { ...config, runner: { ...config.runner!, timeoutMs: 5001, prepare: [[process.execPath, '-e', `require('node:fs').appendFileSync(${JSON.stringify(log)}, process.cwd() + '\\n');`]] } });
     gitCommit(f.root, 'later changes');
-    const repo = new LocalRepository(f.root, { optimistic: true });
+    const repo = (await LocalRepository.open(f.root, { optimistic: true }));
     try {
       const replay = await runApplication(verifyTest(repo, receipt.verification.tests[0]!, f.defect, fix));
       assert.equal(replay.verified, 'replayed');

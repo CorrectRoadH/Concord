@@ -4,11 +4,19 @@
 
 ## 类型检查与产物改写
 
-构建用固定版本的原生 tsc 做完整类型检查，并输出声明与 sourcemap，构建与运行时使用同一编译器版本。
-
-为保持启动性能，构建只改写生成的 JS：把 Effect namespace import 改为窄化导入，每处替换保持原换行数。sourcemap 先解码为绝对坐标，删除被改写行的映射后重新编码，保留其余映射。不改写源文件，不跳过声明检查。
+构建用固定版本的原生 tsc 做完整类型检查。产品代码由固定 Bun 从 TypeScript 源码打包和编译；不通过改写生成 JS 来改变模块加载，也不跳过声明检查。Web 与 Herdr mod 仍由其专用构建入口生成。
 
 `vp build` 的生产构建钩子准备本机目标的完整归档内容，每次清空输出目录。
+
+## 编译入口
+
+`src/entry/compiled/main.ts` 是 Bun 编译根，使用 ESM 与 bytecode。归档入口通过字面量惰性 import 选择角色的显式 `run` 函数；导入角色实现不启动进程、不安装 listener，源码薄入口调用同一函数一次。CLI 在 `run` 内捕获 argv、cwd 和环境，完整命令 fallback 使用可静态打包的字面量 import。
+
+构建从同一源码的正式 CLI 捕获 `--help`、`-h`、`--version` 和 `-v` 的 stdout、stderr 与退出码，作为编译常量嵌入可执行文件。只有完全匹配的参数、非 TTY、`NO_COLOR=1`、`TERM=dumb` 且无 FORCE_COLOR 时使用这些结果；其余调用仍走正式解析器。结果随源码、包版本和编译缓存输入一起失效，不执行外置 startup JavaScript。
+
+内部角色沿用 `workerEntryArgv` 的名称；安装模式参数为 `--concord-internal <name> ...`，选择器只在第一位有效，分派后移除选择器与名称，角色看到的 argv 与源码入口相同。未知角色非零退出。`workspace-server` 使用公开 `server run --root` 命令；`web-build`、Web 构建器和 Herdr mod 的 Vite+ 打包器只属于源码工具图，不出现在产品编译图。内部分派不接受任意 JS/TS 路径，不改变进程组、IPC、信号或父进程退出时的资源责任。
+
+编译模式由构建常量 `CONCORD_COMPILED` 选择，不从 cwd、环境或虚拟模块扩展名推断；未定义该常量即源码模式。编译根从真实 executable 定位归档的 `app/`。源码定位依据模块所在 worktree。运行时入口与资源定位不为寻找目录加载完整 Effect。
 
 ## 原生绑定复用
 
@@ -30,34 +38,34 @@ fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。
 
 ## 归档组装
 
-发版归档由一个 TypeScript 打包入口组装，`vp build`、打包测试与发版工作流都调用它。入口的输入是目标、应用构建输出与经身份校验的原生产物，目标由 [`CONCORD_TARGET`](cli.md#环境变量) 选择。输出为[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)所列的目录与 `concord-<version>-<target>.tar.gz`。
+发版归档由一个 TypeScript 打包入口组装，`vp build` 与发版工作流都调用它。入口的输入是目标、应用构建输出与经身份校验的原生产物，目标由 [`CONCORD_TARGET`](cli.md#环境变量) 选择。输出为[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)所列的目录与 `concord-<version>-<target>.tar.gz`。
 
 各部分的来源与校验只由归档构成定义，本节只写组装顺序。
 
-1. 应用 JavaScript、声明与 Web 产物只依赖与目标无关的输入，按这些输入构建一次，各目标共用；切换 `CONCORD_TARGET` 不重新构建应用。
-2. 每个目标用独立、干净的安装树装运行依赖：按 `pnpm-lock.yaml` 冻结、`--ignore-scripts`、保留可选依赖，并用 pnpm 的 `--os`、`--cpu` 与 `--libc` 选择目标平台的包（`linux-x64` 为 glibc）。安装树中的符号链接不得指向归档之外。依赖必须在目标平台执行安装脚本或编译时，组装失败，不静默漏包。
-3. 按归档构成取得并校验 `runtime/node`、`runtime/rg`、Linux 的 `runtime/lib/` 与许可证文本。
-4. Linux 目标按 [Linux 运行库](../../feature/cross-platform-release/architecture.md#linux-运行库)设置 RPATH 并检查全部 ELF，不满足即失败。macOS 目标的 HawDB 绑定与 `rg` 使用原生任务签名后的字节，不改写。
-5. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。
+1. 构建共享资源与 Web，并严格检查应用类型。
+2. 每目标准备干净的运行依赖树：冻结锁文件、`--ignore-scripts`、按目标选择可选依赖；链接规则由归档构成拥有。
+3. 在目标宿主用 `.bun-version` 的 Bun 编译产品入口，关闭自动 dotenv、bunfig 与 tsconfig 加载；Linux 使用 x64 baseline。校验实际 Bun 版本，编译失败不发布缓存。
+4. 取得并校验 HawDB、ripgrep、运行库和许可证，复制到私有组装目录。Linux 完成 RPATH 处理后实跑；macOS 完成最终签名后冻结字节。
+5. 写入确定的版本和构建身份，打成最终候选并计算 SHA-256。验证阶段使用该候选，不重新构建。
 
-下载的上游发行包按文件内容的 SHA-256 缓存在 `${XDG_CACHE_HOME:-~/.cache}/concord/runtime/`，先校验再使用，校验失败不进入缓存或归档。入口不读取 `PATH` 中的 `node` 或 `rg`。
+下载的上游发行包按 SHA-256 缓存，先校验再使用。归档不携带独立 JS 解释器，不从运行主机 PATH 寻找替代解释器。
 
 ## 共享构建缓存
 
-打包测试与性能对照使用的本机目标归档，按构建输入的摘要保存在 `${XDG_CACHE_HOME:-~/.cache}/concord/build/<摘要>/`。构建输入是 worktree 中参与 `vp build` 的源码、依赖锁、构建配置、`.node-version`、`runtime-deps.json` 的内容与原生产物身份，包括未提交的改动。
+性能对照使用的本机目标归档，按构建输入的摘要保存在 `${XDG_CACHE_HOME:-~/.cache}/concord/build/<摘要>/`。构建输入是 worktree 中参与 `vp build` 的源码、依赖锁、构建配置、`.bun-version`、`.node-version`、`runtime-deps.json` 的内容与原生产物身份，包括未提交的改动。
 
 归档的各部分另按自己的输入缓存，组装只取用这些部分再打包。缓存键包含所有会改变该部分字节或有效性的直接与间接输入，包括产出它的脚本与工具版本，不以文件是否随包发布判断：
 
 | 部分 | 缓存键 |
 | --- | --- |
-| 应用 JavaScript 与声明 | 参与编译的源码、构建配置、依赖锁与编译器版本 |
+| 编译可执行文件 | 源码、构建配置、依赖锁、TypeScript 与 Bun 版本、目标及 CPU baseline |
 | 随应用发布的资源 | `docs`、`skills`、`templates` 等被复制进应用的文件 |
 | Web 产物 | 已有的 Web 产物缓存键 |
 | 目标的运行依赖安装树 | `pnpm-lock.yaml`、`package.json` 与目标 |
-| 运行时文件与许可证 | `.node-version`、`runtime-deps.json`、目标，以及 Linux `runtime/lib/` 的来源身份 |
+| 运行时文件与许可证 | `.bun-version`、`.node-version`、`runtime-deps.json`、目标，以及 Linux `runtime/lib/` 的来源身份 |
 | 原生产物 | 自身的身份 |
 
-版本、Git 提交、`bin/concord` 与 Linux 的 RPATH 变换和 ELF 检查在组装时完成：先把各部分从只读缓存复制到私有的组装目录，再做变换，不写回缓存中的部分。macOS 已签名的字节是部件的输入身份，组装只核验签名，不重签、不改写。最终归档仍由唯一的组装入口产出，打包测试只解压并运行这份归档，不以各部分分别通过代替。
+版本、Git 提交、`bin/concord` 与 Linux 的 RPATH 变换和 ELF 检查在组装时完成：先把各部分从只读缓存复制到私有的组装目录，再做变换，不写回缓存中的部分。macOS 原生绑定与 ripgrep 的已签名字节是部件的输入身份，组装只核验签名，不重签、不改写。新编译的 Concord 可执行文件在目标宿主完成最终签名。最终归档仍由唯一的组装入口产出，CI 发版验收解压并运行这份归档，不以各部分分别通过代替。
 
 只改 CLI 源码或文档时只重建对应部分，其余部分命中缓存；这时在参照机门禁负载下，归档准备不超过 60 秒。各部分都未命中（首次构建或清空缓存后）不受这一上限约束，耗时单独报告。各部分的缓存遵守下面同样的发布、并发与清理规则。
 
@@ -70,9 +78,9 @@ fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。
 
 Concord 有两种运行模式：源码模式直接运行 worktree 中的 `.ts`，安装模式运行安装目录中的构建产物。运行模式由一个模块统一判断。
 
-1. **源码约束**：相对导入写 `.ts` 扩展名，只使用可擦除的 TypeScript 语法，类型检查开启 `erasableSyntaxOnly`。构建归档时由 TypeScript 的 `rewriteRelativeImportExtensions` 改写为 `.js`。
-2. **子进程**：源码模式用 Node 自带的类型擦除直接运行 `.ts` 入口，不经转译工具。安装模式用安装目录内的 `runtime/node` 启动其中的 JavaScript 入口。
-3. **编译缓存**：源码模式的 V8 编译缓存放在 `${XDG_CACHE_HOME:-~/.cache}/concord/node-compile/`，按文件复用，改一个文件只重新编译这个文件。
+1. **源码约束**：相对导入写 `.ts` 扩展名，只使用可擦除的 TypeScript 语法，类型检查开启 `erasableSyntaxOnly`。Bun 从这些源码入口构建归档可执行文件。
+2. **子进程**：源码模式用固定 Bun 运行 `.ts`，关闭 cwd dotenv 与 bunfig。安装模式通过同一 `bin/concord` 的内部角色分派启动。
+3. **编译缓存**：源码执行使用 Bun 自身加载机制；安装模式使用随可执行文件生成的 bytecode，不设置 Node/V8 编译缓存。
 4. **原生绑定**：源码运行取自经身份校验的本机共享缓存，构建产物取自安装目录根，两者的校验规则相同。
 5. **安装身份**：源码模式的安装身份是 worktree 位置，安装模式使用产物摘要。源码模式的服务记录启动时的源码摘要。
 6. **服务替换**：同一 worktree 的调用发现运行中服务的源码摘要与当前不同时，先停止它并等待完全退出，再启动新服务，不报 `WorkspaceServerVersionConflict`。
@@ -92,3 +100,5 @@ Concord 有两种运行模式：源码模式直接运行 worktree 中的 `.ts`�
 | JS 打包 | `vp pack` | native 产物的身份校验与归档组装 |
 
 没有调用者的脚本直接删除。性能测量脚本的计时与采样见[性能测量实现](../performance/architecture.md)。
+
+编译程序启用 package.json 的 exports/入口解析，以加载锚定于安装 app/package.json 的固定工具及显式选择的项目测试框架；不把调用者 cwd 当作 Concord 依赖解析根。dotenv、bunfig preload 与 tsconfig 自动加载仍关闭。项目框架仅在用户执行其测试命令的边界加载，包元数据存在本身不执行脚本。

@@ -43,15 +43,15 @@ test('failed final browser fixture releases retain existing roots in the outer c
     const worker = browserWorkerFixture();
     const root = worker.privateRoot();
     execFileSync('git', ['init', '-q', root]);
-    const repository = new LocalRepository(root, { initialize: true });
-    try { initialize(repository, false, { testRoots: [] }); } finally { repository.close(); }
+    const repository = (await LocalRepository.open(root, { initialize: true }));
+    try { (await initialize(repository, false, { testRoots: [] })); } finally { repository.close(); }
     const server = await worker.privateServer({ root });
     const closePrivate = server.close.bind(server);
     server.close = async () => { throw new Error('unconfirmed private service close'); };
     try {
-      await assert.rejects(worker.closePrivate());
+      await assert.rejects((worker.closePrivate()));
       assert.equal(readFileSync(receipt, 'utf8').split('\n').includes(root), false, 'retryable intermediate cleanup must not register a receipt');
-      await assert.rejects(closeBrowserWorker());
+      await assert.rejects((closeBrowserWorker()));
       assert.equal(existsSync(root), true, 'failed final private release preserves the worktree');
       assert.ok(readFileSync(receipt, 'utf8').split('\n').includes(root), 'outer cleanup must receive the retained private root');
       assert.equal(existsSync(worker.root), false, 'private cleanup failure still releases the shared service and root');
@@ -72,7 +72,7 @@ for (const mode of ['success', 'assertion-failure', 'timeout'] as const) {
   test(`shared browser service restores its frozen fixture and releases process and worktree after ${mode}`, () => Effect.runPromise(Effect.gen(function*() {
     let root: string | undefined;
     let pid: number | undefined;
-    let service: ReturnType<typeof record> | undefined;
+    let service: Awaited<ReturnType<typeof record>> | undefined;
     let reachedOutcome = false;
     const exit = yield* Effect.exit(Effect.scoped(Effect.gen(function*() {
       const fixture = yield* acquireBrowserSharedFixture();
@@ -167,9 +167,9 @@ test('another browser case waits for context and connection closure, and clean r
       const failure = new Error('context close was not confirmed');
       await assert.rejects(fixture.finishAttempt(() => Promise.reject(failure)), cause => cause === failure);
       writeFileSync(path, 'retained for cleanup failure');
-      await assert.rejects(fixture.restore(), cause => cause === failure);
-      await assert.rejects(fixture.finishAttempt(() => Promise.resolve()), cause => cause === failure);
-      await assert.rejects(fixture.restore(), cause => cause === failure);
+      await assert.rejects((fixture.restore()), cause => cause === failure);
+      await assert.rejects(fixture.finishAttempt(async () => (await Promise.resolve())), cause => cause === failure);
+      await assert.rejects((fixture.restore()), cause => cause === failure);
       assert.equal(readFileSync(path, 'utf8'), 'retained for cleanup failure');
     } finally {
       release();
@@ -182,7 +182,7 @@ test('another browser case waits for context and connection closure, and clean r
 
 // @feature docs/feature/local-sdlc/cli.md
 test('server stop refuses success while the recorded service is still exiting after releasing its lock', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const marker = join(root, 'exiting');
   const release = join(root, 'release');
   const preload = join(root, 'exit-barrier.mjs');
@@ -202,7 +202,7 @@ test('server stop refuses success while the recorded service is still exiting af
   let servicePid: number | undefined;
   try {
     const child = spawn(process.execPath, [installedConcordCli(), '--root', root, '--json', 'server', 'start'], {
-      env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(preload).href}` }, stdio: 'pipe',
+      env: { ...process.env, BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${pathToFileURL(preload).href}` }, stdio: 'pipe',
     });
     let output = '';
     child.stdout.on('data', data => { output += String(data); });

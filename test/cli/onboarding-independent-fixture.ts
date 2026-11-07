@@ -39,5 +39,5 @@ async function run(root: string, args: readonly string[], input = '', status = 0
 function consumer(name: string): string {
   const root = join(scratch, name); mkdirSync(root); execFileSync('git', ['init', '-q', root]); consumers.push(root); return root;
 }
-const action = (root: string, input: unknown, status = 0): Promise<any> => run(root, ['action', '--input', '-'], JSON.stringify(input), status);
+const action = async (root: string, input: unknown, status = 0): Promise<any> => run(root, ['action', '--input', '-'], JSON.stringify(input), status);
 export { sourceCli, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, tmpdir, stopWorkspaceServer, join, test, before, after, Effect, Schema, InitializationReceiptSchema, scratch, consumers, cli, run, consumer, action };

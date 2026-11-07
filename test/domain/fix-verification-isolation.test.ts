@@ -7,13 +7,13 @@ import { readDocumentSelector } from '../../src/domain/documents/index.ts';
 import { createFixConsumer, gitCommand } from '../support/fix-consumer.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 
-const verify = (root: string) => {
-  const repo = new LocalRepository(root, { optimistic: true });
+const verify = async (root: string) => {
+  const repo = (await LocalRepository.open(root, { optimistic: true }));
   return runApplication(closeFixedIssue(repo, 'sku', 'Accumulate quantity')).finally(() => repo.close());
 };
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
 test('fix verification runs committed inputs despite dirty sources, tests, runner configuration and unrelated staged files', async () => {
-  const f = createFixConsumer();
+  const f = (await createFixConsumer());
   try {
     const fix = f.fix();
     const changes = [
@@ -35,7 +35,7 @@ test('fix verification runs committed inputs despite dirty sources, tests, runne
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
 test('a parallel commit during verification preserves the initially captured fix commit', async () => {
-  const f = createFixConsumer({ runner: 'move-head' });
+  const f = (await createFixConsumer({ runner: 'move-head' }));
   try {
     const fix = f.fix();
     const receipt = await verify(f.root);
@@ -48,7 +48,7 @@ test('a parallel commit during verification preserves the initially captured fix
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
 test('runner configuration changed during isolated verification is preserved and does not invalidate the frozen run', async () => {
-  const f = createFixConsumer({ runner: 'edit-config' });
+  const f = (await createFixConsumer({ runner: 'edit-config' }));
   try {
     const fix = f.fix();
     const receipt = await verify(f.root);
@@ -59,12 +59,12 @@ test('runner configuration changed during isolated verification is preserved and
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 test('an Issue edited during verification is preserved and closing returns FileChangedSinceRead', async () => {
-  const f = createFixConsumer({ runner: 'edit-issue' });
+  const f = (await createFixConsumer({ runner: 'edit-issue' }));
   try {
     f.fix();
     const path = join(f.root, 'docs/issues/sku.md');
     const before = readFileSync(path, 'utf8');
-    await assert.rejects(verify(f.root), cause => {
+    await assert.rejects((((verify(f.root)))), cause => {
       assert.equal((cause as { code: string }).code, 'FileChangedSinceRead');
       return true;
     });

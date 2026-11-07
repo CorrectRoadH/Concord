@@ -215,13 +215,13 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 ## 验收
 
-发版归档自带 Node.js 运行时与 ripgrep，不含 `workspace:*`、外部仓库路径或运行时 import。解压后在没有系统 Node.js 的 `PATH` 中运行 `bin/concord`，见[打包测试](engineering/testing/README.md#打包测试)。
+发版归档携带内嵌 Bun 运行时的单个编译可执行文件与 ripgrep，不依赖 `workspace:*` 或外部仓库路径。解压后在没有系统 Node.js 或 Bun 的 `PATH` 中运行 `bin/concord`，见[归档验收](engineering/testing/README.md#归档验收)。
 
 真实闭环：init → 写 Feature 与 Use Case → 写 Issue → 提交带 `@issue` 的失败回归测试并配置 runner → 提交修复 → `issue close --fixed` → trace 与 review。
 
 闭环之外还覆盖：错误引用、未核验的 fixed、伪造的 verification、测试源码变化、重开、退役、缓存删除与损坏、注释变化后的缓存失效、悬空与重复标注、跨 cwd 与 root、路径穿越、写冲突、并发写、journal 恢复、超时清理和独立安装。
 
-构建脚本使用 Effect FileSystem 和 ChildProcessSpawner。测试通过 Node test adapter 执行 Effect，由 Node 自带的类型擦除直接运行 TS，并纳入 typecheck。
+构建脚本使用 Effect FileSystem 和 ChildProcessSpawner。源码测试通过官方 Bun test 执行 Effect，直接运行 TypeScript，并纳入 typecheck。
 
 每个目标的发版归档携带该目标的原生产物，绑定源码、ABI、revision 和摘要。平台构建完成后统一组装候选归档，在每个目标的真实系统上运行同一份候选，通过后才发版，见[跨平台标签发版](feature/cross-platform-release/README.md)。
 

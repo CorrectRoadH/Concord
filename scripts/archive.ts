@@ -3,12 +3,13 @@
 import { cp, lstat, readlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
-import { ArchiveFailed, archiveTarget, attempt, run, sha256, type ArchiveTarget } from './archive-support.ts';
+import { ArchiveFailed, archiveTarget, attempt, command, run, sha256, type ArchiveTarget } from './archive-support.ts';
 import { externalBuildOutput } from './build-output.ts';
 import { prepareRuntime } from './archive-runtime.ts';
 import { decodeNativeArtifact } from '../src/base/installation/hawdb-native-contract.ts';
 import { archivePartInput, cachedArchivePart } from './application-cache.ts';
 import { closeLinuxRuntime } from './archive-linux.ts';
+import { assertCompilationHost, compileApplication } from './compile-application.ts';
 
 export interface ArchiveOptions {
   readonly target?: unknown;
@@ -19,39 +20,27 @@ export interface ArchiveOptions {
   readonly linuxRuntimeLibraries?: string;
 }
 export const nativeTarget = (target: ArchiveTarget) => target === 'linux-x64' ? 'linux-x64-glibc' : target;
-export const launcher = `#!/bin/sh
-set -eu
-self=$0
-case "$self" in /*) ;; *) self=$PWD/$self ;; esac
-while [ -L "$self" ]; do
-  directory=$(CDPATH= cd -P "$(dirname "$self")" && pwd)
-  link=$(readlink "$self")
-  case "$link" in /*) self=$link ;; *) self=$directory/$link ;; esac
-done
-root=$(CDPATH= cd -P "$(dirname "$self")/.." && pwd)
-if [ ! -x "$root/runtime/node" ]; then
-  echo 'PackagedRuntimeUnavailable: bundled Node.js cannot run; on NixOS install Concord through the Nix channel.' >&2
-  exit 1
-fi
-# platform-interpreter-check
-exec "$root/runtime/node" "$root/app/dist/entry/cli/entry.js" "$@"
-`;
-export const archiveLauncher = (target: ArchiveTarget): string => launcher.replace('# platform-interpreter-check', target === 'linux-x64' ? `if [ ! -x /lib64/ld-linux-x86-64.so.2 ]; then
-  echo 'PackagedRuntimeUnavailable: the Linux ELF interpreter is unavailable; on NixOS install Concord through the Nix channel.' >&2
-  exit 1
-fi` : '');
-
 export const validateArchiveLinks = Effect.fn('archive.links')(function*(root: string) {
   const fs = yield* FileSystem.FileSystem;
-  for (const name of yield* fs.readDirectory(root, { recursive: true })) {
-    const path = join(root, name);
-    const stat = yield* attempt(() => lstat(path));
-    if (!stat.isSymbolicLink()) continue;
-    const target = yield* attempt(() => readlink(path));
-    const canonical = yield* fs.realPath(path);
-    const inside = relative(root, canonical);
-    if (isAbsolute(target) || isAbsolute(inside) || inside === '..' || inside.startsWith(`..${sep}`)) return yield* new ArchiveFailed({ message: `Archive link escapes root: ${name}` });
-  }
+  const visited = new Set<string>();
+  const walk = Effect.fn('archive.walkLinks')(function*(directory: string, ancestors: readonly string[]): Effect.fn.Return<void, unknown, FileSystem.FileSystem> {
+    const canonical = yield* fs.realPath(directory);
+    if (ancestors.includes(canonical)) return yield* new ArchiveFailed({ message: `Archive link cycle: ${relative(root, directory)}` });
+    if (visited.has(canonical)) return;
+    for (const name of yield* fs.readDirectory(directory)) {
+      const path = join(directory, name);
+      const stat = yield* attempt(() => lstat(path));
+      if (!stat.isSymbolicLink() && !stat.isFile() && !stat.isDirectory()) return yield* new ArchiveFailed({ message: `Unsupported archive entry: ${relative(root, path)}` });
+      if (stat.isSymbolicLink()) {
+        const target = yield* attempt(() => readlink(path));
+        const inside = relative(root, yield* fs.realPath(path));
+        if (isAbsolute(target) || isAbsolute(inside) || inside === '..' || inside.startsWith(`..${sep}`)) return yield* new ArchiveFailed({ message: `Archive link escapes root: ${relative(root, path)}` });
+      }
+      if ((yield* fs.stat(path)).type === 'Directory') yield* walk(path, [...ancestors, canonical]);
+    }
+    visited.add(canonical);
+  });
+  yield* walk(root, []);
 });
 export const installTargetDependencies = Effect.fn('archive.dependencies')(function*(app: string, target: ArchiveTarget) {
   const fs = yield* FileSystem.FileSystem;
@@ -89,7 +78,21 @@ const dependencyLicenses = Effect.fn('archive.licenses')(function*(root: string,
   }
 });
 
-/** Reuses one target-independent application build for any number of targets. */
+/** Exercise the embedded application after relocation/signing, before freezing bytes. */
+export const verifyCompiledPayload = Effect.fn('archive.compiledPayload')(function*(root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const project = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-payload-' });
+  yield* run('git', ['init', '-q', project]);
+  const cli = join(root, 'bin/concord');
+  const argv = ['--root', project, '--json', '--server=command'];
+  const environment = { ...process.env, LD_LIBRARY_PATH: '', NODE_PATH: '', NODE_OPTIONS: '', BUN_OPTIONS: '' };
+  yield* run(cli, [...argv, 'init', '--docs-only', '--yes'], project, environment);
+  const receipt = yield* command(cli, [...argv, 'check'], project, environment);
+  yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ ok: Schema.Literal(true), complete: Schema.Literal(true) })),
+    { onExcessProperty: 'ignore' })(receipt);
+}, Effect.scoped, Effect.timeout('120 seconds'));
+
+/** Assemble only on the target host; resources can be shared, bytecode cannot. */
 export const assembleArchive = Effect.fn('archive.assemble')(function*(options: ArchiveOptions) {
   // Decode before mkdir/remove or any other output mutation.
   const assemblyStarted = performance.now();
@@ -100,8 +103,10 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
     previousPhase = now;
   });
   const target = yield* Effect.try({ try: () => archiveTarget(options.target), catch: cause => cause });
+  yield* Effect.try({ try: () => assertCompilationHost(target), catch: cause => cause });
   const fs = yield* FileSystem.FileSystem;
   const repository = resolve(options.repository ?? import.meta.dirname, options.repository ? '.' : '..');
+  const compiled = yield* compileApplication(repository, target);
   const output = yield* externalBuildOutput(options.outputRoot);
   const application = resolve(options.applicationRoot);
   if (output === application || application.startsWith(output + sep) || output.startsWith(application + sep)) return yield* new ArchiveFailed({ message: 'Application and archive outputs must be disjoint' });
@@ -112,12 +117,17 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
   yield* fs.copy(application, join(root, 'app'));
   const app = join(root, 'app');
   yield* fs.remove(join(app, '.application-cache.json'), { force: true });
+  const assetEntries = new Set(['web', 'preview', 'p5-types', 'herdr-mod', 'native', 'build-identity.json']);
+  for (const name of yield* fs.readDirectory(join(app, 'dist'))) {
+    if (!assetEntries.has(name)) return yield* new ArchiveFailed({ message: `Application contains an execution module instead of resources: dist/${name}` });
+  }
   const dependencyInput = () => archivePartInput(repository,
-    ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'scripts/archive.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'],
+    ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches', 'scripts/archive.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'],
     { target, pnpm: process.env.npm_config_user_agent ?? '' });
   const dependencies = yield* cachedArchivePart('dependencies', yield* dependencyInput(), directory => Effect.gen(function*() {
     yield* fs.makeDirectory(directory, { recursive: true });
     for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) yield* fs.copyFile(join(repository, file), join(directory, file));
+    if (yield* fs.exists(join(repository, 'patches'))) yield* fs.copy(join(repository, 'patches'), join(directory, 'patches'));
     yield* installTargetDependencies(directory, target);
     yield* dependencyLicenses(directory, join(directory, 'node_modules/.pnpm'));
   }), dependencyInput);
@@ -143,17 +153,26 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
   const runtimeInput = () => Effect.gen(function*() {
     const signed = target === 'darwin-arm64' && sources !== undefined
       ? yield* archivePartInput(resolve(sources), [target]) : null;
-    return yield* archivePartInput(repository, ['.node-version', 'runtime-deps.json', 'scripts/archive-runtime.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'], { target, signed });
+    return yield* archivePartInput(repository, ['.bun-version', '.node-version', 'runtime-deps.json', 'scripts/archive-runtime.ts', 'scripts/bun-licenses.ts', 'scripts/bun-license-sources.json', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'], { target, signed });
   });
   const runtime = yield* cachedArchivePart('runtime', yield* runtimeInput(), directory => prepareRuntime(directory, repository, target, sources), runtimeInput);
   for (const name of ['runtime', 'licenses']) yield* fs.copy(join(runtime, name), join(root, name));
 
   yield* fs.makeDirectory(join(root, 'bin'));
-  yield* fs.writeFileString(join(root, 'bin/concord'), archiveLauncher(target));
+  yield* fs.copyFile(join(compiled.directory, 'concord'), join(root, 'bin/concord'));
+  yield* fs.writeFileString(join(app, 'dist/compiler.json'), `${JSON.stringify(compiled.identity)}\n`);
   yield* fs.chmod(join(root, 'bin/concord'), 0o755);
   if (yield* fs.exists(join(dependencies, 'licenses'))) yield* fs.copy(join(dependencies, 'licenses'), join(root, 'licenses'), { overwrite: true });
   yield* phase('runtime-and-licenses');
   if (target === 'linux-x64') yield* closeLinuxRuntime(root, options.linuxRuntimeLibraries ?? process.env.CONCORD_LINUX_RUNTIME_LIBRARIES);
+  else {
+    // Bun's executable requires its entitlements after final byte changes.
+    yield* run('codesign', ['--force', '--sign', '-', '--preserve-metadata=entitlements', join(root, 'bin/concord')]);
+    for (const name of ['bin/concord', 'runtime/rg', `app/dist/native/${nativeTarget(target)}/hawdb.node`]) {
+      yield* run('codesign', ['--verify', '--strict', join(root, name)]);
+    }
+  }
+  yield* verifyCompiledPayload(root);
   yield* phase('target-closure');
   yield* validateArchiveLinks(root);
   yield* phase('link-validation');

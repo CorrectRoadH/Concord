@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { API } from 'typescript/sync';
+import { API } from 'typescript/async';
 import * as ts from 'typescript/ast';
 import { loadBudgets } from '../../scripts/perf/budgets.ts';
 import { selectScenarios } from '../../scripts/perf/selection.ts';
@@ -40,9 +40,9 @@ test('benchmark smoke files partition every scenario exactly once', () => Effect
   const files = ['test/cli', 'test/process'].flatMap(directory => readdirSync(join(root, directory))
     .filter(name => /^perf-(?:service-)?coverage(?:-[a-z0-9-]+)?\.test\.ts$/u.test(name))
     .map(name => join(root, directory, name)));
-  const api = yield* Effect.acquireRelease(Effect.sync(() => new API({ runExternalCode: false })), api => Effect.sync(() => api.close()));
+  const api = yield* Effect.acquireRelease(Effect.sync(() => new API({ runExternalCode: false })), api => Effect.tryPromise(() => api.close()).pipe(Effect.orDie));
   for (const file of files) {
-    const source = api.createSourceFile(file, readFileSync(file, 'utf8'), { scriptKind: ts.ScriptKind.TS });
+    const source = yield* Effect.tryPromise(() => api.createSourceFile(file, readFileSync(file, 'utf8'), { scriptKind: ts.ScriptKind.TS }));
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ['benchmarkSmoke', 'benchmarkCliSmoke'].includes(node.expression.text)) {
         const cli = node.expression.text === 'benchmarkCliSmoke';
@@ -58,7 +58,7 @@ test('benchmark smoke files partition every scenario exactly once', () => Effect
       }
       node.forEachChild(visit);
     };
-    try { visit(source.sourceFile); } finally { source.dispose(); }
+    try { visit(source.sourceFile); } finally { yield* Effect.tryPromise(() => source.dispose()); }
   }
   assert.deepEqual(selected.sort(), scenarios.map(scenario => scenario.id).sort(), 'Smoke files must execute the complete scenario set exactly once');
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));

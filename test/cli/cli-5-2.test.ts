@@ -10,9 +10,9 @@ import { runCli } from '../support/cli.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('new use-case accepts Unicode arguments and prints the generated path', async () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: '角色目录', title: 'NPC' }); }
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: '角色目录', title: 'NPC' })); }
   finally { repo.close(); }
   const args = ['--root', root, '--json', 'new', 'use-case', '扩展NPC动作', '--feature', '角色目录', '--title', '扩展 NPC 动作'];
   const preview = await runCli({ argv: ['--dry-run', ...args], cwd: process.cwd(), env: process.env });

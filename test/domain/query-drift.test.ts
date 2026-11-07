@@ -32,7 +32,7 @@ function candidate(at: number, paths: string[] = [], publicationChanged = false)
   return { kind: 'candidate', message: { format: 'concord.query-scan/v1', ok: true, scannedAt: at, finishedAt: at + 10, value, complete: true, unknown: [], drift: { files: paths, directories: [], publicationChanged } } };
 }
 const fail = (at: number): QueryUpdate => ({ kind: 'failure', error: { failedAt: new Date(at).toISOString(), scannedAt: at, code: 'InvalidConfig', message: 'invalid' } });
-function trace(findings: Finding[]): ReturnType<typeof buildTrace> {
+function trace(findings: Finding[]): Awaited<ReturnType<typeof buildTrace>> {
   return { documents: [], tasteReferences: [], annotations: { cases: [], findings: [], files: [], digest: '', cache: value.cache }, codeDeclarations: [], codeFiles: [], edges: [], findings, complete: findings.length === 0, inventoryComplete: true, advisories: [], codeCache: undefined, codeRelationsUnknown: findings.some(f => f.code === 'CodeSourceChanged') };
 }
 const success = decodeQueryScanMessage({ format: 'concord.query-scan/v1', ok: true, scannedAt: 100, finishedAt: 110, value, complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } });
@@ -180,15 +180,15 @@ test('owner and remote bodies are stripped and restored only after safe matching
 
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-test('real code scanner distinguishes unstable recompilation from stable deletion of every file', () => Effect.runPromise(Effect.sync(() => {
+test('real code scanner distinguishes unstable recompilation from stable deletion of every file', () => Effect.runPromise(Effect.tryPromise(async () => {
   for (const unstable of [false, true]) {
-    const root = realpathSync(createConsumer());
+    const root = realpathSync((await createConsumer()));
     writeProjectConfig(root, { sourceRoots: ['src'], testRoots: [] });
     mkdirSync(join(root, 'src'));
     const path = 'src/sample.ts';
     const source = '// @concord-file\n// @concord-implements docs/feature/sample/README.md\nexport const old = 1;\n';
     writeFileSync(join(root, path), source);
-    const local = new LocalRepository(root, { access: 'read', dryRun: true });
+    const local = (await LocalRepository.open(root, { access: 'read', dryRun: true }));
     let passes = 0;
     const repo: Repository = {
       root: local.root, privateDir: local.privateDir, config: local.config, configSnapshot: local.configSnapshot,
@@ -206,7 +206,7 @@ test('real code scanner distinguishes unstable recompilation from stable deletio
       publish: () => { throw new Error('Source scanner has no publication authority'); },
     };
     try {
-      const snapshot = local.observeProjection(() => scanCode(repo, { cache: 'off' })).value;
+      const snapshot = (await local.observeProjection(async () => (await scanCode(repo, { cache: 'off' })))).value;
       assert.deepEqual(snapshot.codes, []);
       assert.equal(snapshot.relationsUnknown, unstable);
       assert.equal(passes, 3);

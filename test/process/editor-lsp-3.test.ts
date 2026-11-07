@@ -3,7 +3,7 @@ import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync,
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('editor retains cleanup failure after cancellation and rejects shutdown and EOF success', { skip: process.platform === 'win32', timeout: 60000 }, () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = consumer();
+  const root = (await consumer());
   const c = new Client(root, [fileURLToPath(new URL('../fixtures/editor-cleanup-failure.ts', import.meta.url)), root]);
   try {
     await c.initialize();
@@ -41,8 +41,14 @@ test('packed editor repeatedly cancels real compiler jobs without leaving editor
     const request = c.request('textDocument/hover', c.query('src/flow.ts', 1, 25));
     let observed = false;
     for (let attempt = 0; attempt < 500; attempt++) {
-      const all = processes(), jobs = all.filter(p => p.parent === c.child.pid).map(p => p.pid);
-      if (all.some(p => jobs.includes(p.parent) && /typescript[^\0]*\/lib\/tsc\0/u.test(p.command))) { observed = true; break; }
+      const all = processes(), owned = new Set([c.child.pid!]);
+      for (let added = true; added;) {
+        added = false;
+        for (const process of all) if (owned.has(process.parent) && !owned.has(process.pid)) {
+          owned.add(process.pid); added = true;
+        }
+      }
+      if (all.some(p => owned.has(p.pid) && /typescript[^\0]*\/lib\/tsc\0/u.test(p.command))) { observed = true; break; }
       await Effect.runPromise(Effect.sleep('10 millis'));
     }
     assert.equal(observed, true, 'cancellation must interrupt an actual native compiler job');
@@ -60,7 +66,7 @@ test('packed editor repeatedly cancels real compiler jobs without leaving editor
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('editor EOF retains a cleanup failure first observed after the transport ended', { skip: process.platform === 'win32', timeout: 60000 }, () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = consumer();
+  const root = (await consumer());
   const c = new Client(root, [fileURLToPath(new URL('../fixtures/editor-cleanup-failure.ts', import.meta.url)), root]);
   try {
     await c.initialize();

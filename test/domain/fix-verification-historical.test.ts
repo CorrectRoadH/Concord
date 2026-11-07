@@ -9,13 +9,13 @@ import { LocalRepository, runApplication } from '../support/repository.ts';
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 async function close(root: string, defect: string, fix: string) {
-  const repo = new LocalRepository(root, { optimistic: true });
+  const repo = (await LocalRepository.open(root, { optimistic: true }));
   try { return await runApplication(closeFixedIssue(repo, 'sku', 'Historical fix', defect, fix)); }
   finally { repo.close(); }
 }
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
 test('an explicit historical F uses runtime HEAD preparation and preserves later Issue and shared runner changes', async () => {
-  const f = createFixConsumer({ runnerSource: true });
+  const f = (await createFixConsumer({ runnerSource: true }));
   const log = `${f.root}-historical-prepare.log`;
   try {
     const fix = f.fix();
@@ -23,7 +23,7 @@ test('an explicit historical F uses runtime HEAD preparation and preserves later
     writeFileSync(path, readFileSync(path, 'utf8') + '\nLater investigation note.\n');
     writeFileSync(join(f.root, 'runner.ts'), '// Later shared infrastructure\n');
     writeFileSync(join(f.root, 'src/cart.ts'), 'export const quantity = -1;\n');
-    const config = readProjectConfig(f.root);
+    const config = (await readProjectConfig(f.root));
     writeProjectConfig(f.root, { ...config, runner: { ...config.runner!, timeoutMs: 5001, prepare: [[process.execPath, '-e', `require('node:fs').appendFileSync(${JSON.stringify(log)}, process.cwd() + '\\n');`]] } });
     gitCommit(f.root, 'later unrelated changes');
     const head = git(f.root, 'rev-parse', 'HEAD');
@@ -44,7 +44,7 @@ test('an explicit historical F uses runtime HEAD preparation and preserves later
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 test('explicit fix rejects unavailable, non-first-parent and not-after-defect commits without changing the Issue', async t => {
   for (const name of ['missing', 'not-after-defect', 'side-branch'] as const) await t.test(name, async () => {
-    const f = createFixConsumer();
+    const f = (await createFixConsumer());
     try {
       const fix = f.fix();
       let selected = name === 'missing' ? '0'.repeat(40) : f.defect;
@@ -66,7 +66,7 @@ test('explicit fix rejects unavailable, non-first-parent and not-after-defect co
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
 test('a merge after the selected F does not widen the frozen D..F interval', async () => {
-  const f = createFixConsumer();
+  const f = (await createFixConsumer());
   try {
     const fix = f.fix();
     const branch = git(f.root, 'branch', '--show-current');

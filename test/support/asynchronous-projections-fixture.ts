@@ -41,11 +41,11 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 export const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
 export const candidate = (marker = 'original', scannedAt = Date.now()) => ({ kind: 'candidate' as const, message: { format: 'concord.query-scan/v1' as const, ok: true as const, scannedAt, finishedAt: Date.now(), value: gaps(marker), complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } } });
-export function consumer(): string {
-  const root = createConsumer();
+export async function consumer(): Promise<string> {
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: [], sourceRoots: ['src'] });
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); } finally { repo.close(); }
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'sample', title: 'Sample' })); } finally { repo.close(); }
   return root;
 }
 export const cli = installedConcordCli();
@@ -98,7 +98,7 @@ export function packedConsumer(workload = true): string {
   return root;
 }
 export async function packedEnvelope(root: string, query: readonly string[]): Promise<ReturnType<typeof readQuery>> {
-  const path = cacheDatabasePath(genericPrivateDirectorySync(root));
+  const path = cacheDatabasePath(genericPrivateDirectorySync(root, process.env));
   if (!existsSync(path)) return {};
   let db;
   try {
@@ -189,7 +189,7 @@ export { renderDocument };
 export { ConcordError };
 export { digest };
 export { QueryCacheEnvelope };
-export const queryContext = (...args: Parameters<typeof identifyQuery>) => Effect.runSync(identifyQuery(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+export const queryContext = async (...args: Parameters<typeof identifyQuery>) => Effect.runPromise(identifyQuery(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
 
 export { readQuery };
 export { storeQuery };

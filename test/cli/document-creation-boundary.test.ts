@@ -8,7 +8,7 @@ import { runCli } from '../support/cli.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('built creation combines repeated page flags and preserves the named occupied-owner error', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     for (const kind of ['feature', 'engineering', 'roadmap']) {
       const args = ['--root', root, '--json', 'new', kind, 'selected', '--title', 'Selected', '--pages', 'cli,library,api,format,ui', '--pages', 'performance,architecture,data-model,use-case'];

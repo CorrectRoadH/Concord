@@ -17,9 +17,9 @@ const parserRuntime = makeParserRuntime(process.cwd(), process.env);
 // @name analyzed-step-relevance
 // Cross-Design acceptance: LSP C3 and journey C6 use the shared step owner through real source application views; installed command routing has its own process acceptance.
 test('analyzed step references retain their level through code test and trace views', async () => {
-  const root = consumer();
+  const root = (await consumer());
   try {
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...server(), budgets: { totalMs: 20_000, requestMs: 5000 } }] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [{ ...server(), budgets: { totalMs: 20_000, requestMs: 5000 } }] });
     const contract = readFileSync(join(root, target), 'utf8');
     write(root, target, `${contract}\n\n1. Observe the implementation. {#observe}\n`);
     write(root, 'src/sample.py', source.replace(target, `${target}#observe`));
@@ -44,8 +44,8 @@ test('analyzed step references retain their level through code test and trace vi
       assert.equal(hydrated.stepGroups[0]!.observation.result, 'not-observed');
       assert.deepEqual(hydrated.stepGroups[0]!.steps[0]!.relevance[0]!.relevance.gaps, ['SnapshotNotCurrent']);
     }
-    const writer = new LocalRepository(root);
-    try { renameUseCaseStep(writer, target, 'observe', '检查'); } finally { writer.close(); }
+    const writer = (await LocalRepository.open(root));
+    try { (await renameUseCaseStep(writer, target, 'observe', '检查')); } finally { writer.close(); }
     assert.ok(readFileSync(join(root, 'src/sample.py'), 'utf8').includes(`${target}#检查`));
     assert.ok(readFileSync(join(root, 'test/sample.py'), 'utf8').includes(`${target}#检查`));
     assert.equal((await query(root, { name: 'check', input: {} }, projectCheck)).ok, true);

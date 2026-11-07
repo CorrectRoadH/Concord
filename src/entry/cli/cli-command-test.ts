@@ -22,7 +22,7 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
   Command.make('discover', { files: Argument.String('file').pipe(Argument.variadic()) }, args => withRepo((repo,s) => s.dryRun ? Effect.fail(new ConcordError('InvalidOption','test discover does not accept --dry-run')) : collectNativeTests(repo,args.files), { unlocked:true, cacheRequired:true })).pipe(Command.withDescription('Run configured native test adapters and save disposable discovery observations.')),
   Command.make('run', { id, requireNative: Flag.Boolean('require-native').pipe(Flag.withDefault(false)) }, args => withRepo((repo,s) => Effect.gen(function*(){
     if(s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','test run does not accept --dry-run; use test show to inspect the declaration'));
-    const t=yield* sync(()=>repo.snapshot(()=>buildTrace(repo,'off',{includeCode:false})));yield* sync(()=>requireValidTrace(t));
+    const t=yield* sync(async ()=>(await repo.snapshot(async ()=>(await buildTrace(repo,'off',{includeCode:false})))));yield* sync(()=>requireValidTrace(t));
     const selected=yield* sync(()=>selectCase(t.annotations.cases,args.id));
     const evidence=yield* runCase(repo,selected,t.documents,{requireNative:args.requireNative});
     if(evidence.commandOutcome!=='pass' && evidence.commandOutcome!=='green') yield* setExitCode(1);

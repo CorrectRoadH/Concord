@@ -6,14 +6,14 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('cache initialization refuses symlinked private directories and directories outside Git', () => runApplication(Effect.sync(() => {
-  const root = freshConsumer();
+test('cache initialization refuses symlinked private directories and directories outside Git', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await freshConsumer());
   const outside = mkdtempSync(join(tmpdir(), 'concord-cache-outside-'));
   try {
-    assert.throws(() => ensureGenericPrivateDirectorySync(root, outside), /inside the selected Git directory/u);
+    assert.throws(() => ensureGenericPrivateDirectorySync(root, outside, process.env), /inside the selected Git directory/u);
     const link = join(root, '.git/concord');
     symlinkSync(outside, link);
-    assert.throws(() => ensureGenericPrivateDirectorySync(root, link), /symbolic links/u);
+    assert.throws(() => ensureGenericPrivateDirectorySync(root, link, process.env), /symbolic links/u);
     for (const args of [['check'], ['cache', 'rebuild'], ['cache', 'status'], ['--dry-run', 'cache', 'clear']]) {
       const result = cli(root, ...args);
       assert.equal(result.status, 1, result.stdout + result.stderr);
@@ -29,9 +29,9 @@ test('cache-enabled workspace recovers an interrupted WAL without clearing commi
   const root = mkdtempSync(join(tmpdir(), 'concord-cache-wal-'));
   try {
     execFileSync('git', ['init', '-q', root]);
-    const repo = new LocalRepository(root, { initialize: true });
+    const repo = (await LocalRepository.open(root, { initialize: true }));
     const path = join(repo.privateDir, 'cache.hawdb');
-    try { initialize(repo, false, { testRoots: [] }); PersistentCache.repository(repo).prepareWrite({ create: true }); scanAnnotations(repo); } finally { repo.close(); }
+    try { (await initialize(repo, false, { testRoots: [] })); PersistentCache.repository(repo).prepareWrite({ create: true }); (await scanAnnotations(repo)); } finally { repo.close(); }
     const child = spawnSync(process.execPath, ['test/fixtures/hawdb-interrupted.ts', path], { encoding: 'utf8', timeout: 15000 });
     assert.equal(child.signal, 'SIGKILL', child.stderr);
     const interrupted = cacheDiskSnapshot(path);
@@ -51,48 +51,48 @@ test('cache-enabled workspace recovers an interrupted WAL without clearing commi
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 // @name oversized-cache-remains-recoverable
-test('large cache directories remain readable and clearable without deleting the ownership inode', () => {
+test('large cache directories remain readable and clearable without deleting the ownership inode', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-large-cache-'));
   try {
     execFileSync('git', ['init', '-q', root]);
-    const repo = new LocalRepository(root, { initialize: true });
+    const repo = (await LocalRepository.open(root, { initialize: true }));
     try {
-      initialize(repo);
+      (await initialize(repo));
       PersistentCache.repository(repo).prepareWrite({ create: true });
-      assert.equal(scanAnnotations(repo).cache.status, 'miss');
+      assert.equal((await scanAnnotations(repo)).cache.status, 'miss');
       const path = join(repo.privateDir, 'cache.hawdb');
       const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
       const large = join(path, 'old-segment');
       writeFileSync(large, '');
       truncateSync(large, 257 * 1024 * 1024);
       for (let index = 0; index < 4100; index++) writeFileSync(join(path, `old-${index}`), '');
-      assert.equal(scanAnnotations(repo).cache.status, 'hit');
+      assert.equal((await scanAnnotations(repo)).cache.status, 'hit');
       assert.notEqual(cacheStatus(repo, nativeRuntime).status, 'unavailable');
       assert.equal(clearCache(repo, undefined, nativeRuntime).status, 'cleared');
       assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
       PersistentCache.repository(repo).prepareWrite({ create: true });
-      assert.equal(scanAnnotations(repo).cache.status, 'miss');
-      assert.equal(scanAnnotations(repo).cache.status, 'hit');
+      assert.equal((await scanAnnotations(repo)).cache.status, 'miss');
+      assert.equal((await scanAnnotations(repo)).cache.status, 'hit');
     } finally { repo.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('clear keeps the HawDB lock inode and removes only HawDB cache data', () => {
+test('clear keeps the HawDB lock inode and removes only HawDB cache data', async () => {
   assert.equal(hawdbIdentity(nativeRuntime).engine, 'hawdb');
   const root = mkdtempSync(join(tmpdir(), 'concord-hawdb-clear-'));
   try {
     execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial); } finally { initial.close(); }
-    const repo = new LocalRepository(root);
+    const initial = (await LocalRepository.open(root, { initialize: true }));
+    try { (await initialize(initial)); } finally { initial.close(); }
+    const repo = (await LocalRepository.open(root));
     try {
       const path = join(repo.privateDir, 'cache.hawdb');
       assert.equal(cacheStatus(repo, nativeRuntime).status, 'empty');
       assert.equal(existsSync(path), false);
       PersistentCache.repository(repo).prepareWrite({ create: true });
-      assert.equal(scanAnnotations(repo).cache.status, 'miss');
+      assert.equal((await scanAnnotations(repo)).cache.status, 'miss');
       const lock = join(path, 'owner.hawdb.lock');
       const inode = statSync(lock).ino;
       const unrelated = join(repo.privateDir, 'unrelated-data');
@@ -135,23 +135,23 @@ test('clear rejects an ownership inode replacement and a link introduced after i
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('failed native close still releases the outer repository lease', () => {
+test('failed native close still releases the outer repository lease', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-hawdb-close-'));
   try {
     execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial); } finally { initial.close(); }
-    const repo = new LocalRepository(root);
+    const initial = (await LocalRepository.open(root, { initialize: true }));
+    try { (await initialize(initial)); } finally { initial.close(); }
+    const repo = (await LocalRepository.open(root));
     const unsafe = join(repo.privateDir, 'cache.hawdb', 'unexpected-link');
     try {
-      assert.throws(() => repo.snapshot(() => {
+      (await assert.rejects(async () => (await repo.snapshot(async () => {
         PersistentCache.repository(repo).prepareWrite({ create: true });
-        scanAnnotations(repo);
+        (await scanAnnotations(repo));
         symlinkSync(join(root, 'absent'), unsafe);
-      }), /UnsafePath|symlink/u);
+      })), /UnsafePath|symlink/u));
       rmSync(unsafe);
-      const reopened = new LocalRepository(root);
-      try { assert.equal(scanAnnotations(reopened).cache.status, 'hit'); }
+      const reopened = (await LocalRepository.open(root));
+      try { assert.equal((await scanAnnotations(reopened)).cache.status, 'hit'); }
       finally { reopened.close(); }
     } finally { repo.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -159,8 +159,8 @@ test('failed native close still releases the outer repository lease', () => {
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('identity mismatch is unavailable for reads and the next writable rebuild discards and recreates under the same owner lock', () => runApplication(Effect.sync(() => {
-  const root = freshConsumer();
+test('identity mismatch is unavailable for reads and the next writable rebuild discards and recreates under the same owner lock', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await freshConsumer());
   try {
     const directory = join(root, '.git/concord');
     mkdirSync(directory, { recursive: true });

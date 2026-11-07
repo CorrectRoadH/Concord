@@ -13,9 +13,9 @@ import { queryFactsConsumer, ownerPath, flow } from '../support/query-facts-fixt
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
-const current = (root: string, query: Query) => {
-  const repo = new LocalRepository(root, { access: 'read', dryRun: true, persistentCache: 'off' });
-  try { return repo.snapshot(() => scanQueryValue(repo, query).value); } finally { repo.close(); }
+const current = async (root: string, query: Query) => {
+  const repo = (await LocalRepository.open(root, { access: 'read', dryRun: true, persistentCache: 'off' }));
+  try { return (await repo.snapshot(async () => (await scanQueryValue(repo, query)).value)); } finally { repo.close(); }
 };
 async function persist(root: string, query: Query) {
   const context = await runApplication(queryContext(root, query));
@@ -33,12 +33,12 @@ async function persist(root: string, query: Query) {
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#inspect-associations
 // @name steps-historical-projections
 test('C7 persists no owner or remote bodies and hydrates byte-identical current output', async () => {
-  const root = queryFactsConsumer();
+  const root = (await queryFactsConsumer());
   try {
     const stored = new Map<string, QueryValue>();
     for (const query of [['trace', 'show', ownerPath], ['trace', 'show', 'docs/issues/remote.md'], ['review', 'sample']] as const) {
       const value = await persist(root, query); stored.set(JSON.stringify(query), value);
-      const fresh = current(root, query);
+      const fresh = (await current(root, query));
       const historical = hydrateQueryValue(root, value, undefined, nativeRuntime).value;
       assert.doesNotMatch(JSON.stringify(fresh) + JSON.stringify(historical), /relationsUnknown|codeRelationsUnknown/u);
       if (query[0] === 'trace') {
@@ -54,8 +54,8 @@ test('C7 persists no owner or remote bodies and hydrates byte-identical current 
         assert.equal(JSON.stringify(old), JSON.stringify(latest));
       } else {
         const output = Schema.decodeUnknownSync(Schema.Struct({ body: Schema.String }))(historical);
-        const repo = new LocalRepository(root, { access: 'read', dryRun: true, persistentCache: 'off' });
-        try { assert.equal(output.body, repo.snapshot(() => renderReview(repo, 'sample', 'off'))); } finally { repo.close(); }
+        const repo = (await LocalRepository.open(root, { access: 'read', dryRun: true, persistentCache: 'off' }));
+        try { assert.equal(output.body, (await repo.snapshot(async () => (await renderReview(repo, 'sample', 'off'))))); } finally { repo.close(); }
       }
     }
     const gaps = Schema.decodeUnknownSync(TraceGapsValue)(hydrateQueryValue(root, await persist(root, ['trace', 'gaps']), undefined, nativeRuntime).value);

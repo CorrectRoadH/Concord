@@ -23,10 +23,10 @@ async function decode<A>(pending: Promise<unknown>, schema: Schema.ConstraintDec
   assert.equal(result.status, status, JSON.stringify(result.value));
   return Schema.decodeUnknownSync(schema)(result.value);
 }
-function query<A>(root: string, request: QueryRequest, schema: Schema.ConstraintDecoder<A, never>, status = 0) {
+async function query<A>(root: string, request: QueryRequest, schema: Schema.ConstraintDecoder<A, never>, status = 0) {
   return decode(runApplication(executeQuery(root, request)).then(reply => { assert.equal(reply.exitCode, 0); return reply.value; }), schema, status);
 }
-function action<A>(root: string, input: unknown, schema: Schema.ConstraintDecoder<A, never>, status = 0) {
+async function action<A>(root: string, input: unknown, schema: Schema.ConstraintDecoder<A, never>, status = 0) {
   return decode(runApplication(executeViewAction(root, input)), schema, status);
 }
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
@@ -43,7 +43,7 @@ test('installed init previews configuration, preserves existing docs, and never 
  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
  assert.equal(existsSync(join(root, '.git/concord')), false);
  (await action(root, input, Ack));
- const config = readProjectConfig(root);
+ const config = (await readProjectConfig(root));
  assert.deepEqual(config.testRoots, ['spec']); assert.deepEqual(config.runner, runner);
  assert.equal(readFileSync(join(root, 'docs/README.md'), 'utf8'), '# Existing documentation\n');
  assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), '# Existing concepts\n');
@@ -58,7 +58,7 @@ test('installed init previews configuration, preserves existing docs, and never 
 
 // @feature docs/feature/taste/cli.md
 test('packed boundaries reject non-current formats and preserve configuration, owners, receipts, journals and locks', () => Effect.runPromise(Effect.promise(async () => {
- const root = createConsumer();
+ const root = (await createConsumer());
  writeProjectConfig(root, { testRoots: ['test', 'tests'] });
  const taste = 'docs/taste.md';
  const current = readFileSync(join(root, taste), 'utf8');
@@ -92,7 +92,7 @@ test('packed boundaries reject non-current formats and preserve configuration, o
  const lock = 'preserve invalid lock bytes';
  write(root, journalPath, journal); write(root, lockPath, lock);
  for (const command of ['check', 'recover']) {
-  assert.equal((await (command === 'check' ? query(root, { name: 'check', input: {} }, ErrorOutput, 1) : action(root, { action: 'recover' }, ErrorOutput, 1))).error, 'InvalidData');
+  assert.equal((await (command === 'check' ? (await query(root, { name: 'check', input: {} }, ErrorOutput, 1)) : (await action(root, { action: 'recover' }, ErrorOutput, 1)))).error, 'InvalidData');
   assert.equal(readFileSync(join(root, journalPath), 'utf8'), journal);
   assert.equal(readFileSync(join(root, lockPath), 'utf8'), lock);
  }

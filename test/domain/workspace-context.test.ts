@@ -9,8 +9,8 @@ import { createConsumer } from '../support/consumer.ts';
 
 // @feature docs/feature/project-onboarding/README.md
 test('Workspace opens immutable operation metadata without granting publication or retaining configuration', async () => {
-  const root = createConsumer();
-  const otherRoot = createConsumer();
+  const root = (await createConsumer());
+  const otherRoot = (await createConsumer());
   const privateFiles = () => existsSync(join(root, '.git/concord')) ? readdirSync(join(root, '.git/concord')).sort() : [];
   const before = privateFiles();
   try {

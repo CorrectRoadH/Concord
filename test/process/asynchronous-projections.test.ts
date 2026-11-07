@@ -4,7 +4,7 @@ import { queryFactsConsumer, ownerPath } from '../support/query-facts-fixture.ts
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('packed C7 worker publishes a readable body-free envelope and exits', async () => {
-  const root = queryFactsConsumer();
+  const root = (await queryFactsConsumer());
   try {
     const query = ['trace', 'show', ownerPath] as const;
     const result = await refreshInstalled(root, query);

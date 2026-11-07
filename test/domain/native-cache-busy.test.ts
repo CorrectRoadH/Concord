@@ -13,7 +13,7 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @feature docs/feature/local-data-engine/architecture.md#本地操作的缓存快照
 test('native execution keeps its result on cache contention while discovery reports CacheUpdateFailed', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   let repo: LocalRepository | undefined;
   try {
     const source = fileURLToPath(new URL('../..', import.meta.url));
@@ -23,9 +23,9 @@ test('native execution keeps its result on cache contention while discovery repo
     symlinkSync(join(source, 'node_modules'), join(root, 'node_modules'), 'dir');
     writeFileSync(join(root, 'adapter.ts'), readFileSync(join(source, 'test/fixtures/process-adapter.ts'), 'utf8'));
     writeFileSync(join(root, 'mode.txt'), 'green');
-    writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], testAdapters: [{ id: 'fixture', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], lockFiles: [], frameworkVersion: 'fixture/v1', envNames: ['PATH'] }] });
-    repo = new LocalRepository(root);
-    const selected = scanAnnotations(repo, { cache: 'off' }).cases[0]!;
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], testAdapters: [{ id: 'fixture', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], lockFiles: [], frameworkVersion: 'fixture/v1', envNames: ['PATH'] }] });
+    repo = (await LocalRepository.open(root));
+    const selected = (await scanAnnotations(repo, { cache: 'off' })).cases[0]!;
     const held = openHawdb(join(repo.privateDir, 'cache.hawdb'), { create: true, readOnly: false }, makeRuntimeEnvironment(root, process.env));
     try {
       const warnings: string[] = [];

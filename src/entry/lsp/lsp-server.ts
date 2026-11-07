@@ -21,8 +21,8 @@ interface Task {
 }
 
 /** Final verification deliberately opens a fresh config authorization context. */
-function verify(root: string, result: P.Computed, runtime: ApplicationRuntime): void {
-  const repo = createReadRepository(root, { access: 'read', optimistic: true, persistentCache: 'off', runtime });
+async function verify(root: string, result: P.Computed, runtime: ApplicationRuntime): Promise<void> {
+  const repo = await createReadRepository(root, { access: 'read', optimistic: true, persistentCache: 'off', runtime });
   try {
     repo.snapshot(() => {
       if (repo.configSnapshot.digest !== result.config) throw new ConcordError('ContentModified', 'Configuration changed');
@@ -52,7 +52,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
   yield* Effect.addFinalizer(() => Queue.end(stdout).pipe(Effect.andThen(Queue.end(stderr)), Effect.andThen(Fiber.join(output)), Effect.andThen(Fiber.join(errors)), Effect.andThen(Effect.suspend(() => outputFailure === undefined ? Effect.void : Effect.die(failure(outputFailure))))));
   const root = yield* Effect.try({ try: () => discoverRoot(rootInput, false, runtime), catch: failure });
   // Validate the initial project without retaining a repository handle while waiting for stdin.
-  yield* Effect.try({ try: () => { const repo = createReadRepository(root, { access: 'read', persistentCache: 'off', runtime }); repo.close(); }, catch: failure });
+  yield* Effect.tryPromise({ try: async () => { const repo = await createReadRepository(root, { access: 'read', persistentCache: 'off', runtime }); repo.close(); }, catch: failure }).pipe(Effect.uninterruptible);
   yield* Effect.callback<void, ConcordError>(resume => {
     let inputFiber: Fiber.Fiber<void> | undefined;
     const frames = new P.EditorFrames();
@@ -86,10 +86,15 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
     };
     const respond = (id: P.RpcId, result: unknown) => send({ jsonrpc: '2.0', id, result });
     const reject = (id: P.RpcId, code: number, name: string, message = name) => send({ jsonrpc: '2.0', id, error: { code, message, data: { name } } });
+    const rejectCleanupFailure = (id: P.RpcId | undefined): boolean => {
+      if (cleanupFailure === undefined) return false;
+      if (id !== undefined) reject(id, -32603, cleanupFailure.code, cleanupFailure.message);
+      return true;
+    };
     const log = (cause: unknown) => { const error = failure(cause); Queue.offerUnsafe(stderr, Buffer.from(`${error.code}: ${error.message.slice(0, 2000)}\n`)); };
     const clear = (document: P.Overlay) => send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri: document.uri, version: document.version, diagnostics: [] } });
-    const resolveUri = (uri: string) => {
-      const repo = createReadRepository(root, { access: 'read', persistentCache: 'off', runtime });
+    const resolveUri = async (uri: string) => {
+      const repo = await createReadRepository(root, { access: 'read', persistentCache: 'off', runtime });
       try {
         const path = uriPath(repo, uri);
         if (path.split('/').some(part => part === '.git' || part === 'node_modules')) throw new ConcordError('UnsafeEditorUri', 'Private and dependency paths are excluded');
@@ -125,12 +130,14 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
         if (config === undefined) throw new ConcordError('ProjectNotFound', 'Project configuration is missing');
         return { root, session, config: digest(config), overlays: [...overlays.values()], method, ...(params === undefined ? {} : { params }) };
       }, catch: failure }).pipe(Effect.flatMap(job => runEditorJob(job, recordCleanupFailure, createProcessService({ environment: runtime }))));
-      task.promise = Effect.runPromise(work.pipe(Effect.provideContext(context)), { signal: task.controller.signal }).then(result => {
+      task.promise = Effect.runPromise(work.pipe(Effect.provideContext(context)), { signal: task.controller.signal }).then(async result => {
         if (!tasks.has(task) || ended) return;
-        if (cleanupFailure !== undefined) { if (id !== undefined) reject(id, -32603, cleanupFailure.code, cleanupFailure.message); return; }
+        if (rejectCleanupFailure(id)) return;
         if (result.session !== session || task.session !== session) { stopTask(task, 'ContentModified'); return; }
-        try { verify(root, result, runtime); }
+        try { await verify(root, result, runtime); }
         catch { stopTask(task, 'ContentModified'); schedule(); return; }
+        if (!tasks.has(task) || ended || result.session !== session || task.session !== session) return;
+        if (rejectCleanupFailure(id)) return;
         if (id !== undefined) respond(id, result.value);
         // Query results never publish diagnostics: a diagnostics job owns that stream.
         else for (const item of result.diagnostics) {
@@ -144,8 +151,8 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
         else for (const document of overlays.values()) if (document.valid) send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri: document.uri, version: document.version, diagnostics: [{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, severity: 2, source: 'concord', code: 'EditorInputsIncomplete', message: `${error.code}: ${error.message}. No complete-project conclusion is available.` }] } });
       }).finally(() => { tasks.delete(task); running.delete(task); });
     };
-    const existing = (uri: string) => {
-      const safe = resolveUri(uri), document = overlays.get(safe.uri);
+    const existing = async (uri: string) => {
+      const safe = await resolveUri(uri), document = overlays.get(safe.uri);
       if (document === undefined) throw new ConcordError('DocumentNotOpen', safe.path);
       return document;
     };
@@ -153,7 +160,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
       const bytes = Buffer.byteLength(text);
       if (bytes > P.editorLimits.document || bytes + [...overlays.values()].reduce((sum, doc) => sum + (doc === replacing ? 0 : Buffer.byteLength(doc.text)), 0) > P.editorLimits.overlay) throw new ConcordError('EditorBudgetExceeded', 'Overlay text limit');
     };
-    const dispatch = (input: unknown) => {
+    const dispatch = async (input: unknown): Promise<void> => {
       let message: typeof P.Envelope.Type;
       try { message = decode(P.Envelope, input, 'editor JSON-RPC'); }
       catch (cause) { log(cause); send({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'InvalidEditorMessage' } }); return; }
@@ -205,7 +212,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
         if (['textDocument/definition', 'textDocument/references', 'textDocument/completion', 'textDocument/hover'].includes(method)) {
           if (id === undefined) throw new ConcordError('InvalidEditorMessage', 'Navigation requires a request ID');
           const query = decode(method === 'textDocument/references' ? P.References : method === 'textDocument/completion' ? P.Completion : P.Query, params, method);
-          const document = existing(query.textDocument.uri);
+          const document = await existing(query.textDocument.uri);
           if (!document.valid) { reject(id, -32801, 'ContentModified', 'Close and reopen the invalid document'); return; }
           start(method, id, { ...query, textDocument: { uri: document.uri } }); return;
         }
@@ -213,33 +220,33 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
         if (!lifecycle.includes(method)) { if (id !== undefined) reject(id, -32601, 'EditorMethodNotSupported', `Read-only editor does not support ${method}`); return; }
         if (id !== undefined) throw new ConcordError('InvalidEditorMessage', 'Document lifecycle methods are notifications');
         if (method === 'textDocument/didOpen') {
-          const { textDocument: document } = decode(P.Open, params, method), safe = resolveUri(document.uri);
+          const { textDocument: document } = decode(P.Open, params, method), safe = await resolveUri(document.uri);
           if (overlays.has(safe.uri)) throw new ConcordError('DocumentAlreadyOpen', safe.path);
           if (overlays.size >= P.editorLimits.documents) throw new ConcordError('EditorBudgetExceeded', 'Open document limit');
           capacity(document.text);
           overlays.set(safe.uri, { ...document, ...safe, opened: randomUUID(), valid: true }); invalidate();
         } else if (method === 'textDocument/didChange') {
-          const change = decode(P.Change, params, method), document = existing(change.textDocument.uri);
+          const change = decode(P.Change, params, method), document = await existing(change.textDocument.uri);
           if (!document.valid || change.textDocument.version <= document.version) throw new ConcordError('InvalidDocumentVersion', 'Versions must increase; close and reopen');
           const text = P.changedText(document.text, change.contentChanges); capacity(text, document);
           overlays.set(document.uri, { ...document, text, version: change.textDocument.version }); invalidate();
         } else if (method === 'textDocument/didSave') {
-          const save = decode(P.Save, params, method), document = existing(save.textDocument.uri);
+          const save = decode(P.Save, params, method), document = await existing(save.textDocument.uri);
           if (!document.valid || save.text !== undefined && save.text !== document.text) throw new ConcordError('SaveTextConflict', 'Saved text differs from the client overlay; close and reopen');
-          overlays.set(document.uri, { ...document, existed: document.existed || resolveUri(document.uri).existed });
+          overlays.set(document.uri, { ...document, existed: document.existed || (await resolveUri(document.uri)).existed });
           invalidate();
         } else if (method === 'textDocument/didClose') {
-          const close = decode(P.Close, params, method), document = overlays.get(close.textDocument.uri) ?? existing(close.textDocument.uri);
+          const close = decode(P.Close, params, method), document = overlays.get(close.textDocument.uri) ?? await existing(close.textDocument.uri);
           clear(document); overlays.delete(document.uri); invalidate();
         } else {
-          const observe = (uri: string, deleted: boolean) => {
-            const safe = resolveUri(uri), document = overlays.get(safe.uri);
+          const observe = async (uri: string, deleted: boolean) => {
+            const safe = await resolveUri(uri), document = overlays.get(safe.uri);
             if (document !== undefined && (safe.existed || deleted)) overlays.set(document.uri, { ...document, existed: true });
           };
-          if (method === 'workspace/didChangeWatchedFiles') for (const change of decode(P.Watched, params, method).changes) observe(change.uri, change.type === 3);
-          else if (method === 'workspace/didDeleteFiles') for (const file of decode(P.Deleted, params, method).files) observe(file.uri, true);
+          if (method === 'workspace/didChangeWatchedFiles') for (const change of decode(P.Watched, params, method).changes) await observe(change.uri, change.type === 3);
+          else if (method === 'workspace/didDeleteFiles') for (const file of decode(P.Deleted, params, method).files) await observe(file.uri, true);
           else for (const file of decode(P.Renamed, params, method).files) {
-            const old = resolveUri(file.oldUri); resolveUri(file.newUri);
+            const old = await resolveUri(file.oldUri); await resolveUri(file.newUri);
             const document = overlays.get(old.uri);
             if (document !== undefined) { clear(document); overlays.set(document.uri, { ...document, valid: false }); }
           }
@@ -251,17 +258,23 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
         else if (method.startsWith('textDocument/did')) {
           try {
             const probe = Schema.decodeUnknownSync(Schema.Struct({ textDocument: Schema.Struct({ uri: Schema.String }) }), { onExcessProperty: 'ignore' })(params);
-            const document = overlays.get(probe.textDocument.uri) ?? overlays.get(resolveUri(probe.textDocument.uri).uri);
+            const document = overlays.get(probe.textDocument.uri) ?? overlays.get((await resolveUri(probe.textDocument.uri)).uri);
             if (document !== undefined) { overlays.set(document.uri, { ...document, valid: false }); clear(document); invalidate(); }
           } catch { /* Unsafe URIs never enter the overlay. */ }
         }
       }
     };
-    const data = (chunk: Buffer) => { try { frames.receive(chunk, dispatch); } catch (cause) { finish(failure(cause)); } };
+    const data = async (chunk: Buffer) => {
+      try {
+        const messages: unknown[] = [];
+        frames.receive(chunk, message => { messages.push(message); });
+        for (const message of messages) { if (ended) break; await dispatch(message); }
+      } catch (cause) { finish(failure(cause)); }
+    };
     const eof = () => { try { frames.end(); finish(); } catch (cause) { finish(failure(cause)); } };
     const ioError = (cause: unknown) => finish(new ConcordError('EditorTransportFailed', failure(cause).message));
     transportFailed = ioError;
-    inputFiber = Effect.runFork(Stream.runForEach(stdio.stdin, chunk => Effect.sync(() => data(Buffer.from(chunk)))).pipe(Effect.match({ onFailure: ioError, onSuccess: eof })));
+    inputFiber = Effect.runFork(Stream.runForEach(stdio.stdin, chunk => Effect.promise(() => data(Buffer.from(chunk))).pipe(Effect.uninterruptible)).pipe(Effect.match({ onFailure: ioError, onSuccess: eof })));
     function cleanup(): Promise<void> { return cleanupPromise ??= (async () => {
       ended = true; if (timer !== undefined) clearTimeout(timer);
       if (inputFiber !== undefined) await Effect.runPromise(Fiber.interrupt(inputFiber));

@@ -86,7 +86,7 @@ export function markdownReferenceTokens(path: string, source: string, runtime: R
   return tokens;
 }
 
-function sourceTokens(repo: Repository, path: string, source: string): readonly { readonly reference: string; readonly start: number; readonly end: number }[] {
+async function sourceTokens(repo: Repository, path: string, source: string): Promise<readonly { readonly reference: string; readonly start: number; readonly end: number }[]> {
   if (source.includes('\0')) return [];
   const lines = source.split('\n'), tokens: { reference: string; start: number; end: number }[] = [];
   const add = (line: number, reference: string, family: string) => {
@@ -99,26 +99,27 @@ function sourceTokens(repo: Repository, path: string, source: string): readonly 
   if (within(path, repo.config.testRoots)) {
     // Discovery deliberately ignores oversized test text; maintenance must refuse that gap.
     if (Buffer.byteLength(source) > 1_048_576) return incomplete(path);
-    const parsed = parseTestDeclarations(path, source);
+    const parsed = (await parseTestDeclarations(path, source));
     if (parsed.findings.length) return incomplete(path);
     for (const item of parsed.cases) if (item.contractKind === 'use-case') add(item.line, item.contract, 'use-case');
   }
-  if (within(path, repo.config.sourceRoots ?? [])) for (const item of codeReferenceTokens(path, source, repo.config.languageServers)) add(item.line, item.reference, 'concord-implements');
+  if (within(path, repo.config.sourceRoots ?? [])) for (const item of (await codeReferenceTokens(path, source, repo.config.languageServers))) add(item.line, item.reference, 'concord-implements');
   return tokens;
 }
 
-export function scanStepReferences(repo: Repository) {
+export async function scanStepReferences(repo: Repository) {
   // Domain inventory owns managed metadata and Memory/Issue reads.
   const documents = loadDocuments(repo);
   const protectedPaths = new Set(documents.filter(doc => doc.metadata.kind === 'memory' || doc.metadata.kind === 'issue').map(doc => doc.path));
   const paths = new Set([...repo.files('docs'), ...repo.config.testRoots.flatMap(root => repo.files(root, 'source')), ...(repo.config.sourceRoots ?? []).flatMap(root => repo.files(root, 'source'))]);
-  const files = [...paths].sort().filter(path => !protectedPaths.has(path)).map(path => {
+  const files: { path: string; source: string; markdown: ReturnType<typeof markdownReferenceTokens>; tokens: Awaited<ReturnType<typeof sourceTokens>> }[] = [];
+  for (const path of [...paths].sort().filter(path => !protectedPaths.has(path))) {
     const source = repo.read(path);
     if (source === undefined) return incomplete(path);
     const markdown = path.startsWith('docs/') && path.endsWith('.md') ? markdownReferenceTokens(path, source, repositoryRuntime(repo)) : [];
-    const tokens = path.startsWith('docs/') ? [] : sourceTokens(repo, path, source);
-    return { path, source, markdown, tokens };
-  });
+    const tokens = path.startsWith('docs/') ? [] : (await sourceTokens(repo, path, source));
+    files.push({ path, source, markdown, tokens });
+  }
   const inputsDigest = digest(canonical({ files: files.map(file => [file.path, digest(file.source)]), managed: documents.filter(doc => protectedPaths.has(doc.path)).map(doc => [doc.path, doc.digest]).sort() }));
   return { documents, files, inputsDigest };
 }
@@ -129,7 +130,7 @@ function contains(value: unknown, ref: string): boolean {
   return value !== null && typeof value === 'object' && Object.values(value).some(item => contains(item, ref));
 }
 
-export function planStepRename(repo: Repository, request: StepRename) {
+export async function planStepRename(repo: Repository, request: StepRename) {
   const { useCase, oldId, newId } = request;
   if (!DOCUMENT_NAME_PATTERN.test(oldId) || !DOCUMENT_NAME_PATTERN.test(newId) || oldId === newId) throw new ConcordError('InvalidStepId', 'Step rename requires distinct valid document names');
   const document = readDocumentSelector(repo, useCase, 'use-case');
@@ -141,7 +142,7 @@ export function planStepRename(repo: Repository, request: StepRename) {
   if (old === undefined) throw new ConcordError('AnchorNotFound', `Step ${oldId} does not exist in ${useCase}`);
   if (headingAnchors(source, useCase, repositoryRuntime(repo)).has(newId) || extracted.steps.some(step => step.id === newId)) throw new ConcordError('DuplicateAnchor', `Anchor ${newId} is already occupied`);
   const oldRef = `${useCase}#${oldId}`, newRef = `${useCase}#${newId}`;
-  const scan = scanStepReferences(repo);
+  const scan = (await scanStepReferences(repo));
   for (const record of scan.documents) {
     const kind = record.metadata.kind;
     if ((kind === 'memory' || kind === 'issue' || kind === 'design') && contains(record.metadata, oldRef) || (kind === 'memory' || kind === 'issue') && markdownReferenceTokens(record.path, record.body, repositoryRuntime(repo)).some(token => token.target === oldRef)) throw new ConcordError('ManagedReferenceBlocked', `Managed references in ${record.path} require their lifecycle command`);
@@ -165,7 +166,7 @@ export function planStepRename(repo: Repository, request: StepRename) {
       }
       changes.push({ path: file.path, before: file.source, after });
       if (within(file.path, repo.config.testRoots)) {
-        const beforeCases = parseTestDeclarations(file.path, file.source).cases, afterCases = parseTestDeclarations(file.path, after).cases;
+        const beforeCases = (await parseTestDeclarations(file.path, file.source)).cases, afterCases = (await parseTestDeclarations(file.path, after)).cases;
         beforeCases.forEach((item, index) => { if (item.contract === oldRef || item.id !== afterCases[index]!.id) affectedCases.push({ before: item.id, after: afterCases[index]!.id, file: item.file, named: item.named === true }); });
       }
     }
@@ -173,14 +174,14 @@ export function planStepRename(repo: Repository, request: StepRename) {
   return { ...request, changes, affectedCases, inputsDigest: scan.inputsDigest };
 }
 
-export function formatStepSource(repo: Repository, path: string, source: string, seed: boolean, list?: number): string {
+export async function formatStepSource(repo: Repository, path: string, source: string, seed: boolean, list?: number): Promise<string> {
   const extracted = inspectSteps(path, source, repositoryRuntime(repo));
   if (extracted.findings.length) throw new ConcordError(extracted.findings[0]!.code, 'Fix invalid or ambiguous steps before formatting', extracted.findings);
   if (seed !== (list !== undefined) || list !== undefined && (!Number.isSafeInteger(list) || list < 1 || !extracted.lists.some(item => item.ordinal === list))) throw new ConcordError('InvalidStepList', '--seed and --list must select one existing root ordered list');
   const selected = new Set(extracted.lists.filter(item => item.marked > 0 || item.ordinal === list).map(item => item.ordinal));
   if (!selected.size) return source;
   if (extracted.lists.some(list => selected.has(list.ordinal) && extracted.items.filter(item => item.listOrdinal === list.ordinal).length !== list.items)) throw new ConcordError('InvalidStepPosition', 'Every selected item must start with a paragraph');
-  const scan = scanStepReferences(repo), occupied = new Set([...headingAnchors(source, path, repositoryRuntime(repo)), ...extracted.steps.map(step => step.id)]);
+  const scan = (await scanStepReferences(repo)), occupied = new Set([...headingAnchors(source, path, repositoryRuntime(repo)), ...extracted.steps.map(step => step.id)]);
   for (const file of scan.files) for (const ref of [...file.tokens.map(token => token.reference), ...file.markdown.map(token => token.target)]) if (ref.startsWith(`${path}#`)) occupied.add(ref.slice(path.length + 1));
   for (const record of scan.documents) {
     const collect = (value: unknown): void => {

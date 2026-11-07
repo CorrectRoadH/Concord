@@ -33,15 +33,15 @@
    gh run watch --repo CorrectRoadH/Concord
    ```
 
-3. 原生任务分别构建固定版本的 `linux-x64` 与 `darwin-arm64` HawDB 引擎；macOS 任务给 HawDB 绑定与 `runtime/rg` 做 ad-hoc 签名。 {#native}
+3. 原生任务下载并校验固定发行版本的 `linux-x64` 与 `darwin-arm64` HawDB 引擎；macOS 任务保留绑定签名并给 `runtime/rg` 做 ad-hoc 签名。 {#native}
 
-4. 一台 Ubuntu 24.04 CI 机器打包全部候选归档，同一标签 commit 执行完整检查。 {#package}
+4. 两个目标宿主分别生成候选归档，同一标签 commit 执行完整检查。 {#package}
 
-   这台 CI 机器从标签派生版本，构建并类型检查应用一次，为两个目标各组装一个候选归档，计算全部资产的 SHA-256。
+   Ubuntu 24.04 x64 与 macOS 15 arm64 各自从同一标签派生版本，完成类型检查、资源准备与 Bun 编译、字节码和最终签名，组装本目标候选。汇总任务验证身份与摘要，复制原字节并生成最终 SHA256SUMS，不重新编译。
 
 5. 在 `ubuntu-24.04` 与 `macos-15` arm64 的 CI 机器上各验证本目标的候选归档。 {#verify}
 
-   验证任务下载第 4 步产出的同一份候选归档与摘要，不重新构建，校验摘要后解压，在只含系统基础命令与 Git 的 `PATH`（没有 `node`、`pnpm`、`rg`）中运行：
+   验证任务下载第 4 步产出的同一份候选归档与摘要，不重新构建，校验摘要后解压，在只含系统基础命令与 Git 的 `PATH`（没有 `node`、`bun`、`pnpm`、`rg`）中运行：
 
    | 核对 | 通过条件 |
    | --- | --- |
@@ -49,8 +49,8 @@
    | 原生绑定 | 归档内的 HawDB 绑定通过身份校验并被实际加载 |
    | 项目闭环 | 在临时 Git 仓库中 `concord init` 与 `concord check` 成功，退出后没有残留的服务进程 |
    | Web 资源 | 归档内的 Web 资源存在 |
-   | Linux 依赖 | 所有 ELF 只依赖 glibc 与 `runtime/lib/` 中的库，RPATH 指向归档内，GLIBC 符号版本不高于 2.39 |
-   | macOS 签名 | 全部 Mach-O 通过 `codesign --verify`；`runtime/node` 保留 Node.js 官方签名；用 `curl` 下载并解压的文件没有 `com.apple.quarantine` |
+   | Linux 依赖 | 所有 ELF 只依赖 glibc 与 `runtime/lib/` 中的库，非 glibc 依赖的 RPATH 指向归档内，纯 glibc 可执行文件保留原字节并实跑；GLIBC 符号版本不高于 2.39 |
+   | macOS 签名 | 全部 Mach-O 通过 `codesign --verify`；`bin/concord` 在目标宿主最终签名，HawDB 与 ripgrep 保留部件签名；用 `curl` 下载并解压的文件没有 `com.apple.quarantine` |
 
 6. 全部通过后创建源码 GitHub Release。 {#publish}
 

@@ -9,11 +9,11 @@ test('browser reads queue after prior reads, including a read requested after a 
   let release!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; });
   const value = { path: 'first.md', digest: 'first', body: '' };
-  globalThis.fetch = async (input, init) => {
+  globalThis.fetch = Object.assign(async (input: Parameters<typeof original>[0], init?: Parameters<typeof original>[1]) => {
     const path = String(input); calls.push(path);
     if (path.includes('first.md')) await held;
     return Response.json({ ok: true, value });
-  };
+  }, original);
   t.after(() => { globalThis.fetch = original; });
   const api = new ConcordApi();
   const first = api.file('first.md');

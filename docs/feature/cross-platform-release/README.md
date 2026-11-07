@@ -6,7 +6,7 @@
 
 ## 核心模型
 
-Concord 以自带运行时的 CLI 发版：每个目标平台一个归档，里面有启动脚本、固定版本的 Node.js 运行时、构建好的应用、该平台的 HawDB 原生绑定、随附资源与固定版本的 ripgrep。使用者的机器只需要 Git。
+Concord 以自带运行时的 CLI 发版：每个目标平台一个归档，里面有内含固定 Bun 运行时与应用字节码的单个可执行文件、该平台的 HawDB 原生绑定、随附资源与固定版本的 ripgrep。使用者的机器只需要 Git。
 
 Concord 仓库拥有源码、版本与源码标签。标签工作流为每个目标平台构建一个不可变候选归档，核验版本与摘要，再在每个目标的真实系统上解压同一份候选归档并运行；这些验证与同一标签 commit 的完整检查都通过后才创建 GitHub Release。Concord 只以 CLI 交付；配置、adapter 协议与 PR 预览产物的 JSON Schema 由同一版本的 `concord schema` 输出，见[机器可读 Schema](../local-sdlc/cli.md#机器可读-schema)。
 
@@ -52,7 +52,7 @@ macOS 27 在允许安装范围内，但不声明已完成其 CI 实测。不支�
 
 ## 验收
 
-各渠道的安装输入是同一份归档字节，安装后 `concord --version` 相同。发版前的候选验证在 Ubuntu 24.04 与 Apple Silicon macOS 15 上解压同一份候选归档，在只有系统基础命令与 Git 的 `PATH` 中运行，步骤见[从标签发版](use-case/release-from-tag.md#verify)；本机打包测试见[检查入口](../../engineering/testing/README.md#检查入口)。
+各渠道的安装输入是同一份归档字节，安装后 `concord --version` 相同。发版前的候选验证在 Ubuntu 24.04 与 Apple Silicon macOS 15 上解压同一份候选归档，在只有系统基础命令与 Git 的 `PATH` 中运行，步骤见[从标签发版](use-case/release-from-tag.md#verify)。
 
 ## 依据的品味
 

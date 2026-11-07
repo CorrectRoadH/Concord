@@ -48,12 +48,12 @@ export const QueryRequest = Schema.Union([
 ]);
 export type QueryRequest = typeof QueryRequest.Type;
 
-const queryValue = (repo: WorkspaceTypes.LocalRepository, request: QueryRequest, cache: 'use' | 'off'): unknown => {
+const queryValue = async (repo: WorkspaceTypes.LocalRepository, request: QueryRequest, cache: 'use' | 'off'): Promise<unknown> => {
   switch (request.name) {
-    case 'trace.check': { const t = buildTrace(repo, cache); return { operation: 'trace-check', ok: t.complete, complete: t.complete, findings: t.findings, edges: t.edges }; }
-    case 'trace.show': return traceShow(repo, request.input.reference, cache);
-    case 'trace.gaps': return traceGaps(repo, cache);
-    case 'review': return renderReview(repo, request.input.reference, cache);
+    case 'trace.check': { const t = (await buildTrace(repo, cache)); return { operation: 'trace-check', ok: t.complete, complete: t.complete, findings: t.findings, edges: t.edges }; }
+    case 'trace.show': return (await traceShow(repo, request.input.reference, cache));
+    case 'trace.gaps': return (await traceGaps(repo, cache));
+    case 'review': return (await renderReview(repo, request.input.reference, cache));
     case 'taste': return tasteShow(repo);
     case 'config.show': return { ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source };
     case 'docs.check': return checkWriting(repo, undefined, cache !== 'off');
@@ -66,19 +66,19 @@ const queryValue = (repo: WorkspaceTypes.LocalRepository, request: QueryRequest,
     case 'documents.show': {
       const { id, kind } = request.input;
       const selected = id.includes('/') ? readDocumentReference(repo, id) : findDocument(loadDocuments(repo), id);
-      return { ...documentShow(repo, id, kind ?? selected.metadata.kind, cache), operation: 'show' };
+      return { ...(await documentShow(repo, id, kind ?? selected.metadata.kind, cache)), operation: 'show' };
     }
     case 'memory.index': return knowledgeIndex(repo, 'memory');
     case 'memory.search': return knowledgeSearchRecords(repo, 'memory', request.input.query);
     case 'issue.search': return knowledgeSearchRecords(repo, 'issue', request.input.query);
-    case 'code.list': return listCode(repo);
-    case 'test.list': { const t = buildTrace(repo, cache, { includeCode: false }); requireValidTrace(t); return { operation: 'test-list', cases: t.annotations.cases, cache: t.annotations.cache, observations: readNativeObservations(repo) }; }
+    case 'code.list': return (await listCode(repo));
+    case 'test.list': { const t = (await buildTrace(repo, cache, { includeCode: false })); requireValidTrace(t); return { operation: 'test-list', cases: t.annotations.cases, cache: t.annotations.cache, observations: readNativeObservations(repo) }; }
     case 'test.show': {
-      const t = buildTrace(repo, cache, { includeCode: false }); requireValidTrace(t);
+      const t = (await buildTrace(repo, cache, { includeCode: false })); requireValidTrace(t);
       const selected = selectCase(t.annotations.cases, request.input.id);
-      let codes: ReturnType<typeof scanCode>['codes'] = [];
-      try { codes = scanCode(repo, { cache: 'off' }).codes; } catch { /* Optional observations. */ }
-      return { operation: 'test-show', case: selected, evidenceScope: 'command', analysis: analysisView(repo, [selected], codes, t.documents), observations: readNativeObservations(repo) };
+      let codes: Awaited<ReturnType<typeof scanCode>>['codes'] = [];
+      try { codes = (await scanCode(repo, { cache: 'off' })).codes; } catch { /* Optional observations. */ }
+      return { operation: 'test-show', case: selected, evidenceScope: 'command', analysis: (await analysisView(repo, [selected], codes, t.documents)), observations: readNativeObservations(repo) };
     }
     case 'writing.show': return showWriting(repo, request.input.path);
     case 'writing.index': return writingIndex(repo);
@@ -89,7 +89,7 @@ const queryValue = (repo: WorkspaceTypes.LocalRepository, request: QueryRequest,
       const reference = request.input.id.includes('/') ? request.input.id : `docs/issues/${request.input.id}.md`;
       const selected = readDocumentReference(repo, reference, ['issue']);
       const item = listFeedback(repo, [selected])[0]!;
-      const relations = documentShow(repo, item.document.path, 'issue', cache);
+      const relations = (await documentShow(repo, item.document.path, 'issue', cache));
       return { operation: 'feedback-show', feedback: { ...item, document: relations.document }, incoming: relations.incoming, outgoing: relations.outgoing, complete: relations.complete, findings: relations.findings };
     }
     case 'feedback.connection.list': return { operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] };
@@ -109,7 +109,7 @@ export const executeQuery = Effect.fn('Queries.Local.execute')(function*(root: s
       const workspace = yield* Workspace;
       const sources = yield* Sources;
       const repo = yield* waitForPublication(reclaimPublication => workspace.openRead(root, { access: 'read', optimistic: true, persistentCache: cache, reclaimPublication }));
-      return yield* sources.snapshot(repo, Effect.try({ try: () => queryValue(repo, request, cache), catch: failure }));
+      return yield* sources.snapshot(repo, Effect.tryPromise({ try: async () => (await queryValue(repo, request, cache)), catch: failure }).pipe(Effect.uninterruptible));
     })).pipe(Effect.retry({ times: 2, schedule: Schedule.spaced('50 millis'), while: error => error.code === 'SourceChanged' || error.code === 'FileChangedSinceRead' && error.details === 'source-observation' }));
   return yield* Effect.try({ try: () => {
     const json = Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));

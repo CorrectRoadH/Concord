@@ -1,4 +1,4 @@
-// 跨进程保证：网络——真实HTTP超时取消令连接关闭，fixture停止时回收未发请求的TCP连接及服务进程。
+// 跨进程保证：网络——真实HTTP超时取消令连接关闭，fixture停止时回收未完成请求的TCP连接及服务进程。
 import { initialize } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -49,18 +49,21 @@ test('poll deadline aborts an in-flight HTTP request and preserves unexpected HT
 }).pipe(Effect.timeout(5000))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('browser fixture shutdown drains a speculative socket that never sent an HTTP request', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('browser fixture shutdown drains a socket with an incomplete HTTP request', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-e2e-lifecycle-'));
   execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+  const repo = (await LocalRepository.open(root, { initialize: true }));
+  try { (await initialize(repo, false, { testRoots: [] })); } finally { repo.close(); }
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
 
   const socket = connect(server.port, '127.0.0.1');
   socket.on('error', () => {});
   try {
     await once(socket, 'connect');
-    const disconnected = once(socket, 'close');
+    const disconnected = new Promise<void>(resolve => socket.once('close', () => resolve()));
+    // Bun defers accepting bare TCP handshakes until data arrives. Keep the
+    // request incomplete so cleanup cannot depend on the request handler.
+    socket.write('GET / HTTP/1.1\r\n');
     await server.close();
     await disconnected;
     assert.equal((server.process.exitCode === null && server.process.signalCode === null), false);

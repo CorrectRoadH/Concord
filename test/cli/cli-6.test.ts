@@ -12,10 +12,10 @@ import { runCli } from '../support/cli.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
 test('test list and review present the supporting-page test reference', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeProjectConfig(root, { testRoots: ['test', 'tests'] });
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'accounts', title: 'Accounts', pages: ['cli'] }); }
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'accounts', title: 'Accounts', pages: ['cli'] })); }
   finally { repo.close(); }
   writeFileSync(join(root, 'docs/feature/accounts/cli.md'), '# Accounts CLI\n\n## Sign in\n\nReject expired tokens.\n');
   mkdirSync(join(root, 'test'));

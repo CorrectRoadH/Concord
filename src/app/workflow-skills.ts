@@ -106,10 +106,10 @@ export function planWorkflowSkills(repo: Repository, version = installedConcordV
 }
 
 export const installWorkflowSkills = Effect.fn('skills.install')(function*(repo: Repository, dryRun = false) {
-  return yield* Effect.try({ try: () => inRepositorySnapshot(repo, () => {
+  return yield* Effect.tryPromise({ try: async () => (await inRepositorySnapshot(repo, async () => {
     const { changes, createdPaths, updatedPaths, removedPaths, unchangedPaths } = planWorkflowSkills(repo);
-    const receipt = repo.publish('skills-install', changes, dryRun);
+    const receipt = (await repo.publish('skills-install', changes, dryRun));
     return { operation: 'skills-install' as const, dryRun: receipt.dryRun, createdPaths, updatedPaths, removedPaths, unchangedPaths,
       ...(receipt.recoveryRequired === undefined ? {} : { recoveryRequired: receipt.recoveryRequired }) };
-  }), catch: failure });
+  })), catch: failure }).pipe(Effect.uninterruptible);
 });

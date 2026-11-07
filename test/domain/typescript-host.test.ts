@@ -7,7 +7,7 @@ import { makeOwnedProcessService } from "../../src/base/process/index.ts";
 import { Deferred, Effect, Fiber } from 'effect';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { TestClock } from 'effect/testing';
-import { withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../../src/base/process/index.ts";
+import { withTypeScript, withTypeScriptFiles, withTypeScriptSource, withTypeScriptResource } from "../../src/base/process/index.ts";
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('owned editor job timeout releases its real native compiler group', { skip: process.platform !== 'linux', timeout: 15000 }, () => Effect.runPromise(Effect.gen(function*() {
@@ -34,46 +34,57 @@ test('owned editor job timeout releases its real native compiler group', { skip:
 }).pipe(Effect.provide(TestClock.layer()))));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('native compiler scopes isolate captured config inputs and preserve syntax diagnostics', () => Effect.runPromise(Effect.sync(() => {
-  const result = withTypeScriptSource('source.ts', 'const x = ;', (source, diagnostics) => ({ statements: source.statements.length, diagnostics: diagnostics.map(d => ({ text: d.text, pos: d.pos })) }));
+test('native compiler scopes isolate captured config inputs and preserve syntax diagnostics', async () => {
+  const result = await withTypeScriptSource('source.ts', 'const x = ;', (source, diagnostics) => ({ statements: source.statements.length, diagnostics: diagnostics.map(d => ({ text: d.text, pos: d.pos })) }));
   assert.equal(result.statements, 1);
   assert.ok(result.diagnostics.some(d => d.text === 'Expression expected.' && d.pos === 10));
-  withTypeScriptFiles(new Map([
+  await withTypeScriptFiles(new Map([
     ['/captured/tsconfig.json', '{"extends":"./base.json","files":["source.ts"]}'],
     ['/captured/base.json', '{"compilerOptions":{"strict":true}}'],
     ['/captured/source.ts', 'export const answer = 42;'],
-  ]), api => {
-    assert.equal(api.parseConfigFile('/captured/tsconfig.json').options.strict, true);
-    assert.ok(api.readConfigFile('/etc/passwd').error);
-    assert.ok(api.readConfigFile(`${process.cwd()}/package.json`).error);
+  ]), async api => {
+    assert.equal((await api.parseConfigFile('/captured/tsconfig.json')).options.strict, true);
+    assert.ok((await api.readConfigFile('/etc/passwd')).error);
+    assert.ok((await api.readConfigFile(`${process.cwd()}/package.json`)).error);
   }, '/captured');
-})));
+});
 
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
-test('native compiler closes after nested domain failure and snapshot disposal failure', () => Effect.runPromise(Effect.sync(() => {
-  let closed = 0;
-  const domainError = new Error('domain failure');
-  assert.throws(() => withTypeScriptFiles(new Map(), api => {
-    const close = api.close;
-    Object.defineProperty(api, 'close', { value: () => { closed++; close(); } });
-    return withTypeScriptSource('test.ts', 'const answer = 42;', () => { throw domainError; });
-  }), error => error === domainError);
-  assert.equal(closed, 1);
-  assert.throws(() => withTypeScriptFiles(new Map(), api => {
-    const close = api.close;
-    Object.defineProperty(api, 'close', { value: () => { closed++; close(); } });
-    const createSnapshot = api.createSnapshot;
-    Object.defineProperty(api, 'createSnapshot', { value: (...args: Parameters<typeof createSnapshot>) => {
-      const snapshot = createSnapshot(...args);
-      const dispose = snapshot.dispose;
-      Object.defineProperty(snapshot, 'dispose', { value: () => { dispose(); throw new Error('disposal failure'); } });
-      return snapshot;
-    } });
-    return withTypeScriptSource('test.ts', 'const answer = 42;', source => source.statements.length);
-  }), { code: 'TypeScriptUnavailable' });
-  assert.equal(closed, 2);
-  assert.equal(withTypeScriptSource('next.ts', 'const next = 1;', source => source.statements.length), 1);
-})));
+test('independent asynchronous compiler scopes keep inputs isolated and reject escaped methods', async () => {
+  let escaped: (() => Promise<unknown>) | undefined;
+  const values = await Promise.allSettled(['left', 'right'].map(name => withTypeScriptFiles(new Map([
+    ['/captured/tsconfig.json', JSON.stringify({ compilerOptions: { strict: name === 'left' }, files: [] })],
+  ]), async api => {
+    const bound = api.parseConfigFile;
+    escaped = () => bound('/captured/tsconfig.json');
+    return withTypeScript(async nested => {
+      assert.equal(nested, api);
+      const config = await nested.parseConfigFile('/captured/tsconfig.json');
+      return config.options.strict;
+    });
+  }, '/captured')));
+  assert.deepEqual(values.map(result => result.status === 'fulfilled' ? result.value : result.reason), [true, false]);
+  assert.throws(() => escaped!(), { code: 'TypeScriptScopeViolation' });
+});
+
+// @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
+test('native compiler closes after nested domain failure and cleanup preserves named primary errors', async () => {
+  const { ConcordError } = await import('../../src/model/index.ts');
+  const domainError = new ConcordError('InvalidConfigSyntax', 'domain failure');
+  await assert.rejects(withTypeScriptFiles(new Map(), () => withTypeScriptSource('test.ts', 'const answer = 42;', () => { throw domainError; })), error => error === domainError);
+  const releases: string[] = [];
+  const resource = (name: string) => ({ dispose: async () => { releases.push(name); throw new Error(`${name} cleanup`); } });
+  await assert.rejects(withTypeScriptResource(resource('outer'), () => withTypeScriptResource(resource('inner'), () => { throw domainError; })), error => {
+    assert.ok(error instanceof ConcordError);
+    assert.equal(error.code, domainError.code);
+    assert.match(JSON.stringify(error.details), /inner cleanup/u);
+    assert.match(JSON.stringify(error.details), /outer cleanup/u);
+    return true;
+  });
+  assert.deepEqual(releases, ['inner', 'outer']);
+  await assert.rejects(withTypeScriptResource(resource('success'), () => 42), { code: 'TypeScriptUnavailable' });
+  assert.equal(await withTypeScriptSource('next.ts', 'const next = 1;', source => source.statements.length), 1);
+});
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('editor verifies cleanup records only after Scope release and rejects every unconfirmed ownership state', { skip: process.platform === 'win32' }, () => Effect.runPromise(Effect.tryPromise(async () => {

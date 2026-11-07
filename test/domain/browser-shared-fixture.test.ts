@@ -8,8 +8,8 @@ import { FrozenBrowserRepository } from '../support/browser-shared-fixture.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/engineering/testing/architecture.md#浏览器与诊断
-test('frozen browser worktree recovers changed, deleted and added files without following symlinks or replacing Git state', () => Effect.runPromise(Effect.sync(() => {
-  const fixture = new FrozenBrowserRepository();
+test('frozen browser worktree recovers changed, deleted and added files without following symlinks or replacing Git state', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const fixture = (await FrozenBrowserRepository.open());
   const outside = mkdtempSync(join(tmpdir(), 'concord-browser-outside-'));
   try {
     const original = readFileSync(join(fixture.root, 'docs/taste.md'));
@@ -36,8 +36,8 @@ test('frozen browser worktree recovers changed, deleted and added files without 
 })));
 
 // @feature docs/engineering/testing/architecture.md#浏览器与诊断
-test('frozen restoration includes ignored files, index flags and configuration while leaving unchanged files and index intact', () => Effect.runPromise(Effect.sync(() => {
-  const fixture = new FrozenBrowserRepository();
+test('frozen restoration includes ignored files, index flags and configuration while leaving unchanged files and index intact', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const fixture = (await FrozenBrowserRepository.open());
   const git = (...args: string[]) => execFileSync('git', ['-C', fixture.root, ...args]);
   try {
     const unchanged = join(fixture.root, 'docs/taste.md');
@@ -81,8 +81,8 @@ test('frozen restoration includes ignored files, index flags and configuration w
 
 for (const change of ['commit', 'ref', 'detached'] as const) {
   // @feature docs/engineering/testing/architecture.md#浏览器与诊断
-  test(`frozen ${change} drift fails before restoration and retains the original worktree and index`, () => Effect.runPromise(Effect.sync(() => {
-    const fixture = new FrozenBrowserRepository();
+  test(`frozen ${change} drift fails before restoration and retains the original worktree and index`, () => Effect.runPromise(Effect.tryPromise(async () => {
+    const fixture = (await FrozenBrowserRepository.open());
     const git = (...args: string[]) => execFileSync('git', ['-C', fixture.root, ...args]);
     try {
       const path = join(fixture.root, 'docs/taste.md');

@@ -29,13 +29,13 @@ import { startViewServer } from '../e2e/server.ts';
 import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 
-export function fixture(): string {
+export async function fixture(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'concord-projection-'));
   execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
+  const repo = (await LocalRepository.open(root, { initialize: true }));
   try {
-    initialize(repo, false, { testRoots: [], sourceRoots: ['src'] });
-    createDocument(repo, 'feature', { id: 'projected', title: 'Projected feature', pages: ['architecture'] });
+    (await initialize(repo, false, { testRoots: [], sourceRoots: ['src'] }));
+    (await createDocument(repo, 'feature', { id: 'projected', title: 'Projected feature', pages: ['architecture'] }));
   } finally { repo.close(); }
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src/main.ts'), 'export const projectedValue = 1;\n');
@@ -45,8 +45,8 @@ export function fixture(): string {
 export const jsonHeaders = { 'content-type': 'application/json' };
 export const baseOf = (server: ViewServerHandle): string => `http://127.0.0.1:${server.port}`;
 
-export function interruptPublication(root: string): void {
-  const repo = new LocalRepository(root);
+export async function interruptPublication(root: string): Promise<void> {
+  const repo = (await LocalRepository.open(root));
   try {
     const path = 'docs/architecture.md';
     const before = repo.read(path)!;
@@ -58,4 +58,4 @@ export function interruptPublication(root: string): void {
   } finally { repo.close(); }
 }
 
-export const workspaceProjectionContext = (...args: Parameters<typeof identifyProjection>) => Effect.runSync(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env))));
+export const workspaceProjectionContext = async (...args: Parameters<typeof identifyProjection>) => Effect.runPromise(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env))));

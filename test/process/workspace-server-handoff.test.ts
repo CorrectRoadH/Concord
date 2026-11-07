@@ -18,7 +18,7 @@ import { recordPath, record, fixture, command, rpcModule, stop } from '../suppor
 
 // @feature docs/feature/local-data-engine/README.md
 test('C23 another installation reports a version conflict and preserves the existing service until explicit stop', { timeout: 30_000 }, async () => {
-  const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-server-handoff-'));
+  const root = (await fixture()), installation = mkdtempSync(join(tmpdir(), 'concord-server-handoff-'));
   const old = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
     privateSourceInstallation(installation);
@@ -48,7 +48,7 @@ test('C23 another installation reports a version conflict and preserves the exis
 
 // @feature docs/engineering/build/architecture.md#从源码运行
 test('source edits replace the same checkout service only after the previous owner exits', { timeout: 45_000 }, async () => {
-  const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-source-reload-'));
+  const root = (await fixture()), installation = mkdtempSync(join(tmpdir(), 'concord-source-reload-'));
   let entry = '';
   try {
     const tool = join(installation, 'source');

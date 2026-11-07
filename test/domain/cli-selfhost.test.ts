@@ -15,7 +15,7 @@ const CheckOutput = Schema.Struct({ ok: Schema.Boolean });
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('self-host application checks accept the checkout and reject a broken implementation reference', () => Effect.runPromise(Effect.promise(async () => {
   const root = resolve(".");
-  const project = readProjectConfig(root);
+  const project = (await readProjectConfig(root));
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), 'concord-selfhost-smoke-')));
   try {
     execFileSync('git', ['init', '-q', consumer]);

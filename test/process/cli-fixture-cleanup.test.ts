@@ -19,7 +19,7 @@ import { join } from 'node:path';
 test('two consumer services', async () => {
   const pids = [];
   for (const name of ['first', 'second']) {
-    const root = consumer(name);
+    const root = await consumer(name);
     await call(root, ['docs', 'check'], CheckOutput);
     pids.push(JSON.parse(readFileSync(join(root, '.git/concord/server/current.json'), 'utf8')).pid);
   }

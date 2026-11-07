@@ -4,10 +4,10 @@ import { assert, candidate, consumer, createConsumer, editing, Effect, existsSyn
 
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-test('a newly stored snapshot from an older scan does not consume a later refresh request', () => runApplication(Effect.sync(() => {
-  const root = consumer();
+test('a newly stored snapshot from an older scan does not consume a later refresh request', () => runApplication(Effect.tryPromise(async () => {
+  const root = (await consumer());
   try {
-    const context = queryContext(root, ['trace', 'gaps']);
+    const context = (await queryContext(root, ['trace', 'gaps']));
     const requestedAt = Date.now() - 100;
     storeQuery(context, candidate('obsolete', requestedAt - 1000));
     const result = spawnSync(process.execPath, [...workerEntryArgv('query-refresh-worker'), root, JSON.stringify(context.query), String(requestedAt)], { encoding: 'utf8', timeout: 30_000 });
@@ -24,7 +24,7 @@ test('packed C2 retains the consistent generation and annotates the later drifti
   const root = packedConsumer();
   let stop: (() => Promise<void>) | undefined;
   try {
-    const context = { privateDir: genericPrivateDirectorySync(root), query: ['trace', 'gaps'] as const };
+    const context = { privateDir: genericPrivateDirectorySync(root, process.env), query: ['trace', 'gaps'] as const };
     assert.equal((await refreshInstalled(root, ['trace', 'gaps'])).status, 0);
     const previous = (await packedEnvelope(root, context.query)).record;
     assert.ok(previous?.consistent);
@@ -47,10 +47,10 @@ test('packed C2 retains the consistent generation and annotates the later drifti
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('diagnostic refresh accepts absent configuration', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   try {
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);
-    const missing = queryContext(root, ['trace', 'gaps']);
+    const missing = (await queryContext(root, ['trace', 'gaps']));
     await runApplication(refreshQuery(root, missing.query, Date.now()).pipe(Effect.scoped));
     const refreshed = readQuery(missing);
     assert.equal(refreshed.record?.complete, true, JSON.stringify(refreshed));

@@ -12,12 +12,12 @@ import { writeProjectConfig, readProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md
 test('local feedback preserves connection configuration, triage filters and Issue lifecycle', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeProjectConfig(root, { feedbackConnections: [
     { id: 'github-main', provider: 'github', transport: 'api', owner: 'example', repo: 'demo', credentialEnv: 'CONCORD_TEST_MISSING_TOKEN' },
     { id: 'linear-main', provider: 'linear', team: 'TEAM', credentialEnv: 'CONCORD_TEST_MISSING_LINEAR_KEY' },
   ] });
-  assert.deepEqual(readProjectConfig(root).feedbackConnections?.map(connection => connection.provider), ['github', 'linear']);
+  assert.deepEqual((await readProjectConfig(root)).feedbackConnections?.map(connection => connection.provider), ['github', 'linear']);
   const action = (input: unknown) => runApplication(executeViewAction(root, input));
   async function query<A>(request: QueryRequest, schema: Schema.ConstraintDecoder<A, never>) {
     const reply = await runApplication(executeQuery(root, request));
@@ -51,7 +51,7 @@ test('local feedback preserves connection configuration, triage filters and Issu
   const issues = Schema.decodeUnknownSync(Issues)(await action({ action: 'issue.list', query: 'Local observation' }));
   assert.deepEqual(issues.drafts.map(item => item.metadata.id), ['observation']);
   await assert.rejects(action({ action: 'feedback.list', state: 'draft' }));
-  const config = readProjectConfig(root);
+  const config = (await readProjectConfig(root));
   const shown = await query({ name: 'config.show', input: {} }, Schema.Struct({ digest: Schema.String }));
   await action({ action: 'config.set', config: { ...config, feedbackConnections: config.feedbackConnections?.filter(connection => connection.id !== 'github-main') }, expectedDigest: shown.digest });
   assert.ok(existsSync(join(root, relative)), 'removing a connection must preserve local observations');

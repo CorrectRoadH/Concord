@@ -15,12 +15,12 @@ import { writeGhFixture } from '../support/gh-fixture.ts';
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 test('write deadline produces uncertain outcome and a fresh close observes applied state', { skip: process.platform === 'win32', timeout: 30_000 }, async () => {
-  const root = createConsumer(), scratch = mkdtempSync(join(tmpdir(), 'concord-gh-deadline-'));
+  const root = (await createConsumer()), scratch = mkdtempSync(join(tmpdir(), 'concord-gh-deadline-'));
   const bin = join(scratch, 'bin'), scenarioFile = join(scratch, 'scenario.json'), callsFile = join(scratch, 'calls.ndjson');
   writeGhFixture(bin, scenarioFile, callsFile);
   const connection = { id: 'product-gh', provider: 'github', transport: 'gh', owner: 'example', repo: 'product', repositoryId: '42' } as const;
-  const repository = new LocalRepository(root);
-  try { const config = showConfig(repository); setConfig(repository, { ...config.config, feedbackConnections: [connection] }, config.digest); }
+  const repository = (await LocalRepository.open(root));
+  try { const config = showConfig(repository); (await setConfig(repository, { ...config.config, feedbackConnections: [connection] }, config.digest)); }
   finally { repository.close(); }
   const issue = { number: 12, html_url: 'https://github.com/example/product/issues/12', title: 'Planned title', body: 'initial', state: 'open', labels: [{ name: 'old' }] };
   writeFileSync(scenarioFile, JSON.stringify({ issue, list: [], hangWrite: true })); writeFileSync(callsFile, '');

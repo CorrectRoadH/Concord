@@ -14,14 +14,14 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 // @feature docs/feature/local-sdlc/cli.md#adapter-协议
 // @name adapter-failure-invocation-diagnostics
 test('adapter collection errors retain invocation states and bounded output tails', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   let repo: LocalRepository | undefined;
   try {
     mkdirSync(join(root, 'test'), { recursive: true });
     writeFileSync(join(root, 'test/sample.ts'), '// sample\n');
     writeFileSync(join(root, 'adapter.ts'), '// external protocol boundary\n');
-    writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], testAdapters: [{ id: 'external', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: [], envNames: [] }] });
-    repo = new LocalRepository(root);
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], testAdapters: [{ id: 'external', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: [], envNames: [] }] });
+    repo = (await LocalRepository.open(root));
     const stdout = 'discarded prefix\n' + '界'.repeat(30_000) + '\nstdout last line';
     const stderr = 'discarded prefix\n' + 'x'.repeat(70_000) + '\nstderr last line';
     for (const state of [

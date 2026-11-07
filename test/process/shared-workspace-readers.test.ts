@@ -1,4 +1,5 @@
 // 跨进程保证：服务与 IPC——共享服务真实HTTP支持压缩和缓存头，RPC跨帧读取完整原文并拒绝错误instance token。
+import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.ts';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,10 +11,10 @@ import { LocalRepository } from '../support/repository.ts';
 import { sharedWorkspace, type SharedWorkspace } from '../support/shared-service.ts';
 import { writeProjectConfig } from '../support/support.ts';
 
-function sourceFixture(workspace: SharedWorkspace, id: string, title: string, source = `// @concord-code\n// @concord-implements docs/feature/${id}/README.md\nexport function cachedCode() { return true; }\n`): void {
+async function sourceFixture(workspace: SharedWorkspace, id: string, title: string, source = `// @concord-code\n// @concord-implements docs/feature/${id}/README.md\nexport function cachedCode() { return true; }\n`): Promise<void> {
   writeProjectConfig(workspace.root, { testRoots: [], sourceRoots: ['src'] });
-  const repo = new LocalRepository(workspace.root);
-  try { createDocument(repo, 'feature', { id, title, pages: ['architecture'] }); }
+  const repo = (await LocalRepository.open(workspace.root));
+  try { (await createDocument(repo, 'feature', { id, title, pages: ['architecture'] })); }
   finally { repo.close(); }
   mkdirSync(join(workspace.root, 'src'), { recursive: true });
   writeFileSync(join(workspace.root, 'src/main.ts'), source);
@@ -22,7 +23,7 @@ function sourceFixture(workspace: SharedWorkspace, id: string, title: string, so
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('workbench compresses workspace data and caches fingerprinted assets only', async () => {
   await (await sharedWorkspace()).run(async workspace => {
-    sourceFixture(workspace, 'cached', 'Cached');
+    (await sourceFixture(workspace, 'cached', 'Cached'));
     await workspace.ready();
     const compressed = await workspace.http('/api/workspace', { headers: { 'Accept-Encoding': 'gzip' } });
     assert.equal(compressed.status, 200);
@@ -47,25 +48,25 @@ test('workbench compresses workspace data and caches fingerprinted assets only',
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('HTTP Git status does not scan workspace documents or source declarations', async () => {
   await (await sharedWorkspace()).run(async workspace => {
-    sourceFixture(workspace, 'cached', 'Cached');
-    const files = LocalRepository.prototype.files;
+    (await sourceFixture(workspace, 'cached', 'Cached'));
+    const files = RepositoryBase.prototype.files;
     let walks = 0;
-    LocalRepository.prototype.files = function(path) { walks += 1; return files.call(this, path); };
+    RepositoryBase.prototype.files = function(path) { walks += 1; return files.call(this, path); };
     try {
       const response = await workspace.http('/api/git');
       assert.equal(response.status, 200);
       assert.match(response.body, /src\/main.ts/);
       assert.equal(walks, 0, 'Git refresh must not compile the entire workspace');
-    } finally { LocalRepository.prototype.files = files; }
+    } finally { RepositoryBase.prototype.files = files; }
   });
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('/api/file resolves directed current owners without a workspace-wide scan', async () => {
   await (await sharedWorkspace()).run(async workspace => {
-    sourceFixture(workspace, 'projected', 'Projected feature', 'export const projectedValue = 1;\n');
-    const repo = new LocalRepository(workspace.root);
-    try { createDocument(repo, 'issue', { id: 'sample-issue', title: 'Sample issue' }); }
+    (await sourceFixture(workspace, 'projected', 'Projected feature', 'export const projectedValue = 1;\n'));
+    const repo = (await LocalRepository.open(workspace.root));
+    try { (await createDocument(repo, 'issue', { id: 'sample-issue', title: 'Sample issue' })); }
     finally { repo.close(); }
     const document = await workspace.http(`/api/file?path=${encodeURIComponent('docs/feature/projected/README.md')}`);
     assert.equal(document.status, 200, document.body);

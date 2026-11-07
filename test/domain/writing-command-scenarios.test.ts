@@ -11,7 +11,7 @@ import { query } from '../support/application-fixture.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('writing checks consumer policy, readable prose and safe input boundaries while excluding SVG', async () => {
- const root = createConsumer();
+ const root = (await createConsumer());
  try {
  const reportSchema = Schema.Struct({ ok: Schema.Boolean, files: Schema.Int, findings: Schema.Array(Schema.Struct({ file: Schema.String, line: Schema.Int, rule: Schema.String, message: Schema.String })) });
  const policy = {

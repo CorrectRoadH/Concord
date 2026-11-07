@@ -13,9 +13,9 @@ import { waitForWorkspaceProjection } from '../support/support.ts';
 test('incomplete workspace notice opens health diagnostics and dismisses without hiding findings', { tags: ['journey'] }, async fixtures => {
   const { page, workspace } = fixtures;
   const root = workspace.root;
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'engineering', { id: 'health', title: 'Health example' });
+    (await createDocument(repo, 'engineering', { id: 'health', title: 'Health example' }));
   } finally { repo.close(); }
   mkdirSync(join(root, 'docs/feature/broken'));
   writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\nid: broken\n---\n');
@@ -36,9 +36,9 @@ test('incomplete workspace notice opens health diagnostics and dismisses without
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('polling reads the workspace cache with jobs and serializes slow reads', async ({ page, workspace }) => {
   const root = workspace.root;
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'engineering', { id: 'polling', title: 'Polling study' });
+    (await createDocument(repo, 'engineering', { id: 'polling', title: 'Polling study' }));
   } finally { repo.close(); }
   const server = await workspace.ready();
 

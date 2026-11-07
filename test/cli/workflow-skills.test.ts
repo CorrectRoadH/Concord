@@ -20,7 +20,7 @@ const runCase = (body: (root: string) => Effect.Effect<void, unknown, Requiremen
   })).pipe(Effect.provide(NodeServices.layer)),
 );
 const cli = Effect.fn('test.workflowSkills.cli')(function*(root: string, args: string[], status = 0, json = true) {
-  const { stdout, stderr, exitCode: code } = yield* Effect.promise(() => runCli({
+  const { stdout, stderr, exitCode: code } = yield* Effect.promise(async () => runCli({
     argv: [...(args.includes('--skill') ? [] : ['--root', root]), ...(json ? ['--json'] : []), ...args],
     cwd: root, env: process.env,
   }));

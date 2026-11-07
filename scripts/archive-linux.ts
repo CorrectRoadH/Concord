@@ -110,6 +110,16 @@ export const relocateElf = Effect.fn('archive.relocateElf')(function*(file: stri
   yield* fs.rename(staged, file);
 }, Effect.scoped);
 
+/** Pure glibc executables need no library relocation. In particular, moving
+ * Bun's version-definition section with patchelf can invalidate DT_VERDEF. */
+export const relocateLinuxElf = Effect.fn('archive.relocateLinuxElf')(function*(file: string, libraryRoot: string, inspection: string) {
+  const info = parseElf(inspection);
+  if (!info.needed.some(name => !systemLibraries.has(name))) return false;
+  const path = relative(dirname(file), libraryRoot).split('\\').join('/');
+  yield* relocateElf(file, path ? `$ORIGIN/${path}` : '$ORIGIN', info.interpreter !== undefined);
+  return true;
+});
+
 export const closeLinuxRuntime = Effect.fn('archive.linuxClosure')(function*(root: string, libraryDirectory?: string) {
   const fs = yield* FileSystem.FileSystem;
   const source = libraryDirectory ? { libraries: libraryDirectory, licenses: join(libraryDirectory, 'licenses') } : yield* ubuntuRuntimeLibraries();
@@ -147,8 +157,7 @@ export const closeLinuxRuntime = Effect.fn('archive.linuxClosure')(function*(roo
         files.push(join(libraryRoot, dependency));
       }
     }
-    const path = relative(dirname(file), libraryRoot).split('\\').join('/');
-    yield* relocateElf(file, path ? `$ORIGIN/${path}` : '$ORIGIN', info.interpreter !== undefined);
+    yield* relocateLinuxElf(file, libraryRoot, text);
   }
   files = yield* archiveElfFiles(root);
   for (const file of files) {
@@ -157,6 +166,7 @@ export const closeLinuxRuntime = Effect.fn('archive.linuxClosure')(function*(roo
     const info = parseElf(text);
     if (info.interpreter && info.interpreter !== '/lib64/ld-linux-x86-64.so.2') return yield* new ArchiveFailed({ message: `Invalid ELF interpreter: ${file}` });
     for (const needed of info.needed) if (!systemLibraries.has(needed) && !(yield* fs.exists(join(libraryRoot, needed)))) return yield* new ArchiveFailed({ message: `Unresolved ELF dependency: ${needed}` });
+    if (info.needed.some(name => !systemLibraries.has(name)) && info.paths.length === 0) return yield* new ArchiveFailed({ message: `Non-glibc ELF dependency requires an archive RPATH: ${file}` });
     for (const path of info.paths) {
       if (!/^\$ORIGIN(?:\/.*)?$/u.test(path) || resolve(dirname(file), path.replace(/^\$ORIGIN\/?/u, '')) !== resolve(libraryRoot)) return yield* new ArchiveFailed({ message: `ELF RPATH escapes runtime/lib: ${file}: ${path}` });
     }

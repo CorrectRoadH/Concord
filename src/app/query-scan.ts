@@ -14,12 +14,12 @@ export const scanQueryProcess = Effect.fn('query.scanProcess')(function*(root: s
   return yield* Effect.gen(function*() {
       const query = yield* Effect.try({ try: () => Schema.decodeUnknownSync(Query, { onExcessProperty: 'error' })(JSON.parse(rawQuery ?? 'null')), catch: cause => cause });
       const repo = yield* openReadRepository(root, { access: 'read', optimistic: true, dryRun: true });
-      return yield* Effect.try({ try: () => {
-        const observed = repo.observeProjection(() => scanQueryValue(repo, query));
+      return yield* Effect.tryPromise({ try: async () => {
+        const observed = await repo.observeProjection(() => scanQueryValue(repo, query));
         return decodeQueryScanMessage({ format: 'concord.query-scan/v1', ok: true, scannedAt, finishedAt: Date.now(),
           value: stripQueryBodies(observed.value.value), complete: observed.value.complete, unknown: observed.value.unknown,
           drift: { ...observed.drift, files: [...new Set([...observed.drift.files, ...observed.value.files])].sort() } });
-      }, catch: cause => cause });
+      }, catch: cause => cause }).pipe(Effect.uninterruptible);
   }).pipe(Effect.scoped, Effect.catch(cause => Effect.sync(() => {
       const error = cause instanceof ConcordError ? cause : new ConcordError('QueryScanFailed', cause instanceof Error ? cause.message : String(cause));
       const details = Schema.decodeUnknownExit(Schema.Json)(error.details);

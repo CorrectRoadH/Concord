@@ -17,7 +17,7 @@ async function call(root: string, args: readonly string[], status = 0) {
 }
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
 test('packed close fixed prints commit evidence, deletes the Issue, and verifies explicit commits without writing', async t => {
-  const f = createFixConsumer(); t.after(async () => { await stopCliWorkspace(f.root); rmSync(f.root, { recursive: true, force: true }); });
+  const f = (await createFixConsumer()); t.after(async () => { await stopCliWorkspace(f.root); rmSync(f.root, { recursive: true, force: true }); });
   const receipts = join(f.root, '.git/concord/evidence'); mkdirSync(receipts, { recursive: true });
   writeFileSync(join(receipts, 'historical.json'), 'preserved legacy receipt');
   writeFileSync(join(f.root, 'concord.repository.json'), '{legacy-profile-is-not-current-input');
@@ -45,7 +45,7 @@ test('packed verification rejects green defects and failing fix candidates witho
     ['green defect', { greenAtDefect: true }, 'FixUnverifiable'],
     ['unfixed target', {}, 'FixVerificationFailed'],
   ] as const) await t.test(name, async () => {
-    const f = createFixConsumer(options); try {
+    const f = (await createFixConsumer(options)); try {
       writeFileSync(join(f.root, 'candidate.txt'), 'Candidate after the regression commit\n');
       const candidate = gitCommit(f.root, 'candidate without a fix');
       assert.equal(gitCommand(f.root, 'rev-parse', `${candidate}^`), f.defect);
@@ -57,7 +57,7 @@ test('packed verification rejects green defects and failing fix candidates witho
 });
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
 test('packed close fixed accepts a parallel commit and records the initially captured fix', async t => {
-  const f = createFixConsumer({ runner: 'move-head' });
+  const f = (await createFixConsumer({ runner: 'move-head' }));
   t.after(async () => { await stopCliWorkspace(f.root); rmSync(f.root, { recursive: true, force: true }); });
   const fix = f.fix();
   const closed = await call(f.root, ['issue', 'close', 'sku', '--fixed', '--reason', 'Accumulate quantities']);
@@ -70,7 +70,7 @@ test('packed close fixed accepts a parallel commit and records the initially cap
 });
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 test('packed close fixed returns FileChangedSinceRead and preserves an Issue edited during verification', async t => {
-  const f = createFixConsumer({ runner: 'edit-issue' });
+  const f = (await createFixConsumer({ runner: 'edit-issue' }));
   t.after(async () => { await stopCliWorkspace(f.root); rmSync(f.root, { recursive: true, force: true }); });
   f.fix();
   const path = join(f.root, 'docs/issues/sku.md');

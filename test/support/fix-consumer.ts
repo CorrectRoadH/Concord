@@ -8,7 +8,7 @@ import { renderTypeScriptConfig } from "../../src/base/workspace/index.ts";
 
 export const gitCommand = (root: string, ...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_AUTHOR_NAME: 'Concord', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Concord', GIT_COMMITTER_EMAIL: 'test@example.invalid' } }).trim();
 export const gitCommit = (root: string, message: string) => { gitCommand(root, 'add', '.'); gitCommand(root, 'commit', '-qm', message); return gitCommand(root, 'rev-parse', 'HEAD'); };
-export function createFixConsumer(options: { greenAtDefect?: boolean; runnerSource?: boolean; runner?: 'timeout' | 'zero' | 'skipped' | 'signal' | 'move-head' | 'edit-issue' | 'edit-config'; } = {}) {
+export async function createFixConsumer(options: { greenAtDefect?: boolean; runnerSource?: boolean; runner?: 'timeout' | 'zero' | 'skipped' | 'signal' | 'move-head' | 'edit-issue' | 'edit-config'; } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'concord-fix-'));
   gitCommand(root, 'init', '-q');
   mkdirSync(join(root, 'docs/feature/cart'), { recursive: true });
@@ -16,7 +16,7 @@ export function createFixConsumer(options: { greenAtDefect?: boolean; runnerSour
   writeFileSync(join(root, 'docs/taste.md'), readFileSync(new URL('../../templates/taste.md', import.meta.url), 'utf8'));
   writeFileSync(join(root, 'docs/feature/cart/README.md'), '# Cart\n');
   writeFileSync(join(root, 'docs/issues/sku.md'), '# SKU accumulation\n');
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig({ ...repo.configSnapshot.config, testRoots: ['test'], sourceRoots: ['src'], runner: { kind: 'node-test', sourceFiles: options.runnerSource ? ['runner.ts'] : [], timeoutMs: options.runner === 'timeout' ? 50 : 5000 } }));
   mkdirSync(join(root, 'src'), { recursive: true }); mkdirSync(join(root, 'test'), { recursive: true });
   writeFileSync(join(root, 'src/cart.ts'), `export const quantity = ${options.greenAtDefect ? 2 : 1};\n`);

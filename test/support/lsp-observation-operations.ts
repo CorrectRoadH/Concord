@@ -17,7 +17,7 @@ export async function query<A>(root: string, request: QueryRequest, schema: Sche
   } finally { if (prior === undefined) delete process.env.LANG; else process.env.LANG = prior; }
 }
 export async function analyze(root: string) {
-  const repo = new LocalRepository(root, { optimistic: true });
+  const repo = (await LocalRepository.open(root, { optimistic: true }));
   try { return Schema.decodeUnknownSync(analysis, { onExcessProperty: 'ignore' })(await runApplication(analyzeCode(repo))); }
   finally { repo.close(); }
 }

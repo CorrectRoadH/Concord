@@ -13,8 +13,8 @@ import { makeComputationOwner } from '../../src/entry/server/main.ts';
 import { fixture, useCasePath } from '../support/document-cache-fixture.ts';
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('metadata stays lazy and one tree serves repeated and duplicate requests without persistent document state', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), counts = join(root, 'parse-counts.jsonl');
+test('metadata stays lazy and one tree serves repeated and duplicate requests without persistent document state', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await fixture()), counts = join(root, 'parse-counts.jsonl');
   const probe = (mode?: 'off' | 'metadata') => {
     const child = spawnSync(process.execPath, ['--import', fileURLToPath(new URL('../support/parse-count-probe.ts', import.meta.url)), fileURLToPath(new URL('../support/parse-cache-source-probe.ts', import.meta.url)), root, ...(mode === undefined ? [] : [mode])], {
       encoding: 'utf8', timeout: 60_000, env: { ...process.env, CONCORD_TEST_PARSE_COUNTS: counts },
@@ -44,10 +44,10 @@ test('metadata stays lazy and one tree serves repeated and duplicate requests wi
 // @feature docs/engineering/code/architecture.md#基础服务
 // @issue docs/issues/test-architecture-gaps.md
 test('one real compute retains parsed source between requests and rebuilds after source changes', async () => {
-  const root = fixture(), counts = join(root, 'parse-counts.jsonl');
+  const root = (await fixture()), counts = join(root, 'parse-counts.jsonl');
   const preload = fileURLToPath(new URL('../support/parse-count-probe.ts', import.meta.url));
   const environment = Object.fromEntries(Object.entries({ ...process.env,
-    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${preload}`.trim(), CONCORD_TEST_PARSE_COUNTS: counts,
+    BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${preload}`.trim(), CONCORD_TEST_PARSE_COUNTS: counts,
   }).filter((entry): entry is [string, string] => entry[1] !== undefined));
   const runtime = makeRuntimeEnvironment(root, environment);
   const calls = () => readFileSync(counts, 'utf8').trim().split('\n')

@@ -24,7 +24,7 @@ vp run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <co
 
 省略 `--compare` 时只测候选产物，判定只包含样本有效性、刷新上限，以及声明 `--reference` 时的绝对预算。
 
-`bench:profile <场景 ID>` 用 V8 CPU profiler 和 fs 调用计数执行该场景的一次 `run`，`bench:profile cli` 对任意一条命令做同样的 profile。Concord 启动的嵌套 Node 进程同样产出 profile。profile 用于定位热点，wall time 含 profiler 开销，只用于 profile 之间比较，不作为预算或上限证据。profile 未指定 `--out` 时，在系统临时目录创建输出目录并保留。
+`bench:profile <场景 ID>` 用 Bun CPU profiler 和 fs 调用计数执行该场景的一次 `run`，`bench:profile cli` 对任意一条命令做同样的 profile。Concord 启动的内部 Bun 进程同样产出 profile。profile 用于定位热点，wall time 含 profiler 开销，只用于 profile 之间比较，不作为预算或上限证据。profile 未指定 `--out` 时，在系统临时目录创建输出目录并保留。
 
 ## 常用组合
 

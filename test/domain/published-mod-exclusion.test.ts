@@ -12,20 +12,20 @@ import { LocalRepository } from '../support/repository.ts';
 import { writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('published mod files stay outside Concord source, tests and document checks', () => Effect.runPromise(Effect.sync(() => {
-  const root = createConsumer();
+test('published mod files stay outside Concord source, tests and document checks', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = (await createConsumer());
   try {
     writeProjectConfig(root, project);
-    const inspect = () => {
-      const repo = new LocalRepository(root);
+    const inspect = async () => {
+      const repo = (await LocalRepository.open(root));
       try {
-        const checked = checkProject(repo, 'off');
+        const checked = (await checkProject(repo, 'off'));
         return { ok: checked.ok, complete: checked.complete, findings: checked.findings, documents: checked.documents,
           cases: checked.cases, codeDeclarations: checked.codeDeclarations,
-          sourceFiles: scanCode(repo, { cache: 'off' }).files, testFiles: scanAnnotations(repo, { cache: 'off' }).files };
+          sourceFiles: (await scanCode(repo, { cache: 'off' })).files, testFiles: (await scanAnnotations(repo, { cache: 'off' })).files };
       } finally { repo.close(); }
     };
-    const before = inspect();
+    const before = (await inspect());
     for (const [path, text] of [
       ['concord/mods/concord/main.js', '// @concord-file\n// @concord-implements docs/feature/missing/README.md\nexport const generated = true;'],
       ['concord/test/decoy.test.ts', '// @feature docs/feature/missing/README.md\ntest("generated", () => {});'],
@@ -33,7 +33,7 @@ test('published mod files stay outside Concord source, tests and document checks
       ['concord/docs/feature/missing/README.md', '---\ninvalid: managed document\n---\n'],
     ]) { const target = join(root, path!); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, text!); }
     assert.equal(before.ok, true);
-    assert.deepEqual(inspect(), before);
+    assert.deepEqual((await inspect()), before);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 

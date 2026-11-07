@@ -17,7 +17,7 @@ const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @feature docs/feature/portable-coordination/README.md
 test('publication view verifies asynchronous validation and seals bytes, membership and metadata together', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeFileSync(join(root, 'docs/input.md'), '# Before\n');
   try {
     await Effect.runPromise(Effect.gen(function*() {
@@ -64,7 +64,7 @@ test('publication view verifies asynchronous validation and seals bytes, members
 
 // @feature docs/feature/portable-coordination/README.md
 test('publication view rejects precommit drift and never seals failed validation', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeFileSync(join(root, 'docs/input.md'), '# Before\n');
   try {
     await Effect.runPromise(Effect.gen(function*() {
@@ -104,7 +104,7 @@ test('publication view rejects precommit drift and never seals failed validation
 
 // @feature docs/feature/portable-coordination/README.md
 test('publication view cannot use another workspace lease, a released lease or an unbound sibling', async () => {
-  const root = createConsumer(), other = createConsumer();
+  const root = (await createConsumer()), other = (await createConsumer());
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const sources = yield* Sources, publication = yield* Publication;

@@ -1,25 +1,8 @@
-import { refreshQuery } from "../../app/index.ts";
+// @concord-file
+// @concord-implements docs/engineering/build/architecture.md#编译入口
+import { pathToFileURL } from 'node:url';
+import { run } from './query-refresh-worker-main.ts';
 
-import { realpathSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
-import { NodeRuntime } from "@effect/platform-node";
-import { runRefreshMain } from './main.ts';
-import { Effect, Schema } from "effect";
-
-
-import { Query } from "../../app/index.ts";
-
-
-
-
-
-if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  runRefreshMain(Effect.gen(function*() {
-    const query = yield* Schema.decodeUnknownEffect(Query)(JSON.parse(process.argv[3] ?? 'null'));
-    const positive = Schema.Number.check(Schema.isGreaterThan(0));
-    const requestedAt = yield* Schema.decodeUnknownEffect(positive)(Number(process.argv[4]));
-    const limitMs = yield* Schema.decodeUnknownEffect(positive)(Number(process.argv[5] ?? 120_000));
-    yield* refreshQuery(process.argv[2], query, requestedAt, limitMs);
-  }).pipe(Effect.scoped));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await run();
 }

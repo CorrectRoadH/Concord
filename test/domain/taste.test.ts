@@ -17,12 +17,12 @@ const parserRuntime = makeParserRuntime(process.cwd(), process.env);
 
 const source = '# Taste\n\n## General {#general}\n\n1. Read first. {#general-read}\n\n## T-1 Keep one owner {#t-1}\n\nPrefer one source.\n\n## T-8 Read clearly {#t-8}\n';
 const code = (name: string) => (error: unknown) => error instanceof Error && 'code' in error && error.code === name;
-function fixture(run: (repo: LocalRepository, write: (path: string, body: string) => void) => void): void {
+async function fixture(run: (repo: LocalRepository, write: (path: string, body: string) => void) => void): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'concord-taste-'));
   execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   const write = (path: string, body: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), body); };
-  try { run(repo, write); } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
+  try { await run(repo, write); } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 }
 
 // @use-case docs/feature/taste/use-case/write-taste.md
@@ -37,7 +37,7 @@ test('taste uses current Markdown entries and general IDs without adoption state
 });
 
 // @use-case docs/feature/taste/use-case/cite-taste.md
-test('taste derives ordered references from inline links and never writes', () => fixture((repo, write) => {
+test('taste derives ordered references from inline links and never writes', async () => (await fixture((repo, write) => {
   write('docs/taste.md', source);
   write('docs/feature/cart/README.md', '# Cart\n\nUse [owner](../../taste.md#t-1) and [read](../../taste.md#general-read).\n');
   write('docs/_template/example.md', '[ignored](../taste.md#missing)\n');
@@ -45,42 +45,42 @@ test('taste derives ordered references from inline links and never writes', () =
   assert.equal(result.operation, 'taste');
   assert.deepEqual(result.references, [{ path: 'docs/feature/cart/README.md', line: 3, entry: 't-1' }, { path: 'docs/feature/cart/README.md', line: 3, entry: 'general-read' }]);
   assert.equal(repo.read('docs/taste.md'), source);
-}));
+})));
 
 // @use-case docs/feature/taste/use-case/remove-cited-entry.md
-test('missing taste is advisory and removed entries fail Feature and Design pages', () => fixture((repo, write) => {
+test('missing taste is advisory and removed entries fail Feature and Design pages', async () => (await fixture(async (repo, write) => {
   assert.deepEqual(inspectTaste(repo).findings.map(finding => finding.code), ['TasteMissing']);
-  const missing = checkProject(repo, 'off');
+  const missing = (await checkProject(repo, 'off'));
   assert.ok(!missing.findings.some(finding => finding.code === 'TasteMissing'));
   assert.ok(missing.advisories.some(finding => finding.code === 'TasteMissing'));
   write('docs/taste.md', `${source}\n## T-99 Shared rule {#t-99}\n\nKeep references valid.\n`);
   write('docs/design/store.md', '# Store\n\nUse [removed](../taste.md#t-99).\n');
   write('docs/feature/cart/README.md', '# Cart\n\nUse [removed](../../taste.md#t-99).\n');
-  assert.equal(checkProject(repo, 'off').ok, true);
+  assert.equal((await checkProject(repo, 'off')).ok, true);
   write('docs/taste.md', source);
-  const result = checkProject(repo, 'off');
+  const result = (await checkProject(repo, 'off'));
   assert.deepEqual(result.findings.filter(finding => finding.code === 'AnchorNotFound').map(finding => [finding.path, finding.line]), [['docs/design/store.md', 3], ['docs/feature/cart/README.md', 3]]);
   write('docs/design/store.md', '# Store\n\nUse [owner](../taste.md#t-1).\n');
   write('docs/feature/cart/README.md', '# Cart\n\nUse [owner](../../taste.md#t-1).\n');
-  assert.equal(checkProject(repo, 'off').ok, true);
+  assert.equal((await checkProject(repo, 'off')).ok, true);
   write('docs/feature/cart/README.md', '# Cart\n\nUse [invalid](../../taste.md?query#t-1).\n');
   assert.throws(() => tasteShow(repo), code('TasteLinkInvalid'));
-}));
+})));
 
 // @use-case docs/feature/taste/use-case/change-taste.md
-test('editing a cited taste preserves its ID and immediately changes current results without side records', () => Effect.runPromise(Effect.sync(() => withConsumer((repo, root) => {
+test('editing a cited taste preserves its ID and immediately changes current results without side records', () => Effect.runPromise(Effect.tryPromise(async () => (await withConsumer(async (repo, root) => {
   const path = 'docs/taste.md';
   const initialized = readFileSync(join(root, path), 'utf8');
-  setMarkdown(repo, path, source, digest(initialized));
+  (await setMarkdown(repo, path, source, digest(initialized)));
   const entry = tasteShow(repo).entries.find(entry => entry.kind === 'taste')!;
-  createDocument(repo, 'feature', { id: 'cart', title: 'Cart', body: `# Cart\n\nUse [taste](../../taste.md#${entry.id}).\n` });
+  (await createDocument(repo, 'feature', { id: 'cart', title: 'Cart', body: `# Cart\n\nUse [taste](../../taste.md#${entry.id}).\n` }));
   const before = repo.files('docs').sort();
   const updated = source.replace(entry.title, 'A revised project preference');
-  setMarkdown(repo, path, updated, digest(source));
+  (await setMarkdown(repo, path, updated, digest(source)));
   const result = tasteShow(repo);
   assert.equal(result.entries.find(candidate => candidate.id === entry.id)?.title, 'A revised project preference');
   assert.deepEqual(result.references, [{ path: 'docs/feature/cart/README.md', line: 3, entry: entry.id }]);
-  assert.equal(checkProject(repo, 'off').ok, true);
+  assert.equal((await checkProject(repo, 'off')).ok, true);
   assert.equal(readFileSync(join(root, path), 'utf8'), updated);
   assert.deepEqual(repo.files('docs').sort(), before);
-}))));
+})))));

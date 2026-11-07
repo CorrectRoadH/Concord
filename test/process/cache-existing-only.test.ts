@@ -12,10 +12,10 @@ import { installedConcordCli } from '../support/support.ts';
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/exit-hang-after-output.md
-test('C15 dry-run cold show returns the current source without creating a persistent cache', () => {
-  const root = createConsumer();
-  const repo = new LocalRepository(root);
-  try { createDocument(repo, 'feature', { id: 'cold-show', title: 'Cold show', body: 'Current source.\n' }); }
+test('C15 dry-run cold show returns the current source without creating a persistent cache', async () => {
+  const root = (await createConsumer());
+  const repo = (await LocalRepository.open(root));
+  try { (await createDocument(repo, 'feature', { id: 'cold-show', title: 'Cold show', body: 'Current source.\n' })); }
   finally { repo.close(); }
   const path = 'docs/feature/cold-show/README.md', database = join(root, '.git/concord/cache.hawdb');
   try {

@@ -16,9 +16,9 @@ const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((workspace: Brows
 
   let server: ViewServerHandle | undefined;
 
-  const repo = new LocalRepository(root);
+  const repo = (await LocalRepository.open(root));
   try {
-    createDocument(repo, 'feature', { id: 'watch', title: 'Watch fixture', body: '# Watch fixture\n\nOriginal body.\n' });
+    (await createDocument(repo, 'feature', { id: 'watch', title: 'Watch fixture', body: '# Watch fixture\n\nOriginal body.\n' }));
   } finally { repo.close(); }
   if (incomplete) {
     mkdirSync(join(root, 'docs/feature/broken'));
@@ -76,9 +76,9 @@ test('cached workspace polls every four seconds with independent Git cadence and
     const target = window as typeof window & { pollReads: { path: string; at: number; completed: boolean }[] };
     target.pollReads = [];
     const fetch = window.fetch.bind(window);
-    window.fetch = async (input, init) => {
+    window.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const path = typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
-      if (!['/api/workspace', '/api/git', '/api/jobs'].includes(path)) return fetch(input, init);
+      if (!['/api/workspace', '/api/git', '/api/jobs'].includes(path)) return (await fetch(input, init));
       const read = { path, at: Date.now(), completed: false };
       target.pollReads.push(read);
       const response = await fetch(input, init);
@@ -89,7 +89,7 @@ test('cached workspace polls every four seconds with independent Git cadence and
         finally { read.completed = true; }
       };
       return response;
-    };
+    }, window.fetch);
   });
   let workspaceReads = 0, gitReads = 0, jobsReads = 0, activeReads = 0, maximumReads = 0;
   let pending = false;

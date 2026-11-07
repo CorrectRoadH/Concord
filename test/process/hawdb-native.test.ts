@@ -360,14 +360,14 @@ if (childRole) {
       writeFileSync(binary, Buffer.concat([readFileSync(binary), Buffer.from('digest mismatch')]));
       const script = `
         import fs from 'node:fs';
-        import { syncBuiltinESMExports } from 'node:module';
+        import { mock as bunMock } from 'bun:test';
         const [module, binary, original] = process.argv.slice(1);
         const { hawdbIdentity } = await import(module);
         const runtime = { cwd: process.cwd(), env: { ...process.env } };
         const read = fs.readFileSync;
         let reads = 0, failures = 0;
         fs.readFileSync = function(path, ...args) { if (path === binary) reads++; return read.call(this, path, ...args); };
-        syncBuiltinESMExports();
+        bunMock.module('node:fs', () => ({ ...fs, default: fs }));
         for (let i = 0; i < 100; i++) { try { hawdbIdentity(runtime); } catch (error) { if (error.code !== 'HawdbIncompatible') throw error; failures++; } }
         const failedReads = reads;
         fs.writeFileSync(binary + '.repair', read(original)); fs.renameSync(binary + '.repair', binary);

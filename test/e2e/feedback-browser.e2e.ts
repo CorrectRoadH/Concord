@@ -25,12 +25,12 @@ test('feedback browser separates remote observations from local editing and prot
   process.env.CONCORD_BROWSER_MISSING_TOKEN='';
   try {
     execFileSync('git',['init','-q',root]);
-    const repo=new LocalRepository(root,{initialize:true});
+    const repo=(await LocalRepository.open(root,{initialize:true}));
     try {
-      initialize(repo,false,{testRoots:[]});
+      (await initialize(repo,false,{testRoots:[]}));
       openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: false, create: true }, nativeRuntime).close();
-      createDocument(repo,'feature',{id:'target',title:'Feedback target'});
-      createDocument(repo,'issue',{id:'remote-observation',title:'Local title retained',body:'Local notes retained.'});
+      (await createDocument(repo,'feature',{id:'target',title:'Feedback target'}));
+      (await createDocument(repo,'issue',{id:'remote-observation',title:'Local title retained',body:'Local notes retained.'}));
       const document=loadDocuments(repo).find(item=>item.metadata.id==='remote-observation');
       assert.ok(document && document.metadata.kind==='issue');
       const source:FeedbackSource={provider:'github',instance:'https://api.github.com',id:'123',url:'https://github.com/example/demo/issues/7',title:'Original remote title',body:'Original remote body',state:'open',updatedAt:'2026-09-13T00:00:00.000Z',connectionId:'fixture',importedAt:'2026-09-13T01:00:00.000Z'};
@@ -55,7 +55,7 @@ test('feedback browser separates remote observations from local editing and prot
     await page.getByLabel('GitHub owner',{exact:true}).fill('example');
     await page.getByLabel('GitHub repository',{exact:true}).fill('demo');
     const configPath=join(root,projectConfigPath(root));
-    const config=readProjectConfig(root);
+    const config=(await readProjectConfig(root));
     writeProjectConfig(root,{...config,sourceRoots:['external-source']});
     const external=readFileSync(configPath,'utf8');
     await page.getByRole('button',{name:'添加',exact:true}).click();
@@ -73,7 +73,7 @@ test('feedback browser separates remote observations from local editing and prot
     await page.getByRole('button',{name:'添加',exact:true}).click();
     await expect(page.getByRole('dialog')).not.toBeVisible();
     await connectionAdded;
-    await expect.poll(()=>readProjectConfig(root).feedbackConnections?.[0]?.id).toBe('browser-github');
+    await expect.poll(async ()=>(await readProjectConfig(root)).feedbackConnections?.[0]?.id).toBe('browser-github');
     await expect(page.getByRole('tabpanel',{name:'反馈来源'}).getByRole('status')).toHaveText('已自动保存');
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);
     await page.getByRole('button',{name:'同步',exact:true}).click();
@@ -160,7 +160,7 @@ test('feedback browser separates remote observations from local editing and prot
     const connectionRemoved = browserActionReceipt(page, 'config.set', input => !JSON.stringify(input.config).includes('browser-github'));
     await page.getByRole('button',{name:'移除连接 browser-github'}).click();
     await connectionRemoved;
-    await expect.poll(()=>readProjectConfig(root).feedbackConnections?.length).toBe(0);
+    await expect.poll(async ()=>(await readProjectConfig(root)).feedbackConnections?.length).toBe(0);
     await expect(page.getByRole('status').filter({ hasText: '已自动保存' })).toBeVisible();
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);
     await expect(page.getByRole('link').filter({hasText:'Local title retained'})).toBeVisible();

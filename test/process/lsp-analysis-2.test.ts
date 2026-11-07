@@ -3,10 +3,10 @@ import { sourceCli, createDocument, createConsumer, installedConcordCli, assert,
 
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
 // @issue docs/issues/test-architecture-gaps.md
-test('installed CLI exposes a real language server observation through code, test and trace commands', () => {
-  const root = consumer();
+test('installed CLI exposes a real language server observation through code, test and trace commands', async () => {
+  const root = (await consumer());
   try {
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...server(), budgets: { totalMs: 20_000, requestMs: 5000 } }] });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [{ ...server(), budgets: { totalMs: 20_000, requestMs: 5000 } }] });
     const observed = call(root, ['code', 'analyze'], analysis).observations.find(value => value.value.analyzer === 'python-fixture')!;
     const id = observed.value.dependencies[0]!.testId;
     for (const args of [['code', 'list'], ['test', 'show', id], ['trace', 'show', target]]) {

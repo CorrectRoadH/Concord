@@ -1,4 +1,5 @@
 export { measureScan } from './scan-timing.ts';
+export { measureScanAsync } from './scan-timing.ts';
 export type { ScanTiming } from './scan-timing.ts';
 export { Sources } from './service.ts';
 export { SourceSnapshot } from './source-snapshot.ts';

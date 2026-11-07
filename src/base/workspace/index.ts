@@ -26,6 +26,6 @@ export type { WorkspaceService } from './service.ts';
 export { WorkspaceContext } from './context.ts';
 export type { WorkspaceMetadata, WorkspaceOpenOptions } from './context.ts';
 
-export { readRepositoryBytesSync } from './storage.ts';
+export { readRepositoryBytes } from './storage.ts';
 
 export { repositoryRuntime } from './repository-runtime.ts';

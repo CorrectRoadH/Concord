@@ -18,11 +18,11 @@ test('a late successful concepts index preserves the newer writing report', ({ p
   let release: (() => void) | undefined;
   try {
     const scope = 'docs/feature/beta';
-    const repo = new LocalRepository(root);
+    const repo = (await LocalRepository.open(root));
     try {
-      writeConceptFile(repo, '# Terms\n\n## Initial {#initial}\n\nInitial definition\n', showConcepts(repo).digest);
+      (await writeConceptFile(repo, '# Terms\n\n## Initial {#initial}\n\nInitial definition\n', showConcepts(repo).digest));
       mkdirSync(join(root, scope), { recursive: true });
-      writeConceptFile(repo, '# Terms\n\n## Beta {#beta}\n\nBeta definition\n', null, false, `${scope}/concepts.md`);
+      (await writeConceptFile(repo, '# Terms\n\n## Beta {#beta}\n\nBeta definition\n', null, false, `${scope}/concepts.md`));
       writeFileSync(join(root, scope, 'sample.md'), '# Beta\n\nBeta.\n');
     } finally { repo.close(); }
     server = await workspace.ready();
@@ -34,11 +34,11 @@ test('a late successful concepts index preserves the newer writing report', ({ p
     await page.getByRole('link', { name: '术语', exact: true }).click();
     await expect(page.getByRole('list', { name: '术语列表' }).getByRole('button', { name: /Initial/u })).toBeVisible();
     await page.getByRole('link', { name: '写作', exact: true }).click();
-    const other = new LocalRepository(root);
+    const other = (await LocalRepository.open(root));
     try {
       const current = showConcepts(other);
       assert.equal(current.state, 'valid');
-      writeConceptFile(other, `${current.source}\n## External {#external}\n\nExternal definition\n`, current.digest);
+      (await writeConceptFile(other, `${current.source}\n## External {#external}\n\nExternal definition\n`, current.digest));
     } finally { other.close(); }
     let captured!: () => void;
     const capture = new Promise<void>(resolve => { captured = resolve; });

@@ -30,8 +30,8 @@ const viewJobCase = deriveTestReference('test/view-case.test.js', 'test/view-cas
 // @name workspace-scan-keeps-http-responsive
 test('a real thousand-file workspace scan leaves static and document HTTP requests responsive', async t => {
   const f = fixture();
-  const repo = new LocalRepository(f.root, { initialize: true });
-  try { initialize(repo, false, { testRoots: ['test'], sourceRoots: ['src'] }); }
+  const repo = (await LocalRepository.open(f.root, { initialize: true }));
+  try { (await initialize(repo, false, { testRoots: ['test'], sourceRoots: ['src'] })); }
   finally { repo.close(); }
   mkdirSync(join(f.root, 'src'), { recursive: true });
   mkdirSync(join(f.root, 'test'), { recursive: true });
@@ -200,8 +200,8 @@ test('workspace diagnostics never dereference unsafe configuration paths', async
   const outside = mkdtempSync(join(tmpdir(), 'concord-view-outside-'));
   let server: ViewServerHandle | undefined;
   try {
-    const repo = new LocalRepository(root, { initialize: true });
-    try { initialize(repo); }
+    const repo = (await LocalRepository.open(root, { initialize: true }));
+    try { (await initialize(repo)); }
     finally { repo.close(); }
     const secret = 'must-not-cross-the-worktree-boundary';
     writeFileSync(join(outside, 'secret.json'), secret);

@@ -21,13 +21,12 @@ Trace 与定向 Review 按 owner 汇总 Feature supporting page 与 Use Case 的
 
 ## 入口与命令加载
 
-`concord --version`、各层 `--help` 与无参数调用由构建时生成的静态数据直接输出，不加载 Effect、命令模块或原生产物。
+编译后的 CLI 对精确匹配的 `--help`、`-h`、`--version`、`-v` 使用内嵌输出，不加载命令或原生产物。
 
-静态数据从实际命令定义生成：构建时以原 CLI 执行每条帮助路径，记录 stdout、stderr 与退出码。运行时只在与生成时相同的渲染条件下（NO_COLOR、TERM=dumb、非 TTY 等）使用它，其余情况交给完整 CLI，输出逐字节一致。
+构建时从正式源码 CLI 捕获 stdout、stderr 与退出码，随可执行文件冻结。只在 NO_COLOR=1、TERM=dumb、未设置 FORCE_COLOR 且输入输出均非 TTY 时使用；其它调用交给同一正式解析器。编译规则见[编译入口](../../engineering/build/architecture.md#编译入口)。
 
-其它调用按顶层命令组加载：入口只导入被调用命令组的模块图，不静态导入全部命令。静态数据或命令模块缺失、与安装身份不符时，入口回退到完整 CLI，结果与回退前相同。源码运行（`pnpm concord`）使用同一入口逻辑。
+源码 CLI 直接使用正式解析器。`--skill` 读取随包指南；命令与内部 worker 都在编译可执行文件内，不加载外置启动 JavaScript。
 
-入口在加载任何命令模块之前启用 Node 编译缓存，目录为 `${XDG_CACHE_HOME:-~/.cache}/concord/node-compile-cache`，遵守 `NODE_COMPILE_CACHE` 与 `NODE_DISABLE_COMPILE_CACHE`。目录不可写或被禁用时照常加载，不改变命令结果。
 
 ## 自举
 
@@ -176,11 +175,15 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 解析、诊断与模块解析使用精确固定的 TypeScript 7.1 beta 原生编译器，构建与运行时同一版本，消费者无需全局编译器。
 
-- `withTypeScript` 是同步词法作用域：按调用栈惰性创建一个 `typescript/sync` API，嵌套调用复用，最外层 finally 关闭。API、AST、快照与 program 不逃逸作用域，不返回 Promise，违反时报 `TypeScriptScopeViolation`；缓存只保存转换后的领域值。纯 AST 操作从 `typescript/ast` 引入。
+- 产品使用官方 `typescript/async`。`withTypeScript`、`withTypeScriptFiles` 与 `withTypeScriptSource` 返回 Promise，回调允许值或 Promise。`withTypeScript` 用 AsyncLocalStorage 隔离调用链并惰性取得 API；同链嵌套复用，独立并发调用互不借用。`withTypeScriptFiles` 总是独立捕获作用域。关闭后访问 API 报 `TypeScriptScopeViolation`，包括已提取的方法；所有子调用必须等待 settle 后才关闭作用域。API、AST、snapshot 与 program 不逃逸，缓存仅保存投影后的领域值。纯 AST 操作仍从 `typescript/ast` 同步执行。
 - API 固定 `runExternalCode: false`，使用包内可执行文件，不接受项目路径覆盖。默认文件系统回调拒绝读写，允许的文件只来自完整的请求虚拟文件系统，不回落到宿主。项目配置与 MDX content mapper 不获得执行权限。
-- `withTypeScriptSource` 以只含当前文件的虚拟文件系统提供 SourceFile 与真实语法诊断，结束时先释放快照。
+- `withTypeScriptSource` 等待只含当前文件的虚拟快照、SourceFile 与真实语法诊断；领域投影结束后逆序 await snapshot、解析租约和 API 的释放。官方 close 只证明会话关闭，进程退出由进程 owner 另行确认。已有领域主失败保留其错误码，释放失败写入同一错误的 cleanup 诊断；无主失败而清理失败为 TypeScriptUnavailable，不能报告成功。任何单项释放失败都不能阻止其余释放尝试。
 - `withTypeScriptFiles` 只提供已捕获文件与派生目录，在捕获集合内解析 tsconfig（含 extends）并解析模块。失败保留既有缺口，不读取宿主 tsconfig 或 node_modules。
 - p5 在建立快照前递归捕获静态 import/export、import type、ImportTypeNode 与三斜线相对类型路径，经既有预算与路径校验后固定闭包，解析期间不修改虚拟文件系统。p5 lib 与声明来自固定编译器包与发行包。
+- 配置解析、代码/测试声明分析、依赖分析与 p5 调用链显式 await 编译结果。Effect 边界等待拥有资源的 Promise 完成再释放外层 scope，不允许 Effect 产出未完成的 Promise receipt。
+- 内容缓存的异步方法只在 miss 时等待 parser，保持输入顺序和逐文件失败语义；命中不启动编译器，失败不缓存。跨 await 只保留领域值与待写行，写入时重新取得有效 cache handle，不保留可能被 owner 淘汰的 native handle。
+- `PersistentCache.withView` 及 analysis reader 的借用绑定持续到异步回调 settle；成功、失败和取消均先完成 callback 收尾，再解绑 cache/来源。
+- `LocalRepository.open` 是异步工厂；返回前验证配置并归还初始化 FD、lease 与缓存资源，成功返回不代表已有活动 snapshot。写工厂仍要求 publication validation 能力，不公开未初始化对象。
 - 诊断映射回 `InvalidConfigSyntax`、`CodeParseError` 及依赖与 p5 的既有具名边界，编译器不可用统一为 `TypeScriptUnavailable`；位置按 UTF-16。
 
 ## 多语言分析
@@ -218,7 +221,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 每次任务捕获会话标识、全部依赖的 URI、版本、打开标识与磁盘身份，发布或返回前再次核对；任一变化即丢弃结果并重排。步骤、标记、引用解析与写作检查使用同一版本集合。
 
-每个计算 Job 是包内 `editor-worker.js` 的 Node 子进程，固定 256 MiB heap 上限，由独立 OwnedProcess 进程组持有，原生编译器继承该进程组。项目配置不能替换可执行文件、入口或参数。Job 经 stdin 接收单个 JSON 输入、经 stdout 返回单个 JSON，双方严格解码。
+每个计算 Job 是固定 Bun 的 editor worker，由独立 OwnedProcess 进程组持有，编译器 supervisor 与原生编译器继承该进程组。父进程每 100ms 从操作系统采样 editor 主进程 RSS，超过 256 MiB 时以 EditorBudgetExceeded 结束并确认整个组回收；采样不可用报 EditorTaskFailed，不能宣称预算已验证。该预算包含 editor 的 JS 与 runtime resident memory，采样不证明采样间的短峰值；输入、输出与时间预算继续独立强制。项目配置不能替换可执行文件、入口或参数。Job 经 stdin 接收单个 JSON 输入、经 stdout 返回单个 JSON，双方严格解码。
 
 每个 Job 有自己的 Scope，收尾后核验进程组归属、清理已检查且后代已消失；缺少清理记录视为未知。
 
@@ -227,6 +230,8 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 - Job 不获得来源写权限或发布租约。
 
 ## 原生 adapter
+
+项目测试运行时与 Concord 内部角色分开。内置 Node test 和 Vitest 的版本查询与项目执行从项目环境的 PATH 选择 `node`；Vitest 收集角色由 Concord 自身启动，并从显式项目根加载框架。编译后的 `process.execPath` 不能用于解释任意项目 JavaScript。adapter 实现身份绑定源码或实际编译程序，运行时身份绑定实际项目命令。
 
 **绑定**：先按 provider 的 group key（项目、文件、声明范围与组身份）归并参数项，不凭同名合并。
 
@@ -340,3 +345,10 @@ Git-private 目录由 `git rev-parse --git-path concord` 定位，其中的 HawD
 ## 解码与路径边界
 
 所有不可信 JSON、YAML 和缓存内容必须严格解码。路径拒绝绝对路径、traversal 与 symlink 逃逸，读取检查的实现见[路径安全](#路径安全)。修复核验只证明 runner 在两个提交上的退出结果，不继承任何产品专属 E2E 可靠性声明。
+
+
+编译器会话由固定的 TypeScript supervisor 持有，官方 `tsserverPath` 只指向此入口；安装模式在同一可执行文件识别严格的 `--api --async` 参数，源码模式按源码、锁、Bun 与目标身份惰性编译外部缓存中的最小入口。源码准备有 120 秒期限。supervisor 只启动包内固定 native executable，关闭 external mapper，标准流透明转发并使用背压，不累积或截断 RPC。
+
+supervisor 和 native 均继承调用者的进程组，不再建立可逃逸的 native 组；只用专属新 pipes 连接 native 的 stdin/stdout，不继承 supervisor 的协议 fd 或 IPC。会话总期限 600 秒，父 stdin EOF、TERM/INT 或期限触发幂等停止：停止 relay、关闭 native stdin、TERM、500ms 后必要时 KILL，再等待自有 child close。不对继承组发信号。异常收尾中止背压等待，不伪造响应；外层进程组回收仍验证整体退出。
+
+固定 TypeScript 7.1.0-beta 使用锁文件记录的 pnpm lifecycle patch：官方 JSON-RPC connection 关闭时 dispose connection，保证初始化和在途请求拒绝；不复制 RPC、不读取私有 client 字段、不在运行时改写依赖。补丁字节参与依赖与构建身份，所有来源和归档使用同一补丁。

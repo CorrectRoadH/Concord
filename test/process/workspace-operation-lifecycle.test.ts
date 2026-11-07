@@ -22,7 +22,7 @@ const idle = (pid: number, excluded: readonly number[] = []) => pollUntil(async 
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('each Web write consumes a different idle process and stopped services reclaim the replacement', { skip: process.platform === 'win32', timeout: 25_000 }, async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeProjectConfig(root, { sourceRoots: ['src'] });
   mkdirSync(join(root, 'src'), { recursive: true });
   const path = 'src/operation.ts'; writeFileSync(join(root, path), 'export const value = 0;\n');
@@ -48,7 +48,7 @@ test('each Web write consumes a different idle process and stopped services recl
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('killing an unused operation process preserves the next write and produces a new idle process', { skip: process.platform === 'win32', timeout: 20_000 }, async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeProjectConfig(root, { sourceRoots: ['src'] });
   mkdirSync(join(root, 'src'), { recursive: true });
   const path = 'src/operation.ts', before = 'export const value = 0;\n', after = 'export const recovered = true;\n';

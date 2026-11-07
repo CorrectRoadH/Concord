@@ -32,7 +32,7 @@ test('dedicated GitHub CI reserves one GiB while development keeps the half-memo
 
 // @feature docs/engineering/testing/cli.md#并发
 test('admission subtracts fixed overhead and clips browser overrides without raising the cap', () => Effect.runPromise(Effect.sync(() => {
-  assert.deepEqual(gateMemoryBudgets, { fixed: 2 * GiB, archive: 2.5 * GiB, browser: 2.5 * GiB, packaging: 3 * GiB, node: 2 * GiB });
+  assert.deepEqual(gateMemoryBudgets, { fixed: 2 * GiB, browser: 2.5 * GiB, node: 2 * GiB });
   assert.equal(gateAdmissionBytes(7 * GiB), 5 * GiB);
   assert.equal(gateAdmittedBrowserWorkers(7 * GiB, 4), 2);
   assert.equal(gateAdmittedBrowserWorkers(15 * GiB, 4), 4);

@@ -15,24 +15,24 @@ import { requireValidTrace } from "../domain/trace/index.ts";
 import type { RelationshipKind } from "../domain/trace/index.ts";
 
 /** Derivation and its temporary resolver share the graph's source snapshot. */
-export function deriveTrace<A>(repo: Repository, cache: 'use' | 'off', strict: boolean, derive: (trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>) => A): A {
-  const read = () => {
-    const { trace, references } = buildUnderSnapshot(repo, cache, {});
+export async function deriveTrace<A>(repo: Repository, cache: 'use' | 'off', strict: boolean, derive: (trace: Awaited<ReturnType<typeof buildTrace>>, references: ReturnType<typeof referenceResolver>) => A | Promise<A>): Promise<A> {
+  const read = async () => {
+    const { trace, references } = (await buildUnderSnapshot(repo, cache, {}));
     if (strict) requireValidTrace(trace);
-    const result = derive(trace, references);
+    const result = await derive(trace, references);
     const rechecked = references.verify();
     trace.findings.push(...rechecked.filter(finding => !trace.findings.some(previous => previous.code === finding.code && previous.path === finding.path && previous.message === finding.message)));
     trace.complete = trace.complete && trace.findings.every(finding => finding.code === 'UnknownPageKind');
     if (strict) requireValidTrace(trace);
     return result;
   };
-  return repo.snapshot === undefined ? read() : repo.snapshot(read);
+  return repo.snapshot === undefined ? (await read()) : repo.snapshot(read);
 }
 
 export const pathOf = (ref: string) => ref.split('#')[0]!;
 
 /** An owner skipped by the inventory reports why, instead of looking absent. */
-export function findTraced(trace: ReturnType<typeof buildTrace>, selector: string, kind?: DocumentRecord['metadata']['kind']): DocumentRecord {
+export function findTraced(trace: Awaited<ReturnType<typeof buildTrace>>, selector: string, kind?: DocumentRecord['metadata']['kind']): DocumentRecord {
   try { return findDocument(trace.documents, selector, kind); }
   catch (cause) {
     const skipped = cause instanceof ConcordError && cause.code === 'DocumentNotFound' ? trace.findings.find(finding => finding.path === selector && ['InvalidData', 'InvalidPlacement'].includes(finding.code)) : undefined;
@@ -48,7 +48,7 @@ export function pageOwner(references: ReturnType<typeof referenceResolver>, page
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
-export function belongsTo(references: ReturnType<typeof referenceResolver>, trace: ReturnType<typeof buildTrace>, selectedPaths: ReadonlySet<string>, ref: string): boolean {
+export function belongsTo(references: ReturnType<typeof referenceResolver>, trace: Awaited<ReturnType<typeof buildTrace>>, selectedPaths: ReadonlySet<string>, ref: string): boolean {
   if (pathOf(ref) === TASTE_PATH) return selectedPaths.has(TASTE_PATH);
   try {
     const owner = references.resolve(ref);
@@ -63,14 +63,14 @@ export function belongsTo(references: ReturnType<typeof referenceResolver>, trac
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
-export function traceShow(repo: Repository, selector: string, cache: 'use' | 'off' = 'use') {
-  return deriveTrace(repo, cache, true, (trace, references) => traceShowValue(repo, trace, references, selector));
+export async function traceShow(repo: Repository, selector: string, cache: 'use' | 'off' = 'use') {
+  return (await deriveTrace(repo, cache, true, async (trace, references) => (await traceShowValue(repo, trace, references, selector))));
 }
 
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
-export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>, selector: string) {
+export async function traceShowValue(repo: Repository, trace: Awaited<ReturnType<typeof buildTrace>>, references: ReturnType<typeof referenceResolver>, selector: string) {
     const document = findTraced(trace, selector);
     const relatedPaths = new Set([document.path]);
     if (document.metadata.kind === 'feature') for (const doc of trace.documents) if (doc.metadata.kind === 'use-case' && pathOf(doc.metadata.feature) === document.path) relatedPaths.add(doc.path);
@@ -80,14 +80,17 @@ export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildT
     const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
     const codeIds = new Set(incoming.filter(e => e.from.startsWith('code:')).map(e => e.from.slice(5)));
     const codeDeclarations = trace.codeDeclarations.filter(c => codeIds.has(c.id)).map(c => ({ ...c, matchedContracts: c.contracts.filter(ref => belongsTo(references, trace, relatedPaths, ref)) }));
-    const analysis = analysisView(repo, trace.annotations.cases.filter(c => ids.has(c.id)), trace.codeDeclarations, trace.documents, references);
-    return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, stepGroups: trace.documents.filter(doc => doc.metadata.kind === 'use-case' && relatedPaths.has(doc.path)).map(doc => stepGroups(repo, trace, doc, analysis)), cache: trace.annotations.cache, analysis };
+    const analysis = (await analysisView(repo, trace.annotations.cases.filter(c => ids.has(c.id)), trace.codeDeclarations, trace.documents, references));
+    const groups: Awaited<ReturnType<typeof stepGroups>>[] = [];
+    for (const doc of trace.documents.filter(doc => doc.metadata.kind === 'use-case' && relatedPaths.has(doc.path))) groups.push(await stepGroups(repo, trace, doc, analysis));
+    return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, stepGroups: groups, cache: trace.annotations.cache, analysis };
 }
 
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#步骤分组输出
-export function stepGroups(repo: Repository, trace: ReturnType<typeof buildTrace>, document: DocumentRecord, analysis: AnalysisView = analysisView(repo, trace.annotations.cases, trace.codeDeclarations, trace.documents)) {
+export async function stepGroups(repo: Repository, trace: Awaited<ReturnType<typeof buildTrace>>, document: DocumentRecord, suppliedAnalysis?: AnalysisView) {
+  const analysis = suppliedAnalysis ?? await analysisView(repo, trace.annotations.cases, trace.codeDeclarations, trace.documents);
   const extracted = extractSteps(document.path, repo.read(document.path)!, repositoryRuntime(repo));
   const group = (ref: string) => {
     const tests = trace.annotations.cases.filter(item => item.status === 'active' && item.contract === ref);
@@ -110,14 +113,14 @@ export function stepGroups(repo: Repository, trace: ReturnType<typeof buildTrace
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md#list-gaps
-export function traceGaps(repo: Repository, cache: 'use' | 'off' = 'use') {
-  return deriveTrace(repo, cache, true, (trace, references) => traceGapsValue(repo, trace, references));
+export async function traceGaps(repo: Repository, cache: 'use' | 'off' = 'use') {
+  return (await deriveTrace(repo, cache, true, (trace, references) => traceGapsValue(repo, trace, references)));
 }
 
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md#list-gaps
-export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>) {
+export function traceGapsValue(repo: Repository, trace: Awaited<ReturnType<typeof buildTrace>>, references: ReturnType<typeof referenceResolver>) {
     const ownerCounts = new Map<string, { code: number; test: number }>();
     const pageCounts = new Map<string, { code: number; test: number }>();
     const increment = (counts: Map<string, { code: number; test: number }>, path: string, kind: RelationshipKind) => {
@@ -173,8 +176,8 @@ export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildT
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
-export function documentShow(repo: Repository, selector: string, kind: DocumentRecord['metadata']['kind'], cache: 'use' | 'off' = 'use') {
-  const { trace, document, useCases, incoming, outgoing, testIds, codeIds, pages } = deriveTrace(repo, cache, false, (trace, references) => {
+export async function documentShow(repo: Repository, selector: string, kind: DocumentRecord['metadata']['kind'], cache: 'use' | 'off' = 'use') {
+  const { trace, document, useCases, incoming, outgoing, testIds, codeIds, pages } = (await deriveTrace(repo, cache, false, (trace, references) => {
     const document = findTraced(trace, selector, kind);
     const useCases = kind === 'feature' ? trace.documents.filter(candidate => candidate.metadata.kind === 'use-case' && pathOf(candidate.metadata.feature) === document.path) : [];
     const relatedPaths = new Set([document.path, ...useCases.map(candidate => candidate.path)]);
@@ -189,7 +192,7 @@ export function documentShow(repo: Repository, selector: string, kind: DocumentR
       name: documentTitle(path, repo.read(path) ?? ''),
     })) : undefined;
     return { trace, document, useCases, incoming, outgoing, testIds, codeIds, pages };
-  });
+  }));
   return {
     operation: `${kind}-show`,
     document: { path: document.path, metadata: document.metadata, digest: document.digest },
@@ -206,14 +209,14 @@ export function documentShow(repo: Repository, selector: string, kind: DocumentR
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
-export function renderReview(repo: Repository, selector: string | undefined, cache: 'use' | 'off' = 'use'): string {
-  return deriveTrace(repo, cache, true, (trace, references) => renderReviewValue(repo, trace, references, selector).segments.map(segment => 'text' in segment ? segment.text : showTaste(repo).body.trimEnd()).join(''));
+export async function renderReview(repo: Repository, selector: string | undefined, cache: 'use' | 'off' = 'use'): Promise<string> {
+  return (await deriveTrace(repo, cache, true, async (trace, references) => (await renderReviewValue(repo, trace, references, selector)).segments.map(segment => 'text' in segment ? segment.text : showTaste(repo).body.trimEnd()).join('')));
 }
 
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
-export function renderReviewValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>, selector: string | undefined) {
+export async function renderReviewValue(repo: Repository, trace: Awaited<ReturnType<typeof buildTrace>>, references: ReturnType<typeof referenceResolver>, selector: string | undefined) {
     const docs: readonly DocumentRecord[] = selector ? [findTraced(trace, selector)] : trace.documents;
     const selectedPaths = new Set(docs.map(d => d.path));
     const cases = selector ? trace.annotations.cases.filter(c => belongsTo(references, trace, selectedPaths, c.contract) || c.issues.some(r => belongsTo(references, trace, selectedPaths, r))) : trace.annotations.cases;
@@ -240,9 +243,9 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
     for (const c of codes) lines.push(`- **${c.symbol ?? `${c.file}:${c.line}–${c.endLine}`}** — [${c.file}:${c.line}–${c.endLine}](${c.file}#L${c.line}); ${c.scope}`, ...c.contracts.map(ref => `  - Implements: [${ref}](${ref})`));
     lines.push('', '## Test declarations', '');
     for (const c of cases) lines.push(`- **${c.id}** — [${c.file}:${c.line}](${c.file}#L${c.line}); ${c.status}${c.skipped ? ', skipped/todo' : ''}; contract: [${c.contract}](${c.contract})`, ...c.issues.map(r => `  - Regression: [${r}](${r})`));
-    const analysis = analysisView(repo, cases, trace.codeDeclarations, trace.documents, references);
+    const analysis = (await analysisView(repo, cases, trace.codeDeclarations, trace.documents, references));
     for (const doc of trace.documents.filter(doc => doc.metadata.kind === 'use-case' && (!selector || selectedPaths.has(doc.path) || doc.metadata.kind === 'use-case' && selectedPaths.has(doc.metadata.feature)))) {
-      const groups = stepGroups(repo, trace, doc, analysis);
+      const groups = (await stepGroups(repo, trace, doc, analysis));
       lines.push(`## Use Case steps: ${doc.path}`, '', 'Declarations are associations, not execution or coverage. Dependency observations below describe this review snapshot.', '');
       for (const group of [...groups.steps, groups.wholeUseCase, ...groups.nonStepAnchors]) {
         const label = group.ref === doc.path ? 'Whole Use Case' : groups.nonStepAnchors.includes(group) ? 'Non-step anchor' : 'Step';
@@ -268,7 +271,7 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
 /** Separates edit drift from diagnostics that still invalidate the query. */
 // @concord-code
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-export function siftQueryDrift(trace: ReturnType<typeof buildTrace>) {
+export function siftQueryDrift(trace: Awaited<ReturnType<typeof buildTrace>>) {
   const drift = trace.findings.filter(finding => finding.code === 'SourceChanged' || finding.code === 'CodeSourceChanged');
   const unknown: 'code'[] = trace.codeRelationsUnknown ? ['code'] : [];
   trace.findings = trace.findings.filter(finding => !drift.includes(finding));
@@ -279,12 +282,12 @@ export function siftQueryDrift(trace: ReturnType<typeof buildTrace>) {
 
 
 /** Called inside observeProjection: nested source snapshots never verify the outer observation. */
-export function scanQueryValue(repo: Repository, query: readonly string[]) {
-  const { trace, references } = buildUnderSnapshot(repo, 'off', {});
+export async function scanQueryValue(repo: Repository, query: readonly string[]) {
+  const { trace, references } = (await buildUnderSnapshot(repo, 'off', {}));
   const initial = siftQueryDrift(trace);
   requireValidTrace(trace);
-  const value = query[0] === 'review' ? renderReviewValue(repo, trace, references, query[1])
-    : query[1] === 'show' ? traceShowValue(repo, trace, references, query[2]!) : traceGapsValue(repo, trace, references);
+  const value = query[0] === 'review' ? (await renderReviewValue(repo, trace, references, query[1]))
+    : query[1] === 'show' ? (await traceShowValue(repo, trace, references, query[2]!)) : traceGapsValue(repo, trace, references);
   trace.findings.push(...references.verify());
   const final = siftQueryDrift(trace);
   requireValidTrace(trace);

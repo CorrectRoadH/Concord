@@ -49,7 +49,7 @@ test('OwnedProcess preserves cancellation received while the platform is acquiri
 
 // @feature docs/feature/project-onboarding/README.md
 test('Workspace rereads configuration for each operation and Sources rejects a changed snapshot', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig({}));
   const live = Layer.merge(Workspace.layer, Sources.layer).pipe(Layer.provide(NodeServices.layer));
   try {
@@ -73,7 +73,7 @@ test('Workspace rereads configuration for each operation and Sources rejects a c
 
 // @feature docs/feature/local-data-engine/README.md
 test('read snapshots reread current inputs, verify original observations and discard captures before the next operation', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const live = Layer.merge(Workspace.layer, Sources.layer).pipe(Layer.provide(NodeServices.layer));
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -119,7 +119,7 @@ test('entry layers build the declared reader and operation capabilities', async 
 
 // @feature docs/feature/local-data-engine/README.md
 test('PersistentCache reuses nested source ownership and releases the native handle at the outer boundary', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const live = Layer.mergeAll(Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provide(NodeServices.layer));
   let captured: WorkspaceTypes.LocalRepository | undefined;
   try {
@@ -142,7 +142,7 @@ test('PersistentCache reuses nested source ownership and releases the native han
 
 // @feature docs/feature/local-data-engine/README.md
 test('Sources snapshots verify raw bytes and isolate caller mutations', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const path = 'binary-input.bin';
   writeFileSync(join(root, path), Buffer.from([0xff, 0, 0x80]));
   const live = Layer.merge(Workspace.layer, Sources.layer).pipe(Layer.provide(NodeServices.layer));
@@ -164,7 +164,7 @@ test('Sources snapshots verify raw bytes and isolate caller mutations', async ()
 // @feature docs/feature/local-data-engine/README.md
 test('memory Cache owns its handle and read-only snapshots retain detached immutable rows', async () => {
   const rows = [{ key: 'a', payload: 'before' }];
-  const root = createConsumer();
+  const root = (await createConsumer());
   const live = Layer.mergeAll(Workspace.layer, Cache.layer, CacheSnapshot.layer({ document_parse: rows })).pipe(Layer.provide(NodeServices.layer));
   rows[0]!.payload = 'after';
   let closed: CacheTypes.CacheService | undefined;
@@ -194,7 +194,7 @@ test('memory Cache owns its handle and read-only snapshots retain detached immut
 
 // @feature docs/feature/local-data-engine/README.md
 test('memory cache separates workspace contexts and survives individual source snapshots', async () => {
-  const roots = [createConsumer(), createConsumer()];
+  const roots = [(await createConsumer()), (await createConsumer())];
   const live = Layer.mergeAll(Workspace.layer, Sources.layer, Cache.layer).pipe(Layer.provide(NodeServices.layer));
   try {
     await Effect.runPromise(Effect.gen(function*() {
@@ -218,7 +218,7 @@ test('memory cache separates workspace contexts and survives individual source s
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('source snapshot cache closes before publication and cannot reopen within the lease', async () => {
-  const root = createConsumer(), otherRoot = createConsumer();
+  const root = (await createConsumer()), otherRoot = (await createConsumer());
   const live = Layer.mergeAll(Workspace.layer, Sources.layer, PersistentCache.layer, publicationLayer).pipe(Layer.provide(NodeServices.layer));
   try {
     await Effect.runPromise(Effect.gen(function*() {
@@ -254,7 +254,7 @@ test('source snapshot cache closes before publication and cannot reopen within t
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('interrupting an operation releases its lazily opened persistent cache handle', async () => {
-  const root = createConsumer();
+  const root = (await createConsumer());
   const live = Layer.mergeAll(Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provide(NodeServices.layer));
   try {
     await Effect.runPromise(Effect.gen(function*() {
@@ -277,8 +277,8 @@ test('interrupting an operation releases its lazily opened persistent cache hand
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('publication contention expires at its deadline under TestClock and releases acquired ownership', async () => {
-  const root = createConsumer();
-  const held = acquireTraceLeaseSync(root, 'exclusive', 'test-owner')!;
+  const root = (await createConsumer());
+  const held = acquireTraceLeaseSync(root, 'exclusive', 'test-owner', undefined, undefined, process.env)!;
   try {
     await Effect.runPromise(Effect.gen(function*() {
       const publication = yield* Publication;
@@ -290,7 +290,7 @@ test('publication contention expires at its deadline under TestClock and release
     }).pipe(Effect.provide(publicationLayer), Effect.provide(TestClock.layer())).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { releaseTraceLeaseSync(held, 'test-owner'); }
   await Effect.runPromise(Effect.scoped(Effect.flatMap(Publication, publication => publication.lease(root, 'test-released'))).pipe(Effect.provide(publicationLayer)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
-  const reacquired = acquireTraceLeaseSync(root, 'exclusive', 'test-after-scope')!;
+  const reacquired = acquireTraceLeaseSync(root, 'exclusive', 'test-after-scope', undefined, undefined, process.env)!;
   releaseTraceLeaseSync(reacquired, 'test-after-scope');
   rmSync(root, { recursive: true, force: true });
 });

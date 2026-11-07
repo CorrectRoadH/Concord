@@ -9,7 +9,7 @@ import { makePersistentCacheOwner } from './owner.ts';
 import { RuntimeEnvironment } from '../environment/index.ts';
 import { CacheDerivations } from './derivations.ts';
 import { ContentCacheOwner, withContentCacheOwner } from './content-cache-owner.ts';
-import { WorkspaceContext } from '../workspace/context.ts';
+import { WorkspaceContext } from '../workspace/index.ts';
 import { OperationCache } from './operation-cache.ts';
 import { openPersistentHandle } from './persistent-handle.ts';
 
@@ -107,8 +107,15 @@ export class PersistentCache extends Context.Service<PersistentCache, Persistent
   static owner(privateDir: string) { return makePersistentCacheOwner(privateDir); }
   static readonly repository = repositoryCache;
   static withView<A>(owner: Repository, view: Repository, use: () => A): A {
-    const release = bindRepositoryCache(view, repositoryCache(owner));
-    try { return use(); } finally { release(); }
+    const unbind = bindRepositoryCache(view, repositoryCache(owner));
+    let released = false;
+    const release = () => { if (!released) { released = true; unbind(); } };
+    try {
+      const value = use();
+      if (value instanceof Promise) return value.finally(release) as A;
+      release();
+      return value;
+    } catch (cause) { release(); throw cause; }
   }
   static readonly layer = Layer.effect(PersistentCache, Effect.gen(function*() {
     const runtime = yield* RuntimeEnvironment;

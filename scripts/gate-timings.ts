@@ -125,10 +125,10 @@ export function summarizeBrowserLifecycle(rows: readonly LifecycleTiming[], sele
 export const TestTimingReport = Schema.Struct({
   selection: Schema.Struct({ files: Schema.Array(Schema.String), nodeFiles: Schema.Array(Schema.String), browserFiles: Schema.Array(Schema.String), requestedBrowserFiles: Schema.Array(Schema.String),
     suite: Schema.String, namePattern: Schema.NullOr(Schema.String), shard: Schema.NullOr(Schema.String) }),
-  concurrency: Schema.Struct({ node: Schema.Number, browser: Schema.Number, packaging: Schema.Literal(1) }),
+  concurrency: Schema.Struct({ node: Schema.Number, browser: Schema.Number }),
   admission: Schema.optional(Schema.Struct({
     capacityBytes: Schema.Number,
-    budgets: Schema.Struct({ fixed: Schema.Number, archive: Schema.Number, browser: Schema.Number, packaging: Schema.Number, node: Schema.Number }),
+    budgets: Schema.Struct({ fixed: Schema.Number, browser: Schema.Number, node: Schema.Number }),
     nodeConcurrencyIsUpperLimit: Schema.Boolean, browserReservation: Schema.String,
     processTreeReports: Schema.Array(Schema.String),
     timings: Schema.optional(Schema.Array(Schema.Struct({ category: Schema.String, bytes: Schema.Number, wait_ms: Schema.Number, run_ms: Schema.Number }))),

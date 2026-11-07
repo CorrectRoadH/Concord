@@ -38,8 +38,8 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a busy native cache is explicitly unavailable and recovers after its handle closes', async () => {
-  const root = fixture();
-  const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: true }, nativeRuntime);
+  const root = (await fixture());
+  const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root, process.env)), { readOnly: false, create: true }, nativeRuntime);
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
@@ -67,12 +67,12 @@ test('a busy native cache is explicitly unavailable and recovers after its handl
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a running workspace serves its accepted generation while foreign cache opens are rejected', async () => {
-  const root = fixture();
+  const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
     const previous = await waitForWorkspaceProjection(base);
-    assert.throws(() => openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false }, nativeRuntime), { code: 'HawdbBusy' });
+    assert.throws(() => openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root, process.env)), { readOnly: true, create: false }, nativeRuntime), { code: 'HawdbBusy' });
     const response = await fetchFresh(`${base}/api/workspace`);
     const body = await response.text();
     assert.equal(response.status, 200, body);
@@ -85,8 +85,8 @@ test('a running workspace serves its accepted generation while foreign cache ope
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('an installation missing native artifacts reports unavailable instead of pending', () => {
-  const root = fixture();
+test('an installation missing native artifacts reports unavailable instead of pending', async () => {
+  const root = (await fixture());
   const installation = mkdtempSync(join(tmpdir(), 'concord-projection-install-'));
   try {
     privateSourceInstallation(installation);
@@ -102,15 +102,15 @@ test('an installation missing native artifacts reports unavailable instead of pe
 });
 
 // @feature docs/feature/local-data-engine/README.md
-test('server stop returns only after persistent ownership and the instance record are released', () => {
-  const root = fixture();
+test('server stop returns only after persistent ownership and the instance record are released', async () => {
+  const root = (await fixture());
   try {
     const started = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'server', 'start'], { encoding: 'utf8', timeout: 20_000 });
     assert.equal(started.status, 0, started.stdout + started.stderr);
     const ready = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'list'], { encoding: 'utf8', timeout: 20_000 });
     assert.equal(ready.status, 0, ready.stdout + ready.stderr);
     stopWorkspaceServer(root);
-    const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: false }, nativeRuntime);
+    const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root, process.env)), { readOnly: false, create: false }, nativeRuntime);
     try { database.put('query_cache', [{ key: 'released-owner', payload: '{}' }]); }
     finally { database.close(); }
   } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }

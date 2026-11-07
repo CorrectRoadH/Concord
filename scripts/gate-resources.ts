@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path';
 
 export const GiB = 1024 ** 3;
 // Category reservations and observed process-tree peaks use proportional memory.
-export const gateMemoryBudgets = { fixed: 2 * GiB, archive: 2.5 * GiB, browser: 2.5 * GiB, packaging: 3 * GiB, node: 2 * GiB } as const;
+export const gateMemoryBudgets = { fixed: 2 * GiB, browser: 2.5 * GiB, node: 2 * GiB } as const;
 export const gateAdmissionBytes = (memoryMaxBytes: number): number => Math.max(0, memoryMaxBytes - gateMemoryBudgets.fixed);
 export const gateAdmittedBrowserWorkers = (memoryMaxBytes: number, upperLimit: number): number => Math.min(upperLimit, Math.floor(gateAdmissionBytes(memoryMaxBytes) / gateMemoryBudgets.browser));
 export interface AdmissionTiming { readonly category: string; readonly bytes: number; readonly wait_ms: number; readonly run_ms: number }

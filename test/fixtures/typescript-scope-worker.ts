@@ -1,10 +1,10 @@
 import * as Effect from 'effect/Effect';
 import { withTypeScriptSource } from "../../src/base/process/index.ts";
 
-Effect.runSync(Effect.sync(() => withTypeScriptSource('worker.ts', 'export const value = 1;', source => {
+(await Effect.runPromise(Effect.tryPromise(async () => (await withTypeScriptSource('worker.ts', 'export const value = 1;', source => {
   process.stdout.write(`compiler-ready:${source.statements.length}\n`);
   // Hold a real native compiler request scope until its owner stops the group.
   // This deliberately prevents normal lexical disposal.
   const signal = new Int32Array(new SharedArrayBuffer(4));
   while (true) Atomics.wait(signal, 0, 0);
-})));
+})))));

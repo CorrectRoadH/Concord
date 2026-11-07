@@ -22,8 +22,8 @@ test('view CLI propagates or rejects shared dry-run without cache or repository 
     assert.equal(rejected.exitCode, 1);
     assert.equal((JSON.parse(rejected.stderr) as { error: string }).error, 'InvalidOption');
 
-    let repo = new LocalRepository(root, { initialize: true });
-    initialize(repo, false, { testRoots: [] });
+    let repo = (await LocalRepository.open(root, { initialize: true }));
+    (await initialize(repo, false, { testRoots: [] }));
     repo.close();
     writeFileSync(input, JSON.stringify({ action: 'document.create', kind: 'feature', id: 'dry-preview', title: 'Dry preview' }));
     const actionPreview = await runCli({ argv: ['--root', root, '--dry-run', '--json', 'action', '--input', input], cwd: process.cwd(), env: process.env, stdin: '', signal: AbortSignal.timeout(10_000) });
