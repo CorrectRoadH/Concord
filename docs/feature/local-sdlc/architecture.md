@@ -159,6 +159,8 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 - 拼写不一致、别名、锚点或 `fstat` 不一致归为来源变化：当前查询与发布报 `FileChangedSinceRead`（`source-observation`），投影把条目路径并入漂移，锚点变化记为 `.`。
 - 只有 symlink、`ELOOP` 与非普通文件报 `UnsafePath`。
+
+这些检查只作用于 Concord 读写的路径：docs、memory、配置声明的源码与测试根、Concord 写入的配置与 skill 目录。目录扫描在这些路径之外遇到 symlink（例如使用者自己链接的 `CLAUDE.md` 或 `.claude/skills/<名称>`）时，不跟随、不读取，也不使检查失败；Concord 写入的 skill 目录内出现 symlink 仍报 `UnsafePath`。
 - 发布先核验后清空列表，写者自身提交不被判为变化。
 
 验收在真实临时目录中进行：
