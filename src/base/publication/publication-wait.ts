@@ -13,7 +13,11 @@ export const waitForPublication = Effect.fn('waitForPublication')(function*<A, R
     if (Result.isSuccess(result)) return result.success;
     const error = result.failure;
     if (error.code !== 'RepositoryBusy' || !error.message.includes('publication lease is busy')) return yield* Effect.fail(error);
-    if ((yield* Clock.currentTimeMillis) >= deadline) {
+    // An already publishing owner is bounded by its own operation lifetime.
+    // Reopening a read waits for that owner; acquisition-only contention keeps
+    // its existing three-second limit and never replays a completed mutation.
+    const publishing = typeof error.details === 'object' && error.details !== null && 'livePublication' in error.details && error.details.livePublication === true;
+    if (!publishing && (yield* Clock.currentTimeMillis) >= deadline) {
       return yield* Effect.fail(new ConcordError('RepositoryBusy', `Timed out waiting for publication ownership (3000 ms). ${error.message}`, { coordination: error.details, waitedMs: 3000 }));
     }
     yield* Effect.sleep('50 millis');

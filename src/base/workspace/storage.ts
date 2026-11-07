@@ -18,7 +18,7 @@ import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, isO
 import { snapshot, makeConfigContentCache } from "./config.ts";
 import { closeRepositoryCache, inheritContentCacheOwner } from "../cache/index.ts";
 import { invalidateActiveRun } from "../publication/index.ts";
-import { acquireFileLease, acquireRecoverablePublicationLease } from "../publication/index.ts";
+import { acquireFileLease, acquireRecoverablePublicationLease, readLeaseOwner, ownerIsAlive } from "../publication/index.ts";
 
 
 
@@ -48,6 +48,20 @@ function storageCoordinationFailure(cause: unknown): ConcordError {
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 function present(path: string): boolean { try { lstatSync(path); return true; } catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; } }
+
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
+function assertJournalFinished(root: string, coordination: string, journal: string, message: string, ownedToken?: string): void {
+  if (!present(journal)) return;
+  try {
+    const owner = readLeaseOwner(join(coordination, PUBLICATION_LEASE), 'read-publication');
+    if (owner !== undefined && owner.token !== ownedToken && owner.root === root && owner.mode !== 'shared' && ownerIsAlive(owner)) {
+      throw new ConcordError('RepositoryBusy', 'The publication lease is busy with an unfinished publication', { livePublication: true });
+    }
+    // The publisher can remove its journal while ownership is being inspected.
+    if (present(journal)) throw new ConcordError('RecoveryRequired', message);
+  } catch (cause) { throw storageCoordinationFailure(cause); }
+}
 
 function assertReadHost(): void {
   if (process.platform !== 'linux' && process.platform !== 'darwin') throw new ConcordError('UnsupportedHost', 'Concord supports Linux and Darwin/macOS hosts');
@@ -323,11 +337,11 @@ export class LocalRepository implements Repository {
       const traceMultiJournal = traceDir === undefined ? undefined : join(traceDir, 'multi-file-publication-journal.json');
       const pendingTraceJournal = traceJournal !== undefined && present(traceJournal) ? traceJournal : traceMultiJournal !== undefined && present(traceMultiJournal) ? traceMultiJournal : undefined;
       if (pendingTraceJournal !== undefined) {
-        throw new ConcordError('RecoveryRequired', `An interrupted Trace publication exists; run trace recover (${pendingTraceJournal})`);
+        assertJournalFinished(this.root, coordinationDir, pendingTraceJournal, `An interrupted Trace publication exists; run trace recover (${pendingTraceJournal})`, this.traceLease?.owner.token);
       }
       const genericJournal = join(this.privateDir, 'journal.json');
       assertNoSymlink(genericJournal);
-      if (present(genericJournal) && !options.recover) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
+      if (!options.recover) assertJournalFinished(this.root, coordinationDir, genericJournal, 'An interrupted publication exists; run concord recover', this.traceLease?.owner.token);
       const marker = this.read('concord.config.ts');
       const markerPath = 'concord.config.ts';
       const recoveryJournal = options.recover && present(genericJournal) ? currentJournal(genericJournal) : undefined;
@@ -575,8 +589,8 @@ export class LocalRepository implements Repository {
   private assertNoPendingPublication(): void {
     const directory = this.coordinationDirectory;
     const pending = ['publication-journal.json', 'multi-file-publication-journal.json'].filter(name => present(join(directory, name)));
-    if (pending.length > 0) throw new ConcordError('RecoveryRequired', 'An interrupted Trace publication exists; run concord recover');
-    if (!this.recovering && present(join(this.privateDir, 'journal.json'))) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
+    for (const name of pending) assertJournalFinished(this.root, directory, join(directory, name), 'An interrupted Trace publication exists; run concord recover');
+    if (!this.recovering) assertJournalFinished(this.root, directory, join(this.privateDir, 'journal.json'), 'An interrupted publication exists; run concord recover', this.traceLease?.owner.token);
   }
   private assertReady(): void {
     assertCurrentRuntimeFormat(this.root, this.privateDir);

@@ -1,5 +1,5 @@
 import { RuntimeEnvironment, runtimePath, runtimeTemporaryDirectory } from '../environment/index.ts';
-import { Context, Effect, FileSystem, Layer, Path, Stdio, Stream, type Scope } from 'effect';
+import { Context, Effect, FileSystem, Layer, Path, Result, Stdio, Stream, type Scope } from 'effect';
 import { failure, ConcordError } from '../../model/index.ts';
 import { inspectPendingJournals, waitForPublication } from '../publication/index.ts';
 import { readRepositoryBytesSync, readRepositoryFileSync, type LocalRepository } from '../workspace/index.ts';
@@ -64,11 +64,24 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         }).pipe(Effect.mapError(failure));
         return Buffer.concat(chunks).toString('utf8');
       }),
-      snapshot: <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>) => Effect.acquireUseRelease(
-        waitForPublication(reclaimDead => Effect.try({ try: () => repo.beginSnapshot(reclaimDead), catch: failure })),
-        () => operation.pipe(Effect.tap(() => Effect.try({ try: () => repo.verifySnapshot(), catch: failure }))),
-        () => Effect.sync(() => repo.endSnapshot()),
-      ),
+      snapshot: <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>) => Effect.gen(function*() {
+        for (;;) {
+          const result = yield* Effect.result(Effect.acquireUseRelease(
+            waitForPublication(reclaimDead => Effect.try({ try: () => repo.beginSnapshot(reclaimDead), catch: failure })),
+            () => operation.pipe(Effect.tap(() => Effect.try({ try: () => repo.verifySnapshot(), catch: failure }))),
+            () => Effect.sync(() => repo.endSnapshot()),
+          ));
+          if (Result.isSuccess(result)) return result.success;
+          const error = result.failure;
+          // Only a read snapshot may discard observations and evaluate again
+          // when a publisher entered after acquisition. Never replay a writer.
+          const publishing = error instanceof ConcordError && error.code === 'RepositoryBusy'
+            && typeof error.details === 'object' && error.details !== null
+            && 'livePublication' in error.details && error.details.livePublication === true;
+          if (repo.access !== 'read' || !publishing) return yield* Effect.fail(error);
+          yield* Effect.sleep('50 millis');
+        }
+      }),
     });
   }));
 }
