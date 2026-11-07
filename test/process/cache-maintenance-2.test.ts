@@ -2,10 +2,10 @@
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { initialize } from '../support/operations.ts';
 import { sourceCli } from '../support/source-consumer.ts';
-import { workerEntryArgv, CACHE_PHYSICAL_LIMIT_BYTES } from "../../src/base/installation/index.ts";
+import { workerEntryArgv, CACHE_MAINTENANCE_THRESHOLD_BYTES } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,11 +46,11 @@ async function settle(root: string) {
 }
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('maintenance competing with another process holding and writing a handle exits without deletion', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('maintenance competing with another process holding and writing a handle exits without deletion', () => Effect.runPromise(Effect.tryPromise({ try: async () => {
   const f = fixture();
   let holder: ChildProcess | undefined;
   try {
-    pad(f.padding, CACHE_PHYSICAL_LIMIT_BYTES + 1);
+    pad(f.padding, CACHE_MAINTENANCE_THRESHOLD_BYTES * 2 + 1);
     holder = spawn(process.execPath, [fileURLToPath(new URL('../support/cache-maintenance-holder.ts', import.meta.url)), f.path], { stdio: ['pipe', 'pipe', 'pipe'] });
     const wait = (word: string) => new Promise<void>((resolve, reject) => {
       const proc = holder!;
@@ -73,10 +73,10 @@ test('maintenance competing with another process holding and writing a handle ex
     if (holder !== undefined && holder.exitCode === null) await new Promise<void>(resolve => { holder!.once('exit', () => resolve()); holder!.kill('SIGTERM'); });
     rmSync(f.root, { recursive: true, force: true });
   }
-})));
+}, catch: cause => cause })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('a query service maintains an oversized cache while retaining ownership and accepting later queries', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('a query service maintains an oversized cache while retaining ownership and accepting later queries', () => Effect.runPromise(Effect.tryPromise({ try: async () => {
   const f = fixture(), install = join(f.root, 'installation');
   let installedEntry: string | undefined;
   try {
@@ -84,28 +84,38 @@ test('a query service maintains an oversized cache while retaining ownership and
     writeFileSync(join(install, 'package.json'), JSON.stringify({ name: 'maintenance-consumer', private: true, type: 'module' }));
     const entry = sourceCli();
     installedEntry = entry;
-    const command = (...args: string[]) => spawnSync(process.execPath, [entry, '--root', f.root, '--json', ...args], { cwd: install, encoding: 'utf8', timeout: 30_000 });
+    const trace = join(f.root, 'reclamation-trace.jsonl');
+    const env = { ...process.env, CONCORD_TEST_RECLAIM_TRACE: trace, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${fileURLToPath(new URL('../fixtures/cache-maintenance-preload.ts', import.meta.url))}`.trim() };
+    const events = () => existsSync(trace) ? readFileSync(trace, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as { kind: string; pid: number }) : [];
+    const command = (...args: string[]) => spawnSync(process.execPath, [entry, '--root', f.root, '--json', ...args], { cwd: install, env, encoding: 'utf8', timeout: 30_000 });
     const rebuild = () => {
-      const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'cache', 'rebuild'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
+      const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'cache', 'rebuild'], { cwd: install, env, encoding: 'utf8', timeout: 30_000 });
       assert.equal(result.status, 0, result.stdout + result.stderr);
     };
     rebuild();
-    pad(f.padding, CACHE_PHYSICAL_LIMIT_BYTES + 1);
-    const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
+    pad(f.padding, CACHE_MAINTENANCE_THRESHOLD_BYTES * 2 + 1);
+    const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, env, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const owner = JSON.parse(command('server', 'status').stdout);
     assert.equal(owner.state, 'running');
-    await pollUntil(async () => existsSync(f.padding) ? undefined : true, { description: 'service-owned oversized cache maintenance', timeoutMs: 45_000 });
+    const ownerPid: unknown = JSON.parse(command('cache', 'status').stdout).pid;
+    assert.equal(typeof ownerPid, 'number');
+    await pollUntil(async () => events().some(event => event.kind === 'reclaimed' && event.pid === ownerPid) ? true : undefined, { description: 'service-owned oversized cache reclamation', timeoutMs: 45_000 }).catch(cause => { throw new Error(JSON.stringify({ events: events(), status: command('server', 'status').stdout }), { cause }); });
+    assert.equal(existsSync(f.padding), true, 'reclamation must preserve data even above the trigger');
+    const computations = events().filter(event => event.kind === 'compute-start');
+    assert.equal(computations.length, 2, 'reclamation must retain both warm computation processes');
+    for (const worker of computations) assert.doesNotThrow(() => process.kill(worker.pid, 0));
     await pollUntil(async () => {
       const status = command('cache', 'status');
       return status.status === 0 && JSON.parse(status.stdout).status === 'ready' ? true : undefined;
     }, { description: 'service reopens its cache after maintenance', timeoutMs: 10_000 });
     assert.equal(JSON.parse(command('server', 'status').stdout).token, owner.token);
     rebuild();
-    const rebuilt = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
+    const rebuilt = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, env, encoding: 'utf8', timeout: 30_000 });
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     assert.equal(JSON.parse(rebuilt.stdout).ok, true);
-    assert.ok(readdirSync(f.path).length > 1);
+    assert.equal(existsSync(f.padding), true);
+    assert.equal(events().filter(event => event.kind === 'compute-start').length, 2);
   } finally {
     if (installedEntry) {
       const stopped = spawnSync(process.execPath, [installedEntry, '--root', f.root, '--json', 'server', 'stop'], { encoding: 'utf8', timeout: 30_000 });
@@ -114,4 +124,4 @@ test('a query service maintains an oversized cache while retaining ownership and
     }
     await settle(f.root); rmSync(f.root, { recursive: true, force: true });
   }
-})));
+}, catch: cause => cause })));

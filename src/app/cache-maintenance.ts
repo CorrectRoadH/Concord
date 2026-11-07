@@ -26,7 +26,7 @@ export const maintainCache = Effect.fn('maintainCache')(function*(root: string):
   const runtime = yield* RuntimeEnvironment;
   try {
     const privateDir = genericPrivateDirectorySync(root, runtime.env), path = cacheDatabasePath(privateDir);
-    if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) || !(yield* cacheMaintenanceNeeded(privateDir))) return 'below-threshold';
+    if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) || !(yield* cacheMaintenanceNeeded(privateDir).pipe(Effect.catch(() => Effect.succeed(false))))) return 'below-threshold';
     const cache = yield* PersistentCache;
     const deferred = yield* cache.reclaim(privateDir).pipe(
       Effect.map(result => result === undefined || result.deferredForActiveLeases),

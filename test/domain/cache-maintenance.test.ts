@@ -105,7 +105,6 @@ test('reclamation preserves an arbitrarily large cache and waits for 256 MiB of 
     assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), true);
     assert.equal(await runApplication(maintainCache(f.root).pipe(Effect.provide(PersistentCache.layer))), 'reclaimed');
     assert.equal(existsSync(f.padding), true);
-    assert.equal(read(f.path)[0]?.payload, 'a current logical value');
     assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), false);
     const after = cachePhysicalBytes(f.privateDir);
     pad(f.padding, 1024 * 1024 * 1024 + 1 + 256 * 1024 * 1024);
@@ -113,5 +112,6 @@ test('reclamation preserves an arbitrarily large cache and waits for 256 MiB of 
     assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), false, 'exactly 256 MiB is not more than the growth threshold');
     truncateSync(f.padding, 1024 * 1024 * 1024 + 2 + 256 * 1024 * 1024);
     assert.equal(await runApplication(cacheMaintenanceNeeded(f.privateDir)), true);
+    assert.equal(read(f.path)[0]?.payload, 'a current logical value');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });

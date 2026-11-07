@@ -53,6 +53,7 @@ test('an arriving foreground request interrupts maintenance and keeps the servic
   const read = yield* service.execute({ kind: 'source-digest' }).pipe(Effect.forkScoped);
   yield* TestClock.adjust(0);
   assert.equal(interrupted, true, 'foreground admission cancels idle maintenance');
+  yield* TestClock.adjust(0);
   assert.ok(read.pollUnsafe());
   assert.deepEqual(yield* Fiber.join(read), record);
   yield* service.stop;

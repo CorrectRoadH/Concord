@@ -341,7 +341,8 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     }));
     const operations = yield* makeOperationOwner(root, cacheSnapshot, acceptDerived);
     const computation = yield* makeComputationOwner(root, acceptDerived);
-    const backgroundComputation = yield* makeComputationOwner(root, acceptDerived, 'background');
+    const cachePermit = yield* Semaphore.make(1);
+    const backgroundComputation = yield* makeComputationOwner(root, batches => cachePermit.withPermit(acceptDerived(batches)), 'background');
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
       health: cache.verify,
@@ -350,15 +351,21 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources), Effect.provideService(RuntimeEnvironment, execution)),
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } })), Effect.provideService(RuntimeEnvironment, execution)),
       persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt)).pipe(Effect.provideService(RuntimeEnvironment, execution)),
-      compute: operation => cacheSnapshot.pipe(Effect.flatMap(snapshot => (operation.kind === 'scan' ? backgroundComputation : computation).run(operation, snapshot))),
+      compute: operation => (operation.kind === 'scan' ? cachePermit.withPermit(cacheSnapshot) : cacheSnapshot).pipe(Effect.flatMap(snapshot => (operation.kind === 'scan' ? backgroundComputation : computation).run(operation, snapshot))),
       open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open), Effect.andThen(computation.open), Effect.andThen(backgroundComputation.open)),
       close: SubscriptionRef.get(Context.get(stateContext, WorkspaceState).value).pipe(Effect.flatMap(value => value.state === 'stopping'
         ? operations.close : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(backgroundComputation.close), Effect.andThen(cache.close)),
       clear: clearWorkspaceCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))), Effect.provideService(RuntimeEnvironment, execution)),
       foregroundPending: admission.pending,
+      cachePermit,
       maintenance: {
         needed: cacheMaintenanceNeeded(privateDir).pipe(Effect.provideService(RuntimeEnvironment, execution)),
-        run: Effect.uninterruptibleMask(restore => cache.close.pipe(Effect.andThen(restore(maintainCache(root).pipe(Effect.asVoid))), Effect.ensuring(cache.open))).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(PersistentCache, persistent), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))), Effect.provideService(RuntimeEnvironment, execution)),
+        run: Effect.uninterruptibleMask(restore => Effect.gen(function*() {
+          yield* cache.close;
+          const outcome = yield* Effect.exit(restore(maintainCache(root)));
+          yield* cache.open;
+          if (outcome._tag === 'Failure') return yield* Effect.failCause(outcome.cause);
+        })).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(PersistentCache, persistent), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))), Effect.provideService(RuntimeEnvironment, execution)),
       },
       exists: Effect.sync(() => existsSync(root) && existsSync(privateDir)),
       reconcile: candidate => watch ? watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources) : Effect.succeed(false),

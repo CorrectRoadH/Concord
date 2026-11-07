@@ -19,6 +19,7 @@ export interface RuntimePorts {
   readonly close: Effect.Effect<void, unknown>;
   readonly clear: Effect.Effect<unknown, unknown>;
   readonly foregroundPending?: () => number;
+  readonly cachePermit?: Semaphore.Semaphore;
   readonly maintenance?: { readonly needed: Effect.Effect<boolean, unknown>; readonly run: Effect.Effect<unknown, unknown> };
   readonly exists: Effect.Effect<boolean, unknown>;
   readonly reconcile?: (candidate: WorkspaceProjectionCandidate) => Effect.Effect<boolean, unknown>;
@@ -36,7 +37,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   const invalidations = yield* Queue.sliding<void>(1);
   const maintenance = yield* Semaphore.make(1);
   let operations = 0, foreground = 0;
-  const nativeOwnership = yield* Semaphore.make(1);
+  const nativeOwnership = ports.cachePermit ?? (yield* Semaphore.make(1));
   let reclaiming: Fiber.Fiber<void, unknown> | undefined;
   let operationIdle = yield* Deferred.make<void>();
   yield* Deferred.succeed(operationIdle, undefined);
@@ -211,11 +212,11 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() {
       if (foreground > 0 || (ports.foregroundPending?.() ?? 0) > 0) return;
       const fiber = yield* Effect.forkScoped(maintenance.withPermit(nativeOwnership.withPermit(Effect.gen(function*() {
-      if (stopping || (yield* SubscriptionRef.get(state.value)).state !== 'running' || !(yield* idleMaintenance.needed)) return;
-      yield* ports.verify;
-      if (foreground > 0 || (ports.foregroundPending?.() ?? 0) > 0) return;
-      yield* idleMaintenance.run;
-    }))).pipe(Effect.catch(fail)));
+        if (stopping || (yield* SubscriptionRef.get(state.value)).state !== 'running' || !(yield* idleMaintenance.needed)) return;
+        yield* ports.verify;
+        if (foreground > 0 || (ports.foregroundPending?.() ?? 0) > 0) return;
+        yield* idleMaintenance.run;
+      }))).pipe(Effect.catch(fail)));
       reclaiming = fiber;
       yield* Fiber.await(fiber);
       reclaiming = undefined;
