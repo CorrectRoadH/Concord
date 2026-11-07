@@ -10,6 +10,18 @@ import { observeOwnedProcessGroup } from '../../src/base/process/owned-process.t
 import { ProcessEvent } from '../../src/base/process/process-events.ts';
 
 // @feature docs/engineering/testing/architecture.md#bun-测试引擎
+// @issue docs/issues/bun-junit-ci-properties.md
+test('official Bun CI metadata preserves case counts and failure ownership', () => {
+  const file = resolve('test/model/fixture.test.ts');
+  const properties = '<properties><property name="ci" value="https://github.com/CorrectRoadH/Concord/actions/runs/42362038518"/><property name="commit" value="a88230cbcc657466022005dcc57b2a998564b306"/></properties>';
+  const xml = `<testsuites name="bun test" tests="2" assertions="0" failures="1" skipped="1" time="0.1"><testsuite file="${file}">${properties}<testcase file="${file}" name="filtered"><skipped/></testcase><testcase file="${file}" name="failed"><failure message="bad">bad</failure></testcase></testsuite></testsuites>`;
+  assert.deepEqual(readBunCases(xml, file, process.cwd()), { counts: { tests: 1, failed: 1, cancelled: 0, skipped: 1 }, failures: [{ name: 'failed', error: 'bad' }] });
+  for (const invalid of [xml.replace('name="ci"', 'unknown="ci"'), xml.replace('name="ci"', 'name="ci" extra="x"'), xml.replace('<property name="commit"', '<testcase name="commit"')]) {
+    assert.throws(() => readBunCases(invalid, file, process.cwd()));
+  }
+});
+
+// @feature docs/engineering/testing/architecture.md#bun-测试引擎
 test('Bun startup failure reaches the controller failure report without inventing case counts', { timeout: 20_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
