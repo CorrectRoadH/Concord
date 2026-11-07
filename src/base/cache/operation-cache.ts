@@ -5,8 +5,9 @@ import { ConcordError } from '../../model/index.ts';
 import type { WorkspaceMetadata } from '../workspace/context.ts';
 import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { assertLeasePath } from '../publication/file-lease.ts';
+import { openCurrentPersistentCache } from './persistent-handle.ts';
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from './cache-file.ts';
-import { HawdbFailure, openHawdb, type HawdbDatabase, type HawdbEntry, type HawdbNamespace, type HawdbReclamation } from './hawdb-native.ts';
+import { HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace, type HawdbReclamation } from './hawdb-native.ts';
 
 /** Private to base: an operation owns handles, never a workspace metadata value. */
 export class OperationCache extends Context.Service<OperationCache, {
@@ -44,7 +45,7 @@ export const withOperationCache = <A, E, R>(workspace: WorkspaceMetadata, runtim
         assertLeasePath(path);
         const existing = assertCacheDatabaseSafe(path);
         if (!write && (!existing || cacheRootOwnerOnly(path))) return undefined;
-        database = openHawdb(path, { readOnly: !write, create: write }, runtime);
+        database = openCurrentPersistentCache(workspace.privateDir, write, runtime);
         writable = write;
         return database;
       };
