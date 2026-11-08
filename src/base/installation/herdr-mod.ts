@@ -8,6 +8,7 @@ import { ConcordError, failure } from '../../model/index.ts';
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { packageRoot } from './location.ts';
 import { modManifest } from '../../model/herdr-mod/index.ts';
+import { buildHerdrModResources } from './herdr-mod-assets.ts';
 
 declare const CONCORD_COMPILED: boolean;
 
@@ -57,6 +58,7 @@ export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*
   yield* fs.makeDirectory(appHome, { recursive: true });
   const assets = ['main.js', 'mod.json', 'NOTICE.txt'];
   const generated = new Map<string, string>();
+  let iconSource = resources;
   if (!(typeof CONCORD_COMPILED !== 'undefined' && CONCORD_COMPILED) && sourceRoot !== undefined) {
     const scratch = yield* fs.makeTempDirectoryScoped({ directory: appHome, prefix: '.concord-mod-build-' });
     yield* Effect.acquireRelease(Effect.tryPromise(async () => {
@@ -72,10 +74,13 @@ export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*
     generated.set('main.js', yield* fs.readFileString(join(scratch, 'main.js')));
     const version = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ version: Schema.NonEmptyString })), { onExcessProperty: 'ignore' })(yield* fs.readFileString(join(sourceRoot, 'package.json')));
     generated.set('mod.json', JSON.stringify(modManifest(version.version)) + '\n');
-    generated.set('NOTICE.txt', `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString(join(sourceRoot, 'node_modules/effect/LICENSE'))}`);
+    yield* buildHerdrModResources(scratch, sourceRoot);
+    generated.set('NOTICE.txt', yield* fs.readFileString(join(scratch, 'NOTICE.txt')));
+    iconSource = scratch;
   } else for (const name of assets) {
     if (!(yield* fs.exists(join(resources, name)))) return yield* Effect.fail(new ConcordError('BuildRequired', 'Build Concord before installing the Herdr mod'));
   }
+  if (!(yield* fs.exists(join(iconSource, 'icons')))) return yield* Effect.fail(new ConcordError('BuildRequired', 'Build Concord before installing the Herdr mod'));
   yield* fs.makeDirectory(path, { recursive: true });
   for (const name of assets) {
     const temporary = join(path, `.${name}.${process.pid}.tmp`);
@@ -85,6 +90,10 @@ export const manageHerdrMod = Effect.fn('Installation.manageHerdrMod')(function*
       Effect.ensuring(fs.remove(temporary, { force: true }).pipe(Effect.orDie)),
     );
   }
+  const iconStage = yield* fs.makeTempDirectoryScoped({ directory: path, prefix: '.concord-icons-' });
+  yield* fs.copy(join(iconSource, 'icons'), join(iconStage, 'icons'));
+  yield* fs.remove(join(path, 'icons'), { recursive: true, force: true });
+  yield* fs.rename(join(iconStage, 'icons'), join(path, 'icons'));
   if (available) {
     const checked = yield* (host ? host.check(path) : herdrCommand(['check', path], runtime)).pipe(Effect.catch(cause => Effect.succeed({ code: 1, output: cause.message })));
     if (checked.code !== 0) return yield* Effect.fail(new ConcordError('HerdrModCheckFailed', 'Herdr rejected the installed Concord mod', { output: checked.output }));

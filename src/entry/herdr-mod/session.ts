@@ -21,7 +21,7 @@ const Case = Schema.Struct({ file: Path, line: Schema.Int, name: Schema.String, 
 const Code = Schema.Struct({ file: Path, line: Schema.Int, symbol: Schema.optional(Schema.String), contracts: Schema.Array(Schema.String) });
 const Show = Schema.Struct({ tests: Schema.optional(Schema.Array(Case)), codeDeclarations: Schema.optional(Schema.Array(Code)), pages: Schema.optional(Schema.Array(Page)) });
 const Doctor = Schema.Struct({ root: Schema.String, configuration: Schema.Struct({ sourceRoots: Schema.optional(Schema.Array(Schema.String)), testRoots: Schema.optional(Schema.Array(Schema.String)) }) });
-const Concepts = Schema.Struct({ concepts: Schema.Array(Schema.Struct({ reference: Schema.String, path: Path, concept: Schema.Struct({ id: Schema.String, term: Schema.String, definition: Schema.optional(Schema.String) }) })), catalogs: Schema.Array(Schema.Struct({ path: Path })) });
+const Concepts = Schema.Struct({ concepts: Schema.Array(Schema.Struct({ reference: Schema.String, path: Path, concept: Schema.Struct({ id: Schema.String, term: Schema.String, definition: Schema.optional(Schema.String) }) })), catalogs: Schema.Array(Schema.Struct({ path: Path, catalog: Schema.Struct({ title: Schema.String }) })) });
 const Check = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String, line: Schema.optional(Schema.Int), message: Schema.String })) });
 const Initialization = Schema.Struct({ createdPaths: Schema.Array(Path), guide: Schema.Literals(['docs-from-scratch', 'docs-from-code']) });
 const ErrorReply = Schema.Struct({ error: Schema.String, message: Schema.String });
@@ -77,12 +77,17 @@ export class ModSession {
   deleted = false;
   error = '';
   errorDetails = '';
+  errorCode = '';
+  /** The first read of this repository has finished; later reads keep the current view until they finish. */
+  loaded = false;
   detail: ModDetail = {};
   check: ModCheck | undefined;
   private rootResolved = false;
   closed = false;
   private observation = {};
   private selection = {};
+  /** The selection token that `selected` belongs to; a newer click owns a newer token. */
+  private selectedToken = {};
   readonly host: ModHost;
   readonly machine: string | null;
   constructor(host: ModHost, cwd: string, machine: string | null = null) { this.host = host; this.root = cwd; this.machine = machine; }
@@ -107,10 +112,14 @@ export class ModSession {
       const reply = yield* this.io(() => this.host.exec('concord', ['--json', '--fresh', ...(discoverRoot ? [] : ['--root', this.root]), ...args], { cwd: this.root, on: this.machine }));
       if (reply.code !== 0) {
         const error = Schema.decodeUnknownExit(Schema.fromJsonString(ErrorReply), { onExcessProperty: 'ignore' })(reply.stderr || reply.stdout);
-        if (error._tag === 'Success') return yield* Effect.fail(new ModFailure({ message: error.value.message, code: error.value.error }));
+        if (error._tag === 'Success') {
+          return yield* Effect.fail(new ModFailure({ message: error.value.message, code: error.value.error, details: reply.stderr || reply.stdout }));
+        }
         if (!diagnostic || !reply.stdout.trim()) return yield* Effect.fail(new ModFailure({ message: 'Concord 命令失败', details: reply.stderr || reply.stdout }));
       }
-      return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(reply.stdout).pipe(Effect.mapError(failure));
+      const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(reply.stdout).pipe(Effect.mapError(failure));
+      if (!this.closed) { this.error = ''; this.errorDetails = ''; this.errorCode = ''; }
+      return value;
     });
   }
 
@@ -118,7 +127,8 @@ export class ModSession {
     const observation = this.observation = {};
     const current = () => !this.closed && observation === this.observation;
     const selected = this.selected;
-    const selection = this.selection;
+    // Pair the shown page with its own token, so a page being opened now is not replaced by the older one.
+    const selection = this.selectedToken;
     // A pane can start below the Git top. Without a local marker, let the public
     // doctor discover that top before sending any initialization-guarded query.
     let doctor: typeof Doctor.Type | undefined;
@@ -126,9 +136,11 @@ export class ModSession {
     if (!current()) return;
     if (taste === null) {
       const before = this.root;
-      doctor = yield* this.command(['doctor'], Doctor, true, true);
+      // "Not initialized" is a state of the repository, not a failure to show.
+      doctor = yield* this.command(['doctor'], Doctor, true, true).pipe(Effect.catch(error =>
+        error instanceof ModFailure && error.code === 'ProjectNotInitialized' ? Effect.succeed(undefined) : Effect.fail(error)));
       if (!current()) return;
-      this.root = doctor.root;
+      if (doctor) this.root = doctor.root;
       if (this.root !== before) taste = yield* this.read('docs/taste.md');
       if (!current()) return;
     }
@@ -136,15 +148,18 @@ export class ModSession {
     if (!this.initialized) {
       this.documents = []; this.pages = []; this.concepts = []; this.detail = {};
       this.rootResolved = true;
-      this.error = '';
+      this.error = ''; this.errorCode = '';
+      this.loaded = true;
       notify();
       return;
     }
+    notify();
     const [resolvedDoctor] = yield* Effect.all([
       doctor ? Effect.succeed(doctor) : this.command(['doctor'], Doctor, true),
       this.command(['list'], Schema.Struct({ documents: Schema.Array(Owner) })).pipe(Effect.tap(reply => Effect.sync(() => {
         if (!current()) return;
         this.documents = reply.documents;
+        this.loaded = true;
         notify(); // The first readable Feature list need not wait for concepts or package details.
       }))),
       selected ? this.open(selected, false, selection, () => { if (current()) notify(); }) : Effect.void,
@@ -164,9 +179,9 @@ export class ModSession {
     ], { concurrency: 'unbounded' });
     if (!current()) return;
     this.concepts = concepts.concepts;
-    const catalogPages = concepts.catalogs.map(catalog => ({ path: catalog.path, kind: 'concepts', name: catalog.path }));
-    this.pages = [...new Map([...this.pages, ...catalogPages, ...packages.flatMap(pkg => pkg.pages ?? [])].map(page => [page.path, page])).values()].sort((a, b) => a.path.localeCompare(b.path));
-    this.error = '';
+    const catalogPages = concepts.catalogs.map(catalog => ({ path: catalog.path, kind: 'concepts', name: catalog.catalog.title }));
+    this.pages = [...new Map([...this.pages, ...packages.flatMap(pkg => pkg.pages ?? []), ...catalogPages].map(page => [page.path, page])).values()].sort((a, b) => a.path.localeCompare(b.path));
+    this.error = ''; this.errorCode = '';
     notify();
   });
 
@@ -184,7 +199,7 @@ export class ModSession {
     const source = file?.body ?? null;
     if (this.closed || token !== this.selection) return;
     if (resetDraft) this.draft = undefined;
-    this.selected = canonical;
+    this.selected = canonical; this.selectedToken = token;
     this.deleted = source === null;
     if (this.draft !== undefined) this.conflict = source !== this.source;
     else { this.source = source ?? ''; this.sourceDigest = file?.digest ?? ''; this.conflict = false; }
@@ -228,13 +243,6 @@ export class ModSession {
     if (reply.code !== 0) return yield* Effect.fail(new ModFailure({ message: 'Concord 命令失败', details: reply.stderr || reply.stdout }));
     const source = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(reply.stdout).pipe(Effect.mapError(failure));
     if (!this.closed && this.initialization?.guide === guide) this.guideSource = source;
-  });
-
-  createFeature = Effect.fn('ModSession.createFeature')(function*(this: ModSession, name: string, title: string) {
-    const receipt = yield* this.command(['new', 'feature', name, '--title', title || name], Schema.Struct({ changedPaths: Schema.Array(Path) }));
-    yield* this.refresh();
-    const path = receipt.changedPaths.find(path => path.endsWith('/README.md'));
-    if (path) yield* this.open(path);
   });
 
   checkNow = Effect.fn('ModSession.checkNow')(function*(this: ModSession) { this.check = yield* this.command(['check'], Check, true); });

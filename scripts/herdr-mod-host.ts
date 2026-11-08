@@ -29,13 +29,20 @@ class HostElement {
   bg(_v: string) { return this; } text_color(_v: string) { return this; } text_size(_v: number) { return this; }
   rounded(_v: number) { return this; } overflow_y_scroll() { return this; }
   items_stretch() { return this; } overflow_hidden() { return this; }
+  size(_v: number) { return this; } flex_none() { return this; }
+  pl(_v: number) { return this; } pr(_v: number) { return this; }
+  border_1() { return this; } border_b(_v: number) { return this; } border_r(_v: number) { return this; } border_t(_v: number) { return this; } border_color(_v: string) { return this; }
+  cursor_pointer() { return this; } truncate() { return this; } font_semibold() { return this; } font_family(_v: string) { return this; }
+  hover(_body: (element: HostElement) => HostElement) { return this; }
+  on_size_change(_body: (size: { width: number; height: number }, cx: HostContext) => void) { return this; }
+  track_scroll(_handle: HostState) { return this; }
   on_click(callback: Callback) { this.click = callback; return this; }
   on_link_click(_callback: (url: string, cx: HostContext) => void) { return this; }
   text(): string { return this.nodes.map(node => typeof node === 'string' ? node : node.text()).join('\n'); }
   find(id: string): HostElement | undefined { return this.key === id ? this : this.nodes.flatMap(node => typeof node === 'string' ? [] : node.find(id) ?? []).at(0); }
 }
 interface HostTask { cancel(): void; is_done(): boolean }
-interface HostContext { notify(): void; open_url(url: string): void; sleep(ms?: number): Promise<void>; spawn(callback: (cx: HostContext) => unknown): HostTask; timer: { after(ms: number, callback: (cx: HostContext) => void): HostTask; every(ms: number, callback: (cx: HostContext) => void): HostTask } }
+interface HostContext { notify(): void; stop_propagation(): void; open_url(url: string): void; write_to_clipboard(text: string): void; sleep(ms?: number): Promise<void>; spawn(callback: (cx: HostContext) => unknown): HostTask; timer: { after(ms: number, callback: (cx: HostContext) => void): HostTask; every(ms: number, callback: (cx: HostContext) => void): HostTask } }
 interface ModView { init(props: undefined, cx: HostContext): void; render(cx: HostContext): HostElement; close(cx: HostContext): void | Promise<void> }
 class HostState {
   private text: string;
@@ -58,7 +65,9 @@ const main = Effect.scoped(Effect.gen(function*() {
   const calls: string[][] = [];
   const timings: { operation: string; ms: number }[] = [];
   const context = (): HostContext => ({
+    stop_propagation() {},
     open_url() {},
+    write_to_clipboard() {},
     sleep: ms => Effect.runPromise(Effect.sleep(Duration.millis(ms ?? 0))),
     notify() { if (closed) throw new Error('Closed mod context'); output = view?.render(context()); },
     spawn(callback) {
@@ -84,12 +93,16 @@ const main = Effect.scoped(Effect.gen(function*() {
   });
   const sharedData = new Map<string, unknown>();
   const host = {
-    View: class {}, div: () => new HostElement(), image: (path: string) => new HostElement().child(path), h_flex: () => new HostElement(), v_flex: () => new HostElement(),
+    View: class {}, div: () => new HostElement(), image: (path: string) => new HostElement().child(path), svg: () => new HostElement(), h_flex: () => new HostElement(), v_flex: () => new HostElement(),
+    v_virtual_list: (id: string, count: number, _height: number, _key: (index: number) => string, render: (range: { start: number; end: number }, cx: HostContext) => HostElement[]) => new HostElement().id(id).children(render({ start: 0, end: count }, context())),
+    VirtualListScrollHandle: { new: () => new HostState('') },
     TextView: { markdown: (id: string, text: string) => new HostElement().id(id).child(text) },
     EditorState: { new: (options: { value?: string }) => new HostState(options.value ?? '') },
     Editor: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
-    InputState: { new: () => new HostState('') }, Input: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
-    focused: () => ({ cwd: root, pane: 'external-boundary', tab: 'host-tab' }), theme: () => ({}),
+    // Comparison runs load the previous published mod through this same host.
+    InputState: { new: (options?: { value?: string }) => new HostState(options?.value ?? '') },
+    Input: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
+    focused: () => ({ cwd: root, pane: 'external-boundary', tab: 'host-tab' }), theme: () => ({}), settings: () => ({ font_family: '' }),
     panes: () => [{ pane: 'external-boundary', terminal: 'host-terminal', tab: 'host-tab', focused: true, cwd: root }],
     spaces: () => [{ id: 'host-space', machine: null, tabs: [{ id: 'host-tab', active: true }] }],
     run: () => null, closeOverlay: () => null, appHome: () => herdrHome, home: () => '/external-home',
@@ -117,7 +130,7 @@ const main = Effect.scoped(Effect.gen(function*() {
       return reply;
     },
   };
-  const exports: Record<string, readonly (keyof typeof host)[]> = { 'gpui-kit': ['View', 'div', 'image'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'shared', 'setShared', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme'] };
+  const exports: Record<string, readonly (keyof typeof host)[]> = { 'gpui-kit': ['View', 'div', 'image', 'svg'], 'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'shared', 'setShared', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'settings'] };
   plugin({ name: 'concord-herdr-host', setup(builder) {
     for (const [specifier, names] of Object.entries(exports)) {
       builder.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(names.map(name => [name, host[name]])) }));
@@ -130,7 +143,8 @@ const main = Effect.scoped(Effect.gen(function*() {
     }
     return performance.now();
   }).pipe(Effect.timeoutOrElse({ duration: '30 seconds', orElse: () => Effect.fail(new HostFailure({ message: `Mod description timeout: ${output?.text().slice(0, 1000)}` })) })), { signal });
-  const sourcePath = join(root, 'docs/feature/measured/README.md');
+  const documentPath = mode === 'workflow' ? 'docs/taste.md' : 'docs/feature/measured/README.md';
+  const sourcePath = join(root, documentPath);
   let original: string | undefined;
   try {
     let started = performance.now();
@@ -140,16 +154,17 @@ const main = Effect.scoped(Effect.gen(function*() {
     timings.push({ operation: entry.endsWith('.ts') ? 'load source mod' : 'load packaged mod', ms: performance.now() - started });
     view = new module.default(); view.init(undefined, context()); output = view.render(context());
     if (mode === 'workflow') {
-      await waitFor(() => calls.some(call => call[0] === 'workspace' && call[1] === 'wait'));
+      // An uninitialized repository is read again on a timer, not waited on.
+      await waitFor(() => output?.find('initialize') !== undefined);
       const click = (id: string) => { const element = output?.find(id); if (!element?.click) throw new Error(`Missing UI action ${id}: ${output?.text()}`); element.click(undefined, context()); };
       click('initialize');
-      await waitFor(() => output?.find('new-feature') !== undefined);
-      click('new-feature');
-      output!.find('feature-name')!.state!.set_value('measured'); output!.find('feature-title')!.state!.set_value('measured');
-      click('create-feature'); await waitFor(() => output?.find('document-editor') !== undefined);
+      await waitFor(() => output?.find('category-项目规则') !== undefined);
+      click('category-项目规则'); click(`page-${documentPath}`);
+      await waitFor(() => output?.find(`concord-body-${documentPath}`) !== undefined);
+      click('edit');
       const editor = output!.find('document-editor')!.state!;
       editor.set_value(`${editor.value()}\nSAVED_FROM_NATIVE_MOD\n`); click('save');
-      await waitFor(() => output?.find('document-editor') === undefined && output?.text().includes('check:') === true);
+      await waitFor(() => output?.find('document-editor') === undefined && output?.find('concord-check') !== undefined);
       if (!(await Effect.runPromise(fs.readFileString(sourcePath))).includes('SAVED_FROM_NATIVE_MOD')) throw new Error('Native save did not write its draft');
       click('edit'); output!.find('document-editor')!.state!.set_value('# MY_CONFLICTING_DRAFT\n');
       const disk = `${await Effect.runPromise(fs.readFileString(sourcePath))}\nAGENT_CHANGE\n`;
@@ -159,8 +174,8 @@ const main = Effect.scoped(Effect.gen(function*() {
       await waitFor(() => output?.find('merge') !== undefined);
       if (output!.find('document-editor')!.state!.value() !== '# MY_CONFLICTING_DRAFT\n' || await Effect.runPromise(fs.readFileString(sourcePath)) !== disk) throw new Error('Conflict replaced the disk or draft');
       click('discard');
-      await waitFor(() => output?.find(`concord-body-docs/feature/measured/README.md`)?.text().includes('AGENT_CHANGE') === true);
-      process.stdout.write(JSON.stringify({ boundary: 'actual mod and public CLI; external Herdr UI only', text: output?.text(), calls, workflow: 'initialized, created, edited, saved, checked, preserved conflict, discarded' }) + '\n');
+      await waitFor(() => output?.find(`concord-body-${documentPath}`)?.text().includes('AGENT_CHANGE') === true);
+      process.stdout.write(JSON.stringify({ boundary: 'actual mod and public CLI; external Herdr UI only', text: output?.text(), calls, workflow: 'initialized, edited, saved, checked, preserved conflict, discarded' }) + '\n');
       return;
     }
     let ended = await waitFor(() => output?.find('concord-tree')?.text().includes('measured') === true);

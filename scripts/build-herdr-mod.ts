@@ -5,6 +5,7 @@ import { Effect, FileSystem, Schema } from 'effect';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { modManifest, ModVersion } from '../src/model/herdr-mod/index.ts';
+import { buildHerdrModResources } from '../src/base/installation/index.ts';
 import { packJavaScript } from './pack-javascript.ts';
 import { prepareHerdrModCatalog } from './herdr-mod-catalog.ts';
 
@@ -20,7 +21,7 @@ export const buildHerdrModAssets: (output: string) => Effect.Effect<void, HerdrM
     deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr', 'fs/promises', 'buffer', 'crypto'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$|fs\/promises$|buffer$|crypto$)/u, onlyBundle: false },
     outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
   yield* fs.copyFile('src/entry/herdr-mod/preview.png', join(output, 'preview.png'));
-  yield* fs.writeFileString(join(output, 'NOTICE.txt'), `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);
+  yield* buildHerdrModResources(output, process.cwd());
 }, Effect.mapError(cause => new HerdrModBuildFailed({ message: String(cause) })));
 
 export const buildHerdrModCatalog: (repositoryRoot: string) => Effect.Effect<{ version: string; directory: string }, HerdrModBuildFailed, FileSystem.FileSystem> = Effect.fn('buildHerdrModCatalog')(function*(repositoryRoot: string) {

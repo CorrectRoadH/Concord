@@ -15,6 +15,11 @@ class Element {
   click: ((event: unknown, cx: Context) => void) | undefined;
   link: ((url: string, cx: Context) => void) | undefined;
   state: State | undefined;
+  scroll: State | undefined;
+  width: number | undefined;
+  pointer = false;
+  hovered = false;
+  sizeChanged: ((size: { width: number; height: number }, cx: Context) => void) | undefined;
   private consumed = false;
   id(key: string) { this.key = key; return this; }
   child(child: Element | string) {
@@ -25,11 +30,18 @@ class Element {
   size_full() { return this; } flex_1() { return this; } min_w(_v: number) { return this; } min_h(_v: number) { return this; }
   max_w(_v: number) { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
   max_w_full() { return this; }
-  w(_v: number) { return this; } h(_v: number) { return this; } gap(_v: number) { return this; }
+  w(v: number) { this.width = v; return this; } h(_v: number) { return this; } gap(_v: number) { return this; }
   p(_v: number) { return this; } px(_v: number) { return this; } py(_v: number) { return this; }
   bg(_v: string) { return this; } text_color(_v: string) { return this; } text_size(_v: number) { return this; }
   rounded(_v: number) { return this; } overflow_y_scroll() { return this; }
   items_stretch() { return this; } overflow_hidden() { return this; }
+  size(_v: number) { return this; } flex_none() { return this; }
+  pl(_v: number) { return this; } pr(_v: number) { return this; }
+  border_1() { return this; } border_b(_v: number) { return this; } border_r(_v: number) { return this; } border_t(_v: number) { return this; } border_color(_v: string) { return this; }
+  cursor_pointer() { this.pointer = true; return this; } truncate() { return this; } font_semibold() { return this; } font_family(_v: string) { return this; }
+  hover(_body: (element: Element) => Element) { this.hovered = true; return this; }
+  on_size_change(body: (size: { width: number; height: number }, cx: Context) => void) { this.sizeChanged = body; return this; }
+  track_scroll(handle: State) { this.scroll = handle; return this; }
   on_click(body: (event: unknown, cx: Context) => void) { this.click = body; return this; }
   on_link_click(body: (url: string, cx: Context) => void) { this.link = body; return this; }
   find(key: string): Element | undefined {
@@ -41,6 +53,7 @@ class Element {
 }
 class State {
   released = false;
+  readOnly = false;
   private source: string;
   constructor(source: string) { this.source = source; }
   value() { assert.equal(this.released, false); return this.source; }
@@ -64,10 +77,17 @@ class Boundary {
   requests: { command: string; args: string[]; options?: { cwd?: string; on?: string | null } }[] = [];
   reachable = true;
   commandError: { code: number; stdout: string; stderr: string } | undefined;
+  commandGate: ReturnType<typeof pending<void>> | undefined;
   commands: { name: string; args?: Record<string, unknown> }[] = [];
   closedOverlays: string[] = [];
   urls: string[] = [];
+  clipboard = '';
   rendered: RenderedPage['blocks'] | undefined;
+  packagePages = [{ path: page, name: 'Cart', kind: 'readme' }];
+  documents = [{ path: page, kind: 'feature', title: 'Cart' }];
+  conceptCatalogs: { path: string; catalog: { title: string } }[] = [];
+  concepts: { reference: string; path: string; concept: { id: string; term: string; definition: string } }[] = [];
+  relationships: { tests: { file: string; line: number; name: string; contract: string }[]; codeDeclarations: { file: string; line: number; symbol: string; contracts: string[] }[] } = { tests: [], codeDeclarations: [] };
   colors: Record<string, string> = {};
   resourceFiles = new Map<string, Uint8Array>();
   imagePaths: string[] = [];
@@ -86,6 +106,7 @@ class Boundary {
   picker = pending<string | null>();
   closed = false;
   output = new Element();
+  frames: Element[] = [];
   view: { render(cx: Context): unknown; close(cx: AsyncContext): void | Promise<void> } | undefined;
   task(): HostTask {
     const task = { done: false, cancelled: false, cancel() { this.cancelled = true; }, is_done() { return this.done || this.cancelled; } };
@@ -93,7 +114,9 @@ class Boundary {
   }
   context(owner?: HostTask): AsyncContext {
     return {
+      stop_propagation() {},
       open_url: url => { this.urls.push(url); },
+      write_to_clipboard: value => { this.clipboard = value; },
       sleep: () => new Promise(resolve => setImmediate(resolve)),
       notify: () => { assert.equal(this.closed || owner?.cancelled === true, false, 'fresh live context'); this.draw(); },
       spawn: body => {
@@ -117,7 +140,7 @@ class Boundary {
       timer.body(this.context(timer.task));
     }
   }
-  draw() { if (this.view) this.output = this.view.render(this.context()) as Element; }
+  draw() { if (this.view) { this.output = this.view.render(this.context()) as Element; this.frames.push(this.output); } }
   selectTab(tab: string, cwd: string, machine: string | null = null) {
     this.focusedTab = tab;
     for (const pane of this.paneList) pane.focused = false;
@@ -144,6 +167,7 @@ class Boundary {
       if (this.installedVersion === undefined) throw new Error('cannot start concord');
       return { code: 0, stdout: `concord v${this.installedVersion}\n`, stderr: '' };
     }
+    await this.commandGate?.promise;
     if (this.commandError) return this.commandError;
     const operation = args.includes('--root') ? args.slice(args.indexOf('--root') + 2) : args.slice(2); this.calls.push(operation);
     if (operation[0] === 'workspace' && operation[1] === 'wait') {
@@ -166,11 +190,10 @@ class Boundary {
       return { code: 0, stdout: JSON.stringify({ changedPaths: [input.path] }), stderr: '' };
     }
     const data = operation[0] === 'doctor' ? { root: this.roots.get(options?.cwd ?? '') ?? options?.cwd, configuration: { sourceRoots: ['src'], testRoots: ['test'] } }
-      : operation[0] === 'list' ? { documents: [{ path: page, kind: 'feature', title: 'Cart' }] }
-      : operation[0] === 'concepts' ? { concepts: [], catalogs: [] }
-      : operation[0] === 'show' ? { pages: [{ path: page, name: 'Cart', kind: 'readme' }] }
+      : operation[0] === 'list' ? { documents: this.documents }
+      : operation[0] === 'concepts' ? { concepts: this.concepts, catalogs: this.conceptCatalogs }
+      : operation[0] === 'show' ? { pages: this.packagePages, ...this.relationships }
       : operation[0] === 'init' ? { createdPaths: ['docs/taste.md'], guide: 'docs-from-scratch' }
-      : operation[0] === 'new' ? { changedPaths: [page] }
       : operation[0] === 'check' ? { ok: true, findings: [] }
       : {};
     if (operation[0] === 'init') this.files.set(`${options?.cwd}/docs/taste.md`, '# Taste');
@@ -190,11 +213,12 @@ let host: Boundary;
 const sharedData = new Map<string, unknown>();
 const external = {
   View: class {}, div: () => new Element(), h_flex: () => new Element(), v_flex: () => new Element(),
+  svg: () => new Element(),
+  v_virtual_list: (id: string, count: number, _height: number, _key: (index: number) => string, render: (range: { start: number; end: number }, cx: Context) => Element[]) => new Element().id(id).children(render({ start: 0, end: count }, host.context())),
+  VirtualListScrollHandle: { new: () => host.state('') },
   image: (path: string) => { assert.ok(host.resourceFiles.has(`/herdr/${path}`), 'write finishes before native image loading'); host.imagePaths.push(path); return new Element().child(`IMAGE ${path}`); },
   TextView: { markdown: (id: string, source: string) => new Element().id(id).child(source) },
-  InputState: { new: (options?: { value?: string }) => host.state(options?.value) },
-  EditorState: { new: (options?: { value?: string }) => host.state(options?.value) },
-  Input: { new: (state: State) => { const element = new Element(); element.state = state; return element; } },
+  EditorState: { new: (options?: { value?: string; readonly?: boolean }) => { const state = host.state(options?.value); state.readOnly = options?.readonly ?? false; return state; } },
   Editor: { new: (state: State) => { const element = new Element(); element.state = state; return element; } },
   exec: (command: string, args: string[], options?: { cwd?: string; on?: string | null }) => host.exec(command, args, options),
   focused: () => ({ cwd: host.cwd, pane: host.paneList.find(pane => pane.focused)?.pane ?? null, terminal: null, shown: null, agent: null, space: 's1', tab: host.focusedTab }),
@@ -205,6 +229,7 @@ const external = {
   home: () => '/home/local',
   props: () => host.props,
   theme: () => host.colors,
+  settings: () => ({ font_family: 'Test Mono' }),
   shared: (key: string) => structuredClone(sharedData.get(key)),
   setShared: (key: string, value: unknown) => { sharedData.set(key, structuredClone(value)); return null; },
 };
@@ -214,9 +239,9 @@ const global = globalThis as typeof globalThis & { __concordHostSync?: typeof ex
 test('source mod obeys native host invalidation and retained-state boundaries', async t => {
   global.__concordHostSync = external;
   const names: Record<string, string[]> = {
-    'gpui-kit': ['View', 'div', 'image'],
-    'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'],
-    herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'shared', 'setShared'],
+    'gpui-kit': ['View', 'div', 'image', 'svg'],
+    'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState'],
+    herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'settings', 'shared', 'setShared'],
   };
   mock.module('fs/promises', () => ({
       mkdir: async () => undefined,
@@ -231,12 +256,166 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
   } });
   try {
     const { default: Mod } = await import('../../src/entry/herdr-mod/main.ts');
-    const start = async (setup?: (boundary: Boundary) => void) => {
+    const start = async (setup?: (boundary: Boundary) => void, ready = () => host.watches.length === 1) => {
       host = new Boundary(); setup?.(host); const view = new Mod(); host.view = view;
       view.init(undefined, host.context()); host.draw();
-      await host.until(() => host.watches.length === 1);
+      await host.until(ready);
       return host;
     };
+    // @feature docs/feature/herdr-mod/ui.md#双栏
+    await t.test('both columns remain at all widths and the collapsed list survives refresh, selection and repository changes', async () => {
+      const b = await start();
+      try {
+        for (const [width, expected] of [[320, 160], [480, 192], [900, 240]]) {
+          b.output.sizeChanged!({ width: width!, height: 600 }, b.context());
+          assert.equal(b.output.find('concord-sidebar')!.width, expected);
+          assert.ok(b.output.find('concord-page')); assert.ok(b.output.find('concord-tree'));
+        }
+        b.click(`page-${page}`);
+        await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        const scroll = b.output.find('concord-tree')!.scroll;
+        b.click('toggle-documents');
+        assert.equal(b.output.find('concord-tree'), undefined);
+        b.output.find(`concord-block-${page}-0`)!.link!('../../taste.md', b.context());
+        await b.until(() => b.output.find('concord-body-docs/taste.md') !== undefined);
+        assert.equal(b.output.find('concord-tree'), undefined);
+        b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'new' }), stderr: '' });
+        await b.until(() => b.watches.length > 1);
+        assert.equal(b.output.find('concord-tree'), undefined);
+        b.paneList[0]!.cwd = '/other'; b.draw();
+        await b.until(() => b.output.find('initialize') !== undefined);
+        b.paneList[0]!.cwd = '/repo'; b.draw();
+        await b.until(() => b.output.find('toggle-documents') !== undefined);
+        assert.equal(b.output.find('concord-tree'), undefined);
+        b.click('toggle-documents');
+        assert.ok(b.output.find('concord-tree'));
+        assert.equal(b.output.find('concord-tree')!.scroll, scroll, 'the retained native scroll handle survives unmounts');
+      } finally { await b.close(); }
+    });
+    // @feature docs/feature/herdr-mod/ui.md#文档列表
+    await t.test('package arrows only fold, titles open README, and refresh or resizing preserves expansion and click affordances', async () => {
+      const casePath = 'docs/feature/cart/use-case/add.md', caseRoot = 'docs/feature/cart/use-case';
+      const b = await start(boundary => {
+        boundary.packagePages.push({ path: casePath, name: '加入商品', kind: 'use-case' }, { path: `${caseRoot}/README.md`, name: 'Use Cases', kind: 'page' });
+        boundary.files.set(`/repo/${casePath}`, '# 加入商品\n');
+        boundary.files.set(`/repo/${caseRoot}/README.md`, '# Use Cases\n');
+      });
+      try {
+        assert.equal(b.output.find(`page-${casePath}`), undefined, 'packages start folded');
+        const heading = b.output.find('category-Feature')!;
+        assert.ok(heading.click); assert.equal(heading.pointer, true); assert.equal(heading.hovered, true);
+        b.click('category-Feature'); assert.equal(b.output.find(`page-${page}`), undefined);
+        b.click('category-Feature'); assert.ok(b.output.find(`page-${page}`));
+        const repository = b.output.find('concord-repository')!;
+        assert.equal(repository.click, undefined); assert.equal(repository.pointer, false); assert.equal(repository.hovered, false);
+        assert.equal(b.output.find('category-Issue'), undefined, 'empty groups are absent');
+        b.click('toggle-docs/feature/cart');
+        assert.equal(b.output.find(`concord-body-${page}`), undefined, 'arrow did not open the README');
+        b.click(`page-${caseRoot}/README.md`);
+        await b.until(() => b.output.find(`concord-body-${caseRoot}/README.md`) !== undefined);
+        assert.ok(b.output.find(`page-${casePath}`));
+        assert.equal(b.output.find(`tree-row-${caseRoot}/README.md`), undefined, 'README is represented by its directory');
+        b.click(`page-${casePath}`);
+        await b.until(() => b.output.find(`concord-body-${casePath}`) !== undefined);
+        assert.equal(b.output.find('page-toolbar')!.nodes[0] instanceof Element && (b.output.find('page-toolbar')!.nodes[0] as Element).pointer, false);
+        b.output.sizeChanged!({ width: 400, height: 600 }, b.context());
+        assert.ok(b.output.find(`page-${casePath}`));
+        b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'tree-refresh' }), stderr: '' });
+        await b.until(() => b.watches.length > 1);
+        assert.ok(b.output.find(`page-${casePath}`));
+        const link = b.output.find(`page-${casePath}`)!;
+        assert.equal(link.pointer, true); assert.equal(link.hovered, true);
+        b.click('toggle-docs/feature/cart');
+        assert.equal(b.output.find(`page-${casePath}`), undefined);
+        assert.ok(b.output.find(`concord-body-${casePath}`), 'collapsing preserves the selected page');
+      } finally { await b.close(); }
+    });
+    // @feature docs/feature/herdr-mod/ui.md#出错时
+    await t.test('a folded error banner keeps the page and list, can be dismissed, and clears after a successful read', async () => {
+      const b = await start();
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        const error = 'raw private process output';
+        for (const dismiss of [true, false]) {
+          b.commandError = { code: 1, stdout: '', stderr: error };
+          b.output.find(`concord-block-${page}-0`)!.link!('../../architecture.md', b.context());
+          await b.until(() => b.output.find('concord-error') !== undefined);
+          assert.ok(b.output.find(`concord-body-${page}`)); assert.ok(b.output.find('concord-tree'));
+          assert.doesNotMatch(b.output.text(), /raw private process output/u);
+          assert.doesNotMatch(b.output.find(`concord-body-${page}`)!.text(), /Concord 命令失败/u);
+          b.click('copy-error'); assert.match(b.clipboard, /Concord 命令失败[\s\S]*原始输出：\nraw private process output/u);
+          assert.doesNotMatch(b.output.text(), /raw private process output/u);
+          if (dismiss) { b.click('dismiss-error'); assert.equal(b.output.find('concord-error'), undefined); }
+          b.commandError = undefined;
+          b.click(`page-${page}`);
+          await b.until(() => b.output.find('concord-error') === undefined);
+          assert.ok(b.output.find(`concord-body-${page}`));
+        }
+      } finally { await b.close(); }
+    });
+    // @feature docs/feature/herdr-mod/ui.md#文档列表
+    await t.test('the document model groups packages and catalogs with their titles and opens collapsed groups from links', async () => {
+      const b = await start(boundary => {
+        for (const [path, kind, title] of [
+          ['docs/engineering/build/README.md', 'engineering', '构建'],
+          ['docs/roadmap/next/README.md', 'roadmap', '下一步'],
+          ['docs/design/choice.md', 'design', '取舍'], ['docs/issues/broken.md', 'issue', '待修复'], ['memory/lesson.md', 'memory', '经验'],
+        ]) {
+          boundary.documents.push({ path: path!, kind: kind!, title: title! });
+          boundary.packagePages.push({ path: path!, kind: kind!, name: title! });
+          boundary.files.set(`/repo/${path}`, `# ${title}\n`);
+        }
+        boundary.files.set('/repo/docs/writing.md', '# 写作规则\n');
+        boundary.files.set('/repo/docs/architecture.md', '# 全局架构\n');
+        boundary.files.set('/repo/docs/feature/cart/concepts.md', '# 购物车术语表\n');
+        boundary.packagePages.push({ path: 'docs/feature/cart/concepts.md', kind: 'concepts', name: 'concepts' });
+        boundary.conceptCatalogs.push({ path: 'docs/feature/cart/concepts.md', catalog: { title: '购物车术语表' } });
+      });
+      try {
+        const categories = b.output.find('concord-tree')!.nodes.filter((node): node is Element => node instanceof Element && node.key.startsWith('category-')).map(node => node.key);
+        assert.deepEqual(categories, ['Feature', 'Engineering', 'Roadmap', '项目规则', 'Design', 'Issue', 'Memory', '其它文档'].map(group => `category-${group}`));
+        assert.ok(b.output.find('page-docs/engineering/build/README.md'));
+        assert.equal(b.output.find('page-docs/roadmap/next/README.md'), undefined);
+        assert.equal(b.output.find('page-docs/writing.md'), undefined);
+        b.click('category-项目规则');
+        assert.ok(b.output.find('page-docs/writing.md'));
+        assert.equal(b.output.find('page-docs/feature/cart/concepts.md')!.text().trim(), '购物车术语表');
+        b.click('category-项目规则');
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.output.find(`concord-block-${page}-0`)!.link!('../../writing.md', b.context());
+        await b.until(() => b.output.find('concord-body-docs/writing.md') !== undefined);
+        assert.ok(b.output.find('page-docs/writing.md'), 'following the link automatically expands its group');
+        assert.equal(b.output.find('new-feature'), undefined, 'new documents are created in the conversation');
+      } finally { await b.close(); }
+    });
+    // @feature docs/feature/herdr-mod/ui.md#页面视图
+    await t.test('relationship rows open readonly source and concept links show a dismissible definition card above the body', async () => {
+      const b = await start(boundary => {
+        boundary.files.set(`/repo/${page}`, '# Cart\n\n1. 加入商品。 {#add}\n');
+        boundary.files.set('/repo/src/cart.ts', 'export const addItem = 1;\n');
+        boundary.files.set('/repo/test/cart.ts', 'test("adds an item");\n');
+        boundary.files.set('/repo/docs/concepts.md', '# Terms\n\nUnrelated definition\n');
+        boundary.concepts.push({ reference: 'docs/concepts.md#cart', path: 'docs/concepts.md', concept: { id: 'cart', term: '购物车', definition: '商品和数量的集合。' } });
+        boundary.relationships.tests.push({ file: 'test/cart.ts', line: 1, name: 'adds an item', contract: `${page}#add` });
+        boundary.relationships.codeDeclarations.push({ file: 'src/cart.ts', line: 1, symbol: 'addItem', contracts: [`${page}#add`] });
+      });
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`code-${page}#add-0`) !== undefined);
+        assert.match(b.output.find('concord-relationships')!.text(), /守护它的测试[\s\S]*加入商品[\s\S]*adds an item[\s\S]*实现它的代码[\s\S]*addItem/u);
+        b.click(`code-${page}#add-0`);
+        await b.until(() => b.output.find('concord-source-preview') !== undefined);
+        assert.match(b.output.find('concord-source-preview')!.text(), /src\/cart.ts:1/u);
+        assert.equal(b.output.find('concord-source-editor')!.state!.readOnly, true);
+        assert.match(b.output.find('concord-source-editor')!.state!.value(), /export const addItem = 1/u);
+        b.click('close-preview'); assert.equal(b.output.find('concord-source-preview'), undefined);
+        b.output.find(`concord-block-${page}-0`)!.link!('../../concepts.md#cart', b.context());
+        const card = b.output.find('concord-concept-card')!;
+        assert.match(card.text(), /购物车[\s\S]*商品和数量的集合。[\s\S]*docs\/concepts.md/u);
+        assert.doesNotMatch(card.text(), /Unrelated definition/u);
+        b.click('close-concept'); assert.equal(b.output.find('concord-concept-card'), undefined);
+        assert.ok(b.output.find(`concord-body-${page}`));
+      } finally { await b.close(); }
+    });
     // @use-case docs/feature/herdr-mod/use-case/read-spec.md
     await t.test('native blocks load completed files, expose Mermaid source and open an offline p5 file, then react to theme changes', async () => {
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>', html = '<!doctype html><title>p5</title>';
@@ -304,13 +483,45 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       const b = await start(boundary => {
         boundary.files.delete('/repo/docs/taste.md');
         boundary.files.set('/repo/docs/architecture.md', '# Existing architecture\n');
-      });
+      }, () => host.output.find('initialize') !== undefined);
       try {
         assert.ok(b.output.find('initialize'));
         assert.equal(b.output.find('concord-tree'), undefined);
         assert.equal(b.output.find('new-feature'), undefined);
         assert.deepEqual(b.calls.filter(call => !['action', 'workspace'].includes(call[0]!)), [['doctor']]);
       } finally { await b.close(); }
+    });
+    // @feature docs/feature/herdr-mod/ui.md#刷新时不闪
+    await t.test('uninitialized status keeps its button through repeated background reads and discovers terminal initialization', async () => {
+      for (const namedError of [false, true]) {
+        host = new Boundary();
+        const b = host;
+        b.files.delete('/repo/docs/taste.md');
+        if (namedError) b.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'ProjectNotInitialized', message: 'This repository has not been initialized' }) };
+        const view = new Mod(); b.view = view; view.init(undefined, b.context()); b.draw();
+        try {
+          await b.until(() => b.output.find('initialize') !== undefined);
+          for (let retry = 0; retry < 3; retry++) {
+            const frame = b.frames.length, request = b.requests.length, timers = b.timers.length;
+            const gate = b.commandGate = pending<void>();
+            b.fire(2000);
+            await b.until(() => b.requests.length > request);
+            assert.ok(b.output.find('initialize'), 'the button remains while a command is pending');
+            gate.resolve(); b.commandGate = undefined;
+            await b.until(() => b.timers.length > timers);
+            for (const rendered of b.frames.slice(frame)) {
+              assert.ok(rendered.find('initialize'), 'background reads preserve the initialization button');
+              assert.equal(rendered.find('concord-error'), undefined);
+              assert.doesNotMatch(rendered.text(), /This repository has not been initialized|正在读取 Concord 仓库/u);
+            }
+          }
+          b.commandError = undefined;
+          b.files.set('/repo/docs/taste.md', '# Taste\n');
+          b.fire(2000);
+          await b.until(() => b.output.find(`page-${page}`) !== undefined);
+          assert.equal(b.output.find('initialize'), undefined);
+        } finally { b.commandGate?.resolve(); await b.close(); }
+      }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('workspace timeouts keep waiting, accepted changes refresh, and background tabs stop waiting', async () => {
@@ -346,7 +557,8 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           host.commandError = undefined;
           const cwd = machine === null ? '/other' : '/repo';
           host.selectTab('t2', cwd, machine);
-          await host.until(() => host.watches.some(watch => watch.root === cwd));
+          // An uninitialized repository is read again every two seconds instead of waited on.
+          await host.until(() => machine === null ? host.output.find('initialize') !== undefined : host.watches.some(watch => watch.root === cwd));
           assert.match(host.output.text(), machine === null ? /\/other/u : /vps:\/repo/u);
           assert.doesNotMatch(host.output.text(), /Previous repository error/u);
           assert.deepEqual(host.requests.filter(request => request.args[0] === '--version').at(-1)?.options, { cwd, on: machine });
@@ -458,7 +670,11 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       const view = new Mod(); host.view = view; view.init(undefined, host.context()); host.draw();
       await host.until(() => host.output.text().includes('curl -fsSL'));
       assert.equal(host.output.find('concord-tree'), undefined); assert.equal(host.calls.length, 0);
-      host.installedVersion = 'dev'; host.click('recheck-cli');
+      host.click('copy-cli'); assert.match(host.clipboard, /^在本机安装 Concord 命令行工具：运行\ncurl -fsSL .*\n然后用 concord --version 确认能运行。$/u);
+      // Detection repeats every two seconds without leaving the page, so the agent's install is picked up.
+      host.fire(2000); await new Promise<void>(resolve => setImmediate(resolve));
+      assert.match(host.output.text(), /这个 mod 需要 Concord 命令行工具/u);
+      host.installedVersion = 'dev'; host.fire(2000);
       await host.until(() => host.watches.length === 1);
       assert.ok(host.output.find('concord-tree')); await host.close();
     });
@@ -495,7 +711,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         b.paneList[0]!.focused = false; b.draw();
         await b.until(() => b.output.find('initialize') !== undefined);
         assert.match(b.output.text(), /\/other/u);
-        assert.ok(b.watches[0]!.root === '/repo' && b.watches.at(-1)!.root === '/other');
+        assert.ok(b.watches.every(watch => watch.root === '/repo'), 'an uninitialized repository is read again, not waited on');
         b.paneList.find(pane => pane.pane === 'p2')!.focused = false;
         b.paneList.push({ pane: 'p3', terminal: 't3', tab: 't2', focused: true, cwd: '/repo' });
         b.focusedTab = 't2'; b.draw();
@@ -575,8 +791,8 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.doesNotMatch(host.output.text(), /private diagnostic/u);
         host.reachable = true; host.installedVersion = undefined; host.fire(2000);
         await host.until(() => host.output.text().includes('vps 上没有 Concord 命令行工具'));
-        assert.match(host.output.text(), /在 vps 的终端里运行安装命令，装好后点重新检测/u);
-        host.installedVersion = 'dev'; host.click('recheck-cli');
+        assert.match(host.output.text(), /在 vps 上安装 Concord 命令行工具/u);
+        host.installedVersion = 'dev'; host.fire(2000);
         await host.until(() => host.output.find(`page-${page}`) !== undefined);
         assert.ok(host.requests.every(request => request.options?.on === 'vps'));
       } finally { await host.close(); }
@@ -591,7 +807,9 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           await host.until(() => host.output.text().includes(named ? '配置需要修正' : 'Concord 命令失败'));
           assert.ok(host.output.find('concord-status')); assert.equal(host.output.find('concord-tree'), undefined);
           assert.doesNotMatch(host.output.text(), /raw private process output/u);
-          if (!named) { host.click('error-details'); assert.match(host.output.text(), /raw private process output/u); }
+          host.click('copy-error');
+          assert.match(host.clipboard, named ? /^Concord 在 \/repo 报错：ConfigurationInvalid：配置需要修正。/u : /原始输出：\nraw private process output$/u);
+          if (!named) assert.match(host.output.text(), /复制时附上原始输出（1 行）/u);
         } finally { await host.close(); }
       }
     });

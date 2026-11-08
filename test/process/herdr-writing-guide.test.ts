@@ -14,7 +14,9 @@ import { modManifest } from '../../src/model/herdr-mod/index.ts';
 interface Task { cancel(): void; is_done(): boolean }
 interface Context {
   notify(): void;
+  stop_propagation(): void;
   open_url(url: string): void;
+  write_to_clipboard(text: string): void;
   sleep(ms?: number): Promise<void>;
   spawn(body: (cx: Context) => unknown): Task;
   timer: { after(ms: number, body: (cx: Context) => void): Task; every(ms: number, body: (cx: Context) => void): Task };
@@ -30,6 +32,13 @@ class Element {
   max_w(_n: number) { return this; } max_w_full() { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
   w(_n: number) { return this; } gap(_n: number) { return this; } p(_n: number) { return this; } px(_n: number) { return this; } py(_n: number) { return this; }
   bg(_color: string) { return this; } text_color(_color: string) { return this; } text_size(_n: number) { return this; } rounded(_n: number) { return this; } overflow_y_scroll() { return this; } overflow_hidden() { return this; }
+  h(_n: number) { return this; } size(_n: number) { return this; } flex_none() { return this; }
+  pl(_n: number) { return this; } pr(_n: number) { return this; }
+  border_1() { return this; } border_b(_n: number) { return this; } border_r(_n: number) { return this; } border_t(_n: number) { return this; } border_color(_color: string) { return this; }
+  cursor_pointer() { return this; } truncate() { return this; } font_semibold() { return this; } font_family(_name: string) { return this; }
+  hover(_body: (element: Element) => Element) { return this; }
+  on_size_change(_body: (size: { width: number; height: number }, cx: Context) => void) { return this; }
+  track_scroll(_handle: unknown) { return this; }
   on_click(body: (event: unknown, cx: Context) => void) { this.click = body; return this; }
   on_link_click(_body: unknown) { return this; }
   text(): string { return this.nodes.map(node => typeof node === 'string' ? node : node.text()).join('\n'); }
@@ -47,7 +56,9 @@ test('source mod initializes through the real CLI, reopens without the guide and
   const errors: unknown[] = [];
   let view: Mod | undefined, output: Element | undefined;
   const context: Context = {
+    stop_propagation() {},
     open_url() {},
+    write_to_clipboard() {},
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     notify() { output = view?.render(context); },
     spawn(body) {
@@ -73,10 +84,12 @@ test('source mod initializes through the real CLI, reopens without the guide and
   const state = { new: () => ({ value: () => '', release() {} }) };
   // Substitute only the external Herdr/GPUI host; the built view, session and CLI are real.
   const host = {
-    View: class {}, div: () => new Element(), image: (path: string) => new Element().child(path), h_flex: () => new Element(), v_flex: () => new Element(),
+    View: class {}, div: () => new Element(), image: (path: string) => new Element().child(path), svg: () => new Element(), h_flex: () => new Element(), v_flex: () => new Element(),
+    v_virtual_list: (id: string, count: number, _height: number, _key: (index: number) => string, render: (range: { start: number; end: number }, cx: Context) => Element[]) => new Element().id(id).children(render({ start: 0, end: count }, context)),
+    VirtualListScrollHandle: state,
     TextView: { markdown(id: string, source: string) { markdown.push({ id, source }); return new Element().id(id).child(source); } },
-    InputState: state, EditorState: state, Input: { new: () => new Element() }, Editor: { new: () => new Element() },
-    focused: () => ({ cwd: root, pane: 'p1', tab: 'tab1' }), theme: () => ({}),
+    EditorState: state, Editor: { new: () => new Element() },
+    focused: () => ({ cwd: root, pane: 'p1', tab: 'tab1' }), theme: () => ({}), settings: () => ({ font_family: '' }),
     panes: () => [{ pane: 'p1', terminal: 't1', focused: true, tab: 'tab1', cwd: root }],
     spaces: () => [{ id: 's1', machine: null, active: true, tabs: [{ id: 'tab1', active: true }] }],
     props: () => ({}), appHome: () => hostRoot, home: () => '/home/host',
@@ -99,7 +112,7 @@ test('source mod initializes through the real CLI, reopens without the guide and
   };
   const global = globalThis as typeof globalThis & { __concordGuideHost?: typeof host };
   global.__concordGuideHost = host;
-  const exports: Record<string, string[]> = { 'gpui-kit': ['View', 'div', 'image'], 'gpui-base': ['h_flex', 'v_flex', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'shared', 'setShared'] };
+  const exports: Record<string, string[]> = { 'gpui-kit': ['View', 'div', 'image', 'svg'], 'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState'], herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'settings', 'shared', 'setShared'] };
   plugin({ name: 'concord-test-herdr-host', setup(build) {
     for (const [specifier, members] of Object.entries(exports)) {
       build.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(members.map(name => [name, host[name as keyof typeof host]])) }));
@@ -144,6 +157,8 @@ test('source mod initializes through the real CLI, reopens without the guide and
     }
     writeFileSync(join(root, 'docs/feature/cart/unclassified.md'), '# Unclassified page\n');
     view = new BuiltMod(); view.init(undefined, context); context.notify();
+    await wait(() => output?.find('category-项目规则') !== undefined);
+    output!.find('category-项目规则')!.click!(undefined, context);
     await wait(() => output?.find('page-docs/taste.md') !== undefined);
     assert.equal(output!.find('initialize'), undefined);
     assert.equal(output!.find('read-guide'), undefined);
@@ -157,11 +172,14 @@ test('source mod initializes through the real CLI, reopens without the guide and
     };
     for (const kind of ['feature', 'engineering']) {
       const directory = `docs/${kind}/cart/architecture`;
-      await wait(() => output?.find(`page-${directory}/storage.md`) !== undefined);
-      const folder = output!.find(`directory-${directory}`);
+      const rootPage = `docs/${kind}/cart/README.md`;
+      output!.find(`page-${rootPage}`)!.click!(undefined, context);
+      await wait(() => output?.find(`concord-body-${rootPage}`) !== undefined);
+      const folder = output!.find(`tree-row-${directory}`);
       assert.ok(folder, 'kind directory is a navigation node');
-      assert.ok(folder.find(`page-${directory}/storage.md`), 'kind directory contains its leaf page');
+      assert.equal(output!.find(`page-${directory}/storage.md`), undefined, 'kind directory starts folded');
       await clickPage(`${directory}/README.md`, `# ${kind} Cart architecture\n`);
+      assert.ok(output!.find(`page-${directory}/storage.md`), 'the opened directory shows its leaf page');
       await clickPage(`${directory}/storage.md`, `# ${kind} Cart storage\n`);
     }
     await clickPage('docs/feature/cart/unclassified.md', '# Unclassified page\n');

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, existsSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, existsSync, rmSync, symlinkSync, writeFileSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
 import { manageHerdrMod, type HerdrInstallHost } from '../../src/base/installation/herdr-mod.ts';
 import { ConcordError } from '../../src/model/index.ts';
-import { modManifest } from '../../src/model/herdr-mod/index.ts';
+import { modManifest, modIconNames } from '../../src/model/herdr-mod/index.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 const unavailable: HerdrInstallHost = { available: Effect.succeed(false), check: () => Effect.die('unavailable host must not be checked') };
@@ -18,6 +18,7 @@ function packageFixture(root: string): string {
   writeFileSync(join(resources, 'main.js'), 'export default class Concord {}');
   writeFileSync(join(resources, 'mod.json'), JSON.stringify(modManifest('1.2.3')));
   writeFileSync(join(resources, 'NOTICE.txt'), 'Concord Herdr mod bundles Effect.\n\nMIT License\n');
+  cpSync(resolve('concord/mods/concord/icons'), join(resources, 'icons'), { recursive: true });
   return resources;
 }
 
@@ -39,10 +40,14 @@ test('source mod installation builds outside the checkout, updates its bytes and
     assert.deepEqual(JSON.parse(readFileSync(join(target, 'mod.json'), 'utf8')), modManifest(version));
     assert.equal(existsSync(resolve('dist')), false);
     writeFileSync(join(target, 'main.js'), 'damaged');
+    rmSync(join(target, 'icons'), { recursive: true });
+    symlinkSync(join(app, 'mods/other'), join(target, 'icons'));
     assert.equal((await install()).updated, true);
     assert.notEqual(readFileSync(join(target, 'main.js'), 'utf8'), 'damaged');
     assert.deepEqual(readdirSync(app).sort(), ['mods', 'settings.json'], 'scoped build resources are removed');
-    assert.deepEqual(readdirSync(target).sort(), ['NOTICE.txt', 'main.js', 'mod.json'], 'no staged files remain');
+    assert.deepEqual(readdirSync(target).sort(), ['NOTICE.txt', 'icons', 'main.js', 'mod.json'], 'no staged files remain');
+    assert.deepEqual(readdirSync(join(target, 'icons')).sort(), modIconNames.map(name => `${name}.svg`).sort());
+    assert.match(readFileSync(join(target, 'NOTICE.txt'), 'utf8'), /Lucide:[\s\S]*ISC License/u);
     assert.equal(readFileSync(join(app, 'mods/other/main.js'), 'utf8'), 'other');
     assert.equal(readFileSync(join(app, 'settings.json'), 'utf8'), '{"theme":"mine"}');
     await run('uninstall', app, 'unused'); assert.equal(existsSync(target), false);
@@ -83,6 +88,7 @@ test('a command without config creates the selected home, checks the installed m
     const updated = await run('install', home, resources, host);
     assert.equal(updated.updated, true); assert.equal('openHerdr' in updated, false);
     for (const name of ['main.js', 'mod.json', 'NOTICE.txt']) assert.equal(readFileSync(join(target, name), 'utf8'), readFileSync(join(resources, name), 'utf8'));
+    for (const name of modIconNames) assert.equal(readFileSync(join(target, 'icons', `${name}.svg`), 'utf8'), readFileSync(join(resources, 'icons', `${name}.svg`), 'utf8'));
     assert.deepEqual(checks, [target, target]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -1,4 +1,4 @@
-// 跨进程保证：外部程序——真实mod宿主调用CLI完成初始化与新建并保留草稿冲突。
+// 跨进程保证：外部程序——真实mod宿主调用CLI完成初始化与编辑并保留草稿冲突。
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -9,7 +9,7 @@ import { installedConcordCli } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
-test('native mod controls initialize, create, edit, check and retain a stale-save draft through the public CLI', { timeout: 90_000 }, () => {
+test('native mod controls initialize, edit, check and retain a stale-save draft through the public CLI', { timeout: 90_000 }, () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-herdr-workflow-'));
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -17,7 +17,8 @@ test('native mod controls initialize, create, edit, check and retain a stale-sav
     assert.equal(reply.status, 0, reply.stdout + reply.stderr);
     const result = JSON.parse(reply.stdout) as { workflow: string; calls: string[][] };
     assert.match(result.workflow, /preserved conflict/u);
-    for (const operation of ['init', 'new', 'check']) assert.ok(result.calls.some(call => call[0] === operation));
+    for (const operation of ['init', 'check']) assert.ok(result.calls.some(call => call[0] === operation));
+    assert.equal(result.calls.some(call => call[0] === 'new'), false);
     assert.equal(existsSync(join(root, '.git/concord/server/current.json')), true);
   } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }
 });

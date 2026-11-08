@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/herdr-mod/architecture.md#界面
+// @concord-implements docs/feature/herdr-mod/architecture.md#正文渲染
 import { mkdir, unlink, writeFile } from 'fs/promises';
 import { Buffer } from 'buffer';
 import { createHash } from 'crypto';

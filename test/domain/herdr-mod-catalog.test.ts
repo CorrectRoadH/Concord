@@ -38,7 +38,7 @@ test('Herdr catalog validates generated assets before replacing the installable 
   assert.deepEqual(headings, ['What you see', 'How it behaves', 'Built from', 'Watch out', 'Done when']);
   assert.match(recipe, /minimumConcordVersion=1\.2\.3/u);
   assert.match(recipe, /herdr-app check/u);
-  assert.match(recipe, /action file.get\/document.set、workspace wait/u);
+  assert.match(recipe, /action file.get\/page.render\/document.set、workspace wait/u);
   assert.equal(yield* fs.readFileString(join(output, 'unrelated/keep')), 'keep');
   yield* fs.writeFileString(join(catalog, 'mods/concord/stale.js'), 'old');
   yield* prepareHerdrModCatalog(assets, output, '1.2.3');
