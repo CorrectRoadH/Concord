@@ -11,7 +11,7 @@ concord server start|run|status|stop
 
 `shared` 是默认模式，连接或自动启动选定项目目录的后台。`command` 启动[命令作用域后台](concepts.md#command-service)，已有实例时失败；本次命令取得结果并确认资源清理后才退出。
 
-`server status` 和 `server stop` 不自动启动后台。安装或协议不同的活跃实例须由用户显式停止，不能自动接管。配置无效或存在 journal 时，诊断、定向原文读取与恢复仍可到达。
+`server status` 和 `server stop` 不自动启动后台。安装或协议不同的活跃实例由启动者停止后替换。配置无效或存在 journal 时，诊断、定向原文读取与恢复仍可到达。
 
 `--dry-run` 通过同一后台规划，不发布来源、证据，不执行 runner，也不使用本次操作的持久缓存。它允许服务控制状态变化。`--help`、`--version`、`--skill`、随包资源读取与 `herdr install` 不启动后台。
 
@@ -92,7 +92,6 @@ CLI 请求失败沿用 `{error, message, details?}` 的错误信封，非零退�
 | 失败 | 含义与后续动作 |
 | --- | --- |
 | `WorkspaceServerUnavailable` | 无法在启动预算内得到可用服务；报告启动诊断，不在客户端执行项目操作 |
-| `WorkspaceServerVersionConflict` | 活跃服务的安装或协议不同；用户决定是否显式停止 |
 | `WorkspaceServerBusy` | 所需资源或项目所有权被占用；未受理新操作 |
 | `WorkspaceServerScoped` | 外部连接、HTTP 或后台运行选项不符合命令作用域 |
 | `WorkspaceServerScopeMismatch` | 继承作用域与目标根不符或标识无效；不重定向到其它根 |

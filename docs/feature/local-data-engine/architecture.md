@@ -169,7 +169,7 @@ CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选�
 
 `hello {protocol, installation, scope?}` 返回 `{protocol, installation, token, state, sourceDigest}`；`shutdown {token, scope?}` 显式停止实例。
 
-安装身份或协议不同时只回应控制帧。普通启动与查询返回 `WorkspaceServerVersionConflict`，不能自动停止已有实例，错误消息给出 `concord server stop`。`server stop` 用 `shutdown` 控制帧停止其它安装身份的实例。安装、升级与回退时的表现见[用一行命令安装](../cross-platform-release/use-case/install-with-script.md#upgrade-running-service)。
+一个项目目录的服务属于最近使用它的 Concord。安装身份或协议不同的实例只回应控制帧；启动者发现这样的实例时，用 `shutdown` 控制帧让它收拢已有工作并退出，等它完全退出后回到第 1 步启动自己的服务，命令照常完成。这样做不会丢东西：服务不拥有任何事实，来源是文件，缓存可以丢弃，写入有 journal 与恢复，客户端断开后自动重连。一台机器通常只有一个 Concord；同时用两个安装时，交替使用只多一次服务重启。安装、升级与回退时的表现见[用一行命令安装](../cross-platform-release/use-case/install-with-script.md#upgrade-running-service)。
 
 ### 状态
 
@@ -309,7 +309,7 @@ CLI 默认自动启动或复用同安装身份、同协议的服务，再发送 
 | 已运行的服务 1 秒内没有完成握手 | 重新发现实例；不能在客户端计算 |
 | 服务锁无法取得（非 WouldBlock） | `ServerLockUnavailable`，details 给出原因 |
 | 运行目录不符合要求 | 不创建服务，报告原因 |
-| 活跃服务的安装或协议不同 | `WorkspaceServerVersionConflict`，已有实例继续运行 |
+| 活跃服务的安装或协议不同 | 停止它并启动当前安装的服务，见[启动与裁决](#启动与裁决) |
 | 计算进程超时或崩溃 | 当前请求以具名错误失败（超出预算为 `ComputeRequestTimedOut`），计算进程重启，后续请求冷启动；不把它报成 `WorkspaceServerUnavailable` |
 | 后台计算进程超时或崩溃 | 这次刷新按失败记录，保留上一份结果；后台计算进程重启，下一次刷新冷启动 |
 | 服务进程被杀 | 操作系统释放服务锁，下一个启动者删除残留 socket 后启动；面板与浏览器显示重连中 |

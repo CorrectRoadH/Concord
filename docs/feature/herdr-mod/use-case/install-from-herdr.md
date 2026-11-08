@@ -40,7 +40,6 @@ Herdr 用户在 herdr.dev/mods 看到 Concord，想在自己的 Herdr 里用它�
 | 情形 | 结果 |
 | --- | --- |
 | 本机的 Concord 低于 mod 要求的版本 | 显示当前版本、要求的版本与升级命令，不显示文档 |
-| 仓库的工作区服务来自另一个 Concord 安装，例如升级后旧版本的服务还在运行 | 显示“这个仓库正被另一个 Concord 安装的服务占用”和“停止它并继续”；点了才停止旧服务，然后照常显示文档，见[状态页](../ui.md#状态页) |
 | 本机的 Concord 高于 mod 的版本 | 照常工作，并提示用 `concord herdr install` 换成同版本的 mod |
 | 用户已经装了 Concord | 也可以直接运行 `concord herdr install`，结果相同 |
 | 终端位于远程机器 | 检测的是那台机器上的 Concord，安装说明写明机器名，见[在远程机器的终端旁使用](use-on-remote-machine.md) |
