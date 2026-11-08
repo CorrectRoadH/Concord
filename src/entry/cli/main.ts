@@ -23,6 +23,7 @@ import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
 import { CliInvocation, writeStderr } from './invocation.ts';
 import { cliFailure } from './cli-failure.ts';
+import { readWorkspaceRecord } from './workspace-record.ts';
 
 export const cliPlatformLayer = NodeChildProcessSpawner.layer.pipe(Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)));
 /** Real startup captures input; this composition root binds its services. */
@@ -89,7 +90,7 @@ const builtAssetRoot = (name: 'web') => loadApp().pipe(Effect.flatMap(app => Eff
 const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string, scope?: string, countReuse = true) {
   const platform = yield* ServerRuntime;
   const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
-  const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
+  const record = yield* readWorkspaceRecord(platform, privateDir);
   if (!record) return undefined;
   const { connectWorkspaceSocket } = yield* loadClient();
   const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? (yield* installationIdentity(platform)), record.token, scope, countReuse, (yield* RuntimeEnvironment).env);
@@ -139,7 +140,7 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
 
 const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceRecord')(function*(privateDir: string, installation?: string) {
   const runtime = yield* ServerRuntime, client = yield* loadClient();
-  const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+  const record = yield* readWorkspaceRecord(runtime, privateDir, false);
   if (!record) return false;
   if (record.installation === (installation ?? (yield* installationIdentity(runtime))) && record.protocol === client.PROTOCOL) {
     const sourceDigest = yield* Effect.try({ try: runtime.sourceDigest, catch: failure });
@@ -173,7 +174,7 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
   }
   // Query selection has already verified the same installation for fallback.
   if ((yield* QueryServerMode) === 'shared') return yield* connectOrStartWorkspace(root, false, privateDir, installation, true);
-  const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+  const record = yield* readWorkspaceRecord(runtime, privateDir, false);
   if (record && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'A service already owns this project; command mode cannot attach to it'));
   const current = yield* existingWorkspace(root, installation, privateDir).pipe(Effect.catch(cause => {
     const error = workspaceServerFailure(cause);
@@ -257,7 +258,7 @@ function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: S
 const startWorkspaceServer = (root: string) => Effect.scoped(connectOrStartWorkspace(root).pipe(Effect.map(connection => ({ operation: 'server-start', ...connection.hello }))));
 const waitForWorkspaceStop = (runtime: ServerRuntime['Service'], privateDir: string, owner?: { token: string; pid: number }) => Effect.gen(function*() {
       for (;;) {
-        const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+        const record = yield* readWorkspaceRecord(runtime, privateDir, false);
         // A replacement token can only be published after the previous owner released its lock.
         const released = record && owner !== undefined && record.token !== owner.token ? true : yield* runtime.released(privateDir);
         // A dead owner can leave its record behind; only the native lock
@@ -270,7 +271,7 @@ const stopWorkspaceServer = (root: string) => Effect.scoped(Effect.gen(function*
   const runtime = yield* ServerRuntime;
   const { privateDir } = yield* (yield* Workspace).locate(root, true);
   const owner = yield* Effect.scoped(Effect.gen(function*() {
-    const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+    const record = yield* readWorkspaceRecord(runtime, privateDir, false);
     if (!record) { yield* waitForWorkspaceStop(runtime, privateDir); return undefined; }
     const owner = { token: record.token, pid: record.pid };
     if (yield* runtime.released(privateDir)) return owner;
@@ -285,7 +286,7 @@ const stopWorkspaceServer = (root: string) => Effect.scoped(Effect.gen(function*
       // Confirm the actual lock release or wait for the same stopping instance;
       // an active owner with a broken transport must still report its error.
       if (yield* runtime.released(privateDir)) return owner;
-      const current = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+      const current = yield* readWorkspaceRecord(runtime, privateDir, false);
       if (!current || (current.token === record.token && current.state === 'stopping')) return owner;
       return yield* Effect.fail(cause);
     })));
