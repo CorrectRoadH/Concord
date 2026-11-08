@@ -12,7 +12,7 @@ Concord mod 是可独立分发、也随归档提供的一组 JavaScript 文件�
 - 通路：mod 与 Concord 之间没有常驻连接。每个操作是一次 `exec('concord', ['--json', ...], { cwd, on })`，`on` 是仓库地址的机器（本机为 null）；命令在那台机器上找到仓库根，经本机 socket 使用该仓库的[工作区服务](../local-data-engine/architecture.md#cli-查询)。CLI 检测同样带 `on`。本机与远程是同一条通路，mod 不使用 `readTextFile`、`writeTextFile`、`watchFolder` 或 `pickFolder`：后三个只作用于本机，正文与它的摘要又要来自同一次读取。
 - 读取：调用[mod 调用的命令](cli.md#mod-调用的命令)；正文用 `action` 的 `file.get` 读取，同时得到它的 `digest`。mod 不缓存结论，每次刷新重新取。
 - 写入：保存时运行 `concord --json action --input-text <JSON>`，执行 `document.set`，`expectedDigest` 取打开这页时 `file.get` 返回的 `digest`，所以文档包的附页与固定入口也能保存。返回 `FileChangedSinceRead` 时按保存冲突处理、保留草稿，不覆盖。写入后运行 `concord --json check` 显示结果。
-- 刷新：布局侧栏或所属 tab 在前台的独立 pane 循环运行 `concord --json workspace wait --after <sourceDigest>`，命令返回新结果时重新取数据；当前打开的文档、滚动位置与草稿保持不变。独立 pane 所属 tab 不在前台时不等待，回到前台时立即刷新一次。服务不可用（例如 `HawdbUnavailable`）时改为每 2 秒重新取一次。
+- 刷新：布局侧栏或所属 tab 在前台的独立 pane 循环运行 `concord --json workspace wait --after <sourceDigest>`，命令返回新结果时重新取数据；当前打开的文档、滚动位置与草稿保持不变。独立 pane 所属 tab 不在前台时不等待，回到前台时立即刷新一次。服务不可用（例如 `HawdbUnavailable`）或仓库还没有初始化时，改为每 2 秒重新取一次，所以在终端里运行 `concord init` 后 mod 自动显示文档。
 - 连接：`exec` 因机器不可达而失败时显示“连不上 <机器>”，每 2 秒重试，恢复后自动继续。
 
 ## 正文渲染
