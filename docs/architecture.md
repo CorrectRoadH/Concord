@@ -20,7 +20,7 @@ Concord 由 CLI、按需启动的工作区服务和浏览器工作台组成。�
 
 Concord 不规定分支或 worktree 的用法：直接在 main 开发、在同一目录切分支、使用多个 worktree 或独立 clone，都从选定的项目目录开始。不同项目目录的服务、缓存与发布协调状态彼此隔离（[适配项目的开发方式](taste.md#t-9)）。
 
-协议相同的客户端都使用同一个服务；安装身份用于判断服务是否该换成新的程序。项目定位、Git-private 目录、服务锁与握手是底层机制，完整规则由[工作区服务](feature/local-data-engine/architecture.md#工作区服务)拥有。
+协议相同的客户端都使用同一个服务，不论服务由哪个安装启动。项目定位、Git-private 目录、服务锁与握手是底层机制，完整规则由[工作区服务](feature/local-data-engine/architecture.md#工作区服务)拥有。
 
 ```mermaid
 flowchart LR
@@ -40,7 +40,7 @@ flowchart LR
 
 服务让解析缓存与投影保持热，并为 Web 提供长期连接。三类调用这样使用它：
 
-- CLI 查询自动启动或复用服务，每次请求绑定调用者环境。协议相同就复用，不论服务由哪个安装启动；协议不同、自己的代码已改变或升级到新的正式版本时，换成当前安装的服务（见[启动与裁决](feature/local-data-engine/architecture.md#启动与裁决)）。
+- CLI 查询自动启动或复用服务，每次请求绑定调用者环境。协议相同就复用，不论服务由哪个安装启动；协议不同时换成当前安装的服务（见[启动与裁决](feature/local-data-engine/architecture.md#启动与裁决)）。
 - CLI 写入、发布与恢复按各自入口执行；有服务时，通过快照与派生行使用服务的缓存。
 - 浏览器操作由服务调度。
 
