@@ -42,7 +42,11 @@ class Element {
   hover(_body: (element: Element) => Element) { this.hovered = true; return this; }
   on_size_change(body: (size: { width: number; height: number }, cx: Context) => void) { this.sizeChanged = body; return this; }
   track_scroll(handle: State) { this.scroll = handle; return this; }
-  on_click(body: (event: unknown, cx: Context) => void) { this.click = body; return this; }
+  on_click(body: (event: unknown, cx: Context) => void) {
+    // herdr-app refuses handlers registered while a virtual list lays out its rows.
+    if (listLayout > 0) throw new Error('on_click inside a virtual list renderer');
+    this.click = body; return this;
+  }
   on_link_click(body: (url: string, cx: Context) => void) { this.link = body; return this; }
   find(key: string): Element | undefined {
     if (this.key === key) return this;
@@ -210,11 +214,15 @@ class Boundary {
   async close() { await this.view!.close(this.context()); this.closed = true; }
 }
 let host: Boundary;
+let listLayout = 0;
 const sharedData = new Map<string, unknown>();
 const external = {
   View: class {}, div: () => new Element(), h_flex: () => new Element(), v_flex: () => new Element(),
   svg: () => new Element(),
-  v_virtual_list: (id: string, count: number, _height: number, _key: (index: number) => string, render: (range: { start: number; end: number }, cx: Context) => Element[]) => new Element().id(id).children(render({ start: 0, end: count }, host.context())),
+  v_virtual_list: (id: string, count: number, _height: number, _key: (index: number) => string, render: (range: { start: number; end: number }, cx: Context) => Element[]) => {
+    listLayout++;
+    try { return new Element().id(id).children(render({ start: 0, end: count }, host.context())); } finally { listLayout--; }
+  },
   VirtualListScrollHandle: { new: () => host.state('') },
   image: (path: string) => { assert.ok(host.resourceFiles.has(`/herdr/${path}`), 'write finishes before native image loading'); host.imagePaths.push(path); return new Element().child(`IMAGE ${path}`); },
   TextView: { markdown: (id: string, source: string) => new Element().id(id).child(source) },
@@ -290,6 +298,17 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         b.click('toggle-documents');
         assert.ok(b.output.find('concord-tree'));
         assert.equal(b.output.find('concord-tree')!.scroll, scroll, 'the retained native scroll handle survives unmounts');
+      } finally { await b.close(); }
+    });
+    // @feature docs/feature/herdr-mod/ui.md#文档列表
+    // @issue docs/issues/herdr-mod-empty-tree.md
+    await t.test('the document list draws its groups and rows under the native list rules', async () => {
+      const b = await start();
+      try {
+        assert.ok(b.output.find('category-Feature'), 'group headings are drawn');
+        assert.ok(b.output.find(`page-${page}`), 'package rows are drawn');
+        b.click(`page-${page}`);
+        await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
       } finally { await b.close(); }
     });
     // @feature docs/feature/herdr-mod/ui.md#文档列表
