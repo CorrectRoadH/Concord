@@ -157,7 +157,7 @@ commit 在严格解码完整批次后交给既有缓存写入校验；超限、�
 
 CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选定项目目录的服务。`concord server run` 是前台服务入口。`server status` 与 `server stop` 不启动服务。`view --in-process` 需要新服务时，以受当前命令管理的子进程启动；已有服务仍可复用。所有启动方式先取得同一服务锁。
 
-1. 启动者读取运行记录，核对 worktree、privateDir 与安装身份，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
+1. 启动者读取运行记录，核对 worktree、privateDir 与协议，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
 3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者。权限、I/O、类型或身份失败以具名错误 `ServerLockUnavailable` 报告。
 4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`。然后打开持久库、读取最近一份已接受的结果并启动计算进程与后台计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务，并在状态中报告原因。
@@ -169,7 +169,17 @@ CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选�
 
 `hello {protocol, installation, scope?}` 返回 `{protocol, installation, token, state, sourceDigest}`；`shutdown {token, scope?}` 显式停止实例。
 
-一个项目目录的服务属于最近使用它的 Concord。安装身份或协议不同的实例只回应控制帧；启动者发现这样的实例时，用 `shutdown` 控制帧停止它，等它完全退出后回到第 1 步启动自己的服务，然后照常执行自己的命令。为此 `hello` 与 `shutdown` 两种控制帧在各版本间保持不变。替换与 `server stop` 相同：旧服务上进行中的操作按停止的语义结束，连着它的 Web 工作台提示重新运行 `concord view`。这样做不会丢事实：服务不拥有任何事实，来源是文件，缓存可以丢弃，写入有 journal 与恢复。一台机器通常只有一个 Concord；先后使用两个安装时，换手只多一次服务启动；同时用两个安装操作同一个项目，会彼此打断进行中的命令。继承了命令作用域的调用只使用那个作用域的服务，不替换任何实例。安装、升级与回退时的表现见[用一行命令安装](../cross-platform-release/use-case/install-with-script.md#upgrade-running-service)。
+一个项目目录同时只运行一个服务。协议相同的 Concord 都直接使用它，不论它由哪个安装启动：能用就用，不因为程序不同而重启服务。启动者只在三种情况下替换它：
+
+- 协议不同。
+- 它由启动者自己的安装启动，而这个安装的代码已经改变。在源码目录里开发 Concord 时，改了源码之后的下一条命令换上新代码。
+- 启动者是更新的正式版本，它由更旧的正式版本启动。升级后的第一条命令换上新版本。版本取自[安装身份](../../concepts.md#installation-identity)；开发构建不按版本比较。
+
+替换时，启动者用 `shutdown` 控制帧停止它，等它完全退出后回到第 1 步启动自己的服务，然后照常执行自己的命令。为此 `hello` 与 `shutdown` 两种控制帧在各版本间保持不变。
+
+协议号代表服务认得的全部请求：各种帧及其输入，以及查询与动作的名称和输入。其中任何一项改变，协议号随之改变，由测试核对；所以被复用的服务一定认得这次请求，只是结果可能来自另一个安装的实现。要立即换成当前安装的实现，先运行 `concord server stop`。
+
+替换与 `server stop` 相同：旧服务上进行中的操作按停止的语义结束，连着它的 Web 工作台提示重新运行 `concord view`。不发布任何内容的命令（查询、读取与等待）因此断开时，CLI 重新连接或启动服务后自动重试一次，调用者看不到这次替换；发布写入的命令不重试，按结果未知处理。这样做不会丢事实：服务不拥有任何事实，来源是文件，缓存可以丢弃，写入有 journal 与恢复。继承了命令作用域的调用只使用那个作用域的服务，不替换任何实例。安装、升级与回退时的表现见[用一行命令安装](../cross-platform-release/use-case/install-with-script.md#upgrade-running-service)。
 
 ### 状态
 
@@ -309,7 +319,8 @@ CLI 默认自动启动或复用同安装身份、同协议的服务，再发送 
 | 已运行的服务 1 秒内没有完成握手 | 重新发现实例；不能在客户端计算 |
 | 服务锁无法取得（非 WouldBlock） | `ServerLockUnavailable`，details 给出原因 |
 | 运行目录不符合要求 | 不创建服务，报告原因 |
-| 活跃服务的安装或协议不同 | 停止它并启动当前安装的服务，见[启动与裁决](#启动与裁决) |
+| 活跃服务需要替换（协议不同、自己的代码已改变或升级） | 停止它并启动当前安装的服务，见[启动与裁决](#启动与裁决) |
+| 进行中的只读命令遇到服务被替换或停止 | 重新连接或启动服务后自动重试一次 |
 | 计算进程超时或崩溃 | 当前请求以具名错误失败（超出预算为 `ComputeRequestTimedOut`），计算进程重启，后续请求冷启动；不把它报成 `WorkspaceServerUnavailable` |
 | 后台计算进程超时或崩溃 | 这次刷新按失败记录，保留上一份结果；后台计算进程重启，下一次刷新冷启动 |
 | 服务进程被杀 | 操作系统释放服务锁，下一个启动者删除残留 socket 后启动；面板与浏览器显示重连中 |
