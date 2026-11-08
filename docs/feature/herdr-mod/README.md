@@ -36,7 +36,7 @@ Herdr loads it on save; open it with the "Concord" command.
 
 布局里的 Concord 侧栏跟随当前 tab：切换 tab 或 space 后，显示新位置的终端所在的仓库，包括它所在的机器。通过分屏打开的 Concord pane 固定跟随所属 tab，不受其它 tab 的选择影响。两种面板都跟随目标 tab 里最近聚焦的终端。
 
-mod 读那个终端当前目录所在的仓库，终端 `cd` 到另一个仓库时跟着切换，所以 mod 没有“选择目录”。内容变化时 mod 自动刷新，所以也没有“刷新”。这个仓库还没有初始化时，mod 显示“在这里初始化 Concord”；点一下，mod 运行 `concord init`，列出新建的文档，并给出让 agent 读的写作指南。已经初始化的仓库直接显示 Feature 列表。
+mod 读那个终端当前目录所在的仓库，终端 `cd` 到另一个仓库时跟着切换，所以 mod 没有“选择目录”。内容变化时 mod 自动刷新，所以也没有“刷新”。这个仓库还没有初始化时，mod 显示“在这里初始化 Concord”；点一下，mod 运行 `concord init`，列出新建的文档，并给出让 agent 读的写作指南。已经初始化的仓库直接显示文档列表。
 
 ## 怎样工作
 
