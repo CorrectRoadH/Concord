@@ -8,6 +8,6 @@ Concord 随归档提供的 Herdr 原生界面扩展。它通过公开 CLI 读取
 
 本产品写 Concord mod；泛指 Herdr 的任意扩展时写 mod。Feature 目录名 `herdr-mod` 与命令 `concord herdr install` 照原样书写。
 
-## 文档树 {#document-tree}
+## 文档列表 {#document-tree}
 
 Concord mod 左栏的导航树，按 Feature、品味、术语、Issue、Memory 与其它文档分组。

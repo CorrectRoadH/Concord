@@ -35,6 +35,7 @@ mod 只通过公开 CLI 取数据和执行操作，不读取 Concord 的私有�
 | 渲染一页给 mod 显示 | `concord --json action --input-text <JSON>`，执行 `page.render`，见[渲染一页](#渲染一页) |
 | 保存一页文档 | `concord --json action --input-text <JSON>`，执行 `document.set` |
 | 等待下一份结果 | `concord --json workspace wait --after <sourceDigest>` |
+| 用户点“停止它并继续”时停止另一个安装的工作区服务 | `concord --json server stop` |
 
 除 `page.render` 外，这些命令的输出见各自 Feature 的 cli 页，mod 不另定义字段。
 

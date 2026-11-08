@@ -6,7 +6,7 @@
 
 - 在终端所在的仓库里初始化 Concord，拿到适合这个项目的写作指南；终端 `cd` 到另一个仓库，mod 跟着切换。
 - 终端在远程机器上时，mod 读写的是那台机器上的仓库，与本机一样能编辑、检查和自动刷新。
-- 阅读全部文档：Feature 与 Use Case、品味、术语、Issue 与 Memory，正文按 Markdown 渲染。
+- 阅读全部文档：Feature 与 Use Case、Engineering、Roadmap、品味与术语、Design、Issue 与 Memory，按[文档模型](../../document-model.md)的分组排在文档列表里，正文按 Markdown 渲染。
 - 打开一个 Use Case，看守护它的测试和实现它的代码；点开术语，看它的定义。
 - 直接修改一页文档，保存后立刻看到检查结果。
 - agent 改了文件，mod 自动刷新，不打断你正在读的位置。
@@ -59,6 +59,7 @@ Herdr 的 mod 没有网页引擎，所以 Concord 在仓库所在的机器上把
 ## 细节
 
 - [命令](cli.md)
+- [界面](ui.md)
 - [实现](architecture.md)
 
 ## 性能

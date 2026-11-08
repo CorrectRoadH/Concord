@@ -13,7 +13,7 @@
 
 1. 在这个终端旁打开 Concord mod。 {#open}
 
-   mod 在 `vps` 上检测 `concord` 并运行查询，顶栏显示仓库地址 `vps:~/code/shop`。文档树、正文、测试与实现与在 `vps` 上运行 `concord show` 的结果一致。
+   mod 在 `vps` 上检测 `concord` 并运行查询，顶栏显示仓库地址 `vps:~/code/shop`。文档列表、正文、测试与实现与在 `vps` 上运行 `concord show` 的结果一致。
 
 2. agent 在 `vps` 上改了一页文档。 {#follow}
 
@@ -32,7 +32,7 @@
 | `vps` 上没有 `concord` | 显示“vps 上没有 Concord 命令行工具”、安装命令与“在 vps 的终端里运行安装命令，装好后点重新检测”；本机有没有 Concord 不影响结果 |
 | `vps` 上的 Concord 低于 mod 要求的版本 | 显示 `vps` 上的版本、要求的版本与升级命令 |
 | 连不上 `vps` | 显示“连不上 vps”与“Herdr 恢复连接后自动重试”；恢复后自动继续，不需要重新打开 |
-| 初始化、新建 Feature、检查 | 与本机相同，命令在 `vps` 上运行 |
+| 初始化、保存与检查 | 与本机相同，命令在 `vps` 上运行 |
 | 保存前 `vps` 上的文件已被 agent 改过 | 与本机相同，按[保存冲突](../../../concepts.md#save-conflict)处理，保留草稿 |
 | 终端在 `vps` 上 `cd` 到另一个仓库 | mod 跟着切换，与本机相同 |
 
