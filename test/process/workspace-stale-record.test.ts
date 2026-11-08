@@ -28,7 +28,6 @@ async function leaveStaleRecord(root: string) {
 }
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-// @issue docs/issues/stale-server-record-blocks-restart.md
 test('workspace reads restart after reboot leaves a record with a different device', { timeout: 30_000 }, async () => {
   const root = await fixture();
   try {
@@ -44,7 +43,6 @@ test('workspace reads restart after reboot leaves a record with a different devi
 });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-// @issue docs/issues/stale-server-record-blocks-restart.md
 test('server stop confirms stale ownership and command queries replace malformed records', { timeout: 30_000 }, async () => {
   const root = await fixture();
   try {
