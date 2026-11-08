@@ -169,7 +169,7 @@ CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选�
 
 `hello {protocol, installation, scope?}` 返回 `{protocol, installation, token, state, sourceDigest}`；`shutdown {token, scope?}` 显式停止实例。
 
-一个项目目录的服务属于最近使用它的 Concord。安装身份或协议不同的实例只回应控制帧；启动者发现这样的实例时，用 `shutdown` 控制帧让它收拢已有工作并退出，等它完全退出后回到第 1 步启动自己的服务，命令照常完成。这样做不会丢东西：服务不拥有任何事实，来源是文件，缓存可以丢弃，写入有 journal 与恢复，客户端断开后自动重连。一台机器通常只有一个 Concord；同时用两个安装时，交替使用只多一次服务重启。安装、升级与回退时的表现见[用一行命令安装](../cross-platform-release/use-case/install-with-script.md#upgrade-running-service)。
+一个项目目录的服务属于最近使用它的 Concord。安装身份或协议不同的实例只回应控制帧；启动者发现这样的实例时，用 `shutdown` 控制帧停止它，等它完全退出后回到第 1 步启动自己的服务，然后照常执行自己的命令。为此 `hello` 与 `shutdown` 两种控制帧在各版本间保持不变。替换与 `server stop` 相同：旧服务上进行中的操作按停止的语义结束，连着它的 Web 工作台提示重新运行 `concord view`。这样做不会丢事实：服务不拥有任何事实，来源是文件，缓存可以丢弃，写入有 journal 与恢复。一台机器通常只有一个 Concord；先后使用两个安装时，换手只多一次服务启动；同时用两个安装操作同一个项目，会彼此打断进行中的命令。继承了命令作用域的调用只使用那个作用域的服务，不替换任何实例。安装、升级与回退时的表现见[用一行命令安装](../cross-platform-release/use-case/install-with-script.md#upgrade-running-service)。
 
 ### 状态
 
