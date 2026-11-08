@@ -4,6 +4,23 @@ import { Effect } from 'effect';
 import { digest } from '../../src/model/index.ts';
 import { ModSession, markdownTarget, type ModHost } from '../../src/entry/herdr-mod/index.ts';
 
+
+/** Public projection payload emitted by the simulated CLI boundary. */
+function modProjection(root: string, files: ReadonlyMap<string, string>, documents: readonly { path: string; kind: string; title: string }[], pages: readonly { path: string; name: string }[] = [], relationships: { tests: readonly { file: string; line: number; name: string; contract: string }[]; codeDeclarations: readonly { file: string; line: number; symbol?: string; contracts: readonly string[] }[] } = { tests: [], codeDeclarations: [] }, concepts: readonly { path: string; concept: { id: string; term: string } }[] = []) {
+  const sources = [...files].filter(([path]) => path.startsWith(`${root}/`)).map(([path, body]) => ({ path: path.slice(root.length + 1), digest: digest(body) }));
+  const catalogs = [...new Set(concepts.map(item => item.path))].map(path => ({ path, concepts: concepts.filter(item => item.path === path).map(item => ({ id: item.concept.id, term: item.concept.term, deprecated: [] })) }));
+  const snapshot = {
+    complete: true, root, project: null, configDigest: null, conceptCatalogs: catalogs,
+    documents: documents.map(document => ({ path: document.path, digest: 'document', metadata: { format: 'concord.document/v1', id: document.path, ...document } })),
+    feedback: [], pages: [...new Map([...sources.filter(source => source.path.endsWith('.md')).map(source => ({ ...source, derivedTitle: /^#\s+(.+)$/mu.exec(files.get(`${root}/${source.path}`) ?? '')?.[1] })), ...pages.map(page => ({ path: page.path, digest: 'page', derivedTitle: /^#\s+(.+)$/mu.exec(files.get(`${root}/${page.path}`) ?? '')?.[1] ?? page.name }))].map(page => [page.path, page])).values()],
+    cases: relationships.tests.map((item, index) => ({ ...item, id: `neref_${String(index).padStart(32, '0')}`, contractKind: 'feature', issues: [], status: 'active', framework: 'marker', skipped: false })),
+    codes: relationships.codeDeclarations.map((item, index) => ({ ...item, id: `code-${index}`, endLine: item.line, scope: 'file' })),
+    edges: [], findings: [], sources, evidenceIds: [], templates: [], cache: { status: 'ready' }, diagnostics: { error: '', message: '' },
+  };
+  const at = '2026-11-08T00:00:00.000Z';
+  return { snapshot, projection: { sourceDigest: digest(JSON.stringify(snapshot)), builtAt: at, builtFrom: at, builtUntil: at, complete: true, changedPaths: [], unknownRelations: false, status: 'ready', current: false, refreshOwner: 'active' } };
+}
+
 const path = 'docs/feature/cart/README.md';
 const original = '# Cart\n';
 function boundary() {
@@ -22,15 +39,15 @@ function boundary() {
         writes.push({ path: absolute, expected: input.expectedDigest }); files.set(absolute, input.body);
         return { code: 0, stdout: JSON.stringify({ changedPaths: [input.path] }), stderr: '' };
       }
-      const value = operation[0] === 'doctor' ? { root: '/repo', configuration: { sourceRoots: ['src'], testRoots: ['test'] } }
-        : operation[0] === 'list' ? { documents: [{ path, kind: 'feature', title: 'Cart' }] }
-        : operation[0] === 'concepts' ? { concepts: [], catalogs: [] }
-        : operation[0] === 'show' ? { pages: [{ path, kind: 'readme', name: 'Cart' }], tests: [{ file: 'test/cart.ts', line: 4, name: 'add', contract: `${path}#add` }], codeDeclarations: [] }
-        : operation[0] === 'check' ? { ok: false, findings: [{ path, line: 2, message: 'Broken link' }] } : {};
+      if (operation[0] === 'workspace' && operation[1] === 'projection') {
+        if (!files.has('/repo/docs/taste.md')) return { code: 1, stdout: '', stderr: JSON.stringify({ error: 'ProjectNotInitialized', message: 'Not initialized' }) };
+        return { code: 0, stdout: JSON.stringify(modProjection('/repo', files, [{ path, kind: 'feature', title: 'Cart' }], [{ path, name: 'Cart' }], { tests: [{ file: 'test/cart.ts', line: 4, name: 'add', contract: `${path}#add` }], codeDeclarations: [] })), stderr: '' };
+      }
+      const value = operation[0] === 'check' ? { ok: false, findings: [{ path, line: 2, message: 'Broken link' }] } : {};
       return { code: operation[0] === 'check' ? 1 : 0, stdout: JSON.stringify(value), stderr: '' };
     },
   } satisfies ModHost;
-  return { host, files, calls, writes, session: new ModSession(host, '/repo/nested') };
+  return { host, files, calls, writes, session: new ModSession(host, '/repo') };
 }
 
 // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#open
@@ -43,45 +60,27 @@ test('only the canonical taste file enables guarded queries, including when othe
   b.files.set('/repo/docs/taste.md', '');
   await Effect.runPromise(b.session.refresh());
   assert.equal(b.session.initialized, true, 'even an empty taste file is the initialization marker');
-  assert.ok(b.calls.some(call => call[0] === 'list'));
+  assert.ok(b.calls.some(call => call[0] === 'workspace' && call[1] === 'projection'));
   b.files.delete('/repo/docs/taste.md');
   await Effect.runPromise(b.session.refresh());
   assert.equal(b.session.initialized, false); assert.deepEqual(b.session.documents, []);
 });
 
 // @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-feature
-test('an initialized root can publish its feature list while doctor is still running', { timeout: 5000 }, async () => {
-  const b = boundary(); b.session.root = '/repo';
-  const execute = b.host.exec;
-  let release!: () => void, listed!: () => void;
-  const pendingDoctor = new Promise<void>(resolve => { release = resolve; });
-  const listStarted = new Promise<void>(resolve => { listed = resolve; });
-  b.host.exec = async (command, args, options) => {
-    if (args.at(-1) === 'doctor') await pendingDoctor;
-    if (args.at(-1) === 'list') listed();
-    return execute(command, args, options);
-  };
-  const refresh = Effect.runPromise(b.session.refresh());
-  await listStarted;
-  release(); await refresh;
+test('one refresh reads only one projection regardless of the document count', async () => {
+  const b = boundary();
+  await Effect.runPromise(b.session.refresh());
+  assert.deepEqual(b.calls, [['workspace', 'projection']]);
   assert.equal(b.session.initialized, true);
 });
 
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-test('refresh publishes a changed page before its slower relationship query completes', { timeout: 5000 }, async () => {
+test('refresh reads a changed selected page after accepting the new projection', async () => {
   const b = boundary(); await Effect.runPromise(b.session.refresh()); await Effect.runPromise(b.session.open(path));
   b.files.set(`/repo/${path}`, '# Fresh page\n');
-  const execute = b.host.exec;
-  let release!: () => void, observed!: () => void;
-  const relationship = new Promise<void>(resolve => { release = resolve; });
-  const source = new Promise<void>(resolve => { observed = resolve; });
-  b.host.exec = async (command, args, options) => {
-    if (args.includes('show')) await relationship;
-    return execute(command, args, options);
-  };
-  const refresh = Effect.runPromise(b.session.refresh(() => { if (b.session.source === '# Fresh page\n') observed(); }));
-  try { await source; assert.equal(b.session.sourceDigest, digest('# Fresh page\n')); }
-  finally { release(); await refresh; }
+  await Effect.runPromise(b.session.refresh());
+  assert.equal(b.session.source, '# Fresh page\n');
+  assert.equal(b.calls.filter(call => call[0] === 'show').length, 0);
 });
 
 // @use-case docs/feature/herdr-mod/use-case/read-spec.md
@@ -92,6 +91,8 @@ test('mod observes public CLI schemas, package pages and only fixed or linked Ma
   assert.ok(b.session.pages.some(page => page.path === path));
   await Effect.runPromise(b.session.open(path));
   assert.equal(b.session.source, original); assert.equal(b.session.detail.tests?.[0]?.file, 'test/cart.ts');
+  assert.ok(!b.calls.some(call => call[0] === 'taste'));
+  await Effect.runPromise(b.session.open('docs/taste.md'));
   assert.ok(b.calls.some(call => call[0] === 'taste'));
   assert.equal(markdownTarget(path, 'use-case/add.md#step'), 'docs/feature/cart/use-case/add.md');
   assert.equal(markdownTarget(path, '../../../../outside.md'), undefined);
@@ -157,4 +158,53 @@ test('remote drafts use the same digest action and UTF-8 bounded argument chunks
   assert.equal(b.files.get(`/repo/${path}`), draft);
   assert.ok(b.calls.some(call => call.filter(arg => arg.startsWith('--input-text=')).length > 1));
   assert.equal(b.session.sourceDigest, digest(draft));
+});
+
+// @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+test('pending projections wait without after before reading again, and unavailable services scan once', async () => {
+  for (const unavailable of [false, true]) {
+    const b = boundary(); const execute = b.host.exec;
+    let first = true;
+    b.host.exec = async (command, args, options) => {
+      assert.ok(!args.includes('--fresh'));
+      const operation = args.slice(args.indexOf('--root') + 2);
+      if (operation[0] === 'workspace' && first) {
+        first = false; b.calls.push(operation);
+        return { code: 1, stdout: '', stderr: JSON.stringify({ error: unavailable ? 'WorkspaceProjectionUnavailable' : 'WorkspaceProjectionPending', message: 'Not ready' }) };
+      }
+      if (operation[1] === 'wait') {
+        b.calls.push(operation); assert.deepEqual(operation, ['workspace', 'wait']);
+        return { code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'ready' }), stderr: '' };
+      }
+      if (operation[1] === 'show') {
+        b.calls.push(operation);
+        return { code: 0, stdout: JSON.stringify(modProjection('/repo', b.files, [{ path, kind: 'feature', title: 'Cart' }]).snapshot), stderr: '' };
+      }
+      return execute(command, args, options);
+    };
+    await Effect.runPromise(b.session.refresh());
+    assert.equal(b.session.initialized, true);
+    assert.deepEqual(b.calls, unavailable ? [['workspace', 'projection'], ['workspace', 'show']] : [['workspace', 'projection'], ['workspace', 'wait'], ['workspace', 'projection']]);
+  }
+});
+
+// @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#init
+test('initialization keeps waiting if its first wake-up precedes a readable projection', async () => {
+  const b = boundary(); const execute = b.host.exec;
+  let attempts = 0;
+  b.host.exec = async (command, args, options) => {
+    const operation = args.slice(args.indexOf('--root') + 2);
+    if (operation[1] === 'projection' && attempts++ < 2) {
+      b.calls.push(operation);
+      return { code: 1, stdout: '', stderr: JSON.stringify({ error: 'WorkspaceProjectionPending', message: 'Workspace is building' }) };
+    }
+    if (operation[1] === 'wait') {
+      b.calls.push(operation);
+      return { code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'initializing' }), stderr: '' };
+    }
+    return execute(command, args, options);
+  };
+  await Effect.runPromise(b.session.refresh());
+  assert.equal(b.session.initialized, true);
+  assert.deepEqual(b.calls, [['workspace', 'projection'], ['workspace', 'wait'], ['workspace', 'projection'], ['workspace', 'wait'], ['workspace', 'projection']]);
 });

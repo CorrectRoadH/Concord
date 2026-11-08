@@ -23,7 +23,7 @@ export interface HttpRequest {
 }
 export interface RequestSpec extends HttpRequest { readonly companions?: readonly HttpRequest[] }
 export type BenchRun = readonly string[] | { readonly argv: readonly string[]; readonly concurrency: number }
-  | { readonly request: RequestSpec } | { readonly scan: readonly string[] } | { readonly mod: 'first-screen' | 'push' };
+  | { readonly request: RequestSpec } | { readonly scan: readonly string[] } | { readonly mod: 'first-screen' | 'push' | 'switch-back' | 'switch-new' };
 export interface BenchScenario {
   readonly id: string; readonly consumer: 'self' | 'scale' | `fixture:${string}`;
   readonly server?: 'running';

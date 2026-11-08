@@ -5,16 +5,15 @@
 // @concord-implements docs/feature/herdr-mod/use-case/follow-changes.md
 // @concord-implements docs/feature/herdr-mod/use-case/use-on-remote-machine.md
 // @concord-implements docs/feature/herdr-mod/ui.md
-import { Effect, Scheduler, Schema } from 'effect';
+import { Effect, Scheduler } from 'effect';
 import { View, div, type AsyncContext, type Context, type Element, type Task } from 'gpui-kit';
-import { h_flex, v_flex, TextView, Editor, EditorState, Textarea, TextareaState } from 'gpui-base';
+import { h_flex, v_flex, TextView, Editor, EditorState, Textarea, TextareaState, VirtualListScrollHandle } from 'gpui-base';
 import { exec, focused, panes, spaces, run, closeOverlay, home, props as hostProps, theme, settings } from 'herdr';
 import { ModSession, ModFailure, ModDisconnected, failure, markdownTarget } from './session.ts';
-import { ModVersion, compareModVersions, pageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
+import { pageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
 import { RenderAssets, type RenderLease } from './render-assets.ts';
 import { codeMarkdown, livePreviewElements } from './rendered-page.ts';
 import { clickableRow, color, heading, icon, mono, row, text, type IconName } from './ui.ts';
-declare const CONCORD_MOD_MINIMUM_VERSION: string;
 
 const runEffect = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect, { scheduler: new Scheduler.MixedScheduler('sync') });
 const installCommand = 'curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh';
@@ -23,6 +22,10 @@ const documentGroups = ['Feature', 'Engineering', 'Roadmap', '项目规则', 'De
 type DocumentGroup = typeof documentGroups[number];
 
 export default class ConcordMod extends View {
+  private sessions = new Map<string, { session: ModSession; expanded: Set<string>; collapsedGroups: Set<string>; pageLease: RenderLease | undefined; renderedPage: RenderedPage | undefined; renderedSource: string; renderedPath: string; renderKey: string; treeScroll: VirtualListScrollHandle; pageScroll: VirtualListScrollHandle }>();
+  private treeScroll = VirtualListScrollHandle.new();
+  private pageScroll = VirtualListScrollHandle.new();
+  private cliMachines = new Set<string | null>();
   private session = new ModSession({ exec }, '');
   private tasks = new Set<Task>();
   private watcher: Task | undefined;
@@ -39,13 +42,12 @@ export default class ConcordMod extends View {
   private previewLabel = '';
   private conceptText: string | undefined;
   private cli: 'checking' | 'missing' | 'outdated' | 'ready' = 'checking';
-  private cliVersion = '';
-  private minimumVersion = Schema.decodeUnknownSync(ModVersion)(typeof CONCORD_MOD_MINIMUM_VERSION === 'undefined' ? 'dev' : CONCORD_MOD_MINIMUM_VERSION);
-  private newerCli = false;
+  private unknownCommand = '';
   private tab: string | undefined;
   private terminals = new Map<string, string>();
   private ownPane: string | undefined;
   private observedTarget = '';
+  private resolvedTargets = new Map<string, { root: string; home: string; machine: string | null }>();
   private navigation: Task | undefined;
   private retry: Task | undefined;
   private targetToken = {};
@@ -65,6 +67,7 @@ export default class ConcordMod extends View {
   private pageLease: RenderLease | undefined;
   private renderedPage: RenderedPage | undefined;
   private renderedSource = '';
+  private renderedKey = '';
   private renderTasks = new Set<Task>();
   private renderToken = {};
   private renderKey = '';
@@ -96,7 +99,7 @@ export default class ConcordMod extends View {
     this.retry = cx.timer.every(2000, current => {
       if (this.closed || !this.foreground) return;
       if (this.disconnected) { this.observedTarget = ''; this.followTerminal(current); }
-      else if (this.cli === 'missing' || this.cli === 'outdated') this.recheckCli(current);
+      else if (this.cli !== 'ready') this.recheckCli(current);
     });
     this.followTerminal(cx);
   }
@@ -116,6 +119,7 @@ export default class ConcordMod extends View {
   }
 
   private async detectCli(target: Target, current: () => boolean, quiet = false): Promise<void> {
+    if (this.cliMachines.has(target.machine)) { this.cli = 'ready'; return; }
     if (!quiet) { this.cli = 'checking'; this.session.error = ''; }
     let reply;
     try { reply = await exec('concord', ['--version'], { cwd: target.cwd, on: target.machine }); }
@@ -127,10 +131,7 @@ export default class ConcordMod extends View {
     }
     if (!current()) return;
     if (reply.code !== 0) { this.cli = 'missing'; return; }
-    this.cliVersion = Schema.decodeUnknownSync(ModVersion)(reply.stdout.trim().replace(/^concord(?:-sdlc)?\s+v?/u, ''));
-    const order = compareModVersions(this.cliVersion, this.minimumVersion);
-    this.cli = order < 0 ? 'outdated' : 'ready';
-    this.newerCli = order > 0;
+    this.cli = 'ready'; this.cliMachines.add(target.machine);
   }
 
   private async resolveRoot(target: Target): Promise<{ root: string; home: string }> {
@@ -175,14 +176,16 @@ export default class ConcordMod extends View {
     this.navigation = cx.spawn(async next => {
       try {
         if (!this.session.root) this.directory = 'resolving';
-        const resolved = await this.resolveRoot(target);
+        const cachedRoot = this.resolvedTargets.get(key);
+        const resolved = cachedRoot ?? await this.resolveRoot(target);
+        if (resolved.root) this.resolvedTargets.set(key, { ...resolved, machine: target.machine });
         if (!current()) return;
         this.remoteHome = resolved.home;
         const reconnecting = this.disconnected;
         this.disconnected = false;
         const different = this.session.root !== resolved.root || this.session.machine !== target.machine;
-        if (different && this.session.draft !== undefined) {
-          this.finishEditing(next);
+        if (different) this.finishEditing(next);
+        if (different && (this.session.draft !== undefined || this.saving)) {
           await this.flush();
           if (!current()) return;
         }
@@ -192,7 +195,8 @@ export default class ConcordMod extends View {
           if (reconnecting || this.session.error || this.watchedRoot === undefined) this.refresh(next);
           next.notify(); return;
         }
-        this.useFolder(resolved.root, target.machine);
+        this.useFolder(resolved.root, target.machine, next);
+        next.notify();
         await this.detectCli({ cwd: resolved.root, machine: target.machine }, current);
         if (!current()) return;
         if (this.cli === 'ready') this.refresh(next);
@@ -225,8 +229,12 @@ export default class ConcordMod extends View {
     this.tasks.add(task);
   }
 
-  private useFolder(cwd: string, machine: string | null): void {
-    this.session.stop();
+  private useFolder(cwd: string, machine: string | null, cx: Context): void {
+    if (this.session.root) {
+      this.session.suspend();
+      this.sessions.set(JSON.stringify([this.session.machine, this.session.root]), { session: this.session, expanded: this.expanded, collapsedGroups: this.collapsedGroups, pageLease: this.pageLease, renderedPage: this.renderedPage, renderedSource: this.renderedSource, renderedPath: this.renderedPath, renderKey: this.renderedKey, treeScroll: this.treeScroll, pageScroll: this.pageScroll });
+    } else { this.treeScroll.release(); this.pageScroll.release(); }
+    this.renderToken = {};
     this.pauseWatch();
     for (const task of this.tasks) task.cancel();
     this.tasks.clear(); this.watchedRoot = undefined;
@@ -234,22 +242,38 @@ export default class ConcordMod extends View {
     this.releaseEditor(); this.autoSave?.cancel(); this.autoSave = undefined;
     this.preview?.release(); this.preview = undefined;
     this.conceptText = undefined;
-    this.session = new ModSession({ exec }, cwd, machine);
+    const key = JSON.stringify([machine, cwd]);
+    const retained = this.sessions.get(key);
+    this.sessions.delete(key);
+    this.session = retained?.session ?? new ModSession({ exec }, cwd, machine);
+    this.cli = this.cliMachines.has(machine) ? 'ready' : 'checking';
+    this.pageLease = retained?.pageLease; this.renderedPage = retained?.renderedPage;
+    this.renderedSource = retained?.renderedSource ?? ''; this.renderedPath = retained?.renderedPath ?? ''; this.renderKey = retained?.renderKey ?? ''; this.renderedKey = this.renderKey;
+    this.treeScroll = retained?.treeScroll ?? VirtualListScrollHandle.new(); this.pageScroll = retained?.pageScroll ?? VirtualListScrollHandle.new();
     this.reloadVersion = 0; this.pageNavigation = {}; this.saving = undefined;
-    this.expanded.clear(); this.busy.clear();
-    this.collapsedGroups = new Set(documentGroups.filter(name => name !== 'Feature' && name !== 'Engineering'));
+    this.expanded = retained?.expanded ?? new Set(); this.busy.clear();
+    this.collapsedGroups = retained?.collapsedGroups ?? new Set(documentGroups.filter(name => name !== 'Feature' && name !== 'Engineering'));
+    while (this.sessions.size > 7) {
+      const oldest = this.sessions.keys().next().value!;
+      const removed = this.sessions.get(oldest)!; this.sessions.delete(oldest);
+      removed.session.stop(); removed.treeScroll.release(); removed.pageScroll.release();
+      for (const [address, resolved] of this.resolvedTargets) {
+        if (resolved.root === removed.session.root && resolved.machine === removed.session.machine) this.resolvedTargets.delete(address);
+      }
+      if (removed.pageLease) this.releaseLease(cx, removed.pageLease);
+    }
   }
 
   private refresh(cx: Context): void {
     if (this.refreshing) { this.refreshQueued = true; return; }
     const session = this.session;
-    const digest = session.sourceDigest;
+    const digest = session.workspaceDigest, source = session.sourceDigest;
     this.refreshing = true;
     this.run(cx, current => Effect.gen({ self: this }, function*() {
       yield* session.refresh(() => { this.syncEditor(); current.notify(); });
       this.disconnected = false; session.errorDetails = '';
       // Images and imported sketch inputs can change while Markdown stays identical.
-      if (session.sourceDigest === digest) this.renderKey = '';
+      if (session.workspaceDigest !== digest && session.sourceDigest === source) this.renderKey = '';
     }).pipe(Effect.ensuring(Effect.sync(() => { if (session === this.session) this.refreshing = false; }))), current => {
       this.watch(current);
       if (this.refreshQueued) { this.refreshQueued = false; this.refresh(current); }
@@ -281,8 +305,10 @@ export default class ConcordMod extends View {
         while (!session.closed && token === this.watchToken && this.foreground) {
           const reply = await runEffect(session.wait());
           if (session.closed || session !== this.session || token !== this.watchToken || !this.foreground) return;
-          session.workspaceDigest = reply.sourceDigest ?? undefined;
-          if (reply.changed) this.refresh(current);
+          if (reply.changed) {
+            this.watchedRoot = undefined; this.watcher = undefined;
+            this.refresh(current); return;
+          }
         }
       } catch (cause) {
         if (session.closed || session !== this.session || token !== this.watchToken || !this.foreground) return;
@@ -323,7 +349,7 @@ export default class ConcordMod extends View {
     const samePage = Boolean(key) && this.renderedPath === JSON.stringify([session.root, session.machine, path]);
     if (!samePage) {
       const previous = this.pageLease;
-      this.pageLease = undefined; this.renderedPage = undefined; this.renderedPath = ''; this.renderedSource = '';
+      this.pageLease = undefined; this.renderedPage = undefined; this.renderedPath = ''; this.renderedSource = ''; this.renderedKey = '';
       if (previous) this.releaseLease(cx, previous);
     }
     const task = cx.spawn(async next => {
@@ -338,7 +364,7 @@ export default class ConcordMod extends View {
         if (!lease) return;
         if (!current()) { await lease.release(next); return; }
         const replaced = this.pageLease;
-        this.pageLease = lease; this.renderedPage = page; this.renderedSource = source; this.renderedPath = JSON.stringify([session.root, session.machine, path]);
+        this.pageLease = lease; this.renderedPage = page; this.renderedKey = key; this.renderedSource = source; this.renderedPath = JSON.stringify([session.root, session.machine, path]);
         if (replaced) await replaced.release(next);
       } catch (cause) {
         if (!current()) return;
@@ -450,13 +476,26 @@ export default class ConcordMod extends View {
     const anchor = target.split('#')[1];
     const concept = this.session.concepts.find(item => item.path === path && item.concept.id === anchor);
     if (concept) {
-      this.conceptText = `### ${concept.concept.term}\n\n${concept.concept.definition ?? ''}\n\n${concept.path}`;
-      cx.notify();
+      const session = this.session;
+      this.run(cx, session.read(path).pipe(Effect.tap(source => Effect.sync(() => {
+        if (session !== this.session) return;
+        const lines = (source ?? '').split('\n');
+        const heading = lines.findIndex(line => /^##\s/u.test(line) && line.includes(`{#${anchor}}`));
+        const remaining = heading < 0 ? [] : lines.slice(heading + 1);
+        const next = remaining.findIndex(line => /^##\s/u.test(line));
+        const definition = (next < 0 ? remaining : remaining.slice(0, next)).join('\n').trim().split(/\n\s*\n/u)[0] ?? '';
+        this.conceptText = `### ${concept.concept.term}\n\n${definition}\n\n${concept.path}`;
+      }))));
     } else this.open(path, cx);
   }
 
   private reportFailure(cause: unknown, session = this.session): void {
     const error = failure(cause);
+    if (/Unknown(?:Command|Option)|UnrecognizedCommand|unknown (?:command|subcommand|option)|unrecognized (?:command|subcommand|option)|not (?:a |be )?recognized.*command|command not found|concord.*not found|cannot start concord/iu.test(`${error.code ?? ''} ${error.message} ${error.details ?? ''}`)) {
+      this.cliMachines.delete(session.machine);
+      this.cli = /command not found|cannot start concord|concord.*not found/iu.test(`${error.message} ${error.details ?? ''}`) ? 'missing' : 'outdated';
+      this.unknownCommand = error.details || error.message;
+    }
     session.error = error.message; session.errorDetails = error.details ?? ''; session.errorCode = error.code ?? '';
   }
 
@@ -512,7 +551,7 @@ export default class ConcordMod extends View {
   private cliRequest(machine: string | null): string {
     const where = machine === null ? '本机' : ` ${machine} 上`;
     return this.cli === 'outdated'
-      ? `把${where}的 Concord 命令行工具升级到 ${this.minimumVersion} 或更新：运行\n${installCommand}\n然后用 concord --version 确认版本。`
+      ? `把${where}的 Concord 命令行工具升级到最新版本：运行\n${installCommand}\n然后用 concord --version 确认版本。`
       : `在${where}安装 Concord 命令行工具：运行\n${installCommand}\n然后用 concord --version 确认能运行。`;
   }
 
@@ -641,7 +680,7 @@ export default class ConcordMod extends View {
     return !session.loaded ? navigation.child(text('正在读取文档…').p(8).text_color(color('dim')))
       // Rows carry their own click targets (folder and title), which herdr-app refuses inside a
       // virtual list renderer. The id keeps the scroll position across refreshes and unmounts.
-      : navigation.child(v_flex().id('concord-tree').flex_1().min_h(0).overflow_y_scroll().children(rows.map(row => row.render())));
+      : navigation.child(v_flex().id('concord-tree').track_scroll(this.treeScroll).flex_1().min_h(0).overflow_y_scroll().children(rows.map(row => row.render())));
   }
 
   private banner(id: string, message: string, actions: Element[] = [], tone = 'blocked'): Element {
@@ -703,7 +742,7 @@ export default class ConcordMod extends View {
       Editor.new(this.preview).id('concord-source-editor').h(240).min_h(0),
     ]));
     return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).children([toolbar, ...banners,
-      v_flex().id(`concord-document-${session.selected}`).flex_1().min_w(0).min_h(0).overflow_y_scroll().p(12).gap(10).children(body),
+      v_flex().id(`concord-document-${session.selected}`).track_scroll(this.pageScroll).flex_1().min_w(0).min_h(0).overflow_y_scroll().p(12).gap(10).children(body),
     ]);
   }
 
@@ -722,16 +761,16 @@ export default class ConcordMod extends View {
     if (this.directory === 'no-terminal') return this.statusPage(toolbar, '先在这个 tab 里打开一个终端', '终端报告目录后，Concord 会自动跟随');
     if (this.disconnected) return this.statusPage(toolbar, `连不上 ${this.target?.machine ?? session.machine}`, 'Herdr 恢复连接后自动重试');
     if (this.directory === 'not-git') return this.statusPage(toolbar, '这里不是 Git 仓库', location, [text('在终端里 cd 到一个 Git 仓库，mod 会跟着切换')]);
-    if (session.error && !session.loaded) return this.statusPage(toolbar, session.error, location, this.handoff('copy-error', this.errorRequest(false), this.errorRequest(true)));
     if (this.cli !== 'ready') {
       if (this.cli === 'checking') return this.statusPage(toolbar, '正在检测 Concord 命令行工具…', location);
       return this.statusPage(toolbar,
         this.cli === 'missing' ? machine === null ? '这个 mod 需要 Concord 命令行工具' : `${machine} 上没有 Concord 命令行工具`
           : `${machine === null ? 'Concord' : `${machine} 上的 Concord`} 版本过旧`,
         this.cli === 'missing' ? '让 agent 装好后，mod 自动继续'
-          : `${machine === null ? '' : `${machine} 上的 `}Concord 当前版本：${this.cliVersion}；要求的最低版本：${this.minimumVersion}`,
+          : this.unknownCommand,
         this.handoff('copy-cli', this.cliRequest(machine)));
     }
+    if (session.error && !session.loaded) return this.statusPage(toolbar, session.error, location, this.handoff('copy-error', this.errorRequest(false), this.errorRequest(true)));
     // Background reads keep the page as it is; only the first read of a repository says it is reading.
     if (!session.loaded) return this.statusPage(toolbar, '正在读取 Concord 仓库…', location);
     if (!session.initialized) return this.statusPage(toolbar, '这个仓库还没有初始化 Concord', location, [
@@ -740,16 +779,12 @@ export default class ConcordMod extends View {
     ]);
     this.ensureRendered(cx, available);
     const notices = this.errorElements();
-    if (this.newerCli) notices.push(this.banner('concord-update', '运行 concord herdr install，将 mod 更新到与命令行相同的版本。', [], 'muted'));
     // @concord-begin
     // @concord-implements docs/feature/herdr-mod/use-case/init-from-herdr.md#guide
     // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
-    // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
     if (session.initialization) notices.push(this.banner('concord-initialized', `新建了 ${session.initialization.createdPaths.length} 个文件`, [
-      text('下一步：让 agent 读写作指南'), mono(`concord --skill ${session.initialization.guide}`),
-      this.button('read-guide', '阅读指南', current => this.act('read-guide', '正在读取…', current, session.readGuide())),
+      ...this.handoff('copy-initialization', session.initializationRequest(session.machine === null ? this.locationLabel(session.root, null) : `${session.machine} 上的 ${this.locationLabel(session.root, session.machine).slice(session.machine.length + 1)}`)),
     ], 'done'));
-    if (session.guideSource !== undefined) notices.push(TextView.markdown('concord-writing-guide', session.guideSource));
     // @concord-end
     return this.frame(toolbar, [...notices, h_flex().id('concord-columns').flex_1().min_h(0).items_stretch().children([
       ...(!this.treeHidden ? [v_flex().id('concord-sidebar').w(Math.max(160, Math.min(240, this.panelWidth * 0.4))).flex_none().min_h(0).border_r(1).border_color(color('border')).child(this.documentList())] : []),
@@ -769,7 +804,9 @@ export default class ConcordMod extends View {
     // Start both within the host's bounded close window; a slow write must not delay asset cleanup.
     const save = this.session.saving ? Promise.resolve() : runEffect(this.session.save()).catch(() => {});
     await Promise.all([save, this.assets.close(cx)]);
-    this.session.stop();
+    this.session.stop(); this.treeScroll.release(); this.pageScroll.release();
+    for (const retained of this.sessions.values()) { retained.session.stop(); retained.treeScroll.release(); retained.pageScroll.release(); }
+    this.sessions.clear(); this.cliMachines.clear(); this.resolvedTargets.clear();
     for (const task of this.renderTasks) task.cancel();
     this.renderTasks.clear();
   }

@@ -65,7 +65,10 @@ const main = Effect.scoped(Effect.gen(function*() {
   yield* Effect.addFinalizer(() => Effect.forEach(fibers, Fiber.interrupt, { concurrency: 'unbounded', discard: true }));
   return yield* Effect.tryPromise({ try: async signal => {
   const [entry, root, mode] = process.argv.slice(2);
-  if (!entry || !root || !['first-screen', 'push', 'workflow'].includes(mode ?? '')) throw new Error('Expected installed CLI, consumer root, and first-screen|push|workflow');
+  if (!entry || !root || !['first-screen', 'push', 'workflow', 'switch-back', 'switch-new'].includes(mode ?? '')) throw new Error('Expected installed CLI, consumer root, and first-screen|push|workflow|switch-back|switch-new');
+  let activeRoot = root, activeTab = 'host-tab';
+  let secondary: string | undefined;
+  let clipboard = '';
   let closed = false, output: HostElement | undefined, view: ModView | undefined;
   const errors: unknown[] = [], tasks = new Set<HostTask>();
   const calls: string[][] = [];
@@ -73,7 +76,7 @@ const main = Effect.scoped(Effect.gen(function*() {
   const context = (): HostContext => ({
     stop_propagation() {},
     open_url() {},
-    write_to_clipboard() {},
+    write_to_clipboard(value) { clipboard = value; },
     sleep: ms => Effect.runPromise(Effect.sleep(Duration.millis(ms ?? 0))),
     notify() { if (closed) throw new Error('Closed mod context'); output = view?.render(context()); },
     spawn(callback) {
@@ -110,9 +113,9 @@ const main = Effect.scoped(Effect.gen(function*() {
     // Comparison runs load the previous published mod through this same host.
     InputState: { new: (options?: { value?: string }) => new HostState(options?.value ?? '') },
     Input: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
-    focused: () => ({ cwd: root, pane: 'external-boundary', tab: 'host-tab' }), theme: () => ({}), settings: () => ({ font_family: '' }),
-    panes: () => [{ pane: 'external-boundary', terminal: 'host-terminal', tab: 'host-tab', focused: true, cwd: root }],
-    spaces: () => [{ id: 'host-space', machine: null, tabs: [{ id: 'host-tab', active: true }] }],
+    focused: () => ({ cwd: activeRoot, pane: `pane-${activeTab}`, tab: activeTab }), theme: () => ({}), settings: () => ({ font_family: '' }),
+    panes: () => [{ pane: 'pane-host-tab', terminal: 'host-terminal', tab: 'host-tab', focused: activeTab === 'host-tab', cwd: root }, ...(secondary ? [{ pane: 'pane-second-tab', terminal: 'second-terminal', tab: 'second-tab', focused: activeTab === 'second-tab', cwd: secondary }] : [])],
+    spaces: () => [{ id: 'host-space', machine: null, tabs: [{ id: 'host-tab', active: activeTab === 'host-tab' }, ...(secondary ? [{ id: 'second-tab', active: activeTab === 'second-tab' }] : [])] }],
     run: () => null, closeOverlay: () => null, appHome: () => herdrHome, home: () => '/external-home',
     props: () => ({}),
     shared: (key: string) => structuredClone(sharedData.get(key)),
@@ -155,6 +158,38 @@ const main = Effect.scoped(Effect.gen(function*() {
   const sourcePath = join(root, documentPath);
   let original: string | undefined;
   try {
+    if (mode === 'switch-back' || mode === 'switch-new') {
+      secondary = join(herdrHome, 'second-repository');
+      const clone = await host.exec('git', ['clone', '-q', '--no-hardlinks', root, secondary], { cwd: root });
+      if (clone.code !== 0) throw new Error(`Prepare second repository: ${clone.stderr || clone.stdout}`);
+      if (mode === 'switch-new') {
+        // The ordinary mod fixture has two Features; this scenario requires forty.
+        for (let index = 0; index < 38; index++) {
+          const reply = await host.exec('concord', ['--json', 'new', 'feature', `feature-${index}`, '--title', `Feature ${index}`], { cwd: secondary });
+          if (reply.code !== 0) throw new Error(`Prepare forty Features: ${reply.stderr || reply.stdout}`);
+        }
+        for (const args of [['add', '.'], ['-c', 'user.name=Concord bench', '-c', 'user.email=bench@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Frozen switch fixture']]) {
+          const reply = await host.exec('git', args, { cwd: secondary });
+          if (reply.code !== 0) throw new Error(`Freeze second repository: ${reply.stderr || reply.stdout}`);
+        }
+      }
+      for (const args of [['--json', 'workspace', 'wait'], ['--json', 'workspace', 'projection']]) {
+        const reply = await host.exec('concord', args, { cwd: secondary });
+        if (reply.code !== 0) throw new Error(`Prepare second repository: ${reply.stderr || reply.stdout}`);
+      }
+      if (mode === 'switch-new') {
+        const Projection = Schema.Struct({ snapshot: Schema.Struct({ documents: Schema.Array(Schema.Struct({ metadata: Schema.Struct({ kind: Schema.String }) })) }), projection: Schema.Struct({ sourceDigest: Schema.String }) });
+        for (let attempt = 0; ; attempt++) {
+          const reply = await host.exec('concord', ['--json', 'workspace', 'projection'], { cwd: secondary });
+          if (reply.code !== 0) throw new Error(`Read prepared projection: ${reply.stderr || reply.stdout}`);
+          const projection = Schema.decodeUnknownSync(Schema.fromJsonString(Projection), { onExcessProperty: 'ignore' })(reply.stdout);
+          if (projection.snapshot.documents.filter(document => document.metadata.kind === 'feature').length === 40) break;
+          if (attempt === 3) throw new Error('Prepared projection does not contain forty Features');
+          const waited = await host.exec('concord', ['--json', 'workspace', 'wait', '--after', projection.projection.sourceDigest], { cwd: secondary });
+          if (waited.code !== 0) throw new Error(`Wait for prepared projection: ${waited.stderr || waited.stdout}`);
+        }
+      }
+    }
     let started = performance.now();
     const mod = entry.endsWith('.ts') ? new URL('../src/entry/herdr-mod/main.ts', import.meta.url).href
       : pathToFileURL(join(installationResources(installationRootForBin(entry)).herdrMod, 'main.js')).href;
@@ -167,6 +202,8 @@ const main = Effect.scoped(Effect.gen(function*() {
       const click = (id: string) => { const element = output?.find(id); if (!element?.click) throw new Error(`Missing UI action ${id}: ${output?.text()}`); element.click(undefined, context()); };
       click('initialize');
       await waitFor(() => output?.find('category-项目规则') !== undefined);
+      click('copy-initialization');
+      if (!clipboard.includes(`${root} 刚初始化了 Concord。`) || !clipboard.includes('concord --skill start') || output?.find('read-guide') || output?.find('concord-writing-guide')) throw new Error('Initialization handoff is missing or renders the guide');
       click('category-项目规则'); click(`page-${documentPath}`);
       await waitFor(() => output?.find(`concord-body-${documentPath}`) !== undefined);
       click('preview-block-0');
@@ -184,6 +221,18 @@ const main = Effect.scoped(Effect.gen(function*() {
       return;
     }
     let ended = await waitFor(() => output?.find('concord-tree')?.text().includes('measured') === true);
+    if (mode === 'switch-back' || mode === 'switch-new') {
+      output!.find(`page-${documentPath}`)!.click!(undefined, context());
+      await waitFor(() => output?.find(`concord-body-${documentPath}`) !== undefined && !output?.text().includes('正在渲染页面'));
+      activeRoot = secondary!; activeTab = 'second-tab';
+      started = performance.now(); output = view.render(context());
+      ended = await waitFor(() => output?.find('concord-repository')?.text().includes(secondary!) === true && output?.find('concord-tree')?.text().includes('measured') === true);
+      if (mode === 'switch-back') {
+        activeRoot = root; activeTab = 'host-tab';
+        started = performance.now(); output = view.render(context());
+        ended = await waitFor(() => output?.find('concord-repository')?.text().includes(root) === true && output?.find(`concord-body-${documentPath}`) !== undefined);
+      }
+    }
     if (mode === 'push') {
       // Wait for the actual mod's asynchronous watcher and selected source before editing.
       await waitFor(() => calls.some(call => call[0] === 'workspace' && call[1] === 'wait'));
@@ -205,6 +254,7 @@ const main = Effect.scoped(Effect.gen(function*() {
       const temporary = `${sourcePath}.restore.tmp`;
       await Effect.runPromise(fs.writeFileString(temporary, original).pipe(Effect.andThen(fs.rename(temporary, sourcePath))));
     }
+    if (secondary) await host.exec('concord', ['--json', 'server', 'stop'], { cwd: secondary });
     plugin.clearAll();
   }
 }, catch: error => new HostFailure({ message: error instanceof Error ? error.message : String(error) }) });
