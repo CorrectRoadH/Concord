@@ -33,7 +33,7 @@
    concord init --test-root test --source-root src
    ```
 
-   人读输出列出全部创建的文件，最后三行给出下一步与推荐的写作指南（预期输出）：
+   人读输出列出全部创建的文件，最后三行给出下一步与交给 agent 的写作入口（预期输出）：
 
    ```text
    Start here: docs/concord.md
@@ -68,11 +68,11 @@
    concord --skill document
    ```
 
-   `concord --skill` 输出入口、skill 主题列表、设计理由和工作原则。`--skill <topic>` 输出一个 skill 主题，`--skill all` 输出全部 skill 主题。开始写第一批 Spec 时读 init 推荐的写作指南。
+   `concord --skill` 输出入口、skill 主题列表、设计理由和工作原则。`--skill <topic>` 输出一个 skill 主题，`--skill all` 输出全部 skill 主题。开始写第一批 Spec 时读 `concord --skill start`。
 
 ## 结果
 
-仓库得到一套可编辑的文档结构。下一步按推荐的写作指南，用 `concord new feature` 或直接创建 `docs/feature/<f>/README.md` 写第一份 Spec。
+仓库得到一套可编辑的文档结构。下一步让 agent 读 `concord --skill start`，问清从零写还是为已有代码补写，再写第一份 Spec。
 
 `concord.config.ts` 可以不存在。没有配置时，测试根取存在的 `test/`、`tests/`，实现源码根取存在的 `src/`；需要 `test run` 或修复核验时再配置 `runner`。配置项见[项目接入](../../project-onboarding/README.md)。
 

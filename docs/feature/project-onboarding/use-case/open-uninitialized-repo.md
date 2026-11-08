@@ -31,7 +31,7 @@
 
 2. 打开 Web 工作台。 {#web}
 
-   `concord view` 照常启动，页面只显示“这个仓库还没有初始化 Concord”、初始化按钮与推荐的写作指南；点初始化与运行 `concord init` 的结果相同，完成后进入文档页。
+   `concord view` 照常启动，页面只显示“这个仓库还没有初始化 Concord”与初始化按钮；点初始化与运行 `concord init` 的结果相同，完成后进入文档页，页面顶部显示与 Herdr mod 相同的[交给 agent 的请求](../../herdr-mod/use-case/init-from-herdr.md#guide)和“复制给 agent”。
 
 3. 在 Herdr 里打开 mod。 {#herdr}
 

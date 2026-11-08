@@ -51,7 +51,7 @@
 
 `concord --skill` 输出 Agent 入口：[skill 主题](../../concepts.md#skill-topic)列表、设计理由与工作原则。`concord --skill <topic>` 输出一个 skill 主题，`concord --skill all` 输出全部 skill 主题。其中包括开始写 Spec 的入口 `start` 与两份[写作指南](../../concepts.md#writing-guide)：`docs-from-scratch` 与 `docs-from-code`。这个入口在任意 cwd 可用，不读取项目，也不写文件。未知主题返回 `SkillTopicUnknown`。
 
-`concord init` 在 Git worktree 顶层初始化项目，人读输出列出创建的文件，最后给出下一步和推荐的写作指南（预期输出）：
+`concord init` 在 Git worktree 顶层初始化项目，人读输出列出创建的文件，最后给出下一步和交给 agent 的写作入口（预期输出）：
 
 ```text
   docs/README.md

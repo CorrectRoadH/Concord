@@ -7,7 +7,7 @@
 - 用一条 `concord init` 接入仓库：先预览完整变更，确认后才写入，已有文件保留。
 - 不写配置就使用 `check`、`trace` 与 Web 工作台；需要运行测试时才写 `concord.config.ts`。
 - 在 `docs/taste.md` 里写下项目品味，功能开发发现的通用约束经明确修订进入品味。
-- 让 coding agent 从根 `AGENTS.md` 找到 Concord 指引，并按项目情况读一份写作指南。
+- 让 coding agent 从根 `AGENTS.md` 找到 Concord 指引，并在问过维护者从零写还是为已有代码补写之后读对应的写作指南。
 
 ## 上手
 
