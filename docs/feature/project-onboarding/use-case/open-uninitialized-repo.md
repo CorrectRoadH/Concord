@@ -24,10 +24,10 @@
    message: This repository has not been initialized for Concord.
 
    Initialize: concord init
-   Writing guide after init: concord --skill docs-from-scratch
+   Writing guide after init: concord --skill start
    ```
 
-   `--json` 输出 `{"ok":false,"error":"ProjectNotInitialized","message":"...","details":{"root":"...","guide":"docs-from-scratch"}}`，`guide` 按[选哪份指南](start-writing-specs.md#选哪份指南)的规则给出。
+   `--json` 输出 `{"ok":false,"error":"ProjectNotInitialized","message":"...","details":{"root":"..."}}`。
 
 2. 打开 Web 工作台。 {#web}
 

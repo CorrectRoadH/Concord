@@ -19,20 +19,20 @@
 
    mod 在仓库根目录运行 `concord init`，显示新建了多少个文件，文档列表列出它们。
 
-3. 看推荐的写作指南。 {#guide}
+3. 把下一步交给 agent。 {#guide}
 
-   mod 在新建文件的数量下方显示 init 推荐的[写作指南](../../../concepts.md#writing-guide)，以及交给 agent 的命令（预期输出）：
+   mod 在新建文件的数量下方显示一段[交给 agent](../ui.md#交给-agent)的请求和主按钮“复制给 agent”（预期输出）：
 
    ```text
-   下一步：让 agent 读写作指南
-   concord --skill docs-from-scratch
+   ~/code/reader 刚初始化了 Concord。
+   请运行 concord --skill start，先问我从零写 Spec 还是为已有代码补写，再按对应的写作指南开始写。
    ```
 
-   点“阅读指南”，mod 运行这条命令，把指南正文按 Markdown 显示在阅读区。指南怎样选、写了什么见[初始化后按项目情况开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md)。
+   维护者点“复制给 agent”，贴进旁边的 agent。mod 不判断项目有没有代码，也不在阅读区显示指南正文：指南是写给 agent 的，agent 读它之后问维护者走哪条路，见[初始化后开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md)。
 
 4. 在终端里让 agent 写第一个 Feature。 {#new-feature}
 
-   mod 是用来读的，不提供新建文档的按钮：新 Feature 要先想清楚用户故事，这件事在和 agent 的对话里完成。agent 按写作指南创建 Feature 后，它在一秒内出现在文档列表里，点开就能读。
+   mod 是用来读的，不提供新建文档的按钮：新 Feature 要先想清楚用户故事，这件事在和 agent 的对话里完成。agent 按维护者选定的写作指南创建 Feature 后，它在一秒内出现在文档列表里，点开就能读。
 
 ## 结果
 
@@ -46,5 +46,6 @@
 | 还没有可用的仓库 | 只显示状态页，不显示文档列表 |
 | 想用另一个仓库 | 在终端里 `cd` 过去，mod 在 1 秒内跟着切换 |
 | 切换时有未保存的输入 | 自动保存到原仓库，再切换到最新目录，没有确认按钮 |
-| 仓库已有代码 | 推荐 `docs-from-code` |
-| 仓库已经初始化 | 直接显示文档列表，不显示初始化按钮和写作指南 |
+| 仓库在远程机器上 | 请求以“<机器> 上的 <路径> 刚初始化了 Concord。”开头 |
+| 关闭 mod 后再打开 | 请求不再显示；以后需要时在终端里直接让 agent 运行 `concord --skill start` |
+| 仓库已经初始化 | 直接显示文档列表，不显示初始化按钮和这段请求 |

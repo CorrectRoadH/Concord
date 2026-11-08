@@ -9,7 +9,7 @@ import { CliInvocation } from "./invocation.ts";
 import { cliFailure } from "./cli-failure.ts";
 import { writeStdout } from './invocation.ts';
 
-const TOPICS = ['init', 'docs-from-scratch', 'docs-from-code', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback', 'spec', 'implement', 'review', 'fix'] as const;
+const TOPICS = ['init', 'start', 'docs-from-scratch', 'docs-from-code', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback', 'spec', 'implement', 'review', 'fix'] as const;
 const TopicSchema = Schema.Literals(TOPICS);
 const ArgvSchema = Schema.Array(Schema.String);
 const SkillContentSchema = Schema.String.check(

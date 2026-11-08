@@ -26,17 +26,15 @@ mod 只通过公开 CLI 取数据和执行操作，不读取 Concord 的私有�
 | 用途 | 命令 |
 | --- | --- |
 | 判断目录是否已初始化、初始化 | `concord --json doctor`、`concord --json init` |
-| 文档列表 | `concord --json list` |
-| 一页文档及其测试、实现与关系；文档包的全部页面（`pages`） | `concord --json show <path>` |
-| 术语 | `concord --json concepts index` |
-| 品味与依据位置 | `concord --json taste` |
+| 文档列表、页面标题、Use Case 的测试与实现、关系、finding 与术语 | `concord --json workspace projection`；服务无法运行时 `concord --json workspace show` |
+| 品味与依据位置（打开品味页时） | `concord --json taste` |
 | 检查 | `concord --json check` |
 | 读取一页正文与摘要 | `concord --json action --input-text <JSON>`，执行 `file.get` |
 | 渲染一页给 mod 显示 | `concord --json action --input-text <JSON>`，执行 `page.render`，见[渲染一页](#渲染一页) |
 | 保存一页文档 | `concord --json action --input-text <JSON>`，执行 `document.set` |
-| 等待下一份结果 | `concord --json workspace wait --after <sourceDigest>` |
+| 等待下一份结果；等首份结果 | `concord --json workspace wait --after <sourceDigest>`；不带 `--after` |
 
-除 `page.render` 外，这些命令的输出见各自 Feature 的 cli 页，mod 不另定义字段。
+除 `page.render` 外，这些命令的输出见各自 Feature 的 cli 页，mod 不另定义字段。mod 不带 `--fresh`：显示用工作区服务已接受的结果，变化由 `workspace wait` 通知。
 
 ## 渲染一页
 

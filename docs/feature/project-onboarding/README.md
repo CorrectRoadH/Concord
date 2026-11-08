@@ -21,7 +21,7 @@ concord init
 
 ```text
 Start here: docs/concord.md
-Writing guide: concord --skill docs-from-code
+Writing guide: concord --skill start
 Inspect configuration: concord doctor
 ```
 
@@ -50,7 +50,7 @@ findings: none
 - 创建 Feature 时以参数选择页面：README 必需，其余页面可选。
 - 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，`check` 检查结果是否一致。
 - init 在根 `AGENTS.md` 中维护 Concord 的[托管区块](concepts.md#managed-block)，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
-- init 结束时按仓库有没有项目文件推荐一份写作指南：新项目读 `docs-from-scratch`，已有代码的项目读 `docs-from-code`。
+- init 结束时让维护者把 `concord --skill start` 交给 agent：agent 先问维护者从零写还是为已有代码补写，再读对应的[写作指南](../../concepts.md#writing-guide)。init 不替维护者判断项目属于哪种情况。
 - init 与 `concord skills install` 在项目中安装四个工作流 skill（`concord-spec`、`concord-implement`、`concord-review`、`concord-fix`），Claude Code 与 Codex 共用同一份文件。
 - 还没有初始化的仓库里，CLI、Web 工作台与 Concord mod 都提示先初始化，不给出空的通过结果。
 - Memory 固定位于 worktree 根的 `memory/`。
@@ -61,7 +61,7 @@ findings: none
 
 - [渐进选择并初始化项目](use-case/initialize-project.md)
 - [在还没初始化的仓库里打开 Concord](use-case/open-uninitialized-repo.md)
-- [初始化后按项目情况开始写 Spec](use-case/start-writing-specs.md)
+- [初始化后开始写 Spec](use-case/start-writing-specs.md)
 
 日常维护：
 

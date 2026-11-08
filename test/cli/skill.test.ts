@@ -13,7 +13,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'concord-skill-'));
 
 before(() => Effect.runPromise(Effect.sync(() => {
   const owner = sourceRoot;
-  for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'skills/concord/references/feedback.md', 'skills/concord/references/docs-from-scratch.md', 'skills/concord/references/docs-from-code.md', 'skills/concord/references/spec.md', 'skills/concord/references/implement.md', 'skills/concord/references/review.md', 'skills/concord/references/fix.md']) {
+  for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'skills/concord/references/feedback.md', 'skills/concord/references/start.md', 'skills/concord/references/docs-from-scratch.md', 'skills/concord/references/docs-from-code.md', 'skills/concord/references/spec.md', 'skills/concord/references/implement.md', 'skills/concord/references/review.md', 'skills/concord/references/fix.md']) {
     assert.ok(existsSync(join(owner, path)), `source skill is missing ${path}`);
   }
 })));
@@ -46,7 +46,7 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   assert.equal(all.exitCode, 0, all.stderr);
   assert.match(all.stdout, /# 初始化与模板/);
   assert.match(all.stdout, /# Issue 与多来源反馈/);
-  for (const guide of ['docs-from-scratch', 'docs-from-code', 'spec', 'implement', 'review', 'fix']) {
+  for (const guide of ['start', 'docs-from-scratch', 'docs-from-code', 'spec', 'implement', 'review', 'fix']) {
     assert.ok(main.stdout.includes(`concord --skill ${guide}`));
     const reply = await runCli({ argv: ['--skill', guide], cwd: outside, env: process.env });
     assert.equal(reply.exitCode, 0, reply.stderr);

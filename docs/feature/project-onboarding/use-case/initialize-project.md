@@ -49,7 +49,7 @@
      ...
 
    Start here: docs/concord.md
-   Writing guide: concord --skill docs-from-code
+   Writing guide: concord --skill start
    Inspect configuration: concord doctor
    ```
 
@@ -93,7 +93,7 @@
 
 4. 让 agent 读取 Concord 指引与写作指南。 {#guide}
 
-   根 `AGENTS.md` 的托管区块要求 agent 运行 `concord --skill`，按任务读取当前安装版本的说明。init 最后一行推荐的写作指南见[初始化后按项目情况开始写 Spec](start-writing-specs.md)。
+   根 `AGENTS.md` 的托管区块要求 agent 运行 `concord --skill`，按任务读取当前安装版本的说明。init 最后给出的 `concord --skill start` 怎样开始写 Spec，见[初始化后开始写 Spec](start-writing-specs.md)。
 
 5. 查看实际生效的配置与待完善项。 {#doctor}
 

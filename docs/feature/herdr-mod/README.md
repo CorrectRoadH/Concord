@@ -4,7 +4,7 @@
 
 ## 你可以做什么
 
-- 在终端所在的仓库里初始化 Concord，拿到适合这个项目的写作指南；终端 `cd` 到另一个仓库，mod 跟着切换。
+- 在终端所在的仓库里初始化 Concord，把开始写 Spec 的请求复制给 agent；终端 `cd` 到另一个仓库，mod 跟着切换。
 - 终端在远程机器上时，mod 读写的是那台机器上的仓库，与本机一样能编辑、检查和自动刷新。
 - 阅读全部文档：Feature 与 Use Case、Engineering、Roadmap、品味与术语、Design、Issue 与 Memory，按[文档模型](../../document-model.md)的分组排在文档列表里，正文按 Markdown 渲染。
 - 打开一个 Use Case，看守护它的测试和实现它的代码；点开术语，看它的定义。
@@ -36,7 +36,7 @@ Herdr loads it on save; open it with the "Concord" command.
 
 布局里的 Concord 侧栏跟随当前 tab：切换 tab 或 space 后，显示新位置的终端所在的仓库，包括它所在的机器。通过分屏打开的 Concord pane 固定跟随所属 tab，不受其它 tab 的选择影响。两种面板都跟随目标 tab 里最近聚焦的终端。
 
-mod 读那个终端当前目录所在的仓库，终端 `cd` 到另一个仓库时跟着切换，所以 mod 没有“选择目录”。内容变化时 mod 自动刷新，所以也没有“刷新”。这个仓库还没有初始化时，mod 显示“在这里初始化 Concord”；点一下，mod 运行 `concord init`，列出新建的文档，并给出让 agent 读的写作指南。已经初始化的仓库直接显示文档列表。
+mod 读那个终端当前目录所在的仓库，终端 `cd` 到另一个仓库时跟着切换，所以 mod 没有“选择目录”。内容变化时 mod 自动刷新，所以也没有“刷新”。这个仓库还没有初始化时，mod 显示“在这里初始化 Concord”；点一下，mod 运行 `concord init`，列出新建的文档，并给出一段复制给 agent 的请求：agent 先问你从零写还是为已有代码补写，再开始写 Spec。已经初始化的仓库直接显示文档列表。
 
 ## 怎样工作
 

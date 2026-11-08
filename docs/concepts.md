@@ -98,7 +98,7 @@ Git 的一个工作目录，包括其中的文件与 index：主 worktree，或 
 
 ## 写作指南 {#writing-guide}
 
-随归档提供、告诉 agent 怎样为项目写第一批 Spec 的 [skill 主题](#skill-topic)。`docs-from-scratch` 面向还没有代码的项目，`docs-from-code` 面向已有代码的项目。
+随归档提供、告诉 agent 怎样为项目写第一批 Spec 的 [skill 主题](#skill-topic)。`docs-from-scratch` 从目标写起，`docs-from-code` 为已有代码补写；走哪条路由维护者决定，入口 `start` 让 agent 先问维护者再读其中一份。
 
 ## skill 主题 {#skill-topic}
 

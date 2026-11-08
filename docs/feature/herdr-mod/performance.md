@@ -7,6 +7,8 @@
 | 场景 | 测量内容 | p50 预算 |
 | --- | --- | ---: |
 | `herdr-mod/first-screen` | 已初始化的仓库，从加载 mod 到 Feature 的可读描述就绪 | 300ms |
+| `herdr-mod/switch-back` | 两个已初始化的仓库来回切换，从切回目标 tab 到离开时的页面重新显示 | 50ms |
+| `herdr-mod/switch-new` | 服务已在运行、有 40 个 Feature 的仓库，从切到它到 Feature 的可读描述就绪 | 300ms |
 
 ## 刷新上限
 

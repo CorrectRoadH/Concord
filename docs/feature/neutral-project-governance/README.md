@@ -20,7 +20,7 @@ concord init --test-root spec --runner-config runner.json
 
 ```text
 Start here: docs/concord.md
-Writing guide: concord --skill docs-from-code
+Writing guide: concord --skill start
 Inspect configuration: concord doctor
 ```
 

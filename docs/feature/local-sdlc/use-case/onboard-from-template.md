@@ -37,11 +37,11 @@
 
    ```text
    Start here: docs/concord.md
-   Writing guide: concord --skill docs-from-code
+   Writing guide: concord --skill start
    Inspect configuration: concord doctor
    ```
 
-   这个仓库已有 `src/`，所以推荐 `docs-from-code`；选择规则见[初始化后按项目情况开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md#选哪份指南)。
+   agent 读这份指南后先问维护者从零写还是为已有代码补写，见[初始化后开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md)。
 
    创建的内容：
 

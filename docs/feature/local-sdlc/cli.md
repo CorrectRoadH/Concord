@@ -19,6 +19,7 @@
 | `use-case` | `steps`、`format`、`rename-step`：Use Case 步骤 |
 | `issue` | `close`（删除 Issue，fixed 时先核验）、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
 | `memory` | `link`、`search`；摘要列表用 `list memory` |
+| `move <源路径> <目标路径>` | 移动 Feature 或 Engineering 中的一页或整个文档包，并改写指向它的链接、关系、测试标记与代码声明 |
 | `roadmap` | `start <roadmap> [--feature <id>]`：移入 `docs/feature/`，省略 `--feature` 时 Feature ID 与 Roadmap 同名；取消方向即删除目录，历史在 Git |
 | `taste` | 列出品味条目与依据它们的页面 |
 | `concepts`、`writing` | 概念与写作规则的查看与受管写入 |
@@ -32,7 +33,7 @@
 | `config`、`template` | 查看与替换配置；查看随包模板 |
 | `cache`、`recover`、`doctor`、`lsp`、`review`、`action` | 维护与集成 |
 
-顶层共 31 个命令。
+顶层共 32 个命令。
 
 本页其余各节给出这些命令的调用、输出与错误。
 
@@ -48,7 +49,7 @@
 
 ## 接入
 
-`concord --skill` 输出 Agent 入口：[skill 主题](../../concepts.md#skill-topic)列表、设计理由与工作原则。`concord --skill <topic>` 输出一个 skill 主题，`concord --skill all` 输出全部 skill 主题。其中包括两份[写作指南](../../concepts.md#writing-guide)：`docs-from-scratch` 与 `docs-from-code`。这个入口在任意 cwd 可用，不读取项目，也不写文件。未知主题返回 `SkillTopicUnknown`。
+`concord --skill` 输出 Agent 入口：[skill 主题](../../concepts.md#skill-topic)列表、设计理由与工作原则。`concord --skill <topic>` 输出一个 skill 主题，`concord --skill all` 输出全部 skill 主题。其中包括开始写 Spec 的入口 `start` 与两份[写作指南](../../concepts.md#writing-guide)：`docs-from-scratch` 与 `docs-from-code`。这个入口在任意 cwd 可用，不读取项目，也不写文件。未知主题返回 `SkillTopicUnknown`。
 
 `concord init` 在 Git worktree 顶层初始化项目，人读输出列出创建的文件，最后给出下一步和推荐的写作指南（预期输出）：
 
@@ -61,14 +62,14 @@
   AGENTS.md
 
 Start here: docs/concord.md
-Writing guide: concord --skill docs-from-scratch
+Writing guide: concord --skill start
 Inspect configuration: concord doctor
 ```
 
-`--json` 输出在 `changedPaths`、`createdPaths`、`preservedPaths` 之外给出 `guide`，取值 `docs-from-scratch` 或 `docs-from-code`；`--dry-run init` 同样给出。选择规则见[初始化后按项目情况开始写 Spec](../project-onboarding/use-case/start-writing-specs.md#选哪份指南)。
+最后一行对所有仓库都相同：init 不判断项目有没有代码，由 agent 读 `start` 后问维护者，见[初始化后开始写 Spec](../project-onboarding/use-case/start-writing-specs.md)。
 
 ```json
-{"operation":"init","dryRun":false,"changedPaths":["docs/taste.md","..."],"config":{},"createdPaths":["docs/taste.md","..."],"preservedPaths":[],"guide":"docs-from-code"}
+{"operation":"init","dryRun":false,"changedPaths":["docs/taste.md","..."],"config":{},"createdPaths":["docs/taste.md","..."],"preservedPaths":[]}
 ```
 
 `concord skills install` 创建或更新 `.agents/skills/concord-{spec,implement,review,fix}/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，全部是普通文件，在一次写入中提交；`init` 安装同一组文件。当前版本不再提供、但带 `concord-managed` 托管标记的 `concord-*` skill 被删除。人读输出按 `Created`、`Updated`、`Removed`、`Unchanged` 分组列出路径。`--json` 返回：
@@ -83,7 +84,7 @@ Inspect configuration: concord doctor
 | --- | --- |
 | `SkillPathOccupied` | 目标路径已有不带 `concord-managed` 托管标记的文件，或是目录、符号链接；`details.path` 给出路径，不写任何文件 |
 
-在还没有初始化的仓库里，需要项目的命令返回 `ProjectNotInitialized`（退出 1），`details.guide` 给出初始化后推荐的写作指南；哪些命令照常执行见[在还没初始化的仓库里打开 Concord](../project-onboarding/use-case/open-uninitialized-repo.md)。
+在还没有初始化的仓库里，需要项目的命令返回 `ProjectNotInitialized`（退出 1）；哪些命令照常执行见[在还没初始化的仓库里打开 Concord](../project-onboarding/use-case/open-uninitialized-repo.md)。
 
 `concord doctor --json` 报告配置与接入缺口，不运行测试：
 
@@ -138,6 +139,54 @@ concord --json new use-case add-item --feature cart --title "加入商品"
 | 对其它类别使用 `--pages` | `InvalidInput`，退出 1，不改文件 |
 
 路径已存在时返回 `DocumentExists`，退出 1，不改文件。短选择器在同一类别中匹配多个文档时返回具名错误，需要写出路径。路径、类别与名称的规则见[文档与标记格式](format.md#owner)。
+
+### 移动文档
+
+`concord move <源路径> <目标路径>` 移动 `docs/feature/` 或 `docs/engineering/` 下的一页或一个文档包目录，并在同一次写入中改写仓库里指向它的受管引用。两个参数都是仓库相对路径，不接受短选择器。用户路径见[移动 Spec 文档并改写关系](use-case/move-spec-documents.md)。
+
+| 源 | 目标 |
+| --- | --- |
+| Use Case 文件 | 任一已有文档包 `use-case/` 下的新文件名 |
+| 文档包内除 `README.md` 外的其它页面 | 任一已有文档包内、符合页面种类的新路径 |
+| 文档包目录 | 同一分类或另一 Spec 分类下尚不存在的目录 |
+
+改写范围：
+
+| 引用 | owner | 改写 |
+| --- | --- | --- |
+| 相对链接、图片与链接定义 | `docs/` 与 `memory/` 下的 Markdown | 解析到被移动文件的目标改为新的相对路径；被移动文件自身的链接改为从新位置出发 |
+| 正向关系 | Issue 与 Memory | 目标路径映射到新路径 |
+| `@feature`、`@use-case` | 测试根中的测试标记 | 目标路径映射到新路径 |
+| `@concord-implements` | 源码根中的代码声明 | 目标路径映射到新路径 |
+
+只改写各 owner 的解析器识别出的引用，`#anchor` 原样保留，其余字节不变。被移动目录中的非 Markdown 附件按字节原样移动。
+
+规划完成后，命令在 Git 跟踪的其它文本文件中查找原路径的字面出现，作为 `unmanagedReferences` 报告，不改写；它们不使命令失败。人读输出依次为 `Applied move:`（`--dry-run` 时为 `Would apply move:`）、`Changed:` 与 `Not rewritten:`，最后一节为空时省略。
+
+`--json` 输出：
+
+```json
+{"operation":"move","dryRun":false,"moves":[{"from":"docs/feature/a/use-case/x.md","to":"docs/feature/b/use-case/x.md"}],"changedPaths":["docs/feature/a/use-case/x.md","docs/feature/b/use-case/x.md","test/x.test.ts"],"unmanagedReferences":[{"path":"notes.txt","line":3}]}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `moves` | 每个被移动文件的 `from` 与 `to`，按 `from` 排序；目录移动列出目录内的全部文件 |
+| `changedPaths` | 全部写入的路径，含被删除的原路径与新建的目标路径，按字典序排序 |
+| `unmanagedReferences` | 未改写的原路径字面出现，`path` 与从 1 计数的 `line`，按路径与行号排序 |
+
+| 情形 | 结果 |
+| --- | --- |
+| 源路径不存在；单页移动的目标文档包不存在 | `DocumentNotFound` |
+| 目标文件或目标目录已存在 | `DocumentExists` |
+| 源或目标不在 `docs/feature/`、`docs/engineering/` 下；单独移动文档包 `README.md`；Use Case 与非 Use Case 页面互相转换 | `InvalidInput` |
+| 移动后的布局不能通过[放置规则](format.md#owner) | `InvalidPlacement` |
+| 被移动目录内含另一个文档包 owner | `NestedOwner` |
+| 需要改写的链接无法只改目标而不改其余字节 | `UnsupportedMarkdownLink` |
+| 源、目标或被移动目录内含 symlink，或路径越出仓库 | `UnsafePath` |
+| 规划到发布之间观察过的文件被修改 | `FileChangedSinceRead` |
+
+以上错误都退出 1，且不写任何文件。Roadmap 采用为 Feature 使用 `roadmap start`。Roadmap、Design、Issue 与 Memory 不能作为 `move` 的源或目标。
 
 ### 查看一个文档包
 
