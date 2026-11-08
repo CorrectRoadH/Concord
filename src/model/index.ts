@@ -393,8 +393,8 @@ export { parseWritingPolicy, renderWritingPolicy } from './writing-format.ts';
 
 export { decodeWorkspaceProjectionCandidate } from './workspace-projection.ts';
 export type { WorkspaceProjectionCandidate } from './workspace-projection.ts';
-export { WritingGuideSchema, InitializationReceiptSchema } from './initialization.ts';
-export type { WritingGuide, InitializationReceipt } from './initialization.ts';
+export { InitializationReceiptSchema } from './initialization.ts';
+export type { InitializationReceipt } from './initialization.ts';
 export { WORKFLOW_SKILL_TOPICS, workflowSkillPaths, isWorkflowSkillPath, isManagedWorkflowSkill, isObsoleteWorkflowSkillRemoval, SkillsInstallReceiptSchema } from './workflow-skills.ts';
 export type { WorkflowSkillTopic } from './workflow-skills.ts';
 

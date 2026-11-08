@@ -3,8 +3,6 @@
 import { Schema } from 'effect';
 import { ProjectSchema } from './shared.ts';
 
-export const WritingGuideSchema = Schema.Literals(['docs-from-scratch', 'docs-from-code']);
-export type WritingGuide = typeof WritingGuideSchema.Type;
 export const InitializationReceiptSchema = Schema.Struct({
   operation: Schema.Literal('init'),
   dryRun: Schema.Boolean,
@@ -13,6 +11,5 @@ export const InitializationReceiptSchema = Schema.Struct({
   config: ProjectSchema,
   createdPaths: Schema.Array(Schema.String),
   preservedPaths: Schema.Array(Schema.String),
-  guide: WritingGuideSchema,
 });
 export type InitializationReceipt = typeof InitializationReceiptSchema.Type;

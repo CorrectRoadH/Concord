@@ -38,7 +38,7 @@ const init = Command.make('init', {
     for (const preimage of preimages) if (writer.read(preimage.path) !== preimage.source) throw new ConcordError('FileChangedSinceRead', `${preimage.path} changed since init preview; review a fresh preview`);
 
   }));
-  return yield* initialize(writer, false, options, preview.guide);
+  return yield* initialize(writer, false, options);
 }), { initialize: true, readonly: true, unlocked: true })).pipe(Command.withDescription('Progressively initialize static TypeScript configuration, taste, templates and optional configuration. Non-TTY uses deterministic defaults; --dry-run previews and an interactive rejection writes nothing.'));
 
 export { init };

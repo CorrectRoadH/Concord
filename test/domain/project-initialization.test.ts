@@ -9,27 +9,20 @@ import { requireInitializedProject, projectInitializationRequired, uninitialized
 import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-test('initialization requires taste and derives the writing guide from tracked and unignored files', () => {
+test('initialization requires taste and reports only the root', () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-initialization-domain-'));
   const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
   try {
     execFileSync('git', ['init', '-q', root]);
-    for (const path of ['README.md', 'AGENTS.md', 'LICENSE', 'concord.config.ts', '.gitignore']) writeFileSync(join(root, path), path === '.gitignore' ? 'ignored.ts\n' : '');
-    writeFileSync(join(root, 'ignored.ts'), 'ignored');
-    mkdirSync(join(root, 'docs')); writeFileSync(join(root, 'docs/draft.md'), '# Draft');
     const required = projectInitializationRequired(root, false, runtime)!;
-    assert.deepEqual(required, { root, guide: 'docs-from-scratch' });
+    assert.deepEqual(required, { root });
     const result = Effect.runSync(Effect.result(requireInitializedProject(root)).pipe(Effect.provideService(RuntimeEnvironment, runtime)));
     assert.equal(result._tag, 'Failure');
     if (result._tag === 'Failure') { assert.equal(result.failure.code, 'ProjectNotInitialized'); assert.deepEqual(result.failure.details, required); }
     const doctor = uninitializedDoctor(required, 'test-runtime');
     assert.equal(doctor.ok, true);
-    assert.deepEqual(doctor.nextSteps, ['concord init', 'concord --skill docs-from-scratch']);
-    writeFileSync(join(root, 'code.ts'), 'export {};');
-    assert.equal(projectInitializationRequired(root, false, runtime)?.guide, 'docs-from-code');
-    execFileSync('git', ['-C', root, 'add', 'code.ts']);
-    writeFileSync(join(root, '.gitignore'), 'ignored.ts\ncode.ts\n');
-    assert.equal(projectInitializationRequired(root, false, runtime)?.guide, 'docs-from-code');
+    assert.deepEqual(doctor.nextSteps, ['concord init', 'concord --skill start']);
+    mkdirSync(join(root, 'docs'));
     writeFileSync(join(root, 'docs/taste.md'), '');
     assert.equal(projectInitializationRequired(root, false, runtime), undefined);
     Effect.runSync(requireInitializedProject(root).pipe(Effect.provideService(RuntimeEnvironment, runtime)));
@@ -44,7 +37,7 @@ test('preview initialization checks use the Git top for a nested root without re
   try {
     execFileSync('git', ['init', '-q', root]);
     mkdirSync(nested, { recursive: true });
-    assert.deepEqual(projectInitializationRequired(nested, true, runtime), { root, guide: 'docs-from-scratch' });
+    assert.deepEqual(projectInitializationRequired(nested, true, runtime), { root });
     assert.throws(() => projectInitializationRequired(nested, false, runtime), error => error instanceof Error && 'code' in error && error.code === 'ProjectRootInvalid');
     writeFileSync(join(root, 'docs/taste.md'), '');
     assert.equal(projectInitializationRequired(nested, true, runtime), undefined);

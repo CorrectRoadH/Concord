@@ -177,7 +177,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       codeFiles = trace.codeFiles;
       edges = trace.edges;
       findings = [...trace.findings];
-      diagnostics = await doctor(repo, trace, cache, environment.env);
+      diagnostics = await doctor(repo, trace, cache);
     } catch (cause) {
       if (observe !== undefined && cause instanceof ConcordError && ['UnsafePath', 'RecoveryRequired', 'InvalidFile'].includes(cause.code)) throw cause;
       cases = await scanAnnotations(repo, { cache });
@@ -303,7 +303,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' | 'file.get' | 'page.render' }>, environment: Readonly<Record<string, string | undefined>>): Promise<unknown> {
+async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' | 'file.get' | 'page.render' }>): Promise<unknown> {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
     case 'document.create': throw new ConcordError('InvalidInput', 'Creation must run in its Effect scope');
@@ -344,7 +344,7 @@ async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction
     }
     case 'trace.show': return (await traceShow(repo, action.reference));
     case 'review': return { operation: 'review-render', markdown: (await renderReview(repo, action.reference)) };
-    case 'doctor': return (await doctor(repo, undefined, 'off', environment));
+    case 'doctor': return (await doctor(repo, undefined, 'off'));
   }
 }
 
@@ -394,6 +394,6 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
     if (action.defect !== undefined || action.fix !== undefined) return yield* Effect.fail(new ConcordError('InvalidOption', '--defect and --fix require --fixed'));
   }
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action, environment.env))), { access: actionAccess(action.action), dryRun }, timing);
+  return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
 });
 // @concord-end

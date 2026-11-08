@@ -27,7 +27,7 @@ export function humanOutput(value: unknown): string {
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
   // @concord-begin
   // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-  if (value.error === 'ProjectNotInitialized' && Predicate.isObject(value.details)) return `ok: false\nerror: ProjectNotInitialized\nmessage: ${String(value.message)}\n\nInitialize: concord init\nWriting guide after init: concord --skill ${String(value.details.guide)}`;
+  if (value.error === 'ProjectNotInitialized' && Predicate.isObject(value.details)) return `ok: false\nerror: ProjectNotInitialized\nmessage: ${String(value.message)}\n\nInitialize: concord init\nWriting guide after init: concord --skill start`;
   // @concord-end
   if (value.operation === 'herdr-install') return `${value.dryRun ? 'Would install' : value.updated ? 'Updated' : 'Installed'} Concord mod: ${String(value.path)}\n${value.openHerdr ? 'Open Herdr, then open the "Concord" command.' : 'Herdr loads it on save; open it with the "Concord" command.'}`;
   if (value.operation === 'herdr-uninstall') return value.absent ? 'Concord mod is not installed' : `${value.dryRun ? 'Would uninstall' : 'Uninstalled'} Concord mod: ${String(value.path)}`;
@@ -106,7 +106,7 @@ export function humanOutput(value: unknown): string {
     }
     if (Array.isArray(value.warnings) && value.warnings.length > 0) lines.push('', 'Warnings:', ...value.warnings.map(warning => `  ${String(warning)}`));
     if (value.recoveryRequired) lines.push('', 'Recovery required: run concord recover before another operation.');
-    if (value.operation === 'init') lines.push('', 'Start here: docs/concord.md', `Writing guide: concord --skill ${String(value.guide)}`, 'Inspect configuration: concord doctor');
+    if (value.operation === 'init') lines.push('', 'Start here: docs/concord.md', 'Writing guide: concord --skill start', 'Inspect configuration: concord doctor');
     else if (!value.dryRun && value.changedPaths.length > 0) lines.push('', value.operation === 'new' ? 'Next: edit the pages, then run concord check.' : typeof value.operation === 'string' && value.operation.startsWith('create-') ? 'Next: edit the author prose, then run concord check.' : 'Next: concord check.');
     return lines.join('\n');
   }

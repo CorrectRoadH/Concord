@@ -19,7 +19,7 @@ const diagnose = Command.make('doctor', {}, () => Effect.gen(function*() {
     return result;
   }
   return yield* withReadRepo(repo => Effect.gen(function*() {
-    const result = yield* sync(async () => (await doctor(repo, undefined, 'off', runtime.env)));
+    const result = yield* sync(async () => (await doctor(repo, undefined, 'off')));
     if (!result.ok) yield* setExitCode(1);
     return result;
   }));

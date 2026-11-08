@@ -11,7 +11,7 @@ import { useNavigationScroll } from './hooks/use-navigation-scroll.ts';
 import { Link, Navigate, Route, Routes, useBlocker, useLocation, useNavigate } from 'react-router-dom';
 import { CloseMobileOnNavigate, DocumentNavigation } from './components/document-navigation.tsx';
 import type { WorkspaceProjection } from '../src/model/index.ts';
-import { WritingGuideSchema, type WritingGuide } from '../src/model/index.ts';
+import { copyText } from './lib/clipboard.ts';
 import { Schema } from 'effect';
 const DocumentsListPage = lazy(() => import('./pages/documents.tsx').then(module => ({ default: module.DocumentsListPage })));
 const FeatureDetailPage = lazy(() => import('./pages/documents.tsx').then(module => ({ default: module.FeatureDetailPage })));
@@ -88,7 +88,7 @@ function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(valu
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md#web-组件组合
-function Shell() {
+function Shell({ initializationRequest }: { initializationRequest: string | null }) {
   useNavigationScroll();
   const { snapshot, git, dirty, notices, clearNotice, flushAutoSave, discardAutoSave } = useWorkspace();
   const location = useLocation(); const [searchOpen, setSearchOpen] = useState(false);
@@ -107,7 +107,7 @@ function Shell() {
   useEffect(() => { const handler = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); }; window.addEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler); }, [dirty]);
   useEffect(() => { const handler = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(true); } }; window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler); }, []);
   const gitCount = git?.entries.length ?? 0;
-  return <SidebarProvider><Sidebar collapsible="icon"><SidebarHeader><div className="sidebar-brand"><div className="brand-mark brand-mark--small">C</div><div><strong>Concord</strong><span>{snapshot.root.split('/').filter(Boolean).at(-1) ?? '项目工作区'}</span></div></div></SidebarHeader><SidebarContent><SidebarGroup><SidebarGroupLabel>工作区</SidebarGroupLabel><SidebarMenu>{nav.map(item => { const Icon = item.icon; const active = item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href); return <SidebarMenuItem key={item.href}><SidebarMenuButton asChild isActive={active} tooltip={item.label}><CloseMobileOnNavigate href={item.href}><Icon /><span>{item.label}</span></CloseMobileOnNavigate></SidebarMenuButton>{item.href === '/git' && gitCount > 0 && <SidebarMenuBadge>{gitCount}</SidebarMenuBadge>}</SidebarMenuItem>; })}</SidebarMenu></SidebarGroup></SidebarContent><SidebarFooter><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={location.pathname.startsWith('/tools')} tooltip="诊断与工具"><CloseMobileOnNavigate href="/tools"><PanelTop /><span>诊断与工具</span></CloseMobileOnNavigate></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton asChild isActive={location.pathname.startsWith('/settings')} tooltip="项目设置"><CloseMobileOnNavigate href="/settings"><Settings /><span>项目设置</span></CloseMobileOnNavigate></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarFooter><SidebarRail /></Sidebar><SidebarInset><header className="topbar"><SidebarTrigger><Menu /></SidebarTrigger><div className="breadcrumb">{breadcrumb(location.pathname, location.search)}</div><Button variant="outline" className="search-trigger" onClick={() => setSearchOpen(true)}><Search /><span>搜索工作区</span><kbd>⌘ K</kbd></Button><ProjectionStatus />{dirty && <Badge variant="outline" className="dirty-badge">有未保存更改</Badge>}</header><div className="document-workspace"><DocumentNavigation />{(location.pathname === "/feedback" || location.pathname.startsWith("/feedback/")) && <Suspense fallback={null}><FeedbackNavigation /></Suspense>}<div id="content-navigation" /><div className={`page ${stylex.props(shellStyles.page).className ?? ''}`}><WorkspaceHealthNotice /><Suspense fallback={<p role="status">正在载入页面…</p>}><Routes><Route path="/" element={<Navigate to="/git" replace />} /><Route path="/overview" element={<OverviewPage />} /><Route path="/features" element={<DocumentsListPage kind="feature" />} /><Route path="/features/:id" element={<FeatureDetailPage />}><Route path="use-cases/:useCaseId" element={<UseCaseDrawer />} /></Route><Route path="/engineering" element={<DocumentsListPage kind="engineering" />} /><Route path="/engineering/:id" element={<DocumentDetailPage kind="engineering" />} /><Route path="/roadmap" element={<DocumentsListPage kind="roadmap" />} /><Route path="/roadmap/:id" element={<DocumentDetailPage kind="roadmap" />} /><Route path="/design" element={<DocumentsListPage kind="design" />} /><Route path="/design/:id" element={<DocumentDetailPage kind="design" />} /><Route path="/memory" element={<DocumentsListPage kind="memory" />} /><Route path="/memory/:id" element={<DocumentDetailPage kind="memory" />} /><Route path="/feedback" element={<FeedbackPage />} /><Route path="/feedback/:id" element={<FeedbackDetailPage />} /><Route path="/docs" element={<ProjectDocsPage />} /><Route element={<WritingPage />}><Route path="/writing" /><Route path="/terms" /></Route><Route path="/git" element={<GitPage />} /><Route path="/tools" element={<ToolsPage />} /><Route path="/settings" element={<SettingsPage />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></Suspense></div></div></SidebarInset><SearchDialog open={searchOpen} onOpenChange={setSearchOpen} /><div className="notices" aria-live="polite">{notices.map(notice => <button key={notice.id} className={`notice notice--${notice.tone}`} onClick={() => clearNotice(notice.id)}><span>{notice.text}</span><X size={16} /></button>)}</div><Dialog open={blocker.state === 'blocked' && saveBlocked}><DialogContent showCloseButton={false}><DialogHeader><DialogTitle>离开并丢弃未保存内容？</DialogTitle><DialogDescription>{(location.pathname === '/writing' || location.pathname === '/terms') ? '写作规则与术语在点击保存后写入。留在此页可继续编辑或处理冲突。'  : '自动保存未完成或失败。留在此页可处理冲突或重试。'}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => blocker.reset?.()}>留在此页</Button><Button variant="destructive" onClick={() => { void discardAutoSave().then(() => blocker.proceed?.()); }}>丢弃并离开</Button></DialogFooter></DialogContent></Dialog></SidebarProvider>;
+  return <SidebarProvider><Sidebar collapsible="icon"><SidebarHeader><div className="sidebar-brand"><div className="brand-mark brand-mark--small">C</div><div><strong>Concord</strong><span>{snapshot.root.split('/').filter(Boolean).at(-1) ?? '项目工作区'}</span></div></div></SidebarHeader><SidebarContent><SidebarGroup><SidebarGroupLabel>工作区</SidebarGroupLabel><SidebarMenu>{nav.map(item => { const Icon = item.icon; const active = item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href); return <SidebarMenuItem key={item.href}><SidebarMenuButton asChild isActive={active} tooltip={item.label}><CloseMobileOnNavigate href={item.href}><Icon /><span>{item.label}</span></CloseMobileOnNavigate></SidebarMenuButton>{item.href === '/git' && gitCount > 0 && <SidebarMenuBadge>{gitCount}</SidebarMenuBadge>}</SidebarMenuItem>; })}</SidebarMenu></SidebarGroup></SidebarContent><SidebarFooter><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={location.pathname.startsWith('/tools')} tooltip="诊断与工具"><CloseMobileOnNavigate href="/tools"><PanelTop /><span>诊断与工具</span></CloseMobileOnNavigate></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton asChild isActive={location.pathname.startsWith('/settings')} tooltip="项目设置"><CloseMobileOnNavigate href="/settings"><Settings /><span>项目设置</span></CloseMobileOnNavigate></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarFooter><SidebarRail /></Sidebar><SidebarInset><header className="topbar"><SidebarTrigger><Menu /></SidebarTrigger><div className="breadcrumb">{breadcrumb(location.pathname, location.search)}</div><Button variant="outline" className="search-trigger" onClick={() => setSearchOpen(true)}><Search /><span>搜索工作区</span><kbd>⌘ K</kbd></Button><ProjectionStatus />{dirty && <Badge variant="outline" className="dirty-badge">有未保存更改</Badge>}</header><div className="document-workspace"><DocumentNavigation />{(location.pathname === "/feedback" || location.pathname.startsWith("/feedback/")) && <Suspense fallback={null}><FeedbackNavigation /></Suspense>}<div id="content-navigation" /><div className={`page ${stylex.props(shellStyles.page).className ?? ''}`}><WorkspaceHealthNotice />{location.pathname === '/docs' && initializationRequest && <InitializationRequest text={initializationRequest} />}<Suspense fallback={<p role="status">正在载入页面…</p>}><Routes><Route path="/" element={<Navigate to="/git" replace />} /><Route path="/overview" element={<OverviewPage />} /><Route path="/features" element={<DocumentsListPage kind="feature" />} /><Route path="/features/:id" element={<FeatureDetailPage />}><Route path="use-cases/:useCaseId" element={<UseCaseDrawer />} /></Route><Route path="/engineering" element={<DocumentsListPage kind="engineering" />} /><Route path="/engineering/:id" element={<DocumentDetailPage kind="engineering" />} /><Route path="/roadmap" element={<DocumentsListPage kind="roadmap" />} /><Route path="/roadmap/:id" element={<DocumentDetailPage kind="roadmap" />} /><Route path="/design" element={<DocumentsListPage kind="design" />} /><Route path="/design/:id" element={<DocumentDetailPage kind="design" />} /><Route path="/memory" element={<DocumentsListPage kind="memory" />} /><Route path="/memory/:id" element={<DocumentDetailPage kind="memory" />} /><Route path="/feedback" element={<FeedbackPage />} /><Route path="/feedback/:id" element={<FeedbackDetailPage />} /><Route path="/docs" element={<ProjectDocsPage />} /><Route element={<WritingPage />}><Route path="/writing" /><Route path="/terms" /></Route><Route path="/git" element={<GitPage />} /><Route path="/tools" element={<ToolsPage />} /><Route path="/settings" element={<SettingsPage />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></Suspense></div></div></SidebarInset><SearchDialog open={searchOpen} onOpenChange={setSearchOpen} /><div className="notices" aria-live="polite">{notices.map(notice => <button key={notice.id} className={`notice notice--${notice.tone}`} onClick={() => clearNotice(notice.id)}><span>{notice.text}</span><X size={16} /></button>)}</div><Dialog open={blocker.state === 'blocked' && saveBlocked}><DialogContent showCloseButton={false}><DialogHeader><DialogTitle>离开并丢弃未保存内容？</DialogTitle><DialogDescription>{(location.pathname === '/writing' || location.pathname === '/terms') ? '写作规则与术语在点击保存后写入。留在此页可继续编辑或处理冲突。'  : '自动保存未完成或失败。留在此页可处理冲突或重试。'}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => blocker.reset?.()}>留在此页</Button><Button variant="destructive" onClick={() => { void discardAutoSave().then(() => blocker.proceed?.()); }}>丢弃并离开</Button></DialogFooter></DialogContent></Dialog></SidebarProvider>;
 }
 
 // @concord-code
@@ -178,11 +178,24 @@ function failureDetails(details: unknown): { readonly hint?: string; readonly re
 
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#web
-function initializationGuide(data: WorkspaceProjection): WritingGuide | undefined {
+function isUninitialized(data: WorkspaceProjection): boolean {
   const diagnostic = Schema.decodeUnknownExit(Schema.Struct({ findings: Schema.Array(Schema.Struct({
-    code: Schema.String, details: Schema.optional(Schema.Struct({ guide: WritingGuideSchema })),
+    code: Schema.String,
   })) }), { onExcessProperty: 'ignore' })(data.snapshot.diagnostics);
-  return diagnostic._tag === 'Success' ? diagnostic.value.findings.find(finding => finding.code === 'ProjectNotInitialized')?.details?.guide : undefined;
+  return diagnostic._tag === 'Success' && diagnostic.value.findings.some(finding => finding.code === 'ProjectNotInitialized');
+}
+
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#web
+function InitializationRequest({ text }: { text: string }) {
+  const { notify } = useWorkspace();
+  const copy = () => {
+    void copyText(text).then(() => notify('已复制给 agent 的请求。', 'success'), () => notify('无法复制，请检查浏览器剪贴板权限。', 'error'));
+  };
+  return <section className="flex flex-col items-start gap-3">
+    <p className="whitespace-pre-wrap break-words">{text}</p>
+    <Button variant="outline" onClick={copy}>复制给 agent</Button>
+  </section>;
 }
 
 // @concord-code
@@ -197,12 +210,13 @@ export function App() {
   const [attempt, setAttempt] = useState(0);
   const [initializing, setInitializing] = useState(false);
   const [waitingForInitialization, setWaitingForInitialization] = useState(false);
+  const [initializationRequest, setInitializationRequest] = useState<string | null>(null);
   const [initializationError, setInitializationError] = useState('');
   useEffect(() => {
     const controller = new AbortController();
     void api.workspace(controller.signal).then(
       value => { if (!controller.signal.aborted) {
-        if (waitingForInitialization && initializationGuide(value)) { setBuilding(true); return; }
+        if (waitingForInitialization && isUninitialized(value)) { setBuilding(true); return; }
         setData(value); setError(null); setBuilding(false); setWaitingForInitialization(false);
       } },
       cause => {
@@ -233,6 +247,7 @@ export function App() {
     setInitializing(true); setInitializationError('');
     try {
       await api.action({ action: 'init' });
+      setInitializationRequest(`${data!.snapshot.root} 刚初始化了 Concord。\n请运行 concord --skill start，先问我从零写 Spec 还是为已有代码补写，再按对应的写作指南开始写。`);
       setWaitingForInitialization(true); setData(null); setBuilding(true);
       navigate('/docs');
       await api.requestWorkspaceRefresh();
@@ -272,12 +287,10 @@ export function App() {
           : <p role="status">正在读取项目工作区。</p>}
     </section></main>;
   }
-  const guide = initializationGuide(data);
-  if (guide) return <main className="startup-page"><section className="startup-card"><div className="brand-mark">C</div>
+  if (isUninitialized(data)) return <main className="startup-page"><section className="startup-card"><div className="brand-mark">C</div>
     <h1>这个仓库还没有初始化 Concord</h1>
     <Button disabled={initializing} onClick={() => void initializeProject()}>{initializing ? '正在初始化…' : '初始化 Concord'}</Button>
-    <p>推荐的写作指南：<code>concord --skill {guide}</code></p>
     {initializationError && <p role="alert">{initializationError}</p>}
   </section></main>;
-  return <WorkspaceProvider initial={data} api={api}><WorkspaceGate><ThemeToggle /><Shell /></WorkspaceGate></WorkspaceProvider>;
+  return <WorkspaceProvider initial={data} api={api}><WorkspaceGate><ThemeToggle /><Shell initializationRequest={initializationRequest} /></WorkspaceGate></WorkspaceProvider>;
 }

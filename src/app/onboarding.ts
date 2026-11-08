@@ -2,7 +2,7 @@ import { ConcordError, type Repository } from "../model/index.ts";
 import { checkWriting } from "../domain/writing/index.ts";
 import { buildTrace } from "../domain/trace/index.ts";
 import { checkTaste } from "../domain/taste/index.ts";
-import { selectWritingGuide, uninitializedDoctor } from './project-onboarding.ts';
+import { uninitializedDoctor } from './project-onboarding.ts';
 import { inspectWorkflowSkills } from './workflow-skills.ts';
 
 
@@ -11,10 +11,9 @@ import { inspectWorkflowSkills } from './workflow-skills.ts';
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#结果
 // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#update
-export async function doctor(repo: Repository, trace?: Awaited<ReturnType<typeof buildTrace>>, cache: 'use' | 'off' = 'off', environment: Readonly<Record<string, string | undefined>> = {}) {
+export async function doctor(repo: Repository, trace?: Awaited<ReturnType<typeof buildTrace>>, cache: 'use' | 'off' = 'off') {
   if (repo.read('docs/taste.md') === undefined) {
-    const guide = selectWritingGuide(repo.root, environment);
-    return uninitializedDoctor({ root: repo.root, guide }, repo.runtimeVersion ?? 'unknown', repo.config);
+    return uninitializedDoctor({ root: repo.root }, repo.runtimeVersion ?? 'unknown', repo.config);
   }
   trace ??= (await buildTrace(repo, 'off'));
   const { documents, annotations, codeDeclarations, findings } = trace;

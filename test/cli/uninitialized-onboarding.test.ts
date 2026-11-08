@@ -53,21 +53,21 @@ test('every project command rejects an empty Git worktree before any repository 
     assert.equal(result.stdout, '', args.join(' '));
     const error = JSON.parse(result.stderr);
     assert.equal(error.error, 'ProjectNotInitialized', `${args.join(' ')}: ${result.stderr}`);
-    assert.deepEqual(error.details, { root, guide: 'docs-from-scratch' });
+    assert.deepEqual(error.details, { root });
     assert.deepEqual(snapshot(root), before, `${args.join(' ')} changed repository/private state`);
   }
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
-test('uninitialized human errors recommend init and use the same Git-file guide selection as init', async () => consumer(async root => {
+test('uninitialized human errors recommend init and the start command', async () => consumer(async root => {
   mkdirSync(join(root, 'src')); writeFileSync(join(root, 'src/main.ts'), 'export const answer = 42;\n');
   const before = snapshot(root);
   const result = (await invoke(root, ['check'], false));
   assert.equal(result.exitCode, 1);
   assert.equal(result.stdout, '');
-  assert.equal(result.stderr, 'ok: false\nerror: ProjectNotInitialized\nmessage: This repository has not been initialized for Concord.\n\nInitialize: concord init\nWriting guide after init: concord --skill docs-from-code\n');
+  assert.equal(result.stderr, 'ok: false\nerror: ProjectNotInitialized\nmessage: This repository has not been initialized for Concord.\n\nInitialize: concord init\nWriting guide after init: concord --skill start\n');
   const error = (await invoke(root, ['--dry-run', 'new', 'feature', 'example']));
-  assert.deepEqual(JSON.parse(error.stderr).details, { root, guide: 'docs-from-code' });
+  assert.deepEqual(JSON.parse(error.stderr).details, { root });
   assert.deepEqual(snapshot(root), before);
 }));
 
@@ -124,7 +124,7 @@ test('only taste-file existence determines initialization and non-Git directorie
 test('init remains available and immediately permits project commands', async () => consumer(async root => {
   const initialized = (await invoke(root, ['init']));
   assert.equal(initialized.exitCode, 0, initialized.stderr);
-  assert.equal(JSON.parse(initialized.stdout).guide, 'docs-from-scratch');
+  assert.equal(Object.hasOwn(JSON.parse(initialized.stdout), 'guide'), false);
   const listed = (await invoke(root, ['--dry-run', 'list']));
   assert.equal(listed.exitCode, 0, listed.stderr);
   assert.equal(JSON.parse(listed.stdout).operation, 'list');
