@@ -23,7 +23,6 @@ import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
 import { CliInvocation, writeStderr } from './invocation.ts';
 import { cliFailure } from './cli-failure.ts';
-import { readWorkspaceRecord } from './workspace-record.ts';
 
 export const cliPlatformLayer = NodeChildProcessSpawner.layer.pipe(Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)));
 /** Real startup captures input; this composition root binds its services. */
@@ -48,6 +47,15 @@ const remoteFailure = (cause: unknown): ConcordError | undefined => {
 const workspaceServerFailure = (cause: unknown): ConcordError => remoteFailure(cause) ?? failure(cause);
 const asServerError = workspaceServerFailure;
 const installationIdentity = (runtime: ServerRuntime['Service']) => Effect.try({ try: () => runtime.installation(), catch: failure });
+const readWorkspaceRecord = Effect.fn('cli.readWorkspaceRecord')(function*(runtime: ServerRuntime['Service'], privateDir: string, requireSocket = true) {
+  const read = yield* Effect.result(Effect.try({ try: () => runtime.read(privateDir, requireSocket), catch: failure }));
+  if (read._tag === 'Success') return read.success;
+  // Reboot or remount can invalidate a dead owner's device/socket identity.
+  // Only the actual native lock can establish absence; the next server still
+  // acquires that lock before replacing the record or touching its socket.
+  if (read.failure.code === 'WorkspaceServerUnavailable' && (yield* runtime.released(privateDir))) return undefined;
+  return yield* Effect.fail(read.failure);
+});
 const nativeAvailable = Effect.flatMap(PersistentCache, cache => cache.verifyArtifact).pipe(
   Effect.mapError(cause => new ConcordError('HawdbUnavailable', cause.message)),
 );
