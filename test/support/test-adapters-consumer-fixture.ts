@@ -31,9 +31,9 @@ export const setup = Effect.fn('adapterTest.pack')(function* (root: string, need
     mkdirSync(tool); text(tool, 'package.json', JSON.stringify({ private: true, type: 'module' }));
     const fixtureDependencies: string[] = [];
     if (needsEffect) {
-      const { dependencies } = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ dependencies: Schema.Struct({ effect: Schema.String }) })))(readFileSync(join(sourceRoot, 'package.json'), 'utf8'));
+      const { devDependencies } = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ devDependencies: Schema.Struct({ effect: Schema.String }) })))(readFileSync(join(sourceRoot, 'package.json'), 'utf8'));
       // Only the external fixture imports Effect; framework consumers use package dependencies.
-      fixtureDependencies.push(`effect@${dependencies.effect}`);
+      fixtureDependencies.push(`effect@${devDependencies.effect}`);
     }
     prepareSourceConsumer(tool, fixtureDependencies);
     return { cli: sourceCli(), tool };
