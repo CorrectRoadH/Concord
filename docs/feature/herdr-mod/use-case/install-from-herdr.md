@@ -21,28 +21,28 @@ Herdr 用户在 herdr.dev/mods 看到 Concord，想在自己的 Herdr 里用它�
 
 2. 打开 mod。 {#open}
 
-   本机没有 `concord` 时，mod 只显示安装说明（以下为预期输出）：
+   本机没有 `concord` 时，mod 显示“这个 mod 需要 Concord 命令行工具”和一段交给 agent 的请求（以下为预期输出）：
 
    ```text
-   这个 mod 需要 Concord 命令行工具。
+   在本机安装 Concord 命令行工具：运行
    curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh
-   安装后点“重新检测”。
+   然后用 concord --version 确认能运行。
    ```
 
-   这是[安装脚本](../../cross-platform-release/use-case/install-with-script.md)；也可以用项目 README「Install」一节中的 Homebrew 或 Nix。
+   命令是[安装脚本](../../cross-platform-release/use-case/install-with-script.md)；agent 也可以按项目 README「Install」一节改用 Homebrew 或 Nix。
 
-3. 安装 Concord 后点“重新检测”。 {#recheck}
+3. 点“复制给 agent”，贴给身边的 agent。 {#recheck}
 
-   mod 找到 `concord`，按当前 pane 的目录继续，后续与[在空仓库里初始化 Concord](init-from-herdr.md)和[阅读 Spec 与它的测试和实现](read-spec.md)相同。
+   agent 装好后，mod 在 2 秒内找到 `concord`，按当前 pane 的目录继续，后续与[在空仓库里初始化 Concord](init-from-herdr.md)和[阅读 Spec 与它的测试和实现](read-spec.md)相同。
 
 ## 结果
 
 | 情形 | 结果 |
 | --- | --- |
-| 本机的 Concord 低于 mod 要求的版本 | 显示当前版本、要求的版本与升级命令，不显示文档 |
+| 本机的 Concord 低于 mod 要求的版本 | 显示当前版本、要求的版本与交给 agent 的升级请求，不显示文档；升级后自动继续 |
 | 本机的 Concord 高于 mod 的版本 | 照常工作，并提示用 `concord herdr install` 换成同版本的 mod |
 | 用户已经装了 Concord | 也可以直接运行 `concord herdr install`，结果相同 |
-| 终端位于远程机器 | 检测的是那台机器上的 Concord，安装说明写明机器名，见[在远程机器的终端旁使用](use-on-remote-machine.md) |
+| 终端位于远程机器 | 检测的是那台机器上的 Concord，交给 agent 的请求写明机器名，见[在远程机器的终端旁使用](use-on-remote-machine.md) |
 
 mod 要求的最低版本写在它的 `mod.json` 中，来自构建时的 Concord 版本。源码版本 `dev` 不参与发行版排序；使用者通过 Concord 的 `releases/latest` 入口安装 CLI。独立分发目录见[交付 mod](../../../engineering/build/use-case/share-herdr-mod.md)。
 
