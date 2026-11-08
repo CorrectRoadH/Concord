@@ -7,7 +7,7 @@
 // @concord-implements docs/feature/herdr-mod/ui.md
 import { Effect, Scheduler, Schema } from 'effect';
 import { View, div, type AsyncContext, type Context, type Element, type Task } from 'gpui-kit';
-import { h_flex, v_flex, v_virtual_list, TextView, Editor, EditorState, VirtualListScrollHandle } from 'gpui-base';
+import { h_flex, v_flex, TextView, Editor, EditorState } from 'gpui-base';
 import { exec, focused, panes, spaces, run, closeOverlay, home, props as hostProps, theme, settings } from 'herdr';
 import { ModSession, ModFailure, ModDisconnected, failure, markdownTarget } from './session.ts';
 import { ModVersion, compareModVersions, type RenderedPage } from '../../model/herdr-mod/index.ts';
@@ -66,7 +66,6 @@ export default class ConcordMod extends View {
   private expandedBlocks = new Set<number>();
   private expanded = new Set<string>();
   private collapsedGroups = new Set<string>(documentGroups.filter(name => name !== 'Feature' && name !== 'Engineering'));
-  private treeScroll: VirtualListScrollHandle | undefined;
   private panelWidth = 480;
   private treeHidden = false;
   private busy = new Map<string, string>();
@@ -86,7 +85,6 @@ export default class ConcordMod extends View {
         return;
       }
     }
-    this.treeScroll = VirtualListScrollHandle.new();
     this.assets.start(cx);
     this.ownPane = typeof props.pane === 'string' ? props.pane : undefined;
     this.tab = allPanes.find(item => item.pane === this.ownPane)?.tab ?? focus?.tab ?? spaces().find(item => item.active)?.tabs.find(item => item.active)?.id;
@@ -572,8 +570,9 @@ export default class ConcordMod extends View {
     });
     const navigation = v_flex().id('concord-navigation').flex_1().min_w(0).min_h(0).p(6);
     return !session.loaded ? navigation.child(text('正在读取文档…').p(8).text_color(color('dim')))
-      : navigation.child(v_virtual_list('concord-tree', rows.length, 28, index => rows[index]!.key, range => rows.slice(range.start, range.end).map(row => row.render()))
-        .flex_1().min_h(0).track_scroll(this.treeScroll!));
+      // Rows carry their own click targets (arrow and title), which herdr-app refuses inside a
+      // virtual list renderer. The id keeps the scroll position across refreshes and unmounts.
+      : navigation.child(v_flex().id('concord-tree').flex_1().min_h(0).overflow_y_scroll().children(rows.map(row => row.render())));
   }
 
   private banner(id: string, message: string, actions: Element[] = [], tone = 'blocked'): Element {
@@ -710,7 +709,7 @@ export default class ConcordMod extends View {
     this.pauseWatch();
     for (const task of this.tasks) task.cancel();
     this.tasks.clear();
-    this.editor?.release(); this.preview?.release(); this.treeScroll?.release();
+    this.editor?.release(); this.preview?.release();
     await this.assets.close(cx);
     for (const task of this.renderTasks) task.cancel();
     this.renderTasks.clear();

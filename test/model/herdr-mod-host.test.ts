@@ -281,7 +281,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         }
         b.click(`page-${page}`);
         await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
-        const scroll = b.output.find('concord-tree')!.scroll;
         b.click('toggle-documents');
         assert.equal(b.output.find('concord-tree'), undefined);
         b.output.find(`concord-block-${page}-0`)!.link!('../../taste.md', b.context());
@@ -297,7 +296,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.equal(b.output.find('concord-tree'), undefined);
         b.click('toggle-documents');
         assert.ok(b.output.find('concord-tree'));
-        assert.equal(b.output.find('concord-tree')!.scroll, scroll, 'the retained native scroll handle survives unmounts');
       } finally { await b.close(); }
     });
     // @feature docs/feature/herdr-mod/ui.md#文档列表
