@@ -14,6 +14,8 @@
 
 `bun.lock` 是唯一的依赖锁文件。发版准备通过 Bun 的 JSON5 解析器读取文本锁，并严格校验根工作区的依赖、覆盖项、补丁和受信任依赖；清单、锁或 `.bun-version` 不一致时以 `ReleasePreparationError` 拒绝发版。版本标签只改发布版本，不重新解析依赖。
 
+`package.json` 的 `dependencies` 只列编译程序运行时从 `app/` 按包名加载的外置工具：TypeScript（类型检查与 tsserver 宿主）和 esbuild（p5 与 MDX 编译）。编进 `bin/concord` 的模块（Effect、yaml、Markdown 解析器等）与只用于 Web、Herdr mod 构建的包都属于 `devDependencies`，不进入归档的依赖树。新增运行时按包名加载的依赖时，先改本段。
+
 归档在目标宿主安装生产依赖，验证 esbuild 与 TypeScript 的目标可选包，收集安装树中的许可证，再验证相对符号链接均留在归档内。使用私有复制的安装树，后续 ELF 改写不能污染 Bun 缓存或其它安装。编译、Web、源码服务与归档缓存的输入包含 `bun.lock`；生产依赖缓存还包含 `.bun-version`。
 
 ## 编译入口

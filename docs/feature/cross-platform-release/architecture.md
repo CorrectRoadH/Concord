@@ -36,7 +36,7 @@ tap 定期或经通知发现新的公开发版，核验标签、归档与资产�
 | `runtime/rg` | 仓库根目录的 `runtime-deps.json` 唯一记录 ripgrep 版本与每个目标的官方发行资产（文件名与 SHA-256），按它校验后取出 `rg` 与许可证；Linux 使用官方静态链接的 musl 版本，不设 RPATH；macOS 的 `rg` 由 macOS 原生任务校验、ad-hoc 签名后随原生产物交给组装，签名后的摘要记在该任务的产物清单 |
 | `runtime/lib/` | 仅 Linux：Ubuntu 24.04 构建环境中的 `libatomic.so.1` 与 `libstdc++.so.6`，以及检查发现的其它 glibc 之外的 `DT_NEEDED` 库 |
 | `app/` 中的资源 | 包元数据、锁文件、docs、skills、templates、Web、预览、p5 类型与 Herdr mod；不保留应用模块 JS 作为另一套执行入口 |
-| `app/` 中的依赖 | 按 `bun.lock` 冻结、`--ignore-scripts` 安装的运行依赖；平台相关的可选依赖按目标平台选择 |
+| `app/` 中的依赖 | 只有 `bin/concord` 运行时从 `app/` 按包名加载的外置工具：TypeScript 与 esbuild，连同它们按目标平台选择的可选原生包。按 `bun.lock` 冻结、`--ignore-scripts` 安装；已编进 `bin/concord` 的模块不再随包安装 |
 | `app/` 中的原生绑定 | 该目标经身份校验的 HawDB N-API 引擎 |
 | `licenses/` | 固定 Bun 发行版及其内嵌组件、ripgrep、`runtime/lib/` 中的运行库与运行依赖的许可证文本 |
 | `bin/concord` | 固定 Bun 以 `--compile --bytecode --format=esm` 生成的目标原生可执行文件，包含应用与固定角色入口 |
@@ -63,7 +63,9 @@ Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`li
 
 ### Homebrew
 
-Formula 按平台引用对应归档与 SHA-256，没有 `depends_on` 的 node、pnpm 或 ripgrep，也不编译原生引擎。安装把归档内容放入 `libexec`，在 `bin` 链接 `libexec/bin/concord`。
+Formula 按平台引用对应归档与 SHA-256：macOS 用 `darwin-arm64`，Linux 用 `linux-x64`。没有 `depends_on` 的 node、pnpm、bun 或 ripgrep，也不编译原生引擎。安装把归档内容放入 `libexec`，在 `bin` 链接 `libexec/bin/concord`。
+
+Linux 上 Formula 同样保留原生字节：Bun 编译的可执行文件被改写 ELF 头或 RPATH 后会崩溃，Homebrew 的 ELF 重定位不能作用于归档文件。安装时压缩归档内全部 ELF（`bin/concord`、HawDB `.node`、`runtime/rg` 与 `runtime/lib/` 中的库），post-install 解压还原；tap 的检查逐文件比对还原后的摘要与归档相同。
 
 macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`。安装时压缩包内全部 Mach-O 文件（原生绑定、`bin/concord` 与 `runtime/rg`），待 Homebrew 链接处理结束后在 post-install 解压还原原始字节，不重签、不改写。tap 的 Homebrew 检查逐文件比对还原后的摘要与归档相同，对全部 Mach-O 运行 `codesign --verify`，并确认没有 `com.apple.quarantine`。
 
@@ -72,7 +74,7 @@ macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rp
 Nix 只支持 `x86_64-linux`。原始发版身份与渠道安装身份分开：
 
 1. 表达式用 `fetchurl` 按 Release 中的 SHA-256 取 `linux-x64` 归档，recipe 构建先核对原始 native manifest 与绑定字节一致。
-2. recipe 构建阶段用 `autoPatchelfHook` 修补归档内全部 ELF（`bin/concord`、HawDB `.node`、`runtime/rg` 与 `runtime/lib/` 中的库），运行库取自 flake.lock 固定的 nixpkgs，至少包含 glibc、GCC 运行库与 libatomic。有库无法解析时构建失败。修补只改 ELF 的解释器与运行库路径，不改应用逻辑与依赖；修补后必须实跑编译程序以验证内嵌载荷仍可加载。
+2. recipe 构建阶段用 `autoPatchelfHook` 修补 HawDB `.node`、`runtime/rg` 与 `runtime/lib/` 中的库，运行库取自 flake.lock 固定的 nixpkgs，至少包含 glibc、GCC 运行库与 libatomic。有库无法解析时构建失败。`bin/concord` 只依赖 glibc，不交给 `autoPatchelfHook`，只把解释器设为 nixpkgs glibc 的动态加载器，不加 RPATH；添加 RPATH 会破坏 Bun 可执行文件。修补只改 ELF 的解释器与运行库路径，不改应用逻辑与依赖；修补后必须实跑编译程序以验证内嵌载荷仍可加载。
 3. 修补后为 HawDB 绑定重写 native manifest `artifact.json`：`revision`、ABI、`target`、源码摘要 `sourceDigest`、锁文件摘要 `cargoLockDigest` 与 `noticesSha256` 保持原值，`binarySha256` 换成修补后字节的 SHA-256。修补后的安装目录与这个 manifest 构成 Nix 渠道的安装身份。
 
 运行时的摘要检查不放宽：Nix 安装的绑定与其它渠道一样，必须与所在安装的 manifest 一致。tap 的 Nix 检查经过 HawDB 身份校验与一次缓存写入后读取，不只运行 `--help`。
