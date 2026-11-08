@@ -19,7 +19,7 @@ Herdr 用户和其它 mod 一样安装：把下面这句话交给自己的 agent
 Read ~/.config/herdr-app/AGENTS.md, then add this mod: herdr.dev/mods/CorrectRoadH/concord
 ```
 
-agent 读完 mod 的全部文件，说明它会运行 `concord` 命令、读写当前仓库的文件，再把它复制到 Herdr 的 `mods/` 并检查。mod 依赖终端所在机器上的 Concord；没有安装或版本不匹配时，mod 显示安装或升级 Concord 的命令，不显示文档。详见[从 Herdr 安装 Concord mod](use-case/install-from-herdr.md)。
+agent 读完 mod 的全部文件，说明它会运行 `concord` 命令、读写当前仓库的文件，再把它复制到 Herdr 的 `mods/` 并检查。mod 依赖终端所在机器上的 Concord；没有安装或不认识 mod 用到的命令时，mod 显示安装或升级 Concord 的命令，不显示文档。详见[从 Herdr 安装 Concord mod](use-case/install-from-herdr.md)。
 
 已经装了 Concord 的用户也可以直接运行（以下为预期输出）：
 

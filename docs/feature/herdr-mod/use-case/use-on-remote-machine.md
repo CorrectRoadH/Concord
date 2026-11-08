@@ -30,7 +30,7 @@
 | 情形 | 结果 |
 | --- | --- |
 | `vps` 上没有 `concord` | 显示“vps 上没有 Concord 命令行工具”和写明 `vps` 的交给 agent 的安装请求；装好后自动继续，本机有没有 Concord 不影响结果 |
-| `vps` 上的 Concord 低于 mod 要求的版本 | 显示 `vps` 上的版本、要求的版本与交给 agent 的升级请求 |
+| `vps` 上的 Concord 不认识 mod 用到的命令 | 显示它不认识的命令与写明 `vps` 的交给 agent 的升级请求 |
 | 连不上 `vps` | 显示“连不上 vps”与“Herdr 恢复连接后自动重试”；恢复后自动继续，不需要重新打开 |
 | 初始化、保存与检查 | 与本机相同，命令在 `vps` 上运行 |
 | 保存前 `vps` 上的文件已被 agent 改过 | 与本机相同，按[保存冲突](../../../concepts.md#save-conflict)处理，保留草稿 |

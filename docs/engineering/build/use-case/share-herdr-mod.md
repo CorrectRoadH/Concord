@@ -16,7 +16,7 @@
    bun run build:herdr
    ```
 
-   命令生成 `concord/RECIPE.md`、`concord/preview.png` 与 `concord/mods/concord/` 下的 `main.js`、`mod.json`、`NOTICE.txt`，不构建 CLI、Web、原生绑定或完整归档，不访问 Release 服务。最低 CLI 版本来自当前 `package.json`；源码版本为 `dev` 时沿用开发模式，不参与发行版排序。安装说明引导使用者通过 Concord 的 `releases/latest` 入口安装 CLI。
+   命令生成 `concord/RECIPE.md`、`concord/preview.png` 与 `concord/mods/concord/` 下的 `main.js`、`mod.json`、`NOTICE.txt`，不构建 CLI、Web、原生绑定或完整归档，不访问 Release 服务。mod 不记录 CLI 版本。安装说明引导使用者通过 Concord 的 `releases/latest` 入口安装 CLI。
 
 2. 验证可安装目录。 {#verify}
 

@@ -31,7 +31,7 @@ Concord 运行在 Bun 上。开发、测试、CI 与发版归档使用同一个 
 
 ## 怎样工作
 
-开发用的 worktree 中没有 `dist/`：日常开发运行源码，测试同样运行源码，Web 产物与原生绑定来自 worktree 外按输入摘要共享的缓存。worktree 只有源码这一个安装身份，CLI 与工作区服务不会因新旧产物并存而冲突。
+开发用的 worktree 中没有 `dist/`：日常开发运行源码，测试同样运行源码，Web 产物与原生绑定来自 worktree 外按输入摘要共享的缓存。CLI 与工作区服务不会因新旧产物并存而冲突。
 
 `bun run concord <参数>` 直接运行当前 worktree 的源码 CLI，不需要构建，也不需要全局安装的 Concord。源码模式与安装模式的差别见[从源码运行](architecture.md#从源码运行)。
 

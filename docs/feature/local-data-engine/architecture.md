@@ -109,7 +109,7 @@ Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git
 
 | 实体 | 身份 | 拥有与生命周期 |
 | --- | --- | --- |
-| 服务主进程 | worktree 的 Git-private 目录 + 安装身份 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算 |
+| 服务主进程 | worktree 的 Git-private 目录 + 协议 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算 |
 | 计算进程 | 由主进程经 `OwnedProcessService` 启动的长期子进程 | 持有内存解析缓存，执行前台只读查询；不打开持久库 |
 | 后台计算进程 | 由主进程经 `OwnedProcessService` 启动的另一个长期子进程 | 持有自己的内存解析缓存，执行工作区投影的刷新扫描；不打开持久库 |
 | 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动 | 执行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库 |
@@ -268,7 +268,7 @@ clear、维护与 shutdown 串行执行。
 
 `trace show`、`trace gaps` 与 `review` 的历史投影读取保留[异步诊断投影](use-case/query-asynchronous-projections.md)的语义，只是由服务读取投影。
 
-CLI 默认自动启动或复用同安装身份、同协议的服务，再发送 `query`。传输断开后可以重新连接并重试一次；领域错误原样输出，不重算。
+CLI 默认自动启动或复用同协议的服务，再发送 `query`。传输断开后可以重新连接并重试一次；领域错误原样输出，不重算。
 
 `--dry-run` 与 cache-off 调用在本进程执行同一应用查询，不启动或连接后台，也不读取或写入持久缓存，保持[打开模式](#句柄与打开模式)的无持久状态约束。写命令、交互命令、`lsp` 与外部 runner 的执行入口由各自 Feature 拥有。
 

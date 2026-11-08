@@ -98,13 +98,13 @@ mod 的外观与 Herdr 自带的 Files、Changes 一致，看起来是 Herdr 的
 | 连不上终端所在的机器 | 连不上 <机器> | Herdr 恢复连接后自动重试 | 无 |
 | 正在检测命令行工具 | 正在检测 Concord 命令行工具… | 仓库地址 | 无 |
 | 没有 Concord | 这个 mod 需要 Concord 命令行工具（远程为“<机器> 上没有 Concord 命令行工具”） | 让 agent 装好后，mod 自动继续 | 交给 agent：安装 Concord |
-| Concord 低于 mod 要求的版本 | Concord 版本过旧（远程为“<机器> 上的 Concord 版本过旧”） | 当前版本与要求的最低版本 | 交给 agent：升级 Concord |
+| Concord 不认识 mod 用到的命令 | Concord 版本过旧（远程为“<机器> 上的 Concord 版本过旧”） | 它不认识的命令 | 交给 agent：升级 Concord |
 | 第一次读取这个仓库 | 正在读取 Concord 仓库… | 仓库地址 | 无 |
 | 仓库还没有初始化 | 这个仓库还没有初始化 Concord | 仓库地址 | 主按钮“在这里初始化 Concord” |
 
 命令报告仓库还没有初始化（`ProjectNotInitialized`）时就是最后一行，不当作错误显示。其它错误发生在第一次读取时，标题是错误的消息，第二行是仓库地址，下面是交给 agent 的请求。
 
-没有 Concord 或版本过旧时，mod 每 2 秒在那台机器上重新检测一次，装好后自动继续，不需要再点什么。
+mod 不比较版本号：它直接运行需要的命令，只有 Concord 回答不认识某个命令时才显示版本过旧。没有 Concord 或版本过旧时，mod 每 2 秒在那台机器上重新检测一次，装好后自动继续，不需要再点什么。
 
 ## 交给 agent
 
