@@ -520,18 +520,17 @@ export default class ConcordMod extends View {
         const owner = this.session.documents.find(owner => owner.path === page?.path);
         const title = owner?.title ?? (page?.name && page.name !== page.path ? page.name : node.name.replace(/\.md$/u, ''));
         const open = this.expanded.has(node.path);
-        const glyph: IconName = directory ? 'folder' : page?.kind === 'use-case' ? 'route' : 'file-text';
+        const glyph: IconName = directory ? open ? 'folder-open' : 'folder' : page?.kind === 'use-case' ? 'route' : 'file-text';
         rows.push({ key: node.path, render: () => {
           const element = row(`tree-row-${node.path}`).pl(8 + depth * 18).pr(6);
           if (page?.path === this.session.selected) element.bg(color('selected'));
-          if (directory) element.child(clickableRow(`toggle-${node.path}`).w(20).px(2).child(icon(open ? 'chevron-down' : 'chevron-right')).on_click((_event, cx) => {
+          const marker = directory ? clickableRow(`toggle-${node.path}`).w(20).px(3).child(icon(glyph).text_color(color('muted'))).on_click((_event, cx) => {
             cx.stop_propagation();
             if (this.expanded.has(node.path)) this.expanded.delete(node.path); else this.expanded.add(node.path);
             cx.notify();
-          }));
-          else element.child(div().w(20).flex_none());
+          }) : h_flex().w(20).px(3).flex_none().child(icon(glyph).text_color(color('muted')));
           const label = h_flex().id(page ? `page-${page.path}` : `directory-${node.path}`).h(28).flex_1().min_w(0).gap(7).items_center().rounded(7).cursor_pointer().hover(element => element.bg(color('hover')))
-            .children([icon(glyph).text_color(color('muted')), text(title).flex_1().min_w(0).truncate()]);
+            .children([marker, text(title).flex_1().min_w(0).truncate()]);
           label.on_click((_event, cx) => {
             if (page) { if (directory) this.expanded.add(node.path); this.open(page.path, cx); }
             else { if (open) this.expanded.delete(node.path); else this.expanded.add(node.path); cx.notify(); }
@@ -554,7 +553,7 @@ export default class ConcordMod extends View {
       if (!pages.length) return [];
       const collapsed = this.collapsedGroups.has(label);
       const header = { key: `category-${label}`, render: () => clickableRow(`category-${label}`).children([
-        icon(collapsed ? 'chevron-right' : 'chevron-down').text_color(color('dim')), heading(label), heading(String(pages.length)),
+        heading(label), heading(String(pages.length)),
       ]).on_click((_event, cx) => {
         if (collapsed) this.collapsedGroups.delete(label); else this.collapsedGroups.add(label);
         cx.notify();
@@ -570,7 +569,7 @@ export default class ConcordMod extends View {
     });
     const navigation = v_flex().id('concord-navigation').flex_1().min_w(0).min_h(0).p(6);
     return !session.loaded ? navigation.child(text('正在读取文档…').p(8).text_color(color('dim')))
-      // Rows carry their own click targets (arrow and title), which herdr-app refuses inside a
+      // Rows carry their own click targets (folder and title), which herdr-app refuses inside a
       // virtual list renderer. The id keeps the scroll position across refreshes and unmounts.
       : navigation.child(v_flex().id('concord-tree').flex_1().min_h(0).overflow_y_scroll().children(rows.map(row => row.render())));
   }

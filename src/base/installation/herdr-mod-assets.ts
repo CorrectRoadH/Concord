@@ -8,9 +8,8 @@ import { modIconNames, type ModIconName } from '../../model/herdr-mod/index.ts';
 const IconData = Schema.Struct({ __iconData: Schema.Struct({ size: Schema.Number, node: Schema.Array(Schema.Tuple([Schema.String, Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Number]))])) }) });
 const escape = (value: string | number) => String(value).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
 const iconModules: Record<ModIconName, () => Promise<unknown>> = {
-  'chevron-down': () => import('lucide-react/icons/chevron-down'),
-  'chevron-right': () => import('lucide-react/icons/chevron-right'),
   folder: () => import('lucide-react/icons/folder'),
+  'folder-open': () => import('lucide-react/icons/folder-open'),
   'file-text': () => import('lucide-react/icons/file-text'),
   route: () => import('lucide-react/icons/route'),
   'flask-conical': () => import('lucide-react/icons/flask-conical'),

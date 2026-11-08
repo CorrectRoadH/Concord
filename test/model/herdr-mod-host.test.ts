@@ -310,7 +310,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @feature docs/feature/herdr-mod/ui.md#文档列表
-    await t.test('package arrows only fold, titles open README, and refresh or resizing preserves expansion and click affordances', async () => {
+    await t.test('folder icons only fold, titles open README, and refresh or resizing preserves expansion and click affordances', async () => {
       const casePath = 'docs/feature/cart/use-case/add.md', caseRoot = 'docs/feature/cart/use-case';
       const b = await start(boundary => {
         boundary.packagePages.push({ path: casePath, name: '加入商品', kind: 'use-case' }, { path: `${caseRoot}/README.md`, name: 'Use Cases', kind: 'page' });
@@ -327,7 +327,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.equal(repository.click, undefined); assert.equal(repository.pointer, false); assert.equal(repository.hovered, false);
         assert.equal(b.output.find('category-Issue'), undefined, 'empty groups are absent');
         b.click('toggle-docs/feature/cart');
-        assert.equal(b.output.find(`concord-body-${page}`), undefined, 'arrow did not open the README');
+        assert.equal(b.output.find(`concord-body-${page}`), undefined, 'folder icon did not open the README');
         b.click(`page-${caseRoot}/README.md`);
         await b.until(() => b.output.find(`concord-body-${caseRoot}/README.md`) !== undefined);
         assert.ok(b.output.find(`page-${casePath}`));
