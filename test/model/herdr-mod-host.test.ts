@@ -59,9 +59,15 @@ class State {
   released = false;
   readOnly = false;
   private source: string;
+  private listeners = new Map<string, (event: unknown, cx: Context) => void>();
   constructor(source: string) { this.source = source; }
   value() { assert.equal(this.released, false); return this.source; }
   set_value(value: string) { assert.equal(this.released, false); this.source = value; }
+  on(event: string, body: (event: unknown, cx: Context) => void) { this.listeners.set(event, body); return true; }
+  set_auto_grow(_min: number, _max: number) {}
+  focus() { assert.equal(this.released, false); }
+  input(value: string, cx: Context) { this.set_value(value); this.listeners.get('change')?.({}, cx); }
+  blur(cx: Context) { this.listeners.get('blur')?.({}, cx); }
   release() { assert.equal(this.released, false, 'retained state released once'); this.released = true; return true; }
 }
 function pending<A>() {
@@ -228,6 +234,8 @@ const external = {
   TextView: { markdown: (id: string, source: string) => new Element().id(id).child(source) },
   EditorState: { new: (options?: { value?: string; readonly?: boolean }) => { const state = host.state(options?.value); state.readOnly = options?.readonly ?? false; return state; } },
   Editor: { new: (state: State) => { const element = new Element(); element.state = state; return element; } },
+  TextareaState: { new: (options?: { value?: string }) => host.state(options?.value) },
+  Textarea: { new: (state: State) => { const element = new Element(); element.state = state; return element; } },
   exec: (command: string, args: string[], options?: { cwd?: string; on?: string | null }) => host.exec(command, args, options),
   focused: () => ({ cwd: host.cwd, pane: host.paneList.find(pane => pane.focused)?.pane ?? null, terminal: null, shown: null, agent: null, space: 's1', tab: host.focusedTab }),
   panes: () => host.paneList, spaces: () => host.spaceList,
@@ -248,7 +256,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
   global.__concordHostSync = external;
   const names: Record<string, string[]> = {
     'gpui-kit': ['View', 'div', 'image', 'svg'],
-    'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState'],
+    'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState', 'Textarea', 'TextareaState'],
     herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'settings', 'shared', 'setShared'],
   };
   mock.module('fs/promises', () => ({
@@ -270,6 +278,77 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       await host.until(ready);
       return host;
     };
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#edit
+    await t.test('live preview opens only the clicked paragraph without edit controls', async () => {
+      const b = await start(boundary => { boundary.files.set(`/repo/${page}`, '# Cart\n\nFirst paragraph.\n\nSecond paragraph.\n'); });
+      try {
+        b.click(`page-${page}`);
+        await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.click('preview-block-8');
+        assert.equal(b.output.find('document-editor')!.state!.value(), 'First paragraph.');
+        assert.match(b.output.text(), /Second paragraph\./u);
+        for (const id of ['edit', 'save', 'discard', 'merge']) assert.equal(b.output.find(id), undefined);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+    await t.test('autosave preserves surrounding bytes, retains the active state, and serializes newer input', async () => {
+      const original = '---\r\nkind: feature\r\n---\r\n\r\n# Cart\r\n\r\n中文🙂正文。\r\n\r\n<!-- keep -->\r\n';
+      const b = await start(boundary => { boundary.files.set(`/repo/${page}`, original); });
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.click(`preview-block-${original.indexOf('中文')}`);
+        const editor = b.output.find('document-editor')!.state!;
+        b.fire(0); b.fire(800);
+        assert.equal(b.requests.filter(request => request.args.some(arg => arg.includes('document.set'))).length, 0);
+        editor.input('第一次修改', b.context());
+        const requests = b.requests.length;
+        b.commandGate = pending<void>(); b.fire(800);
+        await b.until(() => b.requests.length > requests);
+        editor.input('第二次修改', b.context());
+        b.commandGate.resolve(); b.commandGate = undefined;
+        await b.until(() => b.files.get(`/repo/${page}`) === original.replace('中文🙂正文。', '第二次修改') && b.output.text().includes('已保存'));
+        assert.equal(b.output.find('document-editor')!.state, editor);
+        const writes = b.requests.filter(request => request.args.some(arg => arg.includes('document.set')));
+        assert.equal(writes.length, 2);
+        editor.blur(b.context()); b.fire(0);
+        assert.equal(editor.released, true);
+        assert.match(b.output.text(), /第二次修改/u);
+      } finally { b.commandGate?.resolve(); await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    await t.test('external updates replace active input and cancel the pending autosave', async () => {
+      const b = await start();
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.click('preview-block-0'); const editor = b.output.find('document-editor')!.state!;
+        editor.input('# Unsaved input', b.context());
+        b.files.set(`/repo/${page}`, '# Agent update\n');
+        b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'updated' }), stderr: '' });
+        await b.until(() => b.output.text().includes('# Agent update'));
+        assert.equal(editor.released, true); assert.equal(b.output.find('document-editor'), undefined);
+        b.fire(800); b.fire(0);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(b.files.get(`/repo/${page}`), '# Agent update\n');
+        assert.equal(b.requests.filter(request => request.args.some(arg => arg.includes('document.set'))).length, 0);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+    await t.test('clicking another block immediately saves the previous block and follows its shifted position', async () => {
+      const original = '# Cart\n\nFirst.\n\nSecond.\n';
+      const b = await start(boundary => { boundary.files.set(`/repo/${page}`, original); });
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.click(`preview-block-${original.indexOf('First.')}`);
+        const first = b.output.find('document-editor')!.state!;
+        first.input('A much longer first paragraph.', b.context());
+        b.click(`preview-block-${original.indexOf('Second.')}`);
+        const second = b.output.find('document-editor')!.state!;
+        assert.equal(first.released, true); assert.equal(second.value(), 'Second.');
+        b.fire(0);
+        await b.until(() => b.files.get(`/repo/${page}`) === original.replace('First.', 'A much longer first paragraph.'));
+        assert.equal(b.output.find('document-editor')!.state, second);
+      } finally { await b.close(); }
+    });
     // @feature docs/feature/herdr-mod/ui.md#双栏
     await t.test('both columns remain at all widths and the collapsed list survives refresh, selection and repository changes', async () => {
       const b = await start();
@@ -436,7 +515,8 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
     // @use-case docs/feature/herdr-mod/use-case/read-spec.md
     await t.test('native blocks load completed files, expose Mermaid source and open an offline p5 file, then react to theme changes', async () => {
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>', html = '<!doctype html><title>p5</title>';
-      const b = await start(boundary => { boundary.rendered = [
+      const richSource = '# Rich page\n\n![Plot](plot.svg)\n\n```mermaid\nflowchart LR\nA --> B\n```\n\n```p5\np.describe("Sketch")\n```\n\n![Missing plot](gone.png)\n';
+      const b = await start(boundary => { boundary.files.set(`/repo/${page}`, richSource); boundary.rendered = [
         { type: 'markdown', text: '# Rich page' },
         { type: 'image', source: 'plot.svg', alt: 'Plot', mediaType: 'image/svg+xml', data: Buffer.from(svg).toString('base64'), digest: digest(svg) },
         { type: 'mermaid', source: 'flowchart LR\nA --> B', svg, digest: digest(svg) },
@@ -444,15 +524,18 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         { type: 'image', source: 'gone.png', alt: 'Missing plot', error: '图片不存在' },
       ]; });
       try {
-        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.click(`page-${page}`); await b.until(() => b.resourceFiles.size === 2 && b.output.text().includes('图片不存在'));
         assert.equal(b.resourceFiles.size, 2, 'identical image bytes share one file');
-        assert.match(b.output.text(), /Missing plot · gone.png · 图片不存在/u);
+        assert.match(b.output.text(), /图片不存在/u);
         assert.equal(b.output.find(`concord-block-${page}-2-source`), undefined);
-        b.click(`concord-block-${page}-2-toggle`); assert.match(b.output.text(), /flowchart LR/u);
+        b.click(`preview-block-${richSource.indexOf('```mermaid')}`);
+        assert.equal(b.output.find('document-editor')!.state!.value(), '```mermaid\nflowchart LR\nA --> B\n```');
+        b.output.find('document-editor')!.state!.blur(b.context()); b.fire(0);
+        assert.equal(b.output.find('document-editor'), undefined);
         b.click(`concord-block-${page}-3-play`); assert.match(b.urls[0]!, /^file:\/\/\/herdr\/data\/concord\/render\/[a-f0-9]{64}\.html$/u);
         const renders = () => b.calls.filter(call => call[0] === 'action' && call.some(arg => arg.includes('page.render'))).length;
         const beforeRefresh = renders();
-        b.rendered = [{ type: 'markdown', text: 'Changed dependency with unchanged Markdown' }];
+        b.rendered = [{ type: 'image', source: 'plot.svg', alt: 'Plot', error: 'Changed dependency with unchanged Markdown' }];
         b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'dependency-change' }), stderr: '' });
         await b.until(() => renders() > beforeRefresh && b.output.text().includes('Changed dependency with unchanged Markdown'));
         assert.equal(b.resourceFiles.size, 0, 'refresh releases assets removed from the rendered page');
@@ -461,10 +544,17 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           { type: 'p5', source: 'p.describe("Sketch")', description: 'Sketch', html },
         ];
         const before = renders(); b.colors = { foreground: '#123456' }; b.draw();
-        await b.until(() => renders() > before && b.output.find(`concord-body-${page}`) !== undefined);
+        await b.until(() => renders() > before && b.resourceFiles.size === 2);
         assert.equal(b.resourceFiles.size, 2);
-        await b.close(); assert.equal(b.resourceFiles.size, 0);
-      } finally { if (!b.closed) await b.close(); }
+        b.click('preview-block-0');
+        b.output.find('document-editor')!.state!.input('# Edited before close', b.context());
+        b.commandGate = pending<void>();
+        const closing = b.close();
+        await b.until(() => b.resourceFiles.size === 0);
+        assert.equal(b.closed, false, 'asset cleanup does not wait for the closing save');
+        b.commandGate.resolve(); b.commandGate = undefined;
+        await closing;
+      } finally { b.commandGate?.resolve(); if (!b.closed) await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/read-spec.md
     await t.test('an identical file acquired during final release survives, and only the last instance removes it', async () => {
@@ -642,11 +732,9 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
       const markdown = b.output.find(`concord-block-${page}-0`)!;
       assert.ok(markdown.link); markdown.link('https://example.com/outside.md', b.context());
-      b.click('edit'); b.draw();
+      b.click('preview-block-0'); b.draw();
       const editor = b.output.find('document-editor')!.state!;
-      editor.set_value('# Draft\n');
-      b.click('discard');
-      await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+      editor.blur(b.context()); b.fire(0);
       assert.equal(editor.released, true);
       await b.close();
       const before = b.calls.length;
@@ -705,7 +793,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       assert.match(host.output.text(), /vps:\/repo/u);
       assert.equal(host.output.find('choose-folder'), undefined); assert.equal(host.output.find('refresh'), undefined);
       assert.ok(host.requests.every(request => request.options?.on === 'vps'));
-      assert.ok(host.output.find('edit'));
+      assert.ok(host.output.find('preview-block-0'));
       host.reachable = false; host.colors = { foreground: '#123456' }; host.draw();
       await host.until(() => host.output.text().includes('连不上 vps'));
       assert.doesNotMatch(host.output.text(), /private diagnostic/u);
@@ -739,48 +827,38 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-    await t.test('layout sidebar retains drafts through tab switches and uses the latest destination', async () => {
-      for (const action of ['save', 'discard']) {
+    await t.test('layout sidebar autosaves before switching tabs and uses the latest destination', async () => {
         const b = await start();
         try {
           b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
-          b.click('edit'); const editor = b.output.find('document-editor')!.state!;
-          editor.set_value('# Draft in original repository\n');
+          b.click('preview-block-0'); const editor = b.output.find('document-editor')!.state!;
+          editor.input('# Draft in original repository', b.context());
+          b.commandGate = pending<void>();
           b.selectTab('t2', '/other');
-          await b.until(() => b.output.text().includes('终端已切到 /other，保存或放弃修改后切换'));
+          await b.until(() => editor.released);
           b.selectTab('t3', '/other', 'vps');
-          await b.until(() => b.output.text().includes('终端已切到 vps:/other，保存或放弃修改后切换'));
-          assert.equal(b.output.find('document-editor')!.state, editor);
-          b.click(action);
+          b.commandGate.resolve(); b.commandGate = undefined;
           await b.until(() => b.output.find('initialize') !== undefined);
           assert.match(b.output.text(), /vps:\/other/u);
-          assert.equal(b.files.get(`/repo/${page}`), action === 'save' ? '# Draft in original repository\n' : '# Cart\n');
+          assert.equal(b.files.get(`/repo/${page}`), '# Draft in original repository\n');
           const writes = b.requests.filter(request => request.args.some(arg => arg.includes('document.set')));
-          assert.deepEqual(writes.map(request => request.options), action === 'save' ? [{ cwd: '/repo', on: null }] : []);
-        } finally { await b.close(); }
-      }
+          assert.deepEqual(writes.map(request => request.options), [{ cwd: '/repo', on: null }]);
+        } finally { b.commandGate?.resolve(); await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
-    await t.test('saving or discarding a draft releases a pending repository switch', async () => {
-      for (const action of ['save', 'discard']) {
+    await t.test('changing repository flushes its input without prompting', async () => {
         const b = await start();
         try {
           b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
-          b.click('edit');
+          b.click('preview-block-0');
           const editor = b.output.find('document-editor')!.state!;
-          editor.set_value('# Keep this draft\n');
+          editor.input('# Keep this draft', b.context());
           b.paneList[0]!.cwd = '/other'; b.draw();
-          await b.until(() => b.output.text().includes('终端已切到 /other，保存或放弃修改后切换'));
-          assert.equal(b.output.find('document-editor')!.state, editor);
-          assert.equal(editor.value(), '# Keep this draft\n');
-          assert.equal(b.output.find('initialize'), undefined);
-          b.click(action);
           await b.until(() => b.output.find('initialize') !== undefined);
           assert.equal(editor.released, true);
-          assert.equal(b.files.get(`/repo/${page}`), action === 'save' ? '# Keep this draft\n' : '# Cart\n');
+          assert.equal(b.files.get(`/repo/${page}`), '# Keep this draft\n');
           assert.match(b.output.text(), /\/other/u);
         } finally { await b.close(); }
-      }
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
     await t.test('a missing cwd and a non-repository directory have distinct automatic recovery states', async () => {

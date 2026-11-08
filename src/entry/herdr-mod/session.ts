@@ -73,7 +73,8 @@ export class ModSession {
   draft: string | undefined;
   sourceDigest = '';
   workspaceDigest: string | undefined;
-  conflict = false;
+  reloadVersion = 0;
+  saving = false;
   deleted = false;
   error = '';
   errorDetails = '';
@@ -88,6 +89,8 @@ export class ModSession {
   private selection = {};
   /** The selection token that `selected` belongs to; a newer click owns a newer token. */
   private selectedToken = {};
+  private fileObservation = 0;
+  private savingBody: string | undefined;
   readonly host: ModHost;
   readonly machine: string | null;
   constructor(host: ModHost, cwd: string, machine: string | null = null) { this.host = host; this.root = cwd; this.machine = machine; }
@@ -100,6 +103,16 @@ export class ModSession {
     return this.command(actionArgs({ action: 'file.get', path }), File).pipe(Effect.catch(error => error instanceof ModFailure && (error.code === 'FileNotFound' || error.code === 'ProjectNotInitialized') ? Effect.succeed(undefined) : Effect.fail(error)));
   }
   read(path: string) { return this.readFile(path).pipe(Effect.map(file => file?.body ?? null)); }
+
+  setDraft(body: string): void { this.draft = body === this.source ? undefined : body; }
+
+  private acceptFile(file: typeof File.Type | undefined, reset: boolean): void {
+    const body = file?.body ?? '';
+    if (reset || (file?.digest !== this.sourceDigest && body !== this.savingBody)) {
+      this.draft = undefined; this.reloadVersion += 1; this.check = undefined;
+    }
+    this.source = body; this.sourceDigest = file?.digest ?? ''; this.deleted = file === undefined;
+  }
 
   renderPage(path: string, theme: Readonly<Record<string, string>>) {
     return this.command(actionArgs({ action: 'page.render', path, theme }), Schema.Unknown).pipe(
@@ -195,14 +208,12 @@ export class ModSession {
       this.root = doctor.root;
       this.rootResolved = true;
     }
+    const observation = ++this.fileObservation;
     const file = yield* this.readFile(canonical);
     const source = file?.body ?? null;
-    if (this.closed || token !== this.selection) return;
-    if (resetDraft) this.draft = undefined;
+    if (this.closed || token !== this.selection || observation !== this.fileObservation) return;
     this.selected = canonical; this.selectedToken = token;
-    this.deleted = source === null;
-    if (this.draft !== undefined) this.conflict = source !== this.source;
-    else { this.source = source ?? ''; this.sourceDigest = file?.digest ?? ''; this.conflict = false; }
+    this.acceptFile(file, resetDraft);
     notify();
     if (source !== null) {
       const links = [...source.matchAll(/\[[^\]]*\]\(([^\s)]+)(?:\s+[^)]*)?\)/gu)].flatMap(match => {
@@ -216,17 +227,35 @@ export class ModSession {
     if (!this.closed && token === this.selection) this.detail = detail;
   });
 
-  save = Effect.fn('ModSession.save')(function*(this: ModSession, draft: string) {
-    if (!this.selected) return;
-    const path = this.selected;
-    this.draft = draft;
-    yield* this.command(actionArgs({ action: 'document.set', path, body: draft, expectedDigest: this.sourceDigest }), Schema.Unknown).pipe(Effect.tapError(error => Effect.sync(() => {
-      if (error instanceof ModFailure && error.code === 'FileChangedSinceRead') this.conflict = true;
-    })));
-    if (this.closed || this.selected !== path) return;
-    this.draft = undefined; this.conflict = false;
-    yield* this.open(path, false);
-    this.check = yield* this.command(['check'], Check, true);
+  save = Effect.fn('ModSession.save')(function*(this: ModSession, body?: string) {
+    if (body !== undefined) this.setDraft(body);
+    if (!this.selected || this.draft === undefined || this.closed || this.saving) return;
+    const path = this.selected, draft = this.draft, selection = this.selection, version = this.reloadVersion;
+    const current = () => !this.closed && selection === this.selection && version === this.reloadVersion;
+    this.saving = true; this.savingBody = draft;
+    this.fileObservation += 1;
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const file = yield* this.readFile(path);
+        if (!current()) return;
+        if (!file) { this.acceptFile(undefined, false); return; }
+        const write = yield* Effect.result(this.command(actionArgs({ action: 'document.set', path, body: draft, expectedDigest: file.digest }), Schema.Unknown));
+        if (!current()) return;
+        if (write._tag === 'Failure') {
+          if (write.failure instanceof ModFailure && write.failure.code === 'FileChangedSinceRead' && attempt < 2) continue;
+          return yield* Effect.fail(write.failure);
+        }
+        const observation = ++this.fileObservation;
+        const confirmed = yield* this.readFile(path);
+        if (!current() || observation !== this.fileObservation) return;
+        this.acceptFile(confirmed, false);
+        if (this.draft === draft) this.draft = undefined;
+        if (!current()) return;
+        const check = yield* this.command(['check'], Check, true);
+        if (current()) this.check = check;
+        return;
+      }
+    } finally { this.saving = false; this.savingBody = undefined; }
   });
 
   initialize = Effect.fn('ModSession.initialize')(function*(this: ModSession) {

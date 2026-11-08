@@ -57,6 +57,16 @@ declare module 'gpui-base' {
   export interface EditorState { value(): string; set_value(value: string): void; release(): boolean }
   export const EditorState: { new: (options?: { language?: string; value?: string; readonly?: boolean; font_family?: string; font_size?: number }) => EditorState };
   export const Editor: { new: (state: EditorState) => Element };
+  export interface TextareaState {
+    value(): string;
+    set_value(value: string): void;
+    set_auto_grow(min: number, max: number): void;
+    focus(): void;
+    on(event: 'change' | 'blur', body: (event: unknown, cx: Context) => void): boolean;
+    release(): boolean;
+  }
+  export const TextareaState: { new: (options?: { value?: string; rows?: number }) => TextareaState };
+  export const Textarea: { new: (state: TextareaState) => Element };
   export interface VirtualListScrollHandle { release(): boolean }
   export const VirtualListScrollHandle: { new: () => VirtualListScrollHandle };
 }

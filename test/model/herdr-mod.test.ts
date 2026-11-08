@@ -100,28 +100,28 @@ test('mod observes public CLI schemas, package pages and only fixed or linked Ma
 });
 
 // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md
-test('saving sends the CLI digest preimage then check and preserves a conflicting draft', async () => {
+test('saving reads the current CLI digest and overwrites an unobserved external edit before checking', async () => {
   const b = boundary(); await Effect.runPromise(b.session.open(path));
   await Effect.runPromise(b.session.save('# Cart\n\nEdited\n'));
   assert.deepEqual(b.writes, [{ path: `/repo/${path}`, expected: digest(original) }]);
   assert.equal(b.session.check?.ok, false); assert.equal(b.session.check?.findings[0]?.line, 2);
-  const saved = b.files.get(`/repo/${path}`)!;
   b.files.set(`/repo/${path}`, '# Agent edits\n');
-  await assert.rejects(Effect.runPromise(b.session.save('# My draft\n')));
-  assert.equal(b.session.draft, '# My draft\n'); assert.equal(b.session.conflict, true);
-  assert.equal(b.files.get(`/repo/${path}`), '# Agent edits\n'); assert.notEqual(saved, b.session.draft);
-  assert.equal(b.writes.length, 1);
+  await Effect.runPromise(b.session.save('# My draft\n'));
+  assert.equal(b.session.draft, undefined);
+  assert.equal(b.files.get(`/repo/${path}`), '# My draft\n');
+  assert.equal(b.writes[1]?.expected, digest('# Agent edits\n'));
+  assert.equal(b.writes.length, 2);
 });
 
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-test('refresh retains selection and a draft, reports deletion, and close suppresses in-flight reads', async () => {
+test('refresh retains selection, replaces the draft, reports deletion, and close suppresses in-flight reads', async () => {
   const b = boundary(); await Effect.runPromise(b.session.refresh()); await Effect.runPromise(b.session.open(path));
   b.session.draft = '# Draft'; b.files.set(`/repo/${path}`, '# Changed\n');
   await Effect.runPromise(b.session.refresh());
-  assert.equal(b.session.selected, path); assert.equal(b.session.draft, '# Draft');
-  assert.equal(b.session.source, original); assert.equal(b.session.conflict, true);
+  assert.equal(b.session.selected, path); assert.equal(b.session.draft, undefined);
+  assert.equal(b.session.source, '# Changed\n');
   b.files.delete(`/repo/${path}`); await Effect.runPromise(b.session.refresh());
-  assert.equal(b.session.deleted, true); assert.equal(b.session.draft, '# Draft');
+  assert.equal(b.session.deleted, true); assert.equal(b.session.draft, undefined);
   let finish: ((value: { code: number; stdout: string; stderr: string }) => void) | undefined;
   b.host.exec = async () => new Promise(resolve => { finish = resolve; });
   const pending = Effect.runPromise(b.session.open('docs/feature/other/README.md'));

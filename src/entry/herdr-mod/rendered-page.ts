@@ -2,8 +2,7 @@
 // @concord-implements docs/feature/herdr-mod/use-case/read-spec.md
 import { div, image, type Context, type Element } from 'gpui-kit';
 import { TextView } from 'gpui-base';
-import { settings } from 'herdr';
-import type { RenderedPage } from '../../model/herdr-mod/index.ts';
+import { pageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
 import { clickableRow, color, text } from './ui.ts';
 
 export function codeMarkdown(source: string, language: string): string {
@@ -12,25 +11,40 @@ export function codeMarkdown(source: string, language: string): string {
   const fence = '`'.repeat(length);
   return `${fence}${language}\n${source}\n${fence}`;
 }
-
-export function renderedPageElements(page: RenderedPage, assets: ReadonlyMap<number, string>, expanded: ReadonlySet<number>, toggle: (index: number, cx: Context) => void, link: (url: string, cx: Context) => void): Element[] {
-  return page.blocks.flatMap((block, index): Element[] => {
-    const id = `concord-block-${page.path}-${index}`;
-    const source = () => TextView.markdown(`${id}-source`, codeMarkdown(block.type === 'markdown' ? block.text : block.source, block.type === 'mermaid' ? 'mermaid' : 'typescript')).font_family(settings().font_family ?? '');
-    if (block.type === 'markdown') return [TextView.markdown(id, block.text).on_link_click(link)];
-    if (block.type === 'image') return 'error' in block
-      ? [div().id(id).child(`${block.alt || '图片'} · ${block.source} · ${block.error}`)]
-      : assets.has(index) ? [image(assets.get(index)!).id(id).max_w_full()] : [];
-    if (block.type === 'mermaid') return [
-      ...('error' in block ? [div().child(block.error)] : assets.has(index) ? [image(assets.get(index)!).id(id).max_w_full()] : []),
-      clickableRow(`${id}-toggle`).child(text(expanded.has(index) ? '收起 Mermaid 源码' : '展开 Mermaid 源码')).on_click((_event, cx) => toggle(index, cx)),
-      ...('error' in block || expanded.has(index) ? [source()] : []),
-    ];
-    return [
-      ...(block.description ? [div().child(block.description)] : []), source(),
-      ...('error' in block ? [div().child(block.error)] : assets.has(index) ? [
-        clickableRow(`${id}-play`).border_1().border_color(color('border')).child(text('在浏览器中播放')).on_click((_event, cx) => cx.open_url(assets.get(index)!)),
-      ] : []),
-    ];
+export function livePreviewElements(source: string, path: string, page: RenderedPage | undefined, renderedSource: string, assets: ReadonlyMap<number, string>, active: { block: SourceBlock; element: Element } | undefined, edit: (block: SourceBlock, cx: Context) => void, link: (url: string, cx: Context) => void): Element[] {
+  const parsed = pageSource(source);
+  const renderedSpecial = source === renderedSource ? parsed.special : pageSource(renderedSource).special;
+  const indexes = page?.blocks.flatMap((block, index) => block.type === 'markdown' ? [] : [index]) ?? [];
+  // Include the fence and metadata: identical p5 code can import different files.
+  const renderedIndexes = new Map(renderedSpecial.map((block, index) => [renderedSource.slice(block.start, block.end), indexes[index] ?? -1]));
+  return parsed.blocks.map((block, index) => {
+    if (active?.block.start === block.start) return active.element;
+    const id = `concord-block-${path}-${index}`;
+    const markdown = (value: string, suffix = '') => TextView.markdown(`${id}${suffix}`, parsed.definitions ? `${value}\n\n${parsed.definitions}` : value)
+      .on_link_click((url, cx) => { cx.stop_propagation(); link(url, cx); });
+    const children: Element[] = [];
+    if (block.literal) children.push(markdown(codeMarkdown(source.slice(block.start, block.end), 'markdown')));
+    else {
+      let cursor = block.start;
+      for (const special of parsed.special.filter(item => item.start >= block.start && item.end <= block.end)) {
+        if (special.start > cursor) children.push(markdown(source.slice(cursor, special.start), `-${cursor}`));
+        const type = special.node.type === 'code' ? special.node.lang : 'image';
+        const renderedIndex = renderedIndexes.get(source.slice(special.start, special.end)) ?? -1;
+        const rendered = page?.blocks[renderedIndex];
+        const asset = rendered?.type === type ? assets.get(renderedIndex) : undefined;
+        if (rendered && 'error' in rendered) children.push(text(rendered.error).text_color(color('blocked')));
+        if (asset && (type === 'image' || type === 'mermaid')) children.push(image(asset).max_w_full());
+        else {
+          if (rendered?.type === 'p5' && rendered.description) children.push(text(rendered.description));
+          children.push(markdown(codeMarkdown(source.slice(special.start, special.end), 'markdown'), `-${special.start}-source`));
+          if (asset && type === 'p5') children.push(clickableRow(`${id}-play`).child(text('在浏览器中播放')).on_click((_event, cx) => { cx.stop_propagation(); cx.open_url(asset); }));
+        }
+        cursor = special.end;
+      }
+      if (cursor < block.end) children.push(markdown(source.slice(cursor, block.end), children.length ? `-${cursor}` : ''));
+      if (!children.length) children.push(text('点击开始输入').text_color(color('dim')));
+    }
+    return div().id(`preview-block-${block.start}`).min_w(0).min_h(24).children(children)
+      .on_click((_event, cx) => { cx.stop_propagation(); edit(block, cx); });
   });
 }

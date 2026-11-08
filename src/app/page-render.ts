@@ -2,15 +2,14 @@
 // @concord-implements docs/feature/herdr-mod/cli.md#渲染一页
 import { posix } from 'node:path';
 import { Effect, Schema } from 'effect';
-import type { Definition, Image, ImageReference, Code, Nodes } from 'mdast';
 import { PeleError, renderAsync } from 'pele/lazy';
 import { RuntimeEnvironment } from '../base/environment/index.ts';
 import { Installation, sourceInstallation, sourceP5Runtime } from '../base/installation/index.ts';
 import { openReadRepository } from '../base/workspace/index.ts';
 import { snapshotBytes, snapshotMetadata } from '../base/sources/index.ts';
-import { ConcordError, digest, failure, fromMarkdown } from '../model/index.ts';
+import { ConcordError, digest, failure } from '../model/index.ts';
 import { WorkbenchThemeSchema, p5StandaloneDocument, type WorkbenchTheme } from '../model/p5/index.ts';
-import type { RenderBlock } from '../model/herdr-mod/index.ts';
+import { pageSource, type RenderBlock } from '../model/herdr-mod/index.ts';
 import { getViewFile } from './application.ts';
 import { compileP5WithDescription } from './p5-compiler.ts';
 
@@ -49,28 +48,12 @@ function concreteSvg(svg: string, theme: WorkbenchTheme): string {
   return svg;
 }
 
-function specialNodes(source: string): { node: Image | ImageReference | Code; source: string; start: number; end: number }[] {
-  const root = fromMarkdown(source);
-  const definitions = new Map<string, Definition>();
-  const visit = (node: Nodes, callback: (node: Nodes) => void): void => { callback(node); if ('children' in node) for (const child of node.children) visit(child, callback); };
-  visit(root, node => { if (node.type === 'definition') definitions.set(node.identifier.toLowerCase(), node); });
-  const result: ReturnType<typeof specialNodes> = [];
-  visit(root, node => {
-    if (node.type !== 'image' && node.type !== 'imageReference' && !(node.type === 'code' && (node.lang === 'mermaid' || node.lang === 'p5'))) return;
-    const start = node.position?.start.offset, end = node.position?.end.offset;
-    if (start === undefined || end === undefined) return;
-    const url = node.type === 'image' ? node.url : node.type === 'imageReference' ? definitions.get(node.identifier.toLowerCase())?.url ?? node.identifier : node.value;
-    result.push({ node, source: url, start, end });
-  });
-  return result.sort((a, b) => a.start - b.start);
-}
-
 export const renderPage = Effect.fn('page.render')(function*(root: string, path: string, colors: Readonly<Record<string, string>>) {
   const environment = yield* RuntimeEnvironment;
   const file = yield* getViewFile(root, path);
   const theme = yield* Effect.try({ try: () => workbenchTheme(colors), catch: cause => new ConcordError('InvalidInput', `Invalid page theme: ${String(cause)}`) });
   const repo = yield* openReadRepository(root, { access: 'read' });
-  const nodes = yield* Effect.try({ try: () => specialNodes(file.body), catch: failure });
+  const nodes = yield* Effect.try({ try: () => pageSource(file.body).special, catch: failure });
   const blocks: RenderBlock[] = [];
   let imageBytes = 0, baseBytes = Buffer.byteLength(JSON.stringify({ path: file.path, blocks: [] }));
   const imageError = (block: Extract<RenderBlock, { type: 'image' }>): RenderBlock => ({ type: 'image', source: block.source, alt: block.alt, error: '页面图片超过 6 MiB 输出预算' });

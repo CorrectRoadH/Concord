@@ -46,8 +46,14 @@ interface HostContext { notify(): void; stop_propagation(): void; open_url(url: 
 interface ModView { init(props: undefined, cx: HostContext): void; render(cx: HostContext): HostElement; close(cx: HostContext): void | Promise<void> }
 class HostState {
   private text: string;
+  private listeners = new Map<string, Callback>();
   constructor(text: string) { this.text = text; }
   value() { return this.text; } set_value(value: string) { this.text = value; } release() { return true; }
+  on(event: string, callback: Callback) { this.listeners.set(event, callback); return true; }
+  set_auto_grow(_min: number, _max: number) {}
+  focus() {}
+  input(value: string, cx: HostContext) { this.set_value(value); this.listeners.get('change')?.({}, cx); }
+  blur(cx: HostContext) { this.listeners.get('blur')?.({}, cx); }
 }
 class HostFailure extends Schema.TaggedError<HostFailure>()('HostFailure', { message: Schema.String }) {}
 const main = Effect.scoped(Effect.gen(function*() {
@@ -99,6 +105,8 @@ const main = Effect.scoped(Effect.gen(function*() {
     TextView: { markdown: (id: string, text: string) => new HostElement().id(id).child(text) },
     EditorState: { new: (options: { value?: string }) => new HostState(options.value ?? '') },
     Editor: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
+    TextareaState: { new: (options: { value?: string }) => new HostState(options.value ?? '') },
+    Textarea: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
     // Comparison runs load the previous published mod through this same host.
     InputState: { new: (options?: { value?: string }) => new HostState(options?.value ?? '') },
     Input: { new: (state: HostState) => { const element = new HostElement().child(state.value()); element.state = state; return element; } },
@@ -130,7 +138,7 @@ const main = Effect.scoped(Effect.gen(function*() {
       return reply;
     },
   };
-  const exports: Record<string, readonly (keyof typeof host)[]> = { 'gpui-kit': ['View', 'div', 'image', 'svg'], 'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState', 'Input', 'InputState'], herdr: ['exec', 'shared', 'setShared', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'settings'] };
+  const exports: Record<string, readonly (keyof typeof host)[]> = { 'gpui-kit': ['View', 'div', 'image', 'svg'], 'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState', 'Textarea', 'TextareaState', 'Input', 'InputState'], herdr: ['exec', 'shared', 'setShared', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'settings'] };
   plugin({ name: 'concord-herdr-host', setup(builder) {
     for (const [specifier, names] of Object.entries(exports)) {
       builder.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(names.map(name => [name, host[name]])) }));
@@ -161,21 +169,18 @@ const main = Effect.scoped(Effect.gen(function*() {
       await waitFor(() => output?.find('category-项目规则') !== undefined);
       click('category-项目规则'); click(`page-${documentPath}`);
       await waitFor(() => output?.find(`concord-body-${documentPath}`) !== undefined);
-      click('edit');
+      click('preview-block-0');
       const editor = output!.find('document-editor')!.state!;
-      editor.set_value(`${editor.value()}\nSAVED_FROM_NATIVE_MOD\n`); click('save');
-      await waitFor(() => output?.find('document-editor') === undefined && output?.find('concord-check') !== undefined);
+      editor.input(`${editor.value()}\n\nSAVED_FROM_NATIVE_MOD`, context()); editor.blur(context());
+      await waitFor(() => output?.find('document-editor') === undefined && (output?.text().includes('已保存') === true || output?.find('concord-check') !== undefined));
       if (!(await Effect.runPromise(fs.readFileString(sourcePath))).includes('SAVED_FROM_NATIVE_MOD')) throw new Error('Native save did not write its draft');
-      click('edit'); output!.find('document-editor')!.state!.set_value('# MY_CONFLICTING_DRAFT\n');
+      click('preview-block-0');
       const disk = `${await Effect.runPromise(fs.readFileString(sourcePath))}\nAGENT_CHANGE\n`;
       const temporary = `${sourcePath}.agent.tmp`;
       await Effect.runPromise(fs.writeFileString(temporary, disk).pipe(Effect.andThen(fs.rename(temporary, sourcePath))));
-      click('save');
-      await waitFor(() => output?.find('merge') !== undefined);
-      if (output!.find('document-editor')!.state!.value() !== '# MY_CONFLICTING_DRAFT\n' || await Effect.runPromise(fs.readFileString(sourcePath)) !== disk) throw new Error('Conflict replaced the disk or draft');
-      click('discard');
       await waitFor(() => output?.find(`concord-body-${documentPath}`)?.text().includes('AGENT_CHANGE') === true);
-      process.stdout.write(JSON.stringify({ boundary: 'actual mod and public CLI; external Herdr UI only', text: output?.text(), calls, workflow: 'initialized, edited, saved, checked, preserved conflict, discarded' }) + '\n');
+      if (output?.find('document-editor') || await Effect.runPromise(fs.readFileString(sourcePath)) !== disk) throw new Error('External reload did not replace the editor');
+      process.stdout.write(JSON.stringify({ boundary: 'actual mod and public CLI; external Herdr UI only', text: output?.text(), calls, workflow: 'initialized, edited in place, autosaved, checked, reloaded external update' }) + '\n');
       return;
     }
     let ended = await waitFor(() => output?.find('concord-tree')?.text().includes('measured') === true);

@@ -89,6 +89,7 @@ test('source mod initializes through the real CLI, reopens without the guide and
     VirtualListScrollHandle: state,
     TextView: { markdown(id: string, source: string) { markdown.push({ id, source }); return new Element().id(id).child(source); } },
     EditorState: state, Editor: { new: () => new Element() },
+    TextareaState: state, Textarea: { new: () => new Element() },
     focused: () => ({ cwd: root, pane: 'p1', tab: 'tab1' }), theme: () => ({}), settings: () => ({ font_family: '' }),
     panes: () => [{ pane: 'p1', terminal: 't1', focused: true, tab: 'tab1', cwd: root }],
     spaces: () => [{ id: 's1', machine: null, active: true, tabs: [{ id: 'tab1', active: true }] }],
@@ -112,7 +113,7 @@ test('source mod initializes through the real CLI, reopens without the guide and
   };
   const global = globalThis as typeof globalThis & { __concordGuideHost?: typeof host };
   global.__concordGuideHost = host;
-  const exports: Record<string, string[]> = { 'gpui-kit': ['View', 'div', 'image', 'svg'], 'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState'], herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'settings', 'shared', 'setShared'] };
+  const exports: Record<string, string[]> = { 'gpui-kit': ['View', 'div', 'image', 'svg'], 'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState', 'Textarea', 'TextareaState'], herdr: ['exec', 'focused', 'panes', 'spaces', 'run', 'closeOverlay', 'appHome', 'home', 'props', 'theme', 'settings', 'shared', 'setShared'] };
   plugin({ name: 'concord-test-herdr-host', setup(build) {
     for (const [specifier, members] of Object.entries(exports)) {
       build.module(specifier, () => ({ loader: 'object', exports: Object.fromEntries(members.map(name => [name, host[name as keyof typeof host]])) }));
@@ -168,7 +169,7 @@ test('source mod initializes through the real CLI, reopens without the guide and
       const button = output!.find(`page-${path}`);
       assert.ok(button?.click, `Missing page action ${path}`);
       button.click(undefined, context);
-      await wait(() => output?.find(`concord-body-${path}`)?.text() === source);
+      await wait(() => output?.find(`concord-body-${path}`)?.text().trimEnd() === source.trimEnd());
     };
     for (const kind of ['feature', 'engineering']) {
       const directory = `docs/${kind}/cart/architecture`;
@@ -179,7 +180,7 @@ test('source mod initializes through the real CLI, reopens without the guide and
       assert.ok(folder, 'kind directory is a navigation node');
       assert.equal(output!.find(`page-${directory}/storage.md`), undefined, 'kind directory starts folded');
       await clickPage(`${directory}/README.md`, `# ${kind} Cart architecture\n`);
-      assert.ok(output!.find(`page-${directory}/storage.md`), 'the opened directory shows its leaf page');
+      await wait(() => output?.find(`page-${directory}/storage.md`) !== undefined);
       await clickPage(`${directory}/storage.md`, `# ${kind} Cart storage\n`);
     }
     await clickPage('docs/feature/cart/unclassified.md', '# Unclassified page\n');
