@@ -1131,6 +1131,37 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       assert.ok(b.states.every(state => state.released));
       assert.deepEqual(b.errors, []);
     });
+    // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
+    // @issue docs/issues/herdr-directory-observation.md
+    await t.test('directory observation follows live targets without a host redraw and stays quiet otherwise', async () => {
+      const b = await start();
+      try {
+        const frames = b.frames.length, requests = b.requests.length;
+        b.fire(1000);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(b.frames.length, frames, 'an unchanged target does not redraw');
+        assert.equal(b.requests.length, requests, 'an unchanged target does not run commands');
+        b.paneList[0]!.cwd = '/other';
+        b.fire(1000);
+        await b.until(() => b.output.find('initialize') !== undefined);
+        assert.match(b.output.text(), /\/other/u);
+        b.paneList[0]!.focused = false;
+        b.paneList.push({ pane: 'p2', terminal: 'terminal-2', tab: 't2', focused: true, cwd: '/repo' });
+        b.spaceList[0]!.tabs.push({ id: 't2', active: true });
+        b.focusedTab = 't2';
+        b.fire(1000);
+        await b.until(() => b.output.find(`page-${page}`) !== undefined);
+        assert.match(b.output.text(), /\/repo/u);
+        b.paneList = [];
+        b.fire(1000);
+        assert.match(b.output.text(), /先在这个 tab 里打开一个终端/u);
+      } finally { await b.close(); }
+      const frames = b.frames.length, requests = b.requests.length;
+      b.fire(1000);
+      assert.equal(b.frames.length, frames);
+      assert.equal(b.requests.length, requests);
+      assert.ok(b.tasks.every(task => task.is_done()));
+    });
     await t.test('missing terminal shows its status without using stale space or focus cwd', async () => {
       host = new Boundary(); host.paneList = []; const view = new Mod(); host.view = view;
       view.init(undefined, host.context()); host.draw();
