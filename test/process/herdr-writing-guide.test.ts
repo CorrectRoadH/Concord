@@ -1,8 +1,8 @@
-// 跨进程保证：外部程序——真实mod经宿主exec调用CLI初始化和读取指南，并在会话重开时连接工作区。
+// 跨进程保证：外部程序——真实 mod 经宿主 exec 调用 CLI 初始化，提供交给 agent 的请求，并在会话重开时连接工作区。
 import assert from 'node:assert/strict';
 import { execFile, execFileSync, type ChildProcess } from 'node:child_process';
 import { plugin } from 'bun';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
@@ -47,18 +47,19 @@ class Element {
 interface Mod { init(props: undefined, cx: Context): void; render(cx: Context): Element; close(cx: Context): Promise<void> }
 
 // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#guide
-test('source mod initializes through the real CLI, reopens without the guide and navigates package directories', { timeout: 90_000 }, async () => {
+test('source mod initializes through the real CLI, copies the agent request and reopens without it', { timeout: 90_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-herdr-guide-'));
   const hostRoot = mkdtempSync(join(tmpdir(), 'concord-herdr-guide-host-'));
   const cli = installedConcordCli(), calls: string[][] = [], markdown: { id: string; source: string }[] = [];
   const tasks = new Set<Task>(), pending = new Set<Promise<unknown>>();
   const children = new Set<ChildProcess>(), sharedData = new Map<string, unknown>();
   const errors: unknown[] = [];
+  let clipboard = '';
   let view: Mod | undefined, output: Element | undefined;
   const context: Context = {
     stop_propagation() {},
     open_url() {},
-    write_to_clipboard() {},
+    write_to_clipboard(text) { clipboard = text; },
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     notify() { output = view?.render(context); },
     spawn(body) {
@@ -137,16 +138,16 @@ test('source mod initializes through the real CLI, reopens without the guide and
     view = new BuiltMod(); view.init(undefined, context); context.notify();
     await wait(() => output?.find('initialize') !== undefined);
     output!.find('initialize')!.click!(undefined, context);
-    await wait(() => output?.find('read-guide') !== undefined);
+    await wait(() => output?.find('copy-initialization') !== undefined);
     const files = execFileSync('git', ['-C', root, 'ls-files', '--others', '--exclude-standard', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
     assert.match(output!.text(), new RegExp(`新建了 ${files.length} 个文件`, 'u'));
-    assert.match(output!.text(), /下一步：让 agent 读写作指南\nconcord --skill docs-from-scratch/u);
-    output!.find('read-guide')!.click!(undefined, context);
-    await wait(() => output?.find('concord-writing-guide') !== undefined);
-    const guide = readFileSync('skills/concord/references/docs-from-scratch.md', 'utf8');
-    assert.equal(output!.find('concord-writing-guide')!.text().trimEnd(), guide.trimEnd());
-    assert.ok(markdown.some(item => item.id === 'concord-writing-guide' && item.source.trimEnd() === guide.trimEnd()));
-    assert.ok(calls.some(args => JSON.stringify(args) === JSON.stringify(['--skill', 'docs-from-scratch'])));
+    const request = `${root} 刚初始化了 Concord。\n请运行 concord --skill start，先问我从零写 Spec 还是为已有代码补写，再按对应的写作指南开始写。`;
+    assert.ok(output!.text().includes(request));
+    output!.find('copy-initialization')!.click!(undefined, context);
+    assert.equal(clipboard, request);
+    assert.equal(output!.find('read-guide'), undefined);
+    assert.ok(!markdown.some(item => item.id === 'concord-writing-guide'));
+    assert.ok(!calls.some(args => args.includes('--skill')));
     assert.ok(calls.some(args => JSON.stringify(args) === JSON.stringify(['--version'])));
     await close();
     for (const kind of ['feature', 'engineering']) {
@@ -162,9 +163,10 @@ test('source mod initializes through the real CLI, reopens without the guide and
     output!.find('category-项目规则')!.click!(undefined, context);
     await wait(() => output?.find('page-docs/taste.md') !== undefined);
     assert.equal(output!.find('initialize'), undefined);
+    assert.equal(output!.find('copy-initialization'), undefined);
     assert.equal(output!.find('read-guide'), undefined);
     assert.equal(output!.find('concord-writing-guide'), undefined);
-    assert.doesNotMatch(output!.text(), /下一步：让 agent 读写作指南|新建了/u);
+    assert.doesNotMatch(output!.text(), /刚初始化了 Concord|concord --skill start|新建了/u);
     const clickPage = async (path: string, source: string) => {
       const button = output!.find(`page-${path}`);
       assert.ok(button?.click, `Missing page action ${path}`);
