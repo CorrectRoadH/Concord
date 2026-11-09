@@ -10,7 +10,7 @@ Spec、Memory、Issue 和证据仍是仓库里的普通文件，删除缓存不�
 - 用 `concord cache status` 查看缓存是否可用、占多少空间；用 `concord cache clear` 删除缓存，下一次命令自动重建，结果不变。
 - 用 `trace gaps`、`trace show` 和 `review` 立即读取后台最近算好的诊断结果；需要当前结果时加 `--fresh`。
 - 在项目的任意子目录运行命令：Concord 自动启动或复用该项目的[工作区服务](../../concepts.md#workspace-server)，多个命令共享热的解析结果。
-- 在 CI 中用 `--server=command`，命令结束时回收本次启动的后台。
+- 在 CI 中用 `--server=command`，命令结束时回收本次启动的工作区服务。
 - 在 Linux 与 macOS 上直接使用发版归档，不需要 Rust 编译器、全局程序或数据库服务。
 
 ## 上手
@@ -64,7 +64,7 @@ memory/cache-lesson.md — 删除缓存后检查结论不变
   # 删除缓存后检查结论不变 缓存只保存派生数据。清空后第一次检查重建缓存。
 ```
 
-在 CI 里让命令自己回收后台：
+在 CI 里让命令自己回收工作区服务：
 
 ```sh
 concord --server=command check
@@ -80,7 +80,7 @@ state: absent
 
 缓存放在 Git-private 目录的 `cache.hawdb` 中，不进入提交。每次命中前，Concord 都核对当前文件的摘要；文件新增、修改或删除后，对应结果立即失效并重新读取。缓存缺失、损坏或被占用时，命令从源文件重新计算，结论不变。
 
-查询命令自动启动该项目的工作区服务。服务长期持有缓存，CLI 与 Web 经由它读取，遵守同一套入口与生命周期约束。CI 使用 `--server=command`；此时项目已有后台则明确失败，不结束其它客户端正在使用的服务（[适配项目的开发方式](../../taste.md#t-9)）。
+查询命令自动启动该项目的工作区服务。服务长期持有缓存，CLI 与 Web 经由它读取，遵守同一套入口与生命周期约束。CI 使用 `--server=command`；此时项目已有工作区服务则明确失败，不结束其它客户端正在使用的服务（[适配项目的开发方式](../../taste.md#t-9)）。
 
 `trace gaps`、`trace show` 与 `review` 默认读取后台构建的诊断[投影](../../concepts.md#projection)。它只回答构建时的诊断问题，标明构建时间与一致性，不授权 `check` 成功或证据裁决；`check`、检索和证据裁决总是使用当前来源。
 
