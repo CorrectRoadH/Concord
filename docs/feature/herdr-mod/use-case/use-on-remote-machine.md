@@ -34,7 +34,7 @@
 | 情形 | 结果 |
 | --- | --- |
 | `vps` 上没有 `concord` | 显示“vps 上没有 Concord 命令行工具”和写明 `vps` 的交给 agent 的安装请求；装好后自动继续，本机有没有 Concord 不影响结果 |
-| `vps` 上的 Concord 不认识 mod 用到的命令 | 显示它不认识的命令与写明 `vps` 的交给 agent 的升级请求 |
+| `vps` 上的 Concord 不认识 mod 用到的命令或选项 | 显示它不认识的命令或选项与写明 `vps` 的交给 agent 的升级请求 |
 | 连不上 `vps` | 显示“连不上 vps”与“Herdr 恢复连接后自动重试”；恢复后自动继续，不需要重新打开 |
 | 工作区服务不存在或已退出 | mod 通过远程 Herdr core 托管新的前台服务，再等待结果；并发面板复用同一个仓库服务 |
 | 首次读取连续两轮等待后仍没有可读投影 | 结束读取提示，显示 `WorkspaceProjectionPending` 的错误与“复制给 agent”，不无限重试 |

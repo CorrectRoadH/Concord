@@ -1026,6 +1026,20 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.equal(detections().length, 3);
       } finally { await b.close(); }
     });
+    // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md
+    // @issue docs/issues/herdr-cli-flag-upgrade.md
+    await t.test('unrecognized CLI flags show the remote upgrade request', async () => {
+      const b = await start(boundary => {
+        boundary.spaceList[0]!.machine = 'vps';
+        boundary.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'InvalidInput', message: 'Unrecognized flag: --wait in command concord server status' }) };
+      }, () => host.output.text().includes('Unrecognized flag'));
+      try {
+        assert.match(b.output.text(), /vps 上的 Concord 版本过旧/u);
+        b.click('copy-cli');
+        assert.match(b.clipboard, /vps/u);
+        assert.match(b.clipboard, /--wait/u);
+      } finally { await b.close(); }
+    });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('layout sidebar ignores delayed root resolution from an earlier tab', async () => {
       const b = await start();
