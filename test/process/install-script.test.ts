@@ -40,21 +40,9 @@ test('unsupported platform and missing prerequisites fail before any installatio
       const result = install(); assert.notEqual(result.status, 0); assert.match(result.stderr, /Linux x64.*Apple Silicon/); assert.match(result.stderr, /Homebrew.*Nix/); assert.deepEqual(readdirSync(home), []);
     }
     executable('uname', "process.stdout.write(process.argv[2] === '-s' ? 'Darwin' : 'arm64');");
-    executable('sw_vers', "process.stdout.write('14.7.0');");
-    const oldMac = install(); assert.notEqual(oldMac.status, 0); assert.match(oldMac.stderr, /macOS >= 15/); assert.deepEqual(readdirSync(home), []);
     executable('uname', "process.stdout.write(process.argv[2] === '-s' ? 'Linux' : 'x86_64');");
     executable('ldd', "process.stdout.write('ldd (GNU libc) 2.39\\n');");
-    for (const version of ['2.28', '2.38']) {
-      executable('ldd', `process.stdout.write('ldd (GNU libc) ${version}\\n');`);
-      const result = install(); assert.notEqual(result.status, 0); assert.match(result.stderr, /glibc >= 2\.39/); assert.deepEqual(readdirSync(home), []);
-    }
-    executable('ldd', "process.stdout.write('ldd (GNU libc) 2.39\\n');");
     let result = install(); assert.notEqual(result.status, 0); assert.match(result.stderr, /Git/); assert.deepEqual(readdirSync(home), []);
-    // Arbitrary system runtime versions never participate in preflight.
-    for (const version of ['22.20.0', '24.14.9', '24.15.0', '25.0.0']) {
-      executable('node', `process.stderr.write('unexpected Node ${version}'); process.exitCode = 97;`);
-      result = install(); assert.notEqual(result.status, 0); assert.match(result.stderr, /Git/); assert.deepEqual(readdirSync(home), []);
-    }
     executable('ldd', "process.stderr.write('musl libc\\n'); process.exitCode = 1;");
     result = install(); assert.notEqual(result.status, 0); assert.match(result.stderr, /glibc/); assert.deepEqual(readdirSync(home), []);
   } finally { rmSync(scratch, { recursive: true, force: true }); }

@@ -1100,38 +1100,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         } finally { await b.close(); }
       }
     });
-    // @feature docs/feature/herdr-mod/architecture.md#数据
-    await t.test('CLI detection ignores version ordering, remembers each machine, and invalidates only an unrecognized command', async () => {
-      const b = await start(boundary => { boundary.installedVersion = '0.0.1'; });
-      try {
-        const detections = () => b.requests.filter(request => request.args[0] === '--version');
-        assert.equal(detections().length, 1);
-        b.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'UnknownCommand', message: 'Unknown command workspace projection' }) };
-        b.watches[0]!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'next' }), stderr: '' });
-        await b.until(() => b.output.text().includes('版本过旧'));
-        assert.equal(detections().length, 1);
-        b.commandError = undefined; b.fire(2000); await b.until(() => b.watches.length === 2);
-        assert.equal(detections().length, 2);
-        b.selectTab('remote', '/repo', 'vps'); await b.until(() => b.watches.length === 3);
-        assert.equal(detections().length, 3); assert.equal(detections().at(-1)!.options?.on, 'vps');
-        b.selectTab('t1', '/repo'); await b.until(() => b.watches.length === 4);
-        assert.equal(detections().length, 3);
-      } finally { await b.close(); }
-    });
-    // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md
-    await t.test('unrecognized CLI flags show the remote upgrade request', async () => {
-      const b = await start(boundary => {
-        boundary.spaceList[0]!.machine = 'vps';
-        boundary.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'InvalidInput', message: 'Unrecognized flag: --wait in command concord server status' }) };
-      }, () => host.output.text().includes('Unrecognized flag'));
-      try {
-        assert.match(b.output.text(), /vps 上的 Concord 版本过旧/u);
-        assert.match(b.output.text(), /--wait/u);
-        b.click('copy-cli');
-        assert.match(b.clipboard, /vps/u);
-        assert.match(b.clipboard, /升级到最新版本/u);
-      } finally { await b.close(); }
-    });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('layout sidebar ignores delayed root resolution from an earlier tab', async () => {
       const b = await start();

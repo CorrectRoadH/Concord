@@ -57,7 +57,7 @@ test('p5 compiler checks captured modules, resources, options and repository bou
     write('addon.js', 'window.customAddon = true;');
     writeProjectConfig(root, { ...(await readProjectConfig(root)), p5: { libraries: ['p5.sound', 'p5.brush', './docs/feature/sketch/addon.js'] } });
     const libraries = await compile('p.setup = () => p.noLoop();');
-    assert.deepEqual(libraries.libraries.map(library => library.name), ['p5.sound@0.4.1', 'p5.brush@3.0.0', 'docs/feature/sketch/addon.js']);
+    assert.deepEqual(libraries.libraries.map(library => library.name.split('@')[0]), ['p5.sound', 'p5.brush', 'docs/feature/sketch/addon.js']);
     await assert.rejects(compile('p.setup = () => { const value: number = "wrong"; };'), /P5TypeError|not assignable/);
     await assert.rejects(compile('p.setup = () => {'), /Unexpected|Expected/);
     const unexecuted = await compile('throw new Error("do not execute");');

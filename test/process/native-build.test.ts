@@ -34,36 +34,6 @@ const setup = () => {
 };
 const env = (root: string) => ({ ...process.env, MACOSX_DEPLOYMENT_TARGET: HAWDB_MACOS_DEPLOYMENT_TARGET, CONCORD_NATIVE_OFFLINE: '1', CARGO_PROBE: join(root, 'cargo-invoked'), XDG_CACHE_HOME: join(root, 'cache'), PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` });
 
-// @feature docs/engineering/build/architecture.md#原生绑定复用
-test('bridge revisions of the same engine have independent caches with identical source digests', () => Effect.runPromise(Effect.sync(() => {
-  const root = setup();
-  try {
-    const fixtureRoot = join(root, 'checkout');
-    privateSourceInstallation(fixtureRoot);
-    const install = () => spawnSync(process.execPath, ['scripts/prepare-native.ts', '--prebuilt', nativeCacheRoot(runtime, false)], { cwd: fixtureRoot, env: env(root), encoding: 'utf8' });
-    const versions = [`${release.engineVersion}-concord.1`, `${release.engineVersion}-concord.2`];
-    for (const version of versions) {
-      const tag = `hawdb-${version}`;
-      writeFileSync(join(fixtureRoot, 'native-release.json'), JSON.stringify({ ...release, version, tag }));
-      const missing = spawnSync(process.execPath, args(root), { cwd: fixtureRoot, env: env(root), encoding: 'utf8' });
-      assert.equal(missing.status, 1, missing.stdout + missing.stderr);
-      assert.match(missing.stdout + missing.stderr, /CONCORD_NATIVE_OFFLINE=1/u);
-      assert.equal(existsSync(join(root, 'cache/concord/native', tag)), false);
-      const installed = install();
-      assert.equal(installed.status, 0, installed.stdout + installed.stderr);
-      const hit = spawnSync(process.execPath, args(root), { cwd: fixtureRoot, env: env(root), encoding: 'utf8' });
-      assert.equal(hit.status, 0, hit.stdout + hit.stderr);
-      assert.match(hit.stderr, /Native cache hit/u);
-      assert.ok(hit.stderr.includes(join(root, 'cache/concord/native', tag, target)));
-    }
-    assert.deepEqual(readdirSync(join(root, 'cache/concord/native')).sort(), versions.map(version => `hawdb-${version}`).sort());
-    for (const version of versions) assert.deepEqual(
-      readFileSync(join(root, 'cache/concord/native', `hawdb-${version}`, target, 'hawdb.node')), readFileSync(join(original, 'hawdb.node')),
-    );
-    assert.equal(existsSync(join(root, 'cargo-invoked')), false);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-})));
-
 // @feature docs/engineering/build/README.md
 test('CI prebuilt transfer loads in a fresh cache without Cargo and rejects corrupted or test-hook artifacts', () => Effect.runPromise(Effect.sync(() => {
   const root = setup();

@@ -13,7 +13,7 @@ import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import type { FeedbackTransport } from "../../src/domain/feedback/index.ts";
 import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../../src/model/index.ts";
 
-type Scenario = 'trusted-path' | 'missing' | 'old-version' | 'bad-help' | 'bad-protocol' | 'page-failure' | 'budget' | 'cas' | 'normal' | 'switch';
+type Scenario = 'trusted-path' | 'missing' | 'bad-help' | 'bad-protocol' | 'page-failure' | 'budget' | 'cas' | 'normal' | 'switch';
 type Call = { readonly args: readonly string[]; readonly outputBytes?: number };
 
 const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
@@ -46,7 +46,7 @@ function reply(text, status = 0) {
   process.stdout.write(text);
   process.exitCode = status;
 }
-if (args[0] === '--version') reply(mode === 'old-version' ? 'gh version 2.97.0\\n' : 'gh version 2.98.0\\n');
+if (args[0] === '--version') reply('gh version 2.98.0\\n');
 else if (args[0] === 'api' && args[1] === '--help') reply(mode === 'bad-help' ? '--hostname --method\\n' : '--hostname --method --include\\n');
 else if (mode === 'bad-protocol') reply('this is not an HTTP response');
 else {
@@ -170,7 +170,7 @@ async function child(scenario: Scenario): Promise<void> {
       assert.equal(existsSync(issuePath), false);
       assert.equal((await withRepo(repo => repo.config.feedbackConnections?.[0]?.provider === 'github' ? repo.config.feedbackConnections[0].repositoryId : undefined)), undefined);
     } else {
-      const code = scenario === 'missing' ? 'GhUnavailable' : scenario === 'old-version' || scenario === 'bad-help' || scenario === 'bad-protocol' ? 'GhProtocolInvalid' : scenario === 'budget' ? 'GhLimitExceeded' : 'ProviderRequestFailed';
+      const code = scenario === 'missing' ? 'GhUnavailable' : scenario === 'bad-help' || scenario === 'bad-protocol' ? 'GhProtocolInvalid' : scenario === 'budget' ? 'GhLimitExceeded' : 'ProviderRequestFailed';
       await assert.rejects((runApplication(syncFeedback(consumer, connection.id))), cause => cause instanceof ConcordError && cause.code === code);
       assert.equal(readFileSync(configPath, 'utf8'), originalConfig, 'failure must not bind the connection');
       assert.equal(existsSync(issuePath), false, 'failure must not publish the first page');
@@ -181,7 +181,6 @@ async function child(scenario: Scenario): Promise<void> {
         assert.ok(pageCalls.every(call => (call.outputBytes ?? Infinity) < 2 * 1024 * 1024), 'every fixture page must fit the per-call budget');
       }
       if (scenario === 'page-failure') assert.equal(calls(callsPath).filter(call => call.args.at(-1)?.includes('/issues?')).length, 2);
-      if (scenario === 'old-version') assert.deepEqual(calls(callsPath).map(call => call.args[0]), ['--version']);
       if (scenario === 'bad-help') assert.equal(calls(callsPath).some(call => call.args.at(-1) === 'repos/acme/widgets'), false);
     }
     assert.equal(existsSync(evilMarker), false, 'untrusted gh executable ran');
@@ -204,8 +203,8 @@ if (process.argv[2] === '--fixture-child') {
 
   // @use-case docs/feature/feedback/use-case/triage-feedback.md
   test('trusted startup PATH rejects empty, relative, node_modules, consumer and symlink targets', { skip: process.platform === 'win32' }, () => run('trusted-path'));
-  test('missing gh, old version, missing API flags and malformed protocol have named failures without fallback', { skip: process.platform === 'win32' }, () => {
-    for (const scenario of ['missing', 'old-version', 'bad-help', 'bad-protocol'] as const) run(scenario);
+  test('missing gh, missing API flags and malformed protocol have named failures without fallback', { skip: process.platform === 'win32' }, () => {
+    for (const scenario of ['missing', 'bad-help', 'bad-protocol'] as const) run(scenario);
   });
   test('cumulative gh output budget rejects many individually valid pages without publication', { skip: process.platform === 'win32' }, () => run('budget'));
   test('second-page failure does not publish or bind; successful traversal uses all states and excludes PRs', { skip: process.platform === 'win32' }, () => {

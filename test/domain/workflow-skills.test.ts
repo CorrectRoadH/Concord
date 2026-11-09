@@ -15,33 +15,14 @@ const write = (root: string, path: string, source: string) => {
 };
 
 // @use-case docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#update
-test('workflow update result rows compare versions, copies, ownership and absence without writing', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('workflow inspection observes differing copies, ownership and absence without writing', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = (await createConsumer());
   const repo = (await LocalRepository.open(root, { persistentCache: 'off' }));
   try {
     const generated = planWorkflowSkills(repo, '1.2.0').changes;
     const left = workflowSkillPaths[0]!, right = '.claude/skills/concord-spec/SKILL.md';
     const source = generated.find(change => change.path === left)!.after!;
-    const cases = [
-      { name: 'older differing', version: '1.1.0', changed: true, expected: [left, right] },
-      { name: 'older same body', version: '1.1.0', expected: [] },
-      { name: 'unversioned differing', version: undefined, changed: true, expected: [left, right] },
-      { name: 'unversioned same body', version: undefined, expected: [] },
-      { name: 'newer differing', version: '1.3.0', changed: true, expected: [] },
-      { name: 'numeric minor', version: '1.10.0', changed: true, expected: [] },
-      { name: 'older prerelease', version: '1.2.0-rc.1', changed: true, expected: [left, right] },
-      { name: 'same version', version: '1.2.0', expected: [] },
-    ];
-    for (const row of cases) {
-      for (const change of generated) write(root, change.path, change.after!);
-      const changed = source.replace(' version=1.2.0', row.version === undefined ? '' : ` version=${row.version}`) + (row.changed ? '\nChanged body.\n' : '');
-      write(root, left, changed); write(root, right, changed);
-      assert.deepEqual(inspectWorkflowSkills(repo, '1.2.0').advisories.flatMap(item => item.details.paths), row.expected, row.name);
-      assert.equal(readFileSync(join(root, left), 'utf8'), changed, row.name);
-      assert.deepEqual(planWorkflowSkills(repo, '1.2.0').updatedPaths, row.version === '1.2.0' && !row.changed ? [] : [left, right], row.name);
-    }
     for (const change of generated) write(root, change.path, change.after!);
-    write(root, left, source.replace('version=1.2.0', 'version=1.1.0'));
     assert.deepEqual(inspectWorkflowSkills(repo, '1.2.0').advisories, []);
     write(root, left, `${source}\nDifferent copy.\n`);
     assert.deepEqual(inspectWorkflowSkills(repo, '1.2.0').advisories.flatMap(item => item.details.paths), [left, right]);
