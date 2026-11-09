@@ -49,31 +49,38 @@ test('poll deadline aborts an in-flight HTTP request and preserves unexpected HT
 }).pipe(Effect.timeout(5000))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('view fixture shutdown drains a socket with an incomplete HTTP request', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('view fixture shutdown drains a socket with an incomplete HTTP request', t => Effect.runPromise(Effect.tryPromise(async () => {
+  const started = performance.now();
   const root = mkdtempSync(join(tmpdir(), 'concord-e2e-lifecycle-'));
   execFileSync('git', ['init', '-q', root]);
   const repo = (await LocalRepository.open(root, { initialize: true }));
   try { (await initialize(repo, false, { testRoots: [] })); } finally { repo.close(); }
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
 
+  t.diagnostic(`view startup: ${Math.round(performance.now() - started)}ms`);
   const socket = connect(server.port, '127.0.0.1');
   socket.on('error', () => {});
   try {
-    await once(socket, 'connect');
-    const disconnected = new Promise<void>(resolve => socket.once('close', () => resolve()));
-    // Bun defers accepting bare TCP handshakes until data arrives. Keep the
-    // request incomplete so cleanup cannot depend on the request handler.
-    // Drain any shutdown response so the readable side can consume FIN and close.
-    socket.resume();
-    socket.write('GET / HTTP/1.1\r\n');
-    await server.close();
-    await disconnected;
-    assert.equal((server.process.exitCode === null && server.process.signalCode === null), false);
-    assert.equal(socket.destroyed, true);
-    await server.close();
+    // Bound the lifecycle under test; source Web compilation has its own startup deadline.
+    await Effect.runPromise(Effect.tryPromise(async () => {
+      await once(socket, 'connect');
+      const disconnected = new Promise<void>(resolve => socket.once('close', () => resolve()));
+      // Bun defers accepting bare TCP handshakes until data arrives. Keep the
+      // request incomplete so cleanup cannot depend on the request handler.
+      // Drain any shutdown response so the readable side can consume FIN and close.
+      socket.resume();
+      socket.write('GET / HTTP/1.1\r\n');
+      const closing = performance.now();
+      await server.close();
+      t.diagnostic(`view shutdown: ${Math.round(performance.now() - closing)}ms`);
+      await disconnected;
+      assert.equal((server.process.exitCode === null && server.process.signalCode === null), false);
+      assert.equal(socket.destroyed, true);
+      await server.close();
+    }).pipe(Effect.timeout(10000)));
   } finally {
     socket.destroy();
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
-}).pipe(Effect.timeout(10000))));
+})));
