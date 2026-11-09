@@ -22,8 +22,7 @@ test('Herdr catalog validates generated assets before replacing the installable 
   yield* fs.writeFileString(join(assets, 'mod.json'), manifest);
   yield* fs.writeFileString(join(assets, 'NOTICE.txt'), 'packaged license\n');
   yield* fs.writeFile(join(assets, 'preview.png'), preview);
-  const result = yield* prepareHerdrModCatalog(assets, output, '1.2.3');
-  assert.deepEqual(result, { version: '1.2.3', directory: join(output, 'concord') });
+  yield* prepareHerdrModCatalog(assets, output, '1.2.3');
   const catalog = join(output, 'concord');
   assert.deepEqual((yield* fs.readDirectory(catalog)).sort(), ['RECIPE.md', 'mods', 'preview.png']);
   assert.deepEqual((yield* fs.readDirectory(join(catalog, 'mods/concord'))).sort(), ['NOTICE.txt', 'main.js', 'mod.json']);

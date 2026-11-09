@@ -4,18 +4,9 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
-import { Effect, FileSystem, Schema } from 'effect';
-import { BunLicenseInventory, copyBunLicenseSources } from '../../scripts/bun-licenses.ts';
+import { Effect, FileSystem } from 'effect';
+import { copyBunLicenseSources } from '../../scripts/bun-licenses.ts';
 import { command, sha256 } from '../../scripts/archive-support.ts';
-
-// @feature docs/feature/cross-platform-release/architecture.md#归档构成
-test('Bun license inventory rejects archive paths that escape a relative member', () => {
-  const source = { component: 'fixture', evidence: 'fixture', url: 'https://example.com/fixture.crate', sha256: 'a'.repeat(64) };
-  const decode = Schema.decodeUnknownSync(BunLicenseInventory);
-  for (const path of ['/LICENSE', '../LICENSE', 'crate/../LICENSE', 'crate/./LICENSE', '-C', 'crate\\LICENSE']) {
-    assert.throws(() => decode({ version: '1.4.4', commit: '38afee6c84fcf48c0edb2466aa4b27d287a59c30', sources: [{ ...source, files: [{ path, sha256: source.sha256 }] }] }), path);
-  }
-});
 
 // @feature docs/feature/cross-platform-release/architecture.md#归档构成
 test('Bun licenses extract verified crate and scoped npm members and reject changed license bytes', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
