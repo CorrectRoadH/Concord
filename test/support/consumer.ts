@@ -23,7 +23,7 @@ export function retainConsumer(root: string): void {
   if (receipt !== undefined) appendFileSync(receipt, `${root}\n`);
 }
 
-/** One initialized consumer per test process, cloned with its real Git metadata. */
+/** One initialized template per file run, cloned with its real Git metadata. */
 export async function createConsumer(): Promise<string> {
   preparing ??= (async () => {
     temporary = mkdtempSync(join(tmpdir(), 'concord-consumers-'));
@@ -48,5 +48,9 @@ after(async () => {
   const roots = [...retained].filter(existsSync);
   if (failures.length || roots.length) throw new AggregateError(failures, `Consumer cleanup unconfirmed; retained roots: ${roots.join(', ')}`);
   if (temporary !== undefined) rmSync(temporary, { recursive: true, force: true });
+  temporary = undefined;
+  template = undefined;
+  preparing = undefined;
+  retained.clear();
 });
 before(async () => { const root = (await createConsumer()); rmSync(root, { recursive: true, force: true }); });

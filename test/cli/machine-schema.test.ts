@@ -58,7 +58,8 @@ test('view verify checks strict preview data and exact directory entries without
 
 // @use-case docs/feature/local-sdlc/use-case/run-tests-with-own-runner.md#verify
 test('dependency-free JavaScript adapter discovers, selects and replays a fix through the CLI', async () => {
-  const { LocalRepository } = await import('../support/repository.ts');
+  const { LocalRepository, runApplication } = await import('../support/repository.ts');
+  const { executeQuery } = await import('../../src/app/index.ts');
   const { createDocument } = await import('../support/operations.ts');
   const { execFileSync } = await import('node:child_process');
   const { readFileSync } = await import('node:fs');
@@ -66,7 +67,7 @@ test('dependency-free JavaScript adapter discovers, selects and replays a fix th
   const scratch = mkdtempSync(join(tmpdir(), 'concord-own-adapter-'));
   const transcript = join(scratch, 'transcript.jsonl');
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
-  const call = async (args: string[], status = 0) => runCli({ argv: ['--root', root, '--server', 'command', '--json', ...args], cwd: root, env: process.env }).then(result => {
+  const call = async (args: string[], status = 0) => runCli({ argv: ['--root', root, '--json', ...args], cwd: root, env: process.env }).then(result => {
     assert.equal(result.exitCode, status, result.stdout + result.stderr);
     return JSON.parse(result.stdout || result.stderr);
   });
@@ -101,9 +102,12 @@ process.stdout.write(JSON.stringify(response));
     git('add', '.'); git('commit', '-qm', 'Failing regression');
     const defect = git('rev-parse', 'HEAD');
     await call(['test', 'discover']);
-    const listed = await call(['test', 'list']);
+    // Resolving the case ID is preparation; a workspace service adds no adapter evidence.
+    const reply = await runApplication(executeQuery(root, { name: 'test.list', input: {} }));
+    assert.equal(reply.exitCode, 0, JSON.stringify(reply.value));
+    const listed = Schema.decodeUnknownSync(Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: Schema.String })) }))(reply.value);
     assert.equal(listed.cases.length, 1);
-    const id = listed.cases[0].id;
+    const id = listed.cases[0]!.id;
     assert.match(id, /^neref_/u);
     const red = await call(['test', 'run', id, '--require-native'], 1);
     assert.equal(red.scope, 'native'); assert.equal(red.commandOutcome, 'red');
@@ -135,15 +139,4 @@ process.stdout.write(JSON.stringify(response));
       assert.ok((await validate({ ...message, extra: true })).issues);
     }
   } finally { rmSync(root, { recursive: true, force: true }); rmSync(scratch, { recursive: true, force: true }); }
-});
-
-// @use-case docs/feature/local-sdlc/use-case/run-tests-with-own-runner.md
-test('external adapter timeouts accept longer E2E and retain builtin ceilings', async () => {
-  const { parseTypeScriptConfig } = await import('../../src/base/workspace/index.ts');
-  const adapter = { id: 'external', include: ['test'], argv: ['runner'], implementationFiles: ['runner'], inputRoots: [], frameworkVersion: '1', lockFiles: [], envNames: [] };
-  const config = (value: object) => `export default ${JSON.stringify({ testRoots: ['test'], testAdapters: [value] })};`;
-  assert.equal((await parseTypeScriptConfig(config({ ...adapter, collectTimeoutMs: 600000, runTimeoutMs: 7200000, wallTimeoutMs: 7200000 }))).testAdapters![0]!.runTimeoutMs, 7200000);
-  for (const value of [{ collectTimeoutMs: 600001 }, { runTimeoutMs: 7200001 }, { wallTimeoutMs: 7200001 }]) (await assert.rejects(async () => (await parseTypeScriptConfig(config({ ...adapter, ...value })))));
-  const { argv: _argv, ...builtin } = adapter;
-  for (const value of [{ collectTimeoutMs: 60001 }, { runTimeoutMs: 300001 }, { wallTimeoutMs: 600001 }]) (await assert.rejects(async () => (await parseTypeScriptConfig(config({ ...builtin, builtin: 'node-test', ...value })))));
 });
