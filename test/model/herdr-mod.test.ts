@@ -210,7 +210,6 @@ test('initialization keeps waiting if its first wake-up precedes a readable proj
 });
 
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
-// @issue docs/issues/herdr-remote-host-launch.md
 test('remote cold loading keeps its service outside short execs and confirms its handshake before waiting', async () => {
   const b = boundary(), execute = b.host.exec;
   let managed = false, handshaken = false, projections = 0;
@@ -283,7 +282,6 @@ test('remote hosting failure preserves the host output as a named failure', asyn
 });
 
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
-// @issue docs/issues/herdr-remote-host-launch.md
 test('remote hosting spawn failure preserves diagnostics instead of reporting a lost machine', async () => {
   const session = new ModSession({ exec: async (command) => {
     if (command === 'hc') throw new Error('cannot run hc: permission denied');
