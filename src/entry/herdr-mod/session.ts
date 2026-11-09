@@ -22,6 +22,7 @@ const Show = Schema.Struct({ tests: Schema.optional(Schema.Array(Case)), codeDec
 const Check = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String, line: Schema.optional(Schema.Int), message: Schema.String })) });
 const Initialization = Schema.Struct({ createdPaths: Schema.Array(Path) });
 const ErrorReply = Schema.Struct({ error: Schema.String, message: Schema.String });
+const ServerStatus = Schema.Struct({ state: Schema.Literals(['absent', 'opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']) });
 const File = Schema.Struct({ path: Path, body: Schema.String, digest: Schema.String });
 export type ModPage = typeof Page.Type;
 export type ModCheck = typeof Check.Type;
@@ -142,11 +143,12 @@ export class ModSession {
     const selection = this.selectedToken;
     type Observation = { snapshot: typeof ModWorkspaceSnapshot.Type; projection: typeof ModWorkspaceProjection.Type['projection'] | undefined } | undefined;
     const readProjection = Effect.gen({ self: this }, function*(): Effect.fn.Return<Observation, ModFailure | ModDisconnected> {
-      while (current()) {
+      for (let attempt = 0; current(); attempt++) {
         const reply = yield* Effect.result(this.command(['workspace', 'projection'], ModWorkspaceProjection));
         if (reply._tag === 'Success') return reply.success;
         if (!(reply.failure instanceof ModFailure) || reply.failure.code !== 'WorkspaceProjectionPending') return yield* Effect.fail(reply.failure);
-        const waited = yield* Effect.result(this.command(['workspace', 'wait'], WorkspaceWait));
+        if (attempt === 2) return yield* Effect.fail(reply.failure);
+        const waited = yield* Effect.result(this.waitForWorkspace());
         if (waited._tag === 'Failure' && (!(waited.failure instanceof ModFailure) || waited.failure.code !== 'WorkspaceProjectionPending')) return yield* Effect.fail(waited.failure);
       }
     });
@@ -260,9 +262,23 @@ export class ModSession {
 
   checkNow = Effect.fn('ModSession.checkNow')(function*(this: ModSession) { this.check = yield* this.command(['check'], Check, true); });
 
-  wait = Effect.fn('ModSession.wait')(function*(this: ModSession) {
-    return yield* this.command(['workspace', 'wait', ...(this.workspaceDigest === undefined ? [] : ['--after', this.workspaceDigest])], WorkspaceWait);
+  private waitForWorkspace = Effect.fn('ModSession.waitForWorkspace')(function*(this: ModSession, after?: string) {
+    if (this.machine !== null) {
+      const status = yield* this.command(['server', 'status'], ServerStatus);
+      if (status.state === 'absent') {
+        // A remote exec reclaims detached children. Transfer the foreground
+        // service to its own core terminal instead of escaping the exec scope.
+        const started = yield* this.io(() => this.host.exec('hc', ['run', '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', this.root], { cwd: this.root, on: this.machine }));
+        if (started.code !== 0) return yield* Effect.fail(new ModFailure({ code: 'HerdrServiceStartFailed', message: 'Herdr 无法启动 Concord 工作区服务', details: [started.stderr, started.stdout].filter(Boolean).join('\n') }));
+        // A terminal receipt precedes the service lock; a read-only handshake
+        // barrier prevents workspace wait from starting a competing child.
+        yield* this.command(['server', 'status', '--wait'], ServerStatus);
+      }
+    }
+    return yield* this.command(['workspace', 'wait', ...(after === undefined ? [] : ['--after', after])], WorkspaceWait);
   });
+
+  wait = Effect.fn('ModSession.wait')(function*(this: ModSession) { return yield* this.waitForWorkspace(this.workspaceDigest); });
 
   stop(): void { this.closed = true; this.observation = {}; this.selection = {}; }
 }

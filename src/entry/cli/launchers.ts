@@ -22,7 +22,7 @@ export class ServerLauncher extends Context.Service<ServerLauncher, {
   readonly run: (root: string) => Effect.Effect<void, unknown>;
   readonly start: (root: string) => Effect.Effect<unknown, unknown>;
   readonly stop: (root: string) => Effect.Effect<unknown, unknown>;
-  readonly status: (root: string) => Effect.Effect<unknown, unknown>;
+  readonly status: (root: string, wait?: boolean) => Effect.Effect<unknown, unknown>;
   readonly projection: (root: string) => Effect.Effect<ModelTypes.WorkspaceProjection | undefined, unknown>;
   readonly wait: (root: string, after: string | undefined, timeout: number) => Effect.Effect<WorkspaceWait, ConcordError>;
   readonly clear: (root: string) => Effect.Effect<unknown, unknown>;

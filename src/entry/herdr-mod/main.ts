@@ -156,8 +156,8 @@ export default class ConcordMod extends View {
     const tab = this.ownPane === undefined ? focused()?.tab : all.find(item => item.pane === this.ownPane)?.tab ?? this.tab;
     const foreground = tab !== undefined && focused()?.tab === tab;
     const resumed = foreground && !this.foreground;
-    if (tab !== this.tab || foreground !== this.foreground) this.pauseWatch();
-    if (tab !== this.tab) { this.tab = tab; this.observedTarget = ''; }
+    if (foreground !== this.foreground) this.pauseWatch();
+    this.tab = tab;
     this.foreground = foreground;
     for (const previous of this.terminals.keys()) if (!all.some(item => item.tab === previous)) this.terminals.delete(previous);
     const terminals = all.filter(item => item.tab === tab && item.terminal !== null && !item.mod);

@@ -107,7 +107,12 @@ const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*
   if (connection.hello.installation !== record.installation || connection.hello.protocol !== record.protocol) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Handshake differs from the running record'));
   return connection;
 });
-const workspaceServerStatus = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.map(connection => connection ? { operation: 'server-status', ...connection.hello } : { operation: 'server-status', state: 'absent' }), Effect.catch(() => Effect.succeed({ operation: 'server-status', state: 'absent' }))));
+const workspaceServerStatus = Effect.fn('cli.workspaceServerStatus')(function*(root: string, wait = false) {
+  // Each observation releases its connection before a later handshake attempt.
+  const observe = Effect.scoped(existingWorkspace(root).pipe(Effect.map(connection => connection ? { operation: 'server-status', ...connection.hello } : undefined)));
+  if (wait) return yield* (yield* loadClient()).waitForServerHandshake(observe);
+  return yield* observe.pipe(Effect.map(status => status ?? { operation: 'server-status', state: 'absent' }), Effect.catch(() => Effect.succeed({ operation: 'server-status', state: 'absent' })));
+});
 const canRetryWorkspaceRead = Effect.gen(function*() {
   return (yield* QueryServerMode) === 'shared' && (yield* RuntimeEnvironment).env.CONCORD_SERVER_SCOPE === undefined;
 });
@@ -394,7 +399,7 @@ const launchers = Layer.mergeAll(
       run: root => nativeAvailable.pipe(Effect.andThen(loadServerMain()), Effect.flatMap(server => server.serveWorkspaceFromEnvironment(root)), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause)), Effect.provideContext(context)),
       start: root => startWorkspaceServer(root).pipe(Effect.provideContext(context)),
       stop: root => stopWorkspaceServer(root).pipe(Effect.provideContext(context)),
-      status: root => workspaceServerStatus(root).pipe(Effect.provideContext(context)),
+      status: (root, wait) => workspaceServerStatus(root, wait).pipe(Effect.provideContext(context)),
       projection: root => readExistingWorkspaceProjection(root).pipe(Effect.provideContext(context)),
       wait: (root, after, timeout) => Effect.gen(function*() {
         return yield* retryWorkspaceRead(() => Effect.scoped(Effect.gen(function*() {
