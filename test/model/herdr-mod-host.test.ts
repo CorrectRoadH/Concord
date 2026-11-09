@@ -883,14 +883,16 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-    await t.test('layout sidebar refreshes the same repository on tab changes and remembers each terminal', async () => {
+    await t.test('layout sidebar keeps receiving changes across same repository tabs and remembers each terminal', async () => {
       const b = await start();
       try {
         b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
         b.files.set(`/repo/${page}`, '# Changed while switching tabs\n');
         b.selectTab('t2', '/repo');
+        b.watches[0]!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'changed' }), stderr: '' });
         await b.until(() => b.output.text().includes('# Changed while switching tabs'));
-        const oldWatch = b.watches[0]!;
+        await b.until(() => b.watches.length === 2);
+        const oldWatch = b.watches[1]!;
         b.paneList.push({ pane: 'other-terminal', terminal: 'other-terminal', tab: 't2', focused: true, cwd: '/other' });
         b.paneList.find(pane => pane.pane === 'pane-t2')!.focused = false; b.draw();
         await b.until(() => b.output.find('initialize') !== undefined);

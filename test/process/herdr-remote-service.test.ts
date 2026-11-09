@@ -6,6 +6,18 @@ import { Effect } from 'effect';
 import { ModSession, type ModHost } from '../../src/entry/herdr-mod/index.ts';
 import { command, fixture, record, recordPath, stop } from '../support/workspace-server-fixture.ts';
 
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('waiting for a server handshake times out without creating a service', { timeout: 20_000 }, async () => {
+  const root = await fixture();
+  try {
+    const reply = await command(root, ['server', 'status', '--wait']);
+    assert.notEqual(reply.status, 0);
+    assert.equal(JSON.parse(reply.stderr).error, 'WorkspaceServerUnavailable');
+    assert.equal(existsSync(recordPath(root)), false);
+    assert.equal(JSON.parse((await command(root, ['server', 'status'])).stdout).state, 'absent');
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
 // Only Herdr's exec/run ownership boundary is simulated; every Concord call,
 // server, handshake, projection and shutdown uses the actual public CLI.
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open

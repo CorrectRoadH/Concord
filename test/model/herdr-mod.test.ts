@@ -233,7 +233,7 @@ test('remote cold loading keeps its service outside short execs and confirms its
     }
     if (operation[1] === 'wait') {
       if (managed) assert.equal(handshaken, true, 'a terminal receipt is not a service handshake');
-      return { code: 0, stdout: JSON.stringify({ changed: true, sourceDigest: 'ready' }), stderr: '' };
+      return { code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'ready' }), stderr: '' };
     }
     return execute(command, args, options);
   };
@@ -253,7 +253,7 @@ test('unreadable initial projections report pending after two waits instead of l
   let projections = 0, waits = 0;
   const session = new ModSession({ exec: async (_command, args) => {
     const operation = args.slice(args.indexOf('--root') + 2);
-    if (operation[1] === 'wait') { waits++; return { code: 0, stdout: JSON.stringify({ changed: false, sourceDigest: 'old' }), stderr: '' }; }
+    if (operation[1] === 'wait') { waits++; return { code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: false, sourceDigest: 'old' }), stderr: '' }; }
     return { code: 1, stdout: '', stderr: JSON.stringify({ error: ++projections > 3 ? 'ProbeLimit' : 'WorkspaceProjectionPending', message: 'Workspace is opening' }) };
   } }, '/repo');
   await assert.rejects(Effect.runPromise(session.refresh()), error => error instanceof ModFailure && error.code === 'WorkspaceProjectionPending');
@@ -266,10 +266,10 @@ test('remote waits reuse an existing service and keep the observed digest', asyn
   const session = new ModSession({ exec: async (command, args) => {
     assert.equal(command, 'concord');
     const operation = args.slice(args.indexOf('--root') + 2); calls.push(operation);
-    return { code: 0, stdout: JSON.stringify(operation[0] === 'server' ? { state: 'running' } : { changed: false, sourceDigest: 'kept' }), stderr: '' };
+    return { code: 0, stdout: JSON.stringify(operation[0] === 'server' ? { state: 'running' } : { operation: 'workspace-wait', changed: false, sourceDigest: 'kept' }), stderr: '' };
   } }, '/repo', 'vps');
   session.workspaceDigest = 'kept';
-  assert.deepEqual(await Effect.runPromise(session.wait()), { changed: false, sourceDigest: 'kept' });
+  assert.deepEqual(await Effect.runPromise(session.wait()), { operation: 'workspace-wait', changed: false, sourceDigest: 'kept' });
   assert.deepEqual(calls, [['server', 'status'], ['workspace', 'wait', '--after', 'kept']]);
 });
 
@@ -277,7 +277,7 @@ test('remote waits reuse an existing service and keep the observed digest', asyn
 test('remote hosting failure preserves the host output as a named failure', async () => {
   const session = new ModSession({ exec: async (command, args) => command === 'hc'
     ? { code: 1, stdout: '', stderr: 'terminal quota exceeded' }
-    : { code: 0, stdout: JSON.stringify(args.includes('status') ? { state: 'absent' } : { changed: false, sourceDigest: 'old' }), stderr: '' },
+    : { code: 0, stdout: JSON.stringify(args.includes('status') ? { state: 'absent' } : { operation: 'workspace-wait', changed: false, sourceDigest: 'old' }), stderr: '' },
   }, '/repo', 'vps');
   await assert.rejects(Effect.runPromise(session.wait()), error => error instanceof ModFailure && error.code === 'HerdrServiceStartFailed' && error.details === 'terminal quota exceeded');
 });
