@@ -194,6 +194,9 @@ export default class ConcordMod extends View {
     const current = () => !this.closed && token === this.targetToken;
     this.navigation = cx.spawn(async next => {
       try {
+        // spawn may start inside render; cached roots must yield before notifying.
+        await next.sleep(0);
+        if (!current()) return;
         if (!this.session.root) this.directory = 'resolving';
         const cachedRoot = this.resolvedTargets.get(key);
         const resolved = cachedRoot ?? await this.resolveRoot(target);
