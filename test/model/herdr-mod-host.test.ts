@@ -321,7 +321,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       return host;
     };
     // @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-feature
-    // @issue docs/issues/herdr-render-interrupted.md
     await t.test('long documents prepare their Markdown outside redraw and reuse it while editing', async () => {
       const source = '# Cart\n\n' + Array.from({ length: 140 }, (_, index) => `Paragraph ${index}: 中文🙂 [link](./architecture.md) and **text**.\n\n`).join('');
       const b = await start(boundary => { boundary.files.set(`/repo/${page}`, source); });
