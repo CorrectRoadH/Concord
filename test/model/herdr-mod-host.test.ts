@@ -1132,7 +1132,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       assert.deepEqual(b.errors, []);
     });
     // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
-    // @issue docs/issues/herdr-directory-observation.md
     await t.test('directory observation follows live targets without a host redraw and stays quiet otherwise', async () => {
       const b = await start();
       try {
