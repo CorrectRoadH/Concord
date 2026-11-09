@@ -14,11 +14,11 @@ import { Schema } from 'effect';
 import { runSourceWeb, sourceWebDigest } from '../../src/base/installation/index.ts';
 import { acquireFileLease, releaseFileLease } from '../../src/base/publication/index.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
+import { privateSourceInstallation } from '../support/private-source.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 const checkout = fileURLToPath(new URL('../..', import.meta.url));
-const entry = join(checkout, 'src/entry/cli/entry.ts');
 const installation = pathToFileURL(join(checkout, 'src/base/installation/index.ts')).href;
 const Ready = Schema.Struct({ address: Schema.String });
 const Receipt = Schema.Struct({ digest: Schema.String, builderPid: Schema.Int, files: Schema.Array(Schema.Struct({ path: Schema.String })) });
@@ -41,8 +41,8 @@ async function stop(child: ChildProcess): Promise<void> {
   try { await exited; } finally { clearTimeout(deadline); }
 }
 
-async function view(root: string, env: NodeJS.ProcessEnv): Promise<{ address: string; child: ChildProcess }> {
-  const child = spawn(process.execPath, ['--conditions=concord-source', entry, '--root', root, '--json', 'view', '--in-process', '--port', '0'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+async function view(root: string, env: NodeJS.ProcessEnv, cli: string): Promise<{ address: string; child: ChildProcess }> {
+  const child = spawn(process.execPath, ['--conditions=concord-source', cli, '--root', root, '--json', 'view', '--in-process', '--port', '0'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '', errors = '';
   child.stderr!.on('data', data => { errors += String(data); });
   try {
@@ -62,7 +62,7 @@ async function view(root: string, env: NodeJS.ProcessEnv): Promise<{ address: st
     return { ...ready, child };
   } catch (cause) {
     await stop(child);
-    try { stopWorkspaceServer(root, entry, env, ['--conditions=concord-source']); }
+    try { stopWorkspaceServer(root, cli, env, ['--conditions=concord-source']); }
     catch (cleanup) { throw new AggregateError([cause, cleanup], 'Source view startup and cleanup failed'); }
     throw cause;
   }
@@ -71,6 +71,11 @@ async function view(root: string, env: NodeJS.ProcessEnv): Promise<{ address: st
 // @feature docs/engineering/build/architecture.md#从源码运行
 test('two real source workspace services share one disk Web build without checkout artifacts', { timeout: 180_000 }, async () => {
   const directory = mkdtempSync(join(tmpdir(), 'concord-web-services-'));
+  const tool = join(directory, 'tool');
+  const cli = privateSourceInstallation(tool);
+  // Cache ownership needs real compilers and services, not the entire editor UI.
+  // Keep preview, p5 and all publication/HTTP paths from the private installation.
+  writeFileSync(join(tool, 'web/main.tsx'), 'document.querySelector("#root")!.textContent = "Web cache fixture";\n');
   const cache = join(directory, 'cache');
   const buildLog = join(directory, 'builds.ndjson');
   const env = { ...process.env, XDG_CACHE_HOME: cache, CONCORD_TEST_WEB_BUILD_LOG: buildLog };
@@ -86,7 +91,7 @@ test('two real source workspace services share one disk Web build without checko
   });
   const handles: Awaited<ReturnType<typeof view>>[] = [];
   try {
-    const results = await Promise.allSettled(roots.map(async root => { const handle = await view(root, env); handles.push(handle); return handle; }));
+    const results = await Promise.allSettled(roots.map(async root => { const handle = await view(root, env, cli); handles.push(handle); return handle; }));
     for (const result of results) if (result.status === 'rejected') throw result.reason;
     assert.equal(handles.length, 2);
     const webCache = join(cache, 'concord/web');
@@ -108,6 +113,7 @@ test('two real source workspace services share one disk Web build without checko
       assert.ok(asset, page.body);
       const javascript = await http(new URL(asset, handle.address).href);
       assert.equal(javascript.status, 200); assert.match(javascript.headers['content-type'] ?? '', /javascript/u);
+      assert.match(javascript.body, /Web cache fixture/u);
       assert.equal((await http(new URL('/assets/missing.js', handle.address).href)).status, 404);
       assert.equal((await http(new URL('/feature/example', handle.address).href)).status, 200);
       assert.match((await http(new URL('/p5-frame', handle.address).href)).body, /p5/iu);
@@ -119,10 +125,11 @@ test('two real source workspace services share one disk Web build without checko
     assert.equal(existsSync(join(checkout, 'dist')), false);
     assert.equal(existsSync(join(checkout, 'web/dist')), false);
     assert.equal(existsSync(join(checkout, 'web/preview/dist')), false);
+    for (const path of ['dist', 'web/dist', 'web/preview/dist']) assert.equal(existsSync(join(tool, path)), false);
   } finally {
     // Ask the live product service to stop before releasing its owning View
     // command; killing the owner first can race the server's own finalizers.
-    for (const root of roots) stopWorkspaceServer(root, entry, env, ['--conditions=concord-source']);
+    for (const root of roots) stopWorkspaceServer(root, cli, env, ['--conditions=concord-source']);
     await Promise.all(handles.map(async handle => stop(handle.child)));
     rmSync(directory, { recursive: true, force: true });
   }
