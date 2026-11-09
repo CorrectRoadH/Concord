@@ -7,7 +7,7 @@ import { Effect, Schema } from 'effect';
 import { ModWorkspaceProjection, ModWorkspaceSnapshot, RenderedPage, WorkspaceWait } from '../../model/herdr-mod/index.ts';
 
 export interface ModHost {
-  readonly exec: (command: string, args: string[], options: { cwd: string; on: string | null }) => Promise<{ code: number; stdout: string; stderr: string }>;
+  readonly exec: (command: string, args: string[], options: { cwd?: string; on: string | null }) => Promise<{ code: number; stdout: string; stderr: string }>;
 }
 export class ModFailure extends Schema.TaggedError<ModFailure>()('ModFailure', { message: Schema.String, code: Schema.optional(Schema.String), details: Schema.optional(Schema.String) }) {}
 export class ModDisconnected extends Schema.TaggedError<ModDisconnected>()('ModDisconnected', { machine: Schema.String }) {}
@@ -268,7 +268,9 @@ export class ModSession {
       if (status.state === 'absent') {
         // A remote exec reclaims detached children. Transfer the foreground
         // service to its own core terminal instead of escaping the exec scope.
-        const started = yield* this.io(() => this.host.exec('hc', ['run', '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', this.root], { cwd: this.root, on: this.machine }));
+        const started = yield* io(() => this.host.exec('hc', ['run', '--on', this.machine!, '--cwd', this.root, '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', this.root], { on: null })).pipe(
+          Effect.mapError(error => new ModFailure({ code: 'HerdrServiceStartFailed', message: 'Herdr 无法启动 Concord 工作区服务', details: error.details })),
+        );
         if (started.code !== 0) return yield* Effect.fail(new ModFailure({ code: 'HerdrServiceStartFailed', message: 'Herdr 无法启动 Concord 工作区服务', details: [started.stderr, started.stdout].filter(Boolean).join('\n') }));
         // A terminal receipt precedes the service lock; a read-only handshake
         // barrier prevents workspace wait from starting a competing child.
