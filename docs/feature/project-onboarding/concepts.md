@@ -1,12 +1,6 @@
 # 项目接入术语表
 
-本页定义项目接入中的概念。[全局术语表](../../concepts.md)中的[快照](../../concepts.md#snapshot)、[skill 主题](../../concepts.md#skill-topic)与[写作指南](../../concepts.md#writing-guide)自动适用于本目录。
-
-## 接入项目 {#adopting-project}
-
-采用 Concord 工作范式的软件仓库。它拥有自己的构建、runner、运行环境与技术栈，Concord 只规定 Spec 布局与关联规则。
-
-旧写法：`消费仓库`
+本页定义项目接入中的概念。[全局术语表](../../concepts.md)中的[接入项目](../../concepts.md#adopting-project)、[快照](../../concepts.md#snapshot)、[skill 主题](../../concepts.md#skill-topic)与[写作指南](../../concepts.md#writing-guide)自动适用于本目录。
 
 ## 托管标记 {#managed-marker}
 

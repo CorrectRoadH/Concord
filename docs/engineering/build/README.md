@@ -27,7 +27,7 @@ bun run test
 
 Concord 运行在 Bun 上。开发、测试、CI 与发版归档使用同一个 Bun 精确版本，唯一记录在仓库根目录的 `.bun-version` 中；`package.json` 不声明 `engines`。性能测量默认直接调用业务操作，启动成本按需要单独分析，不能用空操作代替业务测量（[快到每次都愿意跑](../../taste.md#t-7)）。
 
-产品代码可以使用该版本 Bun 的 API，以及它实现的 Node.js 兼容 API。开发工具与测试控制器也运行在 Bun 上，不要求安装 Node.js。`node:` 导入与 `@types/node` 声明只使用 Bun 提供的兼容 API。Vitest 开发依赖仅提供产品 adapter 的上游 API 类型；运行时从消费项目加载，不在门禁执行 Vitest。升级产品运行时更新 `.bun-version`，交付前跑完整门禁与归档构建。
+产品代码可以使用该版本 Bun 的 API，以及它实现的 Node.js 兼容 API。开发工具与测试控制器也运行在 Bun 上，不要求安装 Node.js。`node:` 导入与 `@types/node` 声明只使用 Bun 提供的兼容 API。Vitest 开发依赖仅提供产品 adapter 的上游 API 类型；运行时从接入项目加载，不在门禁执行 Vitest。升级产品运行时更新 `.bun-version`，交付前跑完整门禁与归档构建。
 
 只交付 Herdr mod 时运行 `bun run build:herdr`，生成目录直接随 Git 提交分发，不需要完整归档或 CLI Release，见[独立交付 Concord mod](use-case/share-herdr-mod.md)。
 

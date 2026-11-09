@@ -4,7 +4,7 @@
 
 Concord 拥有路径身份推导、源码标记与测试支持文件映射、稳定 case 身份派生、trace、Issue 与 Memory 的字段与状态转换校验、[修复核验](../local-sdlc/README.md#证据的范围)。CLI、Web 与 action 共用同一实现；入口和存储适配可以不同，生命周期与核验不变量只有一个解释。
 
-消费者拥有测试 runner、执行环境、候选产品的构建与安装，以及产品命令、Preview、示例同步、文档站与 PR 编辑格式。Concord 只通过配置的 runner 运行测试，按退出码解释结果，不签发原生 case 覆盖或正式可靠性结论。Concord 的 `review` 保留 Spec、测试、Issue 与 Memory 的审阅能力。依据：产品工具归消费者、治理归 Concord。
+接入项目拥有测试 runner、执行环境、候选产品的构建与安装，以及产品命令、Preview、示例同步、文档站与 PR 编辑格式。Concord 只通过配置的 runner 运行测试，按退出码解释结果，不签发原生 case 覆盖或正式可靠性结论。Concord 的 `review` 保留 Spec、测试、Issue 与 Memory 的审阅能力。依据：产品工具归接入项目、治理归 Concord。
 
 ## 升级
 
@@ -29,4 +29,4 @@ run-id 默认由 Clock 时间与随机后缀生成。同一 run 的写操作持�
 
 ## 命令入口
 
-Concord 的工作流由 `concord` bin 提供。消费项目以进程调用这些命令，领域操作与入口适配由 Concord 拥有，不向宿主导出命令贡献。
+Concord 的工作流由 `concord` bin 提供。接入项目以进程调用这些命令，领域操作与入口适配由 Concord 拥有，不向宿主导出命令贡献。

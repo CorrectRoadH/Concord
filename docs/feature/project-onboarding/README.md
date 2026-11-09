@@ -74,7 +74,7 @@ findings: none
 
 ### 接入项目采用的范式
 
-以下规则约束[接入项目](concepts.md#adopting-project)。
+以下规则约束[接入项目](../../concepts.md#adopting-project)。
 
 1. Concord 规定一套工作范式，接入项目必须采用：统一 Spec 布局；Spec 先于实现；每项事实一个 owner；`docs/` 只写声明（[页面职责](../../document-model.md#页面职责)）；测试与实现通过显式源码标记关联 Spec。工程过程进入 Memory 与 Issue；Issue 按关闭种类的规则关闭，fixed 经过修复核验；写入遵守前像与恢复 Spec。
 2. 不提供关闭事实归属、关系解释、生命周期、证据下限及安全写入不变量的配置。项目可以配置来源位置、执行适配、文档页面和写作规则参数，配置不得绕过已采用的不变量。
