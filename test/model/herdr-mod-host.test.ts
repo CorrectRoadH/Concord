@@ -397,7 +397,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @feature docs/feature/herdr-mod/ui.md#文档列表
-    // @issue docs/issues/herdr-mod-empty-tree.md
     await t.test('the document list draws its groups and rows under the native list rules', async () => {
       const b = await start();
       try {
