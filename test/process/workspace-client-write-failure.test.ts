@@ -10,6 +10,7 @@ import { command, fixture, record, rpcModule, stop } from '../support/workspace-
 // @issue docs/issues/bun-socket-diagnostic.md
 test('a socket write defect becomes a named transport failure during derivation submission', { timeout: 30_000 }, async t => {
   const root = (await fixture());
+  const failures: unknown[] = [];
   try {
     const started = await command(root, ['server', 'start']);
     assert.equal(started.status, 0, started.stderr);
@@ -27,8 +28,11 @@ test('a socket write defect becomes a named transport failure during derivation 
         }
       } finally { write.mock.restore(); }
     })));
-  } finally {
-    await stop(root);
-    rmSync(root, { recursive: true, force: true });
+  } catch (cause) { failures.push(cause); } finally {
+    try {
+      await stop(root);
+      rmSync(root, { recursive: true, force: true });
+    } catch (cause) { failures.push(cause); }
   }
+  if (failures.length) throw new AggregateError(failures, `Socket failure fixture failed; root: ${root}`);
 });

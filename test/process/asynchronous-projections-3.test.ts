@@ -23,6 +23,7 @@ test('a newly stored snapshot from an older scan does not consume a later refres
 test('packed C2 retains the consistent generation and annotates the later drifting attempt', async () => {
   const root = packedConsumer();
   let stop: (() => Promise<void>) | undefined;
+  const failures: unknown[] = [];
   try {
     const context = { privateDir: genericPrivateDirectorySync(root, process.env), query: ['trace', 'gaps'] as const };
     assert.equal((await refreshInstalled(root, ['trace', 'gaps'])).status, 0);
@@ -41,7 +42,16 @@ test('packed C2 retains the consistent generation and annotates the later drifti
     const result = installedCall(root, 'trace', 'gaps');
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /此后的刷新在编辑中未能取得一致结果/u);
-  } finally { if (stop) await stop(); await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
+  } catch (cause) { failures.push(cause); } finally {
+    const cleanup: unknown[] = [];
+    try { if (stop) await stop(); } catch (cause) { cleanup.push(cause); }
+    try { await waitForRefreshExit(root); } catch (cause) { cleanup.push(cause); }
+    failures.push(...cleanup);
+    if (cleanup.length === 0) {
+      try { rmSync(root, { recursive: true, force: true }); } catch (cause) { failures.push(cause); }
+    }
+  }
+  if (failures.length) throw new AggregateError(failures, `Drifting diagnostic fixture failed; root: ${root}`);
 });
 
 

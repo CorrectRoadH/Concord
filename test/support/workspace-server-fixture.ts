@@ -7,6 +7,7 @@ import { tmpdir } from '../support/temporary.ts';
 import { createConsumer } from './consumer.ts';
 import { sourceCliCommand } from './source-consumer.ts';
 import { packageCommand } from '../../scripts/package-command.ts';
+import assert from 'node:assert/strict';
 
 const Record = Schema.Struct({ token: Schema.String, pid: Schema.Int, installation: Schema.String, sourceDigest: Schema.optional(Schema.String), socket: Schema.Struct({ path: Schema.String }) });
 export const recordPath = (root: string) => join(root, '.git/concord/server/current.json');
@@ -27,7 +28,10 @@ export const command = (root: string, args: readonly string[], entry = installed
 // The peer uses the source protocol; the system under test is the installed service.
 export const rpcModule = () => import('../../src/entry/server/index.ts');
 export const stop = async (root: string) => {
-  if (existsSync(recordPath(root))) await command(root, ['server', 'stop']);
+  if (existsSync(recordPath(root))) {
+    const stopped = await command(root, ['server', 'stop']);
+    assert.equal(stopped.status, 0, `Service cleanup failed for ${root}: ${JSON.stringify(stopped)}`);
+  }
   await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'service record removed after confirmed cleanup', timeoutMs: 8000 });
 };
 

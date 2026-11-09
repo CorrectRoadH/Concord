@@ -10,10 +10,9 @@ import { fetchFresh, parseWorkspaceProjection } from '../support/support.ts';
 import { command, fixture, record, recordPath, stop } from '../support/workspace-server-fixture.ts';
 import { rmSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { execFileSync, spawn } from 'node:child_process';
 import { get } from 'node:http';
 import { once } from 'node:events';
-import { installedConcordCli, pollUntil } from '../support/support.ts';
+import { pollUntil } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { initialize } from '../support/operations.ts';
 import { LocalRepository } from '../support/repository.ts';
@@ -178,48 +177,86 @@ test('server stop refuses success while the recorded service is still exiting af
       });
     }
   `);
-  let firstStop: Promise<{ status: number | null; stdout: string; stderr: string }> | undefined;
+  let firstStop: ReturnType<typeof command> | undefined;
+  let stopOutcome: PromiseSettledResult<Awaited<ReturnType<typeof command>>> | undefined;
   let servicePid: number | undefined;
+  let reachedBarrier = false, residualRecord = false;
+  const failures: unknown[] = [];
   try {
-    const child = spawn(process.execPath, [installedConcordCli(), '--root', root, '--json', 'server', 'start'], {
-      env: { ...process.env, BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${pathToFileURL(preload).href}` }, stdio: 'pipe',
+    const started = await command(root, ['server', 'start'], undefined, {
+      ...process.env, BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${pathToFileURL(preload).href}`,
     });
-    let output = '';
-    child.stdout.on('data', data => { output += String(data); });
-    child.stderr.on('data', data => { output += String(data); });
-    const started = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
-    assert.equal(started, 0, output);
+    assert.equal(started.status, 0, JSON.stringify(started));
     const owner = record(root);
     servicePid = owner.pid;
     const original = JSON.parse(readFileSync(recordPath(root), 'utf8'));
     firstStop = command(root, ['server', 'stop']);
-    await pollUntil(async () => existsSync(marker) ? true : undefined, { description: 'real service reached the exit barrier', timeoutMs: 8000 });
+    void firstStop.then(value => { stopOutcome = { status: 'fulfilled', value }; }, reason => { stopOutcome = { status: 'rejected', reason }; });
+    await pollUntil(async () => {
+      if (existsSync(marker)) return true;
+      if (stopOutcome?.status === 'rejected') throw stopOutcome.reason;
+      if (stopOutcome?.status === 'fulfilled') assert.fail(`First stop ended before the service reached its exit barrier: ${JSON.stringify(stopOutcome.value)}`);
+      return undefined;
+    }, { description: 'real service reached the exit barrier', timeoutMs: 8000 });
+    reachedBarrier = true;
     // Reconstruct the residual stopping record to exercise a second caller after
     // lock release. Its PID and lock identity belong to the actual service.
     writeFileSync(recordPath(root), JSON.stringify({ ...original, state: 'stopping' }));
+    residualRecord = true;
     const result = await command(root, ['server', 'stop']);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.equal(JSON.parse(result.stderr || result.stdout).error, 'CleanupFailed');
     assert.doesNotThrow(() => process.kill(owner.pid, 0), 'the barrier keeps the real service alive');
-  } finally {
-    writeFileSync(release, 'release');
-    await firstStop;
-    const exitingPid = servicePid;
-    if (exitingPid !== undefined) await pollUntil(async () => {
-      try {
-        process.kill(exitingPid, 0);
-        if (process.platform === 'linux') {
-          const stat = readFileSync(`/proc/${exitingPid}/stat`, 'utf8');
-          if (/^[ZX] /u.test(stat.slice(stat.lastIndexOf(')') + 2))) return true;
-        }
-        return undefined;
-      } catch (cause) {
-        if (['ESRCH', 'ENOENT'].includes((cause as NodeJS.ErrnoException).code ?? '')) return true;
-        throw cause;
+  } catch (cause) { failures.push(cause); } finally {
+    const cleanup: unknown[] = [];
+    try { writeFileSync(release, 'release'); } catch (cause) { cleanup.push(cause); }
+    try {
+      if (servicePid === undefined && existsSync(recordPath(root))) servicePid = record(root).pid;
+      // A rejected shutdown did not reach the barrier; terminate only this fixture's owner.
+      if (!reachedBarrier && servicePid !== undefined) {
+        try { process.kill(servicePid, 'SIGTERM'); }
+        catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw cause; }
       }
-    }, { description: 'exit-barrier service actually exits before fixture removal', timeoutMs: 8000 }).catch(cause => { retainConsumer(root); throw cause; });
-    rmSync(recordPath(root), { force: true });
-    await stop(root);
-    rmSync(root, { recursive: true, force: true });
+    } catch (cause) { cleanup.push(cause); }
+    try {
+      if (firstStop) {
+        const result = await firstStop;
+        if (result.status !== 0) {
+          assert.equal(reachedBarrier, true, `Shutdown failed before the exit barrier: ${JSON.stringify(result)}`);
+          assert.equal(result.status, 1, JSON.stringify(result));
+          assert.equal(JSON.parse(result.stderr || result.stdout).error, 'CleanupFailed', JSON.stringify(result));
+        }
+      }
+    } catch (cause) { cleanup.push(cause); }
+    let exited = servicePid === undefined && !existsSync(recordPath(root));
+    try {
+      const exitingPid = servicePid;
+      if (exitingPid !== undefined) {
+        await pollUntil(async () => {
+          try {
+            process.kill(exitingPid, 0);
+            if (process.platform === 'linux') {
+              const stat = readFileSync(`/proc/${exitingPid}/stat`, 'utf8');
+              if (/^[ZX] /u.test(stat.slice(stat.lastIndexOf(')') + 2))) return true;
+            }
+            return undefined;
+          } catch (cause) {
+            if (['ESRCH', 'ENOENT'].includes((cause as NodeJS.ErrnoException).code ?? '')) return true;
+            throw cause;
+          }
+        }, { description: 'exit-barrier service actually exits before fixture removal', timeoutMs: 8000 });
+        exited = true;
+      }
+    } catch (cause) { cleanup.push(cause); }
+    if (exited) {
+      try {
+        if (residualRecord) rmSync(recordPath(root), { force: true });
+        await stop(root);
+        if (cleanup.length === 0) rmSync(root, { recursive: true, force: true });
+      } catch (cause) { cleanup.push(cause); }
+    }
+    if (cleanup.length) retainConsumer(root);
+    failures.push(...cleanup);
   }
+  if (failures.length) throw new AggregateError(failures, `Exit-barrier fixture failed; root: ${root}`);
 });

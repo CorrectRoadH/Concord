@@ -32,8 +32,19 @@ function snapshot(root: string): Record<string, string> {
 
 function consumer(run: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), 'concord-uninitialized-cli-'));
+  const failures: unknown[] = [];
   try { execFileSync('git', ['init', '-q', root]); run(root); }
-  finally { rmSync(root, { recursive: true, force: true }); }
+  catch (cause) { failures.push(cause); }
+  finally {
+    try {
+      const stopped = invoke(root, ['server', 'stop']);
+      assert.equal(stopped.status, 0, JSON.stringify({ status: stopped.status, signal: stopped.signal, error: stopped.error?.message, stdout: stopped.stdout, stderr: stopped.stderr }));
+      assert.equal(JSON.parse(stopped.stdout).operation, 'server-stop');
+      assert.equal(existsSync(join(root, '.git/concord/server/current.json')), false, 'service cleanup precedes fixture removal');
+      rmSync(root, { recursive: true, force: true });
+    } catch (cause) { failures.push(cause); }
+  }
+  if (failures.length) throw new AggregateError(failures, `Uninitialized service fixture failed; root: ${root}`);
 }
 
 function invoke(root: string, args: readonly string[], json = true) {
@@ -46,18 +57,12 @@ function invoke(root: string, args: readonly string[], json = true) {
 
 // @use-case docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
 test('server lifecycle commands remain available to host and reclaim the initialization page', () => consumer(root => {
-  try {
-    const started = invoke(root, ['server', 'start']);
-    assert.equal(started.status, 0, started.stderr);
-    assert.equal(JSON.parse(started.stdout).operation, 'server-start');
-    const status = invoke(root, ['server', 'status']);
-    assert.equal(status.status, 0, status.stderr);
-    assert.equal(JSON.parse(status.stdout).operation, 'server-status');
-    assert.equal(existsSync(join(root, 'docs/taste.md')), false);
-  } finally {
-    const stopped = invoke(root, ['server', 'stop']);
-    assert.equal(stopped.status, 0, stopped.stderr);
-    assert.equal(JSON.parse(stopped.stdout).operation, 'server-stop');
-  }
+  const started = invoke(root, ['server', 'start']);
+  assert.equal(started.status, 0, started.stderr);
+  assert.equal(JSON.parse(started.stdout).operation, 'server-start');
+  const status = invoke(root, ['server', 'status']);
+  assert.equal(status.status, 0, status.stderr);
+  assert.equal(JSON.parse(status.stdout).operation, 'server-status');
+  assert.equal(existsSync(join(root, 'docs/taste.md')), false);
 }));
 

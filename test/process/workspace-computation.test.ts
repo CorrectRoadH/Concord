@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { channel } from 'node:diagnostics_channel';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Deferred, Effect, Fiber, Schema } from 'effect';
@@ -11,7 +11,7 @@ import { acquireTraceLeaseSync, releaseTraceLeaseSync } from '../../src/base/pub
 import { digest, WorkspaceProjectionSchema } from '../../src/model/index.ts';
 import { installedConcordCli, pollUntil } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
-import { command, record, rpcModule, stop } from '../support/workspace-server-fixture.ts';
+import { command, record, recordPath, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-computation-'));
@@ -45,6 +45,7 @@ test('cancelling a queued computation preserves the active child and cancelling 
   let server: Promise<Awaited<ReturnType<typeof runCli>> | undefined> | undefined;
   let serverFailure: unknown;
   let pid: number | undefined;
+  const failures: unknown[] = [];
   try {
     // Keep the RPC owner here so the diagnostic barrier observes actual mutex
     // acquisition. A hello reply alone cannot prove a query owns the child.
@@ -80,16 +81,32 @@ test('cancelling a queued computation preserves the active child and cancelling 
       assert.equal(Schema.decodeUnknownSync(Schema.Struct({ exitCode: Schema.Int }))(next).exitCode, 0);
       assert.deepEqual(readdirSync(lease.path), [`${lease.owner.token}.json`]);
     })));
-  } finally {
-    if (pid !== undefined) try { process.kill(pid, 'SIGCONT'); } catch { /* confirmed reaped */ }
-    await stop(root);
-    controller.abort();
-    const result = await server;
-    releaseTraceLeaseSync(lease, 'unrelated-computation-reader');
-    rmSync(root, { recursive: true, force: true });
-    assert.equal(serverFailure, undefined);
-    assert.equal(result?.exitCode, 0, result?.stderr ?? '');
+  } catch (cause) { failures.push(cause); } finally {
+    const cleanup: unknown[] = [];
+    if (pid !== undefined) {
+      try { process.kill(pid, 'SIGCONT'); }
+      catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') cleanup.push(cause); }
+    }
+    try {
+      // This fixture hosts the service in the test process. The public stop
+      // command also waits for that PID to exit, so request protocol shutdown
+      // and await this invocation's scope instead of waiting for our own PID.
+      const running = record(root), rpc = await rpcModule();
+      await Effect.runPromise(Effect.scoped(rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token).pipe(
+        Effect.flatMap(connection => connection.client.shutdown({ token: running.token })),
+      )));
+    } catch (cause) { cleanup.push(cause); controller.abort(); }
+    try {
+      const result = await server;
+      assert.equal(serverFailure, undefined);
+      assert.equal(result?.exitCode, 0, result?.stderr ?? '');
+      assert.equal(existsSync(recordPath(root)), false, 'the in-process service removed its record before scope completion');
+    } catch (cause) { cleanup.push(cause); }
+    try { releaseTraceLeaseSync(lease, 'unrelated-computation-reader'); } catch (cause) { cleanup.push(cause); }
+    failures.push(...cleanup);
+    if (cleanup.length === 0) rmSync(root, { recursive: true, force: true });
   }
+  if (failures.length) throw new AggregateError(failures, `Computation cancellation fixture failed; root: ${root}`);
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

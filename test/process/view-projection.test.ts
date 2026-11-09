@@ -91,15 +91,26 @@ test('POST /api/workspace requests one merged refresh without waiting for the sc
 
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('workspace ETag reuses the published generation and only 304s while the cache stays readable', async () => {
+test('workspace ETag reuses the readable response and invalidates after a new publication', async () => {
   const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
     await waitForWorkspaceProjection(base);
     const etag = await waitForWorkspaceNotModified(base);
-    // Polling is throttled, so a source edit does not silently swap the published generation.
     writeFileSync(join(root, 'src/main.ts'), 'export const projectedValue = 2;\n');
-    assert.equal(await waitForWorkspaceNotModified(base), etag, 'navigation returns the last readable generation until a refresh replaces it');
+    const refresh = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
+    assert.equal(refresh.status, 202, await refresh.text());
+    // A source watcher may already publish while HTTP requests are in flight.
+    // Observe the changed representation instead of assuming a quiet time window.
+    await pollUntil(async () => {
+      const response = await fetchFresh(`${base}/api/workspace`, { headers: { 'If-None-Match': etag } });
+      const body = await response.text();
+      if (response.status === 304) return undefined;
+      assert.equal(response.status, 200, body);
+      assert.notEqual(response.headers.get('etag'), etag);
+      return parseWorkspaceProjection(body);
+    }, { description: 'a refreshed representation rejects the previous HTTP validator' });
+    assert.notEqual(await waitForWorkspaceNotModified(base), etag);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });

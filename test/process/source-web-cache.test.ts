@@ -61,10 +61,11 @@ async function view(root: string, env: NodeJS.ProcessEnv, cli: string): Promise<
     });
     return { ...ready, child };
   } catch (cause) {
-    await stop(child);
+    const failures = [cause];
     try { stopWorkspaceServer(root, cli, env, ['--conditions=concord-source']); }
-    catch (cleanup) { throw new AggregateError([cause, cleanup], 'Source view startup and cleanup failed'); }
-    throw cause;
+    catch (cleanup) { failures.push(cleanup); }
+    try { await stop(child); } catch (cleanup) { failures.push(cleanup); }
+    throw new AggregateError(failures, `Source view startup failed for ${root}`);
   }
 }
 
@@ -90,9 +91,11 @@ test('two real source workspace services share one disk Web build without checko
     return root;
   });
   const handles: Awaited<ReturnType<typeof view>>[] = [];
+  const failures: unknown[] = [];
   try {
     const results = await Promise.allSettled(roots.map(async root => { const handle = await view(root, env, cli); handles.push(handle); return handle; }));
-    for (const result of results) if (result.status === 'rejected') throw result.reason;
+    const rejected = results.flatMap(result => result.status === 'rejected' ? [result.reason] : []);
+    if (rejected.length) throw new AggregateError(rejected, 'Source views did not both become ready');
     assert.equal(handles.length, 2);
     const webCache = join(cache, 'concord/web');
     const entries = readdirSync(webCache).filter(name => /^[a-f0-9]{64}$/u.test(name));
@@ -126,13 +129,18 @@ test('two real source workspace services share one disk Web build without checko
     assert.equal(existsSync(join(checkout, 'web/dist')), false);
     assert.equal(existsSync(join(checkout, 'web/preview/dist')), false);
     for (const path of ['dist', 'web/dist', 'web/preview/dist']) assert.equal(existsSync(join(tool, path)), false);
-  } finally {
+  } catch (cause) { failures.push(cause); } finally {
     // Ask the live product service to stop before releasing its owning View
     // command; killing the owner first can race the server's own finalizers.
-    for (const root of roots) stopWorkspaceServer(root, cli, env, ['--conditions=concord-source']);
-    await Promise.all(handles.map(async handle => stop(handle.child)));
-    rmSync(directory, { recursive: true, force: true });
+    const services = await Promise.allSettled(roots.map(async root => stopWorkspaceServer(root, cli, env, ['--conditions=concord-source'])));
+    const views = await Promise.allSettled(handles.map(async handle => stop(handle.child)));
+    const cleanup = [...services, ...views].flatMap(result => result.status === 'rejected' ? [result.reason] : []);
+    failures.push(...cleanup);
+    if (cleanup.length === 0) {
+      try { rmSync(directory, { recursive: true, force: true }); } catch (cause) { failures.push(cause); }
+    }
   }
+  if (failures.length) throw new AggregateError(failures, `Source Web fixture failed; directory: ${directory}`);
 });
 
 const runBuilder = (root: string, cache: string, digest: string) => new Promise<{ code: number | null; stderr: string }>((accept, reject) => {

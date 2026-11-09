@@ -7,6 +7,7 @@ test('packed C1 publishes cold projections during continuous docs, test, and cod
   for (const relative of ['docs/feature/sample/README.md']) {
     const root = packedConsumer();
     let stop: (() => Promise<void>) | undefined;
+    const failures: unknown[] = [];
     try {
       stop = await editing(root, relative);
       const result = await refreshInstalled(root, ['trace', 'gaps']);
@@ -27,6 +28,29 @@ test('packed C1 publishes cold projections during continuous docs, test, and cod
       const human = installedCall(root, 'trace', 'gaps');
       assert.equal(human.status, 0, human.stderr);
       assert.match(human.stdout, /关系可能不完整/u);
-    } finally { if (stop) await stop(); await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
+    } catch (cause) { failures.push(cause); } finally {
+      const cleanup: unknown[] = [];
+      try { if (stop) await stop(); } catch (cause) { cleanup.push(cause); }
+      try { await waitForRefreshExit(root); } catch (cause) { cleanup.push(cause); }
+      failures.push(...cleanup);
+      if (cleanup.length === 0) {
+        try { rmSync(root, { recursive: true, force: true }); } catch (cause) { failures.push(cause); }
+      }
+    }
+    if (failures.length) throw new AggregateError(failures, `Cold diagnostic fixture failed; root: ${root}`);
   }
+});
+
+// @feature docs/engineering/testing/architecture.md#执行与资源边界
+test('drift writer cleanup reuses its completion after the process has closed', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-drift-writer-cleanup-'));
+  let close: (() => Promise<void>) | undefined;
+  t.after(async () => {
+    if (close) await close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  writeFileSync(join(root, 'source.md'), '# Writer lifecycle\n');
+  close = await editing(root, 'source.md');
+  await close();
+  await close();
 });

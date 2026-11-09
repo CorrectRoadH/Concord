@@ -63,15 +63,22 @@ export async function historicalCall(root: string) {
 
 /** Only processes naming this isolated consumer are owned by this test. */
 export async function waitForRefreshExit(root: string): Promise<void> {
-  stopWorkspaceServer(root);
-  const active = () => execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n')
-    .filter(line => line.includes(root) && /query-(refresh|scan)-worker\.(?:js|ts)/u.test(line)).map(line => Number(line.trim().split(/\s/u)[0]));
-  const deadline = Date.now() + 125_000;
-  while (active().length && Date.now() < deadline) await Effect.runPromise(Effect.sleep('100 millis').pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
-  for (const pid of active()) { try { process.kill(pid, 'SIGTERM'); } catch { /* Already exited. */ } }
-  const cleanupDeadline = Date.now() + 5_000;
-  while (active().length && Date.now() < cleanupDeadline) await Effect.runPromise(Effect.sleep('100 millis').pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
-  assert.deepEqual(active(), [], 'Owned refresh processes must exit before deleting their consumer');
+  const failures: unknown[] = [];
+  try { stopWorkspaceServer(root); } catch (cause) { failures.push(cause); }
+  try {
+    const active = () => execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n')
+      .filter(line => line.includes(root) && /query-(refresh|scan)-worker\.(?:js|ts)/u.test(line)).map(line => Number(line.trim().split(/\s/u)[0]));
+    const deadline = Date.now() + 125_000;
+    while (active().length && Date.now() < deadline) await Effect.runPromise(Effect.sleep('100 millis').pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+    for (const pid of active()) {
+      try { process.kill(pid, 'SIGTERM'); }
+      catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') failures.push(cause); }
+    }
+    const cleanupDeadline = Date.now() + 5_000;
+    while (active().length && Date.now() < cleanupDeadline) await Effect.runPromise(Effect.sleep('100 millis').pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+    assert.deepEqual(active(), [], 'Owned refresh processes must exit before deleting their consumer');
+  } catch (cause) { failures.push(cause); }
+  if (failures.length) throw new AggregateError(failures, `Diagnostic refresh cleanup unconfirmed for ${root}`);
 }
 
 export let packageScratch = '', installedCli = '';
@@ -126,20 +133,33 @@ export async function packedEnvelope(root: string, query: readonly string[]): Pr
 export async function refreshInstalled(root: string, query: readonly string[]) {
   const requestedAt = Date.now();
   const requested = installedCall(root, '--json', ...query);
-  assert.ok(requested.status === 0 || requested.status === 1, requested.stderr);
+  assert.equal(requested.status, 0, JSON.stringify({ status: requested.status, signal: requested.signal, error: requested.error?.message, stdout: requested.stdout, stderr: requested.stderr }));
   await pollUntil(async () => {
     const value = await packedEnvelope(root, query);
-    return Math.max(value.record?.scannedAt ?? 0, value.lastAttempt?.scannedAt ?? 0, value.error?.scannedAt ?? 0) >= requestedAt ? true : undefined;
+    if ((value.error?.scannedAt ?? 0) >= requestedAt) assert.fail(JSON.stringify(value));
+    return Math.max(value.record?.scannedAt ?? 0, value.lastAttempt?.scannedAt ?? 0) >= requestedAt ? true : undefined;
   }, { timeoutMs: 125_000, description: 'installed CLI diagnostic refresh' });
-  await waitForRefreshExit(root);
-  return { status: 0, stderr: '' };
+  return requested;
 }
 export async function editing(root: string, relative: string) {
   // Keep inode and size stable so C1/C2 exercise decoded-content drift. Opening
   // an atomically replaced file can correctly abort before a candidate exists.
   const child = spawn(process.execPath, [resolve('test/fixtures/projection-drift-writer.ts'), join(root, relative)], { stdio: ['ignore', 'pipe', 'pipe'] });
-  await new Promise<void>((resolveReady, reject) => { child.stdout.once('data', () => resolveReady()); child.once('error', reject); child.once('exit', code => reject(new Error(`Writer exited before ready: ${code}`))); });
-  return async () => { const exited = new Promise<void>(resolveExit => child.once('close', () => resolveExit())); child.kill('SIGTERM'); await exited; };
+  let stderr = '';
+  child.stderr.on('data', bytes => { stderr += String(bytes); });
+  const completed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolveExit({ code, signal }));
+  });
+  await Promise.race([
+    new Promise<void>(resolveReady => { child.stdout.once('data', () => resolveReady()); }),
+    completed.then(result => { throw new Error(`Writer exited before ready: ${JSON.stringify(result)}; ${stderr}`); }),
+  ]);
+  return async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+    const result = await completed;
+    assert.ok(result.code === 0 || result.code === 130 || result.signal === 'SIGTERM', `Writer cleanup failed: ${JSON.stringify(result)}; ${stderr}`);
+  };
 }
 
 export { makeOwnedProcessService };

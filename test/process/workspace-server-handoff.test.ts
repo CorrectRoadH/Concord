@@ -52,6 +52,7 @@ test('another installation shares the same protocol service without changing its
 // @feature docs/feature/local-data-engine/architecture.md#启动与裁决
 test('a different data protocol retains control frames for automatic service replacement', { timeout: 30_000 }, async () => {
   const root = await fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-protocol-handoff-'));
+  const failures: unknown[] = [];
   try {
     const entry = privateSourceInstallation(installation);
     for (const path of ['src/model/workspace-protocol.ts']) {
@@ -65,7 +66,15 @@ test('a different data protocol retains control frames for automatic service rep
     assert.equal(query.status, 0, query.stderr);
     assert.notEqual(record(root).token, before.token);
     assert.equal(await processExited(before.pid), true);
-  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
+  } catch (cause) { failures.push(cause); } finally {
+    try {
+      await stop(root);
+      for (const path of [root, installation]) {
+        try { rmSync(path, { recursive: true, force: true }); } catch (cause) { failures.push(cause); }
+      }
+    } catch (cause) { failures.push(cause); }
+  }
+  if (failures.length) throw new AggregateError(failures, `Protocol handoff fixture failed; root: ${root}; installation: ${installation}`);
 });
 
 
