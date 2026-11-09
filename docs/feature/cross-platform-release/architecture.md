@@ -108,7 +108,7 @@ Concord 拥有源码校验、归档字节与源码 Release，tap 拥有包管理
 
 ### 运行
 
-Linux 与 macOS 原生任务分别在 Ubuntu 24.04 与 Apple Silicon macOS 15 上下载并验证固定版本的 HawDB 二进制，后者 deployment target 为 macOS 15.0。native manifest 绑定桥接源码、Cargo lock、ABI、HawDB revision 与二进制摘要；本机 Nix 构建的原生产物不进入归档。
+Linux 与 macOS 原生任务分别在 Ubuntu 24.04 与 Apple Silicon macOS 15 上下载并验证固定版本的 HawDB 二进制，后者 deployment target 为 macOS 15.0。native manifest 绑定桥接源码、Cargo lock、ABI、HawDB 提交标识与二进制摘要；本机 Nix 构建的原生产物不进入归档。
 
 各目标宿主在原生任务之后构建应用，使用本目标经核验的原生产物组装候选归档并核验版本与摘要，把候选作为不可变产物上传。汇总任务收集两个目标的候选并生成摘要清单，不重编译或改写候选。
 

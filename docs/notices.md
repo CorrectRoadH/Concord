@@ -3,7 +3,7 @@
 Concord 的源码来源包括 NiceEval 私有仓库的维护工具与工程 Spec。
 
 - 来源：NiceEval `packages/repo-tools/src/`。
-- 来源 revision：`e1c66d31115208ceaae2f5bd4d730a7abf67048d`。
+- 来源提交标识：`e1c66d31115208ceaae2f5bd4d730a7abf67048d`。
 - 来源概念：Feature / Use Case、源码拥有的 trace 关系、`Problem / Decision / Insight` 生命周期、受管写入和基于证据的审阅。
 
 Concord 是独立的本地项目，不包含 NiceEval 的产品数据、凭据、部署配置或正式 E2E 证据实现。当前文档与领域定义见[文档模型](document-model.md)和[术语](concepts.md)。

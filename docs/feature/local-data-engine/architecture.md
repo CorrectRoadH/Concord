@@ -6,7 +6,7 @@
 
 Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [技术栈](../../engineering/build/README.md#技术栈)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放；它复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。
 
-引擎固定为 v0.28.0，使用 fork 的 `hawdb-0.28.0` 二进制发行；revision `d47dd9b2b6a51c57a8a621367f5ff6d5d958b3e6`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。
+引擎版本、提交标识与桥接发行版本由 `native-release.json` 声明，更新与校验遵守[原生绑定复用](../../engineering/build/architecture.md#原生绑定复用)。桥接 ABI 与缓存表 schema 由原生接口定义，加载时必须匹配。引擎默认 features 关闭，不启用后台维护、向量或全文检索。
 
 关系缓存使用参数化 SQL。子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据。
 
@@ -78,7 +78,7 @@ Repository 的只读属性 `persistentCache: 'use' | 'off'` 独立于来源访�
 
 互斥覆盖遵守本协议的 Concord 进程（含 metadata-only 与延迟准入阶段），原生引擎锁阻止清理已持有根或分支的 HawDB 句柄。它不保证直接调用 HawDB 的程序并发创建分支，也不抵抗恶意路径替换。
 
-该适配是对固定 revision 锁协议的显式依赖：不从 HawDBError 字符串推断，不绕过公开数据 API。
+该适配是对所选引擎提交的锁协议的显式依赖：不从 HawDBError 字符串推断，不绕过公开数据 API。
 
 ## 清理
 
@@ -281,7 +281,7 @@ clear、维护与 shutdown 串行执行。
 
 可经由服务的命令是固定白名单：各类 `list` 与 `show`、`trace check`、`check`、`docs check` 与 `list memory`。
 
-每项在计算进程中以一个新的乐观 Repository 快照，执行与本进程相同的领域函数。返回前按该命令原有规则核验文件、缺失路径、目录集合、配置、路径安全、publication.revision 与恢复状态。服务只提供热的解析缓存，不提供结果。
+每项在计算进程中以一个新的乐观 Repository 快照，执行与本进程相同的领域函数。返回前按该命令原有规则核验文件、缺失路径、目录集合、配置、路径安全、发布修订号与恢复状态。服务只提供热的解析缓存，不提供结果。
 
 `trace show`、`trace gaps` 与 `review` 的历史投影读取保留[异步诊断投影](use-case/query-asynchronous-projections.md)的语义，只是由服务读取投影。
 
@@ -527,7 +527,7 @@ type QueryCacheEnvelope = {
 缓存只加速，原生引擎只承担桥接（[一件事只写一次，其余推导](../../taste.md#t-3)、[技术栈](../../engineering/build/README.md#技术栈)）。
 
 1. HawDB 只保存可重建投影与可丢弃缓存，短期解析使用同一引擎的内存实例。文件 owner、证据与发布日志不进入缓存。
-2. 桥接、引擎、Rust toolchain 与依赖精确固定。锁协议与上游 revision 绑定，升级必须重新验证互斥与清理。
+2. 桥接、引擎、Rust toolchain 与依赖精确固定。锁协议与上游提交标识绑定，升级必须重新验证互斥与清理。
 3. 持久句柄由明确的唯一所有者管理，来源快照不拥有跨请求句柄。客户端的逻辑会话、事务、快照与清理的生命周期分别声明，内存句柄按进程管理。
 4. 缓存不参与来源发布或证据裁决。发行包携带目标平台产物，消费者不需要 Rust、全局 HawDB 或数据库服务。
 5. 当前事实查询的缓存只加速：成功结果的领域事实与有效性判断必须与同源重建一致，不返回陈旧或未经校验的成功结果。

@@ -20,7 +20,7 @@ React Router 管理人用导航，归档内带有 Vite 编译结果；从源码�
 
 工作区导航读取[工作区投影](#工作区投影)，不在请求内扫描来源。
 
-后台编译复用 trace 生成诊断。文档与代码的纯解析结果使用有容量上限的 HawDB 内存缓存，以当前原文匹配；目录集合、文件读取、路径安全、配置、租约及恢复检查仍每次执行，不以时间戳代替内容校验。单文件预览只读取目标和其 README 归属链，全局 inventory 异常由 workspace/check 诊断。Git 测试基线在 HawDB 内存 namespace 中按 worktree、不可变 HEAD revision、测试根与解析器版本缓存，worktree 状态仍实时读取。
+后台编译复用 trace 生成诊断。文档与代码的纯解析结果使用有容量上限的 HawDB 内存缓存，以当前原文匹配；目录集合、文件读取、路径安全、配置、租约及恢复检查仍每次执行，不以时间戳代替内容校验。单文件预览只读取目标和其 README 归属链，全局 inventory 异常由 workspace/check 诊断。Git 测试基线在 HawDB 内存 namespace 中按 worktree、不可变 HEAD 提交标识、测试根与解析器版本缓存，worktree 状态仍实时读取。
 
 浏览器以 `GET /api/events`（SSE）接收工作区服务的状态事件（结果变化、刷新状态与任务变化）。事件只作信号，收到后读取工作区缓存，读取串行执行；SSE 断开期间改为每四秒读取工作区缓存和任务状态并重连。Git 每三十二秒读取，轮询不重叠；首次构建期间每两秒重试读取缓存。读取不触发扫描，不重置当前文件或草稿。写入后的读取排在已有读取之后。首次取得工作区后不立即重复读取。同一 Feature 内切换页面保留文件树节点、折叠和滚动状态，加载占位保持工具栏布局。
 
@@ -46,7 +46,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 ### 读取与发布
 
-历史投影由 `LocalRepository.observeProjection(read)` 读取：沿用 `snapshot()` 的路径安全、Schema 解码、观察记录与句柄关闭。读取后比较文件内容与目录集合，返回 `{ value, drift: { files, directories, publicationChanged } }`。这些漂移不抛错；前后都须确认没有待恢复 journal，单独的 revision 变化在 `changedPaths` 中记为 `.`。配置变化、RecoveryRequired、路径安全失败和无可用结构的编译异常具名抛错并丢弃候选。`snapshot()`、`verifySnapshot()`、当前 CLI、check、写入与证据路径不用该原语。
+历史投影由 `LocalRepository.observeProjection(read)` 读取：沿用 `snapshot()` 的路径安全、Schema 解码、观察记录与句柄关闭。读取后比较文件内容与目录集合，返回 `{ value, drift: { files, directories, publicationChanged } }`。这些漂移不抛错；前后都须确认没有待恢复 journal，单独的发布修订号变化在 `changedPaths` 中记为 `.`。配置变化、RecoveryRequired、路径安全失败和无可用结构的编译异常具名抛错并丢弃候选。`snapshot()`、`verifySnapshot()`、当前 CLI、check、写入与证据路径不用该原语。
 
 刷新开始与写入前都重算身份，不一致时丢弃候选并立即以新身份刷新，不记为失败。安装身份在进程内首次计算后不变，配置字节每次重读。
 
@@ -172,13 +172,13 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 - Vite 与 Tailwind：静态构建、样式与开发集成；Vite 构建的静态资源随 CLI 包分发。
 - react-diff-view：Git patch 解析及统一、分栏展示。
 - Effect：领域执行与外部输入 Schema；严格版本与 CLI 一致。
-- pele 1.13.0：把 Mermaid 代码块渲染为 SVG，按图类型按需加载，没有运行时依赖；颜色与字体取自工作台主题的 CSS 变量，阅读页首屏不加载它。
+- pele：把 Mermaid 代码块渲染为 SVG，按图类型按需加载，没有运行时依赖；颜色与字体取自工作台主题的 CSS 变量，阅读页首屏不加载它。
 - KaTeX：渲染行内与独立数学公式，随包提供。
 - Fontsource Noto Sans SC：随归档提供中文字体，不依赖外部 CDN。
-- p5.js 2.3.4：完整核心运行库，仅在运行图解时加载，支持实例与全局模式。
-- p5.sound 0.4.1：显式声明后离线加载，提供声音播放、合成和分析；音频启动仍要求沙箱内的用户手势，麦克风权限不开放。
-- p5.brush 3.0.0：显式声明后离线加载，提供笔刷、自然填充和排线；按扩展要求使用 WebGL 画布。项目启用后每个图块都会加载该库，作者须统一满足它的画布要求。
-- TypeScript 与 esbuild 0.28.2：检查并编译 p5 输入，不执行消费者构建配置或安装脚本。第三方库的 JS 产物与许可证由固定依赖随包提供。
+- p5.js：完整核心运行库，仅在运行图解时加载，支持实例与全局模式。
+- p5.sound：显式声明后离线加载，提供声音播放、合成和分析；音频启动仍要求沙箱内的用户手势，麦克风权限不开放。
+- p5.brush：显式声明后离线加载，提供笔刷、自然填充和排线；按扩展要求使用 WebGL 画布。项目启用后每个图块都会加载该库，作者须统一满足它的画布要求。
+- TypeScript 与 esbuild：检查并编译 p5 输入，不执行消费者构建配置或安装脚本。第三方库的 JS 产物与许可证由固定依赖随包提供。
 
 ## PR 静态导出
 
@@ -212,7 +212,7 @@ URL 是导航状态的唯一来源。文档 `tab`、正文 `file`、Use Case 路
 
 用户切换产生历史项；前进、后退和深链接使用同一条渲染路径。drawer 关闭只在当前运行实例能证明紧邻父项时后退，否则替换到明确父 URL；刷新后不信任旧 history state。源码关闭保留所属文档的 tab/file，Use Case 关闭回所属 Feature 的 Use Cases。历史 provenance 只证明关闭去向，不保存可见选择。
 
-编辑草稿、请求状态和临时表单由组件拥有。全局路由 blocker 统一处理离开前保存，不维护第二个 pending destination。只读内容不注册自动保存；唯一活动草稿 owner 负责 flush、dirty 与 discard，旧 owner 清理不能影响新 owner。设置的表单与 JSON 在离开前保存当前表示；失败保留原 URL 和草稿，明确丢弃先恢复 baseline 并取消延迟保存。导航等待期间继续编辑必须保存最新 revision，过期导航回调不得跳转。
+编辑草稿、请求状态和临时表单由组件拥有。全局路由 blocker 统一处理离开前保存，不维护第二个 pending destination。只读内容不注册自动保存；唯一活动草稿 owner 负责 flush、dirty 与 discard，旧 owner 清理不能影响新 owner。设置的表单与 JSON 在离开前保存当前表示；失败保留原 URL 和草稿，明确丢弃先恢复 baseline 并取消延迟保存。导航等待期间继续编辑必须保存最新草稿版本，过期导航回调不得跳转。
 
 滚动缓存只属于展示层，按历史项记录桌面、移动容器与 drawer 位置；等待异步内容后恢复，用户主动操作停止补偿。刷新恢复导航位置，不承诺像素位置。结果页视图可深链接，但瞬时命令返回值不会为恢复页面而自动重跑。
 

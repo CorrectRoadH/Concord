@@ -358,4 +358,4 @@ Git-private 目录由 `git rev-parse --git-path concord` 定位，其中的 HawD
 
 supervisor 和 native 均继承调用者的进程组，不再建立可逃逸的 native 组；只用专属新 pipes 连接 native 的 stdin/stdout，不继承 supervisor 的协议 fd 或 IPC。会话总期限 600 秒，父 stdin EOF、TERM/INT 或期限触发幂等停止：停止 relay、关闭 native stdin、TERM、500ms 后必要时 KILL，再等待自有 child close。不对继承组发信号。异常收尾中止背压等待，不伪造响应；外层进程组回收仍验证整体退出。
 
-固定 TypeScript 7.1.0-beta 使用锁文件记录的 Bun 安装补丁：官方 JSON-RPC connection 关闭时 dispose connection，保证初始化和在途请求拒绝；不复制 RPC、不读取私有 client 字段、不在运行时改写依赖。补丁字节参与依赖与构建身份，所有来源和归档使用同一补丁。
+TypeScript 使用依赖清单与锁文件记录的 Bun 安装补丁：官方 JSON-RPC connection 关闭时 dispose connection，保证初始化和在途请求拒绝；不复制 RPC、不读取私有 client 字段、不在运行时改写依赖。补丁字节参与依赖与构建身份，所有来源和归档使用同一补丁。

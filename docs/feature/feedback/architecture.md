@@ -37,7 +37,7 @@ Issue 文件可以直接编辑，`concord issue` 是写入同样内容并执行�
 
 API 适配器只访问固定 HTTPS API，重定向拒绝，外部 URL 只用于解析支持的对象定位符。所有分页、响应体、时间和条数有界；失败不发布已抓取的部分结果。连接失败不能证明对象被删除或其他连接无权读取。Linear 只使用个人 API key。
 
-可选 GitHub CLI 模式的[接入设计](#gh-读取适配)采用不同的信任边界：认证与 HTTP 网络处理委托给受信 gh，Concord 控制初始请求、进程、输出预算、身份与发布，不声称能限制 CLI 内部重定向或网络缓冲。API 保持默认且不自动切换；项目配置显式选择 `transport: 'gh'`，要求 gh 2.98.0 或更新版本及 POSIX 进程组能力。工作台操作者可触发服务端账号对配置范围的读取，不能把选择 CLI 当成浏览器认证。Linear CLI 仍为候选。
+可选 GitHub CLI 模式的[接入设计](#gh-读取适配)采用不同的信任边界：认证与 HTTP 网络处理委托给受信 gh，Concord 控制初始请求、进程、输出预算、身份与发布，不声称能限制 CLI 内部重定向或网络缓冲。API 保持默认且不自动切换；项目配置显式选择 `transport: 'gh'`，要求 gh 通过适配器版本与 API 能力检查，并支持 POSIX 进程组。工作台操作者可触发服务端账号对配置范围的读取，不能把选择 CLI 当成浏览器认证。Linear CLI 仍为候选。
 
 将来新增 provider 可实现同一读取与规范化 Spec；webhook 和 OAuth 回调需要另行定义权限、重试和资源归属。远端 Issue 写入不属于 Feedback 读取，见[远端 Issue 写入](../neutral-project-governance/use-case/mutate-remote-issue.md)。
 
@@ -85,7 +85,7 @@ GitHub 可显式委托 gh 处理认证与网络，与 API 模式并列；两种�
 
 新增 CLI 模式应是明确的配置分支，与当前环境变量 API 模式并列；不静默改写已有连接，不自动把已安装的同名程序视为支持的适配器。项目不得配置任意 executable、shell 或 argv。
 
-GitHub 的读取入口是 `gh api`，要求 gh 2.98.0 或更新版本及 POSIX 进程组能力。查询显式指定公共主机和仓库，继续使用 REST 仓库／issue ID、全部状态及 PR 排除规则。将来接入 Linear CLI 须固定一个可验收的具体工具版本与原生 `api` 命令，显式指定 workspace/team，保留组织、team 与 issue UUID。
+GitHub 的读取入口是 `gh api`，要求 gh 通过适配器版本与 API 能力检查，并支持 POSIX 进程组。查询显式指定公共主机和仓库，继续使用 REST 仓库／issue ID、全部状态及 PR 排除规则。将来接入 Linear CLI 须由适配器声明可验收的版本范围与原生 `api` 命令，显式指定 workspace/team，保留组织、team 与 issue UUID。
 
 ### 来源与发布语义
 

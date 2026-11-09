@@ -26,7 +26,7 @@ concord feedback connection remove product-github
 
 `--transport gh` 不接受 `--credential-env`；Concord 不导出 CLI 的 token。先在运行 Concord 的机器上完成 `gh auth login`，再保存项目连接。`feedback connection check <id>` 只检测 gh 连接的指定仓库访问与既有绑定，不导入反馈、不提前绑定、不保存账号列表。缺失工具、未登录或无访问权限分别报告，不自动退回 API。
 
-gh 模式要求 GitHub CLI 2.98.0 或更新的兼容版本，以及支持进程组回收的 POSIX 环境；不自动安装工具。Windows 上继续使用 API 模式或本地反馈。CLI 默认认证优先级为 GH_TOKEN、GITHUB_TOKEN、已保存的 gh 凭据，均来自启动 Concord 的环境。
+gh 模式要求 通过适配器版本与 API 能力检查的 GitHub CLI，以及支持进程组回收的 POSIX 环境；不自动安装工具。Windows 上继续使用 API 模式或本地反馈。CLI 默认认证优先级为 GH_TOKEN、GITHUB_TOKEN、已保存的 gh 凭据，均来自启动 Concord 的环境。
 
 Web 从侧栏「反馈」进入：按来源或本地处理状态筛选，创建本地反馈，选择连接导入 URL 或同步，进入详情编辑本地 Markdown、按角色关联 Memory 与涉及的 Spec，以及关闭。在「项目设置 → 反馈来源」维护连接，表单保存名称与范围，用同一份配置摘要保护外部并发修改。正常工作台刷新只读取本地数据。
 

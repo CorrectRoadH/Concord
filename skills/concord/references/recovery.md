@@ -10,7 +10,7 @@ concord cache rebuild
 
 缓存损坏、schema 不符或写失败时，查询应回退权威源码而非返回陈旧声明或关系。`cache clear` 不删除 journal、Issue 或 Memory。`cache rebuild` 不接受 `--dry-run`。
 
-`cache clear` 取得同级 Concord 协调锁及固定 HawDB revision 的根、分支锁。先删数据，再删嵌套锁，最后删空目录，保留根目录、根 owner.hawdb.lock 和 cache.hawdb.concord.lock 的 inode。不要删锁抢占。clear 因占用、路径异常或 I/O 失败而拒绝或部分完成时保留现场，处理原因后重试。
+`cache clear` 取得同级 Concord 协调锁及所选 HawDB 提交对应的根、分支锁。先删数据，再删嵌套锁，最后删空目录，保留根目录、根 owner.hawdb.lock 和 cache.hawdb.concord.lock 的 inode。不要删锁抢占。clear 因占用、路径异常或 I/O 失败而拒绝或部分完成时保留现场，处理原因后重试。
 
 普通只读观察和 status 不修改来源或逻辑缓存行，允许已有库的内部派生文件重建及同级协调锁创建。缺失数据库不初始化。dry-run 与 cache-off 不打开持久库；dry-run status 对已有内容报告 unavailable，并说明持久访问关闭。
 
