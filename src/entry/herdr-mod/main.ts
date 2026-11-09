@@ -541,7 +541,7 @@ export default class ConcordMod extends View {
 
   private reportFailure(cause: unknown, session = this.session): void {
     const error = failure(cause);
-    if (/Unknown(?:Command|Option)|UnrecognizedCommand|unknown (?:command|subcommand|option)|unrecognized (?:command|subcommand|option)|not (?:a |be )?recognized.*command|command not found|concord.*not found|cannot start concord/iu.test(`${error.code ?? ''} ${error.message} ${error.details ?? ''}`)) {
+    if (/Unknown(?:Command|Option)|UnrecognizedCommand|unknown (?:command|subcommand|option|flag)|unrecognized (?:command|subcommand|option|flag)|not (?:a |be )?recognized.*command|command not found|concord.*not found|cannot start concord/iu.test(`${error.code ?? ''} ${error.message} ${error.details ?? ''}`)) {
       this.cliMachines.delete(session.machine);
       this.cli = /command not found|cannot start concord|concord.*not found/iu.test(`${error.message} ${error.details ?? ''}`) ? 'missing' : 'outdated';
       this.unknownCommand = error.details || error.message;
