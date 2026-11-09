@@ -228,7 +228,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 每次任务捕获会话标识、全部依赖的 URI、版本、打开标识与磁盘身份，发布或返回前再次核对；任一变化即丢弃结果并重排。步骤、标记、引用解析与写作检查使用同一版本集合。
 
-每个计算 Job 是固定 Bun 的 editor worker，由独立 OwnedProcess 进程组持有，编译器 supervisor 与原生编译器继承该进程组。父进程每 100ms 从操作系统采样 editor 主进程 RSS，超过 256 MiB 时以 EditorBudgetExceeded 结束并确认整个组回收；采样不可用报 EditorTaskFailed，不能宣称预算已验证。该预算包含 editor 的 JS 与 runtime resident memory，采样不证明采样间的短峰值；输入、输出与时间预算继续独立强制。项目配置不能替换可执行文件、入口或参数。Job 经 stdin 接收单个 JSON 输入、经 stdout 返回单个 JSON，双方严格解码。
+每个计算 Job 是固定 Bun 的 editor worker，由独立 OwnedProcess 进程组持有，编译器 supervisor 与原生编译器继承该进程组。editor 不设置进程内存上限，不因 RSS 大小终止计算；输入、输出与时间预算继续独立强制。项目配置不能替换可执行文件、入口或参数。Job 经 stdin 接收单个 JSON 输入、经 stdout 返回单个 JSON，双方严格解码。
 
 每个 Job 有自己的 Scope，收尾后核验进程组归属、清理已检查且后代已消失；缺少清理记录视为未知。
 

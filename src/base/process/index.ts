@@ -24,7 +24,6 @@ export { withTypeScript } from './typescript-host.ts';
 export { withTypeScriptFiles } from './typescript-host.ts';
 export { withTypeScriptSource } from './typescript-host.ts';
 export { sourceUri } from './source-uri.ts';
-export { residentMemory } from './resident-memory.ts';
 export { uriPath } from './source-uri.ts';
 export { javascript } from './mdx-parser.ts';
 export { mdxProse } from './mdx-parser.ts';

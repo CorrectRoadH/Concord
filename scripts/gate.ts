@@ -5,7 +5,7 @@ import { Duration, Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { join, resolve } from 'node:path';
 import { checkoutRoot } from './build-output.ts';
-import { gateMemoryBudgets, withGateResources } from './gate-resources.ts';
+import { withGateResources } from './gate-resources.ts';
 import { GateProcessIdentity, observeFixedGateMemory, observeTestProcessTree } from './gate-resource-processes.ts';
 import { withGateQueue } from './gate-queue.ts';
 import { isFullGateSelection, selectGateTests } from './gate-selection.ts';
@@ -16,7 +16,7 @@ class DistInCheckout extends Schema.TaggedError<DistInCheckout>()('DistInCheckou
 const task = Effect.fn('gate.task')(function* (name: string, args: readonly string[] = [], env: NodeJS.ProcessEnv = process.env) {
   const started = performance.now();
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const observation = name === 'test:source' ? undefined : yield* observeTestProcessTree(name, gateMemoryBudgets.fixed);
+  const observation = name === 'test:source' ? undefined : yield* observeTestProcessTree(name);
   const code = yield* spawner.exitCode(ChildProcess.make('bun', ['--no-env-file', '--config=/dev/null', 'run', name, ...args], {
     env: { ...env, CONCORD_GATE_TEST_OUTPUT: name === 'test:source' ? process.env.CONCORD_GATE_REPORT : undefined },
     stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', forceKillAfter: Duration.seconds(5),
@@ -51,7 +51,7 @@ const main = (selected: Effect.Success<ReturnType<typeof selectGateTests>>) => E
   }).pipe(Effect.orDie));
   const eventDirectory = join(output, 'process-events');
   yield* fs.makeDirectory(eventDirectory, { recursive: true });
-  const fixedObservation = yield* observeFixedGateMemory(gateMemoryBudgets.fixed);
+  const fixedObservation = yield* observeFixedGateMemory();
   const env = { ...process.env,
     CONCORD_TEST_RETAIN_FILE: retainedFile, CONCORD_TEST_EVENT_DIRECTORY: eventDirectory, CONCORD_TEST_RUN_ID: output,
     TMPDIR: fixtureDirectory, TMP: fixtureDirectory, TEMP: fixtureDirectory,

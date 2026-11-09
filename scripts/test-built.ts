@@ -8,7 +8,7 @@ import { availableParallelism, loadavg } from 'node:os';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { runNodeTests } from './test-reporter.ts';
-import { currentGateMemoryMax, gateConcurrency, gateAdmissionBytes, gateMemoryBudgets, makeGateAdmission } from './gate-resources.ts';
+import { gateConcurrency } from './gate-resources.ts';
 import { auditTestLayers, summarizeMeasuredTestLayers } from './test-layers.ts';
 import { readFileTimings, summarizeFileTimings, timingMeasurement, writeTimingReport, type Measurement } from './gate-timings.ts';
 import { writeProcessEventReport } from './process-events.ts';
@@ -40,9 +40,8 @@ const main = Effect.scoped(Effect.gen(function* () {
   const allFiles = process.env.CONCORD_GATE_ALL_TEST_FILES;
   yield* Effect.sync(() => { delete process.env.CONCORD_GATE_TEST_OUTPUT; delete process.env.CONCORD_GATE_TEST_FILES; delete process.env.CONCORD_GATE_ALL_TEST_FILES; });
   const fs = yield* FileSystem.FileSystem;
-  const memoryMaxBytes = currentGateMemoryMax();
   const { node: concurrency } = yield* Effect.try({
-    try: () => gateConcurrency(memoryMaxBytes),
+    try: () => gateConcurrency(),
     catch: cause => new TestArgumentsInvalid({ detail: String(cause) }),
   });
   const { values, positionals } = yield* Effect.try({
@@ -72,8 +71,6 @@ const main = Effect.scoped(Effect.gen(function* () {
     const inventory = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(allFiles);
     yield* Effect.try({ try: () => auditTestLayers(inventory), catch: cause => cause });
   }
-  const capacity = gateAdmissionBytes(memoryMaxBytes);
-  const admission = yield* makeGateAdmission(capacity);
   const started = performance.now();
   yield* fs.makeDirectory('.test-results', { recursive: true });
   const output = resolve(gateOutput ?? (yield* fs.makeTempDirectory({ directory: '.test-results', prefix: 'run-' })));
@@ -97,7 +94,7 @@ const main = Effect.scoped(Effect.gen(function* () {
     });
     const failed = yield* runNodeTests({ files: files.map(file => resolve(file)), concurrency,
       testNamePatterns: values['test-name-pattern'], timeout: Duration.toMillis(Duration.minutes(5)),
-    }, output, { admission, bytes: gateMemoryBudgets.node, history: true });
+    }, output);
     const elapsed = performance.now() - suiteStarted;
     phases.push({ name: 'Source Bun', measurement: timingMeasurement('suite-wallclock', [{ duration_ms: elapsed, success: !failed }], 1) });
     yield* Effect.sync(() => console.error(`# Source Bun tests: ${(elapsed / 1000).toFixed(3)}s; exit=${failed ? 1 : 0}`));
@@ -115,8 +112,7 @@ const main = Effect.scoped(Effect.gen(function* () {
     selection: { files, nodeFiles: selectedNode,
       namePattern: values['test-name-pattern'] ?? null, shard: values['test-shard'] ?? null },
     concurrency: { node: concurrency },
-    admission: { timings: admission.timings, capacityBytes: capacity, budgets: gateMemoryBudgets, nodeConcurrencyIsUpperLimit: true,
-      processTreeReports: [join(output, 'process-tree-peaks.jsonl')] },
+    memory: { processTreeReports: [join(output, 'process-tree-peaks.jsonl')] },
     node: summarizeFileTimings(selectedNode, nodeTimings, 'node-file-elapsed-sum', !failed),
     phases: [{ name: 'Source Bun', ...(phases[0]?.measurement ?? timingMeasurement('suite-wallclock', [], 0)) }],
     wallclock: timingMeasurement('test-runner-wallclock', [{ duration_ms: performance.now() - started, success: !failed }], 1),

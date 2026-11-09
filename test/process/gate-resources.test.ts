@@ -1,4 +1,4 @@
-// 跨进程保证：运行环境——真实gate子进程在独立cgroup受内存限制，OOM不杀调用者且资源报告保留，systemd缺失保留工作负载退出码。
+// 跨进程保证：运行环境——真实gate子进程在独立cgroup观测内存且不设上限，资源报告保留，systemd缺失保留工作负载退出码。
 import type * as EffectTypes from 'effect';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -7,12 +7,11 @@ import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { GiB } from '../../scripts/gate-resources.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 const Report = Schema.Struct({
   memoryIsolation: Schema.String, reason: Schema.NullOr(Schema.String),
-  memoryMaxBytes: Schema.Number, memorySwapMaxBytes: Schema.NullOr(Schema.Number),
+  memoryMaxBytes: Schema.Null, memorySwapMaxBytes: Schema.Null,
   memoryPeakBytes: Schema.NullOr(Schema.Number), memorySwapPeakBytes: Schema.NullOr(Schema.Number),
   cgroup: Schema.NullOr(Schema.String), unit: Schema.NullOr(Schema.String), exitCode: Schema.NullOr(Schema.Number),
   slice: Schema.optional(Schema.NullOr(Schema.String)), memoryPeakCgroup: Schema.optional(Schema.NullOr(Schema.String)),
@@ -36,7 +35,7 @@ const hasSystemdScope = Effect.gen(function*() {
   );
 });
 
-const runFixture = Effect.fn('test.gate.resources')(function*(root: string, body: string, memoryMaxBytes: number, noSystemd = false) {
+const runFixture = Effect.fn('test.gate.resources')(function*(root: string, body: string, noSystemd = false) {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fixture = join(root, 'fixture.ts');
@@ -44,7 +43,7 @@ const runFixture = Effect.fn('test.gate.resources')(function*(root: string, body
   yield* fs.writeFileString(fixture, `import { NodeRuntime, NodeServices } from ${JSON.stringify(import.meta.resolve('@effect/platform-node'))};
 import { Effect } from ${JSON.stringify(import.meta.resolve('effect'))};
 import { withGateResources } from ${JSON.stringify(pathToFileURL(resolve('scripts/gate-resources.ts')).href)};
-withGateResources(${body}, { memoryMaxBytes: ${memoryMaxBytes}, reportRoot: ${JSON.stringify(reportRoot)} }).pipe(Effect.scoped, Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+withGateResources(${body}, { reportRoot: ${JSON.stringify(reportRoot)} }).pipe(Effect.scoped, Effect.provide(NodeServices.layer), NodeRuntime.runMain);
 `);
   const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [fixture], {
     env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined,
@@ -62,7 +61,7 @@ withGateResources(${body}, { memoryMaxBytes: ${memoryMaxBytes}, reportRoot: ${JS
 resourceTest('a real gate scope is separate from its caller and records cgroup peaks before exit', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const expectedScope = yield* hasSystemdScope;
-  const result = yield* runFixture(root, 'Effect.sync(() => { const memory = Buffer.alloc(16 * 1024 * 1024, 1); console.log(memory[0]); })', GiB / 2);
+  const result = yield* runFixture(root, 'Effect.sync(() => { const memory = Buffer.alloc(16 * 1024 * 1024, 1); console.log(memory[0]); })');
   assert.equal(result.code, 0, result.text);
   assert.equal(result.report.wallclockMs, result.report.observedWallclockMs);
   assert.ok(Number.isFinite(result.report.wallclockMs));
@@ -71,9 +70,8 @@ resourceTest('a real gate scope is separate from its caller and records cgroup p
     assert.equal(typeof result.report.reason, 'string');
     return;
   }
-  assert.equal(result.report.memoryMaxBytes, GiB / 2);
-  assert.equal(result.report.memorySwapMaxBytes, 0);
-  assert.equal(result.report.memorySwapPeakBytes, 0);
+  assert.equal(result.report.memoryMaxBytes, null);
+  assert.equal(result.report.memorySwapMaxBytes, null);
   assert.equal(result.report.exitCode, 0);
   assert.equal(typeof result.report.slice, 'string');
   assert.ok(result.report.memoryPeakCgroup?.endsWith(`/${result.report.slice}`));
@@ -81,29 +79,21 @@ resourceTest('a real gate scope is separate from its caller and records cgroup p
   assert.ok(result.report.cgroup?.endsWith(`/${result.report.unit}`));
   const parent = process.platform === 'linux' ? yield* fs.readFileString('/proc/self/cgroup') : '';
   assert.equal(parent.includes(result.report.unit!), false, 'gate entered its caller scope');
-  assert.ok(result.report.memoryPeakBytes !== null && result.report.memoryPeakBytes >= 16 * 1024 * 1024 && result.report.memoryPeakBytes <= GiB / 2, result.text);
+  assert.ok(result.report.memoryPeakBytes !== null && result.report.memoryPeakBytes >= 16 * 1024 * 1024, result.text);
   assert.equal(yield* fs.exists(result.report.cgroup!), false, 'gate left its scope populated');
   assert.equal(yield* fs.exists(result.report.memoryPeakCgroup!), false, 'gate left its slice populated');
 }));
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
-resourceTest('scope OOM kills only the gate and leaves its peak report readable to the surviving caller', root => Effect.gen(function*() {
-  const fs = yield* FileSystem.FileSystem;
-  const expectedScope = yield* hasSystemdScope;
-  const memoryMax = GiB / 8;
-  const result = yield* runFixture(root, 'Effect.sync(() => { const memory: Buffer[] = []; for (let i = 0; i < 24; i++) memory.push(Buffer.alloc(16 * 1024 * 1024, 1)); })', memoryMax);
-  assert.equal(result.report.memoryIsolation, expectedScope ? 'systemd-scope' : 'unavailable', result.text);
-  if (result.report.memoryIsolation === 'unavailable') return;
-  assert.notEqual(result.code, 0, result.text);
-  assert.equal(result.report.wallclockMs, null);
-  assert.ok(Number.isFinite(result.report.observedWallclockMs));
-  assert.equal(result.report.memoryMaxBytes, memoryMax);
-  assert.equal(result.report.memoryPeakBytes, memoryMax, result.text);
-  assert.equal(result.report.memorySwapPeakBytes, 0);
-  assert.equal(result.report.exitCode, result.code);
-  assert.equal(typeof result.report.slice, 'string');
-  assert.ok(result.report.memoryPeakCgroup?.endsWith(`/${result.report.slice}`));
-  assert.equal(yield* fs.exists(result.report.memoryPeakCgroup!), false, 'OOM gate left its slice populated');
+resourceTest('gate scope observes allocations without memory or swap caps', root => Effect.gen(function*() {
+  const result = yield* runFixture(root, 'Effect.sync(() => { const memory: Buffer[] = []; for (let i = 0; i < 24; i++) memory.push(Buffer.alloc(16 * 1024 * 1024, 1)); console.log(memory.length); })');
+  assert.equal(result.code, 0, result.text);
+  assert.equal(result.report.memoryMaxBytes, null);
+  assert.equal(result.report.memorySwapMaxBytes, null);
+  assert.equal(result.report.exitCode, 0);
+  if (result.report.memoryIsolation === 'systemd-scope') {
+    assert.ok(result.report.memoryPeakBytes !== null && result.report.memoryPeakBytes >= 384 * 1024 ** 2);
+  }
 }));
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
@@ -112,13 +102,13 @@ resourceTest('unavailable systemd keeps the workload result and explicitly repor
   const successRoot = join(root, 'success'), failedRoot = join(root, 'failed');
   yield* fs.makeDirectory(successRoot);
   yield* fs.makeDirectory(failedRoot);
-  const success = yield* runFixture(successRoot, 'Effect.void', GiB, true);
+  const success = yield* runFixture(successRoot, 'Effect.void', true);
   assert.equal(success.code, 0, success.text);
   assert.equal(success.report.memoryIsolation, 'unavailable');
   assert.equal(success.report.exitCode, 0);
   assert.equal(success.report.wallclockMs, success.report.observedWallclockMs);
   assert.equal(typeof success.report.reason, 'string');
-  const failed = yield* runFixture(failedRoot, "Effect.fail(new Error('intentional workload failure'))", GiB, true);
+  const failed = yield* runFixture(failedRoot, "Effect.fail(new Error('intentional workload failure'))", true);
   assert.equal(failed.code, 1, failed.text);
   assert.equal(failed.report.exitCode, 1);
   assert.equal(failed.report.memoryIsolation, 'unavailable');

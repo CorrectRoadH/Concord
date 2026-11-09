@@ -10,13 +10,13 @@ Bun 直接加载 TypeScript 测试源码，并兼容 `node:test` 声明。同步
 
 ### Bun 测试引擎
 
-现有 gate 负责文件发现、changed 选择、文件分片与 Effect 内存准入；每个获准文件由一个独立的官方 `bun test` 进程执行，不复用测试进程。官方引擎负责用例执行、名称过滤、超时与报告，不实现替代测试引擎（[用现成的能力，不重写](../../taste.md#t-10)）。
+现有 gate 负责文件发现、changed 选择、文件分片与 Effect 文件并发；每个获准文件由一个独立的官方 `bun test` 进程执行，不复用测试进程。官方引擎负责用例执行、名称过滤、超时与报告，不实现替代测试引擎（[用现成的能力，不重写](../../taste.md#t-10)）。
 
 - 每个文件使用新的临时 timings 路径，传入 `--timings <文件> --update-timings`，以官方 JUnit 记录用例结果。名称筛选传 `--test-name-pattern`；零匹配允许成功，报告执行数为零，不能把过滤跳过算成执行。动态 `t.test` 子测试的失败归其父测试，计数遵循 Bun 官方报告，不能声称逐个子测试独立计数。
 - 成功要求正常退出 0、没有信号终止，并且本次 timings 含所选文件的完整记录；主动 `process.exit(0)` 缺少完成记录也失败。旧报告不能复用。空文件可以没有 JUnit，但须有本次文件完成记录，执行数为零。导入失败、断言失败、超时、报告损坏或非预期文件均失败。
 - 单文件有 5 分钟的进程期限；终止后等待整个自有进程组退出再归还准入。测试自带的更短超时继续交给官方引擎，取消不能返回成功。
 - 预加载使用真实文件路径，事件上下文通过显式环境传递，不依赖文件 URL query。启动关闭 cwd dotenv 和 bunfig 自动加载。每个文件记录真实 PID 与进程出生身份，观测不到的计数记为未知；不依赖 Bun 没有实现的 Node diagnostics channel，也不填造零值。
-- gate 保持现有路径、changed、名称与分片选项、完整静态检查、单文件日志、层耗时、内存准入及失败聚合。报告必须区分执行、跳过和未知计数。
+- gate 保持现有路径、changed、名称与分片选项、完整静态检查、单文件日志、层耗时、内存观测及失败聚合。报告必须区分执行、跳过和未知计数。
 
 ### 修复核验冻结的文件
 
@@ -95,13 +95,13 @@ CLI 层的测试在测试进程里运行和真实 CLI 相同的命令程序，�
 
 受管文件的内容只由格式的 owner 生成：Spec 与 Memory 通过领域写入入口或 `renderDocument`，品味由 `initialize` 写入的模板生成，配置通过 `renderTypeScriptConfig`，写作规则与 concepts 通过各自的写入入口。格式改变时只改格式 owner，测试不随之修改（[当前格式](../../architecture.md#当前格式)）。
 
-## 内存隔离
+## 内存观测
 
-门禁按[内存](README.md#共享资源与同步)规则限制自身的内存峰值，在有 systemd user scope 的环境中这样实现：
+门禁按[共享资源](README.md#共享资源与同步)规则记录内存峰值，不设置内存上限：
 
-1. 门禁在独立的 systemd scope 中运行，以门禁的内存上限为 `MemoryMax`。超出时只终止门禁本身，不影响同一会话中的其它进程。
-2. 每次门禁另建一个只属于它的 slice 包住这个 scope。slice 设同样的 `MemoryMax`，并禁用 swap。
-3. 报告的峰值读自 slice，因为较旧的 systemd 删除被 OOM 终止的 scope 时不保留其峰值。
-4. 门禁的调用方在报告写完后回收 scope 与 slice。
+1. 有 systemd user scope 时，门禁在自己拥有的 scope 与 slice 中运行，仅启用 `MemoryAccounting`。不设置 `MemoryMax`、`MemorySwapMax` 或因内存占用终止进程的策略。
+2. 报告峰值读自 slice；scope 与 slice 的归属验证、结束回收及存活进程确认保持独立。
+3. `resources.json` 的 `memoryMaxBytes` 与 `memorySwapMaxBytes` 为 `null`，表示未设置上限；整体和各测试进程树仍记录可观测的峰值。测试时间报告只保存文件并发数及进程树报告路径，不保存准入容量或预算。
+4. 每文件进程树的观测不判超预算，不写入用于调度的历史内存记录；进程清理失败仍返回具名错误并停止后续调度。
 
-没有 systemd user scope 的环境不建 scope 与 slice，报告写明 `memoryIsolation: "unavailable"` 与原因。
+没有 systemd user scope 时直接运行，报告写明 `memoryIsolation: "unavailable"` 与原因；有 scope 时该字段为 `systemd-scope`，表示独立的观测与回收边界，不表示内存受限。

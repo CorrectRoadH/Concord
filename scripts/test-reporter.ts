@@ -10,8 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { inspect } from 'node:util';
 import { summarizeTestLayers } from './test-layers.ts';
 import { observeTestProcessTree } from './gate-resource-processes.ts';
-import { withGateAdmission, type GateAdmission, gateMemoryBudgets } from './gate-resources.ts';
-import { readGateNodeReservation, writeGateNodePeak } from './gate-admission-history.ts';
+import { GateResourcesInvalid } from './gate-resources.ts';
 import { readBunCases, readBunCompletion } from './bun-test-report.ts';
 
 class TestRunnerFailed extends Schema.TaggedError<TestRunnerFailed>()('TestRunnerFailed', {
@@ -25,8 +24,8 @@ interface SourceTestOptions {
 }
 type Counts = ReturnType<typeof readBunCases>['counts'];
 
-/** The controller owns admission and diagnostics; Bun owns test execution and reports. */
-export const runNodeTests = Effect.fn('test.bun')(function*(options: SourceTestOptions, output: string, admission?: { readonly admission: GateAdmission; readonly bytes: number; readonly history?: boolean }) {
+/** The controller owns concurrency and diagnostics; Bun owns test execution and reports. */
+export const runNodeTests = Effect.fn('test.bun')(function*(options: SourceTestOptions, output: string) {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const pinned = (yield* fs.readFileString(fileURLToPath(new URL('../.bun-version', import.meta.url)))).trim();
@@ -44,6 +43,7 @@ export const runNodeTests = Effect.fn('test.bun')(function*(options: SourceTestO
   const timingsPath = process.env.CONCORD_TEST_TIMINGS ?? join(output, 'node-timings.jsonl');
   const runCounts: Counts = { tests: 0, failed: 0, cancelled: 0, skipped: 0 };
   let success = true, countsKnown = true, fileProcessStarts = 0;
+  let cleanupFailed = false;
   const fileTimings: { file: string; duration_ms: number; success: boolean; cases?: number }[] = [];
   const failure = (file: string, name: string, error: string) => fs.writeFileString(join(output, 'node-failures.jsonl'), `${JSON.stringify({ file, name, error })}\n`, { flag: 'a' });
   const readReport = Effect.fn('test.bun.readReport')(function*(path: string) {
@@ -51,7 +51,7 @@ export const runNodeTests = Effect.fn('test.bun')(function*(options: SourceTestO
     if (Number(stat.size) > 16 * 1024 * 1024) return yield* new TestRunnerFailed({ cause: new Error(`Bun report exceeds 16 MiB: ${path}`) });
     return yield* fs.readFileString(path);
   });
-  const engine = (file: string, admittedBytes: number) => Effect.scoped(Effect.gen(function*() {
+  const engine = (file: string) => Effect.scoped(Effect.gen(function*() {
     // The official engine merges existing timings, so every invocation owns a new destination.
     const directory = yield* fs.makeTempDirectory({ directory: logs, prefix: `${basename(file)}-` });
     const officialTimings = join(directory, 'timings.json'), junit = join(directory, 'junit.xml');
@@ -59,20 +59,15 @@ export const runNodeTests = Effect.fn('test.bun')(function*(options: SourceTestO
     yield* fs.writeFileString(config, '');
     const id = createHash('sha256').update(file).digest('hex');
     const log = join(logs, `${basename(file)}-${id}.log`);
-    const observation = yield* observeTestProcessTree(file, admission?.history ? gateMemoryBudgets.node : admission?.bytes ?? gateMemoryBudgets.node, []);
+    const observation = yield* observeTestProcessTree(file, []);
     let finished = false;
     const finish = Effect.uninterruptible(Effect.gen(function*() {
       if (finished) return;
       finished = true;
       const report = yield* observation.finish.pipe(Effect.onExit(exit => Effect.sync(() => {
-        if (exit._tag === 'Failure' && admission !== undefined) admission.admission.failed = true;
+        if (exit._tag === 'Failure') cleanupFailed = true;
       })));
-      yield* fs.writeFileString(join(output, 'process-tree-peaks.jsonl'), `${JSON.stringify({ ...report, admittedBytes })}\n`, { flag: 'a' });
-      if (admission?.history && report.state === 'observed' && report.peakBytes !== null) yield* writeGateNodePeak(file, report.peakBytes);
-      if (report.exceeded) {
-        if (admission !== undefined) admission.admission.failed = true;
-        yield* Effect.sync(() => console.error(`# Gate file exceeds memory budget: ${report.file}; sampled PSS=${report.peakBytes}; budget=${report.budgetBytes}`));
-      }
+      yield* fs.writeFileString(join(output, 'process-tree-peaks.jsonl'), `${JSON.stringify(report)}\n`, { flag: 'a' });
     }));
     yield* Effect.addFinalizer(() => finish.pipe(Effect.orDie));
     const code = yield* Effect.scoped(Effect.gen(function*() {
@@ -118,10 +113,10 @@ export const runNodeTests = Effect.fn('test.bun')(function*(options: SourceTestO
   }));
   yield* Effect.forEach(options.files, original => Effect.gen(function*() {
     const file = resolve(original);
-    const bytes = admission?.history ? yield* readGateNodeReservation(file) : admission?.bytes ?? 0;
     const execute = Effect.gen(function*() {
+      if (cleanupFailed) return yield* new GateResourcesInvalid({ detail: 'A test process tree could not be released safely' });
       const started = performance.now();
-      const result = yield* engine(file, bytes).pipe(Effect.catch(cause => Effect.gen(function*() {
+      const result = yield* engine(file).pipe(Effect.catch(cause => Effect.gen(function*() {
         const error = inspect(cause, { depth: 8, maxStringLength: 100_000 });
         yield* failure(file, 'Bun test engine', error);
         yield* Effect.sync(() => console.error(`# Bun test engine failed: ${file}; ${error}`));
@@ -136,7 +131,7 @@ export const runNodeTests = Effect.fn('test.bun')(function*(options: SourceTestO
       yield* fs.writeFileString(timingsPath, `${JSON.stringify({ ...timing, scope: 'file', counts: result.counts ?? null })}\n`, { flag: 'a' });
       yield* Effect.sync(() => console.error(`# Bun file: ${file}; ${(timing.duration_ms / 1000).toFixed(3)}s; success=${timing.success}; logs=${logs}`));
     });
-    yield* admission === undefined ? execute : withGateAdmission(admission.admission, bytes)(execute);
+    yield* execute;
   }), { concurrency: options.concurrency, discard: true });
   yield* fs.writeFileString(timingsPath, `${JSON.stringify({ scope: 'run', success, counts: countsKnown ? runCounts : null,
     observedCounts: runCounts, countsKnown, fileProcessStarts })}\n`, { flag: 'a' });

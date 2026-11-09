@@ -56,7 +56,7 @@ const groupMembers = (group: number): number[] => readdirSync('/proc').filter(na
 });
 
 /** PSS apportions shared resident pages; 100ms sampling may miss short peaks. */
-export const observeTestProcessTree = (file: string, budgetBytes: number, rootArguments: readonly string[] = [file], includeSupervisor = false, additionalRoots: () => readonly number[] = () => []) => {
+export const observeTestProcessTree = (file: string, rootArguments: readonly string[] = [file], includeSupervisor = false, additionalRoots: () => readonly number[] = () => []) => {
   const known = new Map<number, string>();
   const groups = new Set<number>();
   let peakBytes = 0;
@@ -118,7 +118,7 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
         const scanLiving = () => process.platform === 'linux' ? scan() : [];
         let living = yield* Effect.sync(scanLiving);
         let pending = yield* Effect.sync(pendingGroups);
-        // Keep admission while normal shutdown drains; only then classify a leak.
+        // Keep the concurrency slot while normal shutdown drains; only then classify a leak.
         const normalExitDeadline = performance.now() + 5_000;
         while ((living.length > 0 || pending.length > 0) && performance.now() < normalExitDeadline) {
           yield* Effect.sleep('10 millis');
@@ -141,13 +141,13 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
             remaining = yield* Effect.sync(scanLiving);
             pending = yield* Effect.sync(pendingGroups);
           }
-          // A failed confirmation poisons admission before its permit is released.
+          // A failed confirmation stops scheduling before the concurrency slot is released.
           if (remaining.length > 0 || pending.length > 0) return yield* new GateProcessCleanupFailed({ file, pids: [...new Set([...remaining.map(row => row.pid), ...pending])], message: `${file}: process/group exit remains unconfirmed after SIGKILL; groups=${pending.join(', ')}; pids=${remaining.map(row => row.pid).join(', ')}` });
           return yield* new GateProcessCleanupFailed({ file, pids: living.map(row => row.pid), message: `${file}: descendants survived normal runner shutdown and required SIGKILL: ${living.map(row => row.pid).join(', ')}` });
         }
-        if (process.platform !== 'linux') return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, exceeded: null, samples: 0, processes: [] };
-        return { file, budgetBytes, metric: 'sampled-process-tree-pss' as const, state: roots > 0 ? 'observed' as const : 'unknown' as const,
-          peakBytes: roots > 0 ? peakBytes : null, exceeded: roots > 0 ? peakBytes > budgetBytes : null, samples,
+        if (process.platform !== 'linux') return { file, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, samples: 0, processes: [] };
+        return { file, metric: 'sampled-process-tree-pss' as const, state: roots > 0 ? 'observed' as const : 'unknown' as const,
+          peakBytes: roots > 0 ? peakBytes : null, samples,
           processes: [...known].map(([pid, birth]) => ({ pid, birth })) };
       }),
     };
@@ -155,8 +155,8 @@ export const observeTestProcessTree = (file: string, budgetBytes: number, rootAr
 };
 
 /** Shared schedulers belong to fixed overhead. Classify historical samples only
- * after admission owners have published their complete process identities. */
-export const observeFixedGateMemory = (budgetBytes: number) => Effect.gen(function*() {
+ * after process owners have published their complete process identities. */
+export const observeFixedGateMemory = () => Effect.gen(function*() {
   const frames: { process: ProcessSample; ancestors: readonly GateProcessIdentity[] }[][] = [];
   const scan = () => {
     const frame: typeof frames[number] = [];
@@ -174,12 +174,12 @@ export const observeFixedGateMemory = (budgetBytes: number) => Effect.gen(functi
   };
   if (process.platform === 'linux') yield* Effect.gen(function*() { for (;;) { yield* Effect.sync(scan); yield* Effect.sleep('100 millis'); } }).pipe(Effect.forkScoped);
   return { finish: (admitted: readonly GateProcessIdentity[], complete: boolean) => Effect.sync(() => {
-    if (process.platform !== 'linux') return { file: 'fixed-overhead', budgetBytes, metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, observedPeakBytes: null, exceeded: null, samples: 0 };
+    if (process.platform !== 'linux') return { file: 'fixed-overhead', metric: 'sampled-process-tree-pss' as const, state: 'unavailable' as const, peakBytes: null, observedPeakBytes: null, samples: 0 };
     scan();
     const owned = new Set(admitted.map(row => `${row.pid}:${row.birth}`));
     const isOwned = (row: GateProcessIdentity) => owned.has(`${row.pid}:${row.birth}`);
     const observedPeakBytes = Math.max(0, ...frames.map(frame => frame.reduce((sum, row) => sum + (isOwned(row.process) || row.ancestors.some(isOwned) ? 0 : row.process.bytes), 0)));
-    return { file: 'fixed-overhead', budgetBytes, metric: 'sampled-process-tree-pss' as const, state: complete ? 'observed' as const : 'unknown' as const,
-      peakBytes: complete ? observedPeakBytes : null, observedPeakBytes, exceeded: complete ? observedPeakBytes > budgetBytes : null, samples: frames.length };
+    return { file: 'fixed-overhead', metric: 'sampled-process-tree-pss' as const, state: complete ? 'observed' as const : 'unknown' as const,
+      peakBytes: complete ? observedPeakBytes : null, observedPeakBytes, samples: frames.length };
   }) };
 });

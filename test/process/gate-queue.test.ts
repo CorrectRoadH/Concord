@@ -84,7 +84,7 @@ test('the real gate queues full, file and title selections behind an all-slot ow
   yield* fs.writeFileString(join(bin, 'systemctl'), `#!${process.execPath}\nprocess.exitCode = 1;\n`);
   yield* fs.chmod(join(bin, 'bun'), 0o755);
   yield* fs.chmod(join(bin, 'systemctl'), 0o755);
-  const env = { ...process.env, CONCORD_GATE_QUEUE_DIRECTORY: slot, CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3),
+  const env = { ...process.env, CONCORD_GATE_QUEUE_DIRECTORY: slot,
     PATH: `${bin}:${process.env.PATH}`, GATE_TEST_MARKER: marker, CONCORD_GATE_SCOPE: undefined };
   for (const args of [[], [resolve('test/model/gate-resources.test.ts')], ['--test-name-pattern=queue-entry-probe']]) {
     const owned = yield* Deferred.make<void>(), release = yield* Deferred.make<void>();

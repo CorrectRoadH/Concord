@@ -1,30 +1,11 @@
 // @concord-file
 // @concord-implements docs/engineering/testing/README.md#共享资源与同步
 // @concord-implements docs/engineering/testing/cli.md#并发
-import { Duration, Effect, Exit, FileSystem, Schema, Semaphore } from 'effect';
+import { Duration, Effect, Exit, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
-import { availableParallelism, totalmem } from 'node:os';
+import { availableParallelism } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
-
-export const GiB = 1024 ** 3;
-// Category reservations and observed process-tree peaks use proportional memory.
-export const gateMemoryBudgets = { fixed: 2 * GiB, node: 2 * GiB } as const;
-export const gateAdmissionBytes = (memoryMaxBytes: number): number => Math.max(0, memoryMaxBytes - gateMemoryBudgets.fixed);
-export interface AdmissionTiming { readonly category: string; readonly bytes: number; readonly wait_ms: number; readonly run_ms: number }
-export const makeGateAdmission = (capacity: number) => Effect.map(Semaphore.make(capacity), pool => ({ pool, capacity, failed: false, timings: [] as AdmissionTiming[] }));
-export type GateAdmission = Effect.Success<ReturnType<typeof makeGateAdmission>>;
-export const withGateAdmission = (admission: GateAdmission, bytes: number, category = 'node') => <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.suspend(() => {
-  const requested = performance.now();
-  if (bytes > admission.capacity) return Effect.fail(new GateResourcesInvalid({ detail: `${category} needs ${bytes} bytes; admission pool has ${admission.capacity}` }));
-  return admission.pool.withPermits(bytes)(Effect.suspend<A, E | GateResourcesInvalid, R>(() => {
-    if (admission.failed) return Effect.fail(new GateResourcesInvalid({ detail: 'Admission stopped because a test process tree could not be released safely' }));
-    const admitted = performance.now();
-    return body.pipe(Effect.ensuring(Effect.sync(() => {
-      admission.timings.push({ category, bytes, wait_ms: admitted - requested, run_ms: performance.now() - admitted });
-    })));
-  }));
-});
 
 const PositiveInteger = Schema.NumberFromString.pipe(
   Schema.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
@@ -33,11 +14,7 @@ export class GateResourcesInvalid extends Schema.TaggedError<GateResourcesInvali
   detail: Schema.String,
 }) {}
 
-/** GitHub runners are dedicated to the gate; development hosts share memory. */
-export const gateMemoryMax = (physicalBytes = totalmem(), env: NodeJS.ProcessEnv = process.env): number =>
-  env.GITHUB_ACTIONS === 'true' ? Math.max(1, physicalBytes - GiB) : Math.max(1, Math.floor(physicalBytes / GiB / 2)) * GiB;
-
-export const gateConcurrency = (memoryMaxBytes: number, cpus = availableParallelism(), env: NodeJS.ProcessEnv = process.env) => {
+export const gateConcurrency = (cpus = availableParallelism(), env: NodeJS.ProcessEnv = process.env) => {
   const read = (name: string): number | undefined => {
     if (env[name] === undefined) return undefined;
     try {
@@ -49,23 +26,14 @@ export const gateConcurrency = (memoryMaxBytes: number, cpus = availableParallel
   const explicitNode = read('CONCORD_TEST_CONCURRENCY');
   const cpuLimit = Math.max(1, Math.min(8, Math.floor(cpus / 2)));
   const node = explicitNode ?? cpuLimit;
-  return { node, availableNodeMemoryBytes: gateAdmissionBytes(memoryMaxBytes) };
-};
-
-export const currentGateMemoryMax = (): number => {
-  if (process.env.CONCORD_GATE_MEMORY_MAX === undefined) return gateMemoryMax();
-  try {
-    if (!/^[1-9]\d*$/u.test(process.env.CONCORD_GATE_MEMORY_MAX)) throw new Error('Expected a positive integer');
-    return Schema.decodeUnknownSync(PositiveInteger)(process.env.CONCORD_GATE_MEMORY_MAX);
-  }
-  catch (cause) { throw new GateResourcesInvalid({ detail: `CONCORD_GATE_MEMORY_MAX: ${String(cause)}` }); }
+  return { node };
 };
 
 const MemoryReport = Schema.Struct({
   memoryIsolation: Schema.Literals(['systemd-scope', 'unavailable']),
   reason: Schema.NullOr(Schema.String),
-  memoryMaxBytes: Schema.Number,
-  memorySwapMaxBytes: Schema.NullOr(Schema.Number),
+  memoryMaxBytes: Schema.Null,
+  memorySwapMaxBytes: Schema.Null,
   memoryPeakBytes: Schema.NullOr(Schema.Number),
   memorySwapPeakBytes: Schema.NullOr(Schema.Number),
   cgroup: Schema.NullOr(Schema.String),
@@ -109,29 +77,27 @@ const scopeUnavailable = Effect.gen(function*() {
   );
 });
 
-/** The supervisor stays outside the scope, so it can persist an OOM result. */
+/** The supervisor owns accounting and cleanup independently of the workload. */
 export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options: {
-  readonly memoryMaxBytes?: number;
   readonly reportRoot?: string;
 } = {}) => Effect.gen(function*() {
   const started = performance.now();
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const memoryMaxBytes = options.memoryMaxBytes ?? currentGateMemoryMax();
-  const concurrency = yield* Effect.try({ try: () => gateConcurrency(memoryMaxBytes), catch: cause => cause instanceof GateResourcesInvalid ? cause : new GateResourcesInvalid({ detail: String(cause) }) });
+  const concurrency = yield* Effect.try({ try: () => gateConcurrency(), catch: cause => cause instanceof GateResourcesInvalid ? cause : new GateResourcesInvalid({ detail: String(cause) }) });
   const inheritedUnit = process.env.CONCORD_GATE_SCOPE;
   const inheritedOutput = process.env.CONCORD_GATE_REPORT;
   if (inheritedUnit && inheritedOutput) {
     const directory = yield* cgroupDirectory;
     const actualMax = (yield* fs.readFileString(join(directory, 'memory.max'))).trim();
     const actualSwapMax = (yield* fs.readFileString(join(directory, 'memory.swap.max'))).trim();
-    if (!directory.endsWith(`/${inheritedUnit}`) || actualMax !== String(memoryMaxBytes) || actualSwapMax !== '0') {
-      return yield* new GateResourcesInvalid({ detail: `Gate scope does not own its requested memory boundary: ${directory}, memory.max=${actualMax}, memory.swap.max=${actualSwapMax}` });
+    if (!directory.endsWith(`/${inheritedUnit}`) || actualMax !== 'max' || actualSwapMax !== 'max') {
+      return yield* new GateResourcesInvalid({ detail: `Gate scope must be owned and have no memory limit: ${directory}, memory.max=${actualMax}, memory.swap.max=${actualSwapMax}` });
     }
     // The re-exec token belongs only to this entry, never its test descendants.
     yield* Effect.sync(() => { delete process.env.CONCORD_GATE_SCOPE; });
     const base: MemoryReport = {
-      memoryIsolation: 'systemd-scope', reason: null, memoryMaxBytes, memorySwapMaxBytes: 0,
+      memoryIsolation: 'systemd-scope', reason: null, memoryMaxBytes: null, memorySwapMaxBytes: null,
       memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: directory, unit: inheritedUnit,
       nodeConcurrency: concurrency.node, exitCode: null,
       wallclockMs: null, observedWallclockMs: 0, queueWaitMs: Number(process.env.CONCORD_GATE_QUEUE_WAIT_MS ?? 0),
@@ -158,7 +124,7 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
   let sliceDirectory: string | null = null;
   const base: MemoryReport = {
     memoryIsolation: unavailable === null ? 'systemd-scope' : 'unavailable', reason: unavailable,
-    memoryMaxBytes, memorySwapMaxBytes: unavailable === null ? 0 : null,
+    memoryMaxBytes: null, memorySwapMaxBytes: null,
     memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: null, unit: unavailable === null ? unit : null,
     nodeConcurrency: concurrency.node, exitCode: null,
     wallclockMs: null, observedWallclockMs: 0, queueWaitMs: Number(process.env.CONCORD_GATE_QUEUE_WAIT_MS ?? 0),
@@ -166,8 +132,8 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
   };
   yield* writeReport(output, base);
   const directly = (reason: string) => Effect.gen(function*() {
-    yield* Effect.sync(() => console.error(`# Gate memory isolation unavailable: ${reason}; MemoryMax=${memoryMaxBytes}; admission=${gateAdmissionBytes(memoryMaxBytes)}; physical=${totalmem()}; whole-gate peak=unknown`));
-    yield* Effect.sync(() => { process.env.CONCORD_GATE_MEMORY_MAX = String(memoryMaxBytes); process.env.CONCORD_GATE_REPORT = output; });
+    yield* Effect.sync(() => console.error(`# Gate memory isolation unavailable: ${reason}; whole-gate peak=unknown`));
+    yield* Effect.sync(() => { process.env.CONCORD_GATE_REPORT = output; });
     yield* body.pipe(Effect.scoped, Effect.onExit(exit => {
       const elapsed = performance.now() - started;
       const code = Exit.isFailure(exit) ? 1 : Number(process.exitCode ?? 0);
@@ -178,12 +144,11 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
   });
   if (unavailable !== null) return yield* directly(unavailable);
 
-  // A transient slice stays alive after its OOM-killed scope, including on
-  // managers which discard the scope's memory accounting before we can read it.
+  // Keep accounting alive until the supervisor reads it, even after workload failure.
   const sliceCreated = yield* spawner.string(ChildProcess.make('busctl', [
     '--user', 'call', 'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
     'org.freedesktop.systemd1.Manager', 'StartTransientUnit', 'ssa(sv)a(sa(sv))', slice, 'fail',
-    '3', 'MemoryMax', 't', String(memoryMaxBytes), 'MemorySwapMax', 't', '0', 'MemoryAccounting', 'b', 'true', '0',
+    '1', 'MemoryAccounting', 'b', 'true', '0',
   ], { stdin: 'ignore', stderr: 'pipe' })).pipe(
     Effect.match({ onFailure: cause => String(cause), onSuccess: () => null }),
   );
@@ -223,7 +188,7 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
       memoryPeakBytes: (yield* peak('memory.peak')) ?? report.memoryPeakBytes,
       memorySwapPeakBytes: (yield* peak('memory.swap.peak')) ?? report.memorySwapPeakBytes };
     yield* writeReport(output, report);
-    yield* Effect.sync(() => console.error(`# Gate memory peak: ${report.memoryPeakBytes ?? 'unavailable'} bytes; swap peak: ${report.memorySwapPeakBytes ?? 'unavailable'} bytes; MemoryMax=${memoryMaxBytes}`));
+    yield* Effect.sync(() => console.error(`# Gate memory peak: ${report.memoryPeakBytes ?? 'unavailable'} bytes; swap peak: ${report.memorySwapPeakBytes ?? 'unavailable'} bytes`));
   }).pipe(Effect.ensuring(cleanup.pipe(Effect.orDie, Effect.onExit(exit => Effect.gen(function*() {
     const report = Schema.decodeUnknownSync(Schema.fromJsonString(MemoryReport))(yield* fs.readFileString(join(output, 'resources.json')));
     const elapsed = performance.now() - started;
@@ -236,14 +201,14 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
     sliceDirectory = join('/sys/fs/cgroup', group);
     const sliceMax = (yield* fs.readFileString(join(sliceDirectory, 'memory.max'))).trim();
     const sliceSwapMax = (yield* fs.readFileString(join(sliceDirectory, 'memory.swap.max'))).trim();
-    if (sliceMax !== String(memoryMaxBytes) || sliceSwapMax !== '0') return yield* new GateResourcesInvalid({ detail: `Gate slice does not own its requested memory boundary: ${group}` });
+    if (sliceMax !== 'max' || sliceSwapMax !== 'max') return yield* new GateResourcesInvalid({ detail: `Gate slice must have no memory limit: ${group}` });
     yield* writeReport(output, { ...base, slice, memoryPeakCgroup: sliceDirectory });
     const child = yield* spawner.spawn(ChildProcess.make('systemd-run', [
       '--user', '--scope', '--quiet', `--unit=${unit}`, `--slice=${slice}`,
-      '-p', `MemoryMax=${memoryMaxBytes}`, '-p', 'MemorySwapMax=0', '-p', 'MemoryAccounting=yes', '-p', 'OOMPolicy=kill',
+      '-p', 'MemoryAccounting=yes',
       '--', process.execPath, ...process.execArgv, ...process.argv.slice(1),
     ], {
-      env: { ...process.env, CONCORD_GATE_SCOPE: unit, CONCORD_GATE_REPORT: output, CONCORD_GATE_MEMORY_MAX: String(memoryMaxBytes), CONCORD_GATE_SLICE: slice, CONCORD_GATE_SLICE_CGROUP: sliceDirectory },
+      env: { ...process.env, CONCORD_GATE_SCOPE: unit, CONCORD_GATE_REPORT: output, CONCORD_GATE_SLICE: slice, CONCORD_GATE_SLICE_CGROUP: sliceDirectory },
       stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', forceKillAfter: Duration.seconds(10),
     }));
     code = Number(yield* child.exitCode);

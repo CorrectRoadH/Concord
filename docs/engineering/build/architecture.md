@@ -103,7 +103,7 @@ Concord 有两种运行模式：源码模式直接运行 worktree 中的 `.ts`�
 
 | 需要 | 使用 | 脚本只负责 |
 | --- | --- | --- |
-| 源码测试执行、用例超时与报告 | 官方 `bun test`、JUnit 与 timings | 保留 gate 选择与文件分片、每文件内存准入、完成记录校验、日志和资源回收；见[测试引擎](../testing/architecture.md#bun-测试引擎) |
+| 源码测试执行、用例超时与报告 | 官方 `bun test`、JUnit 与 timings | 保留 gate 选择与文件分片、文件并发、完成记录校验、日志和资源回收；见[测试引擎](../testing/architecture.md#bun-测试引擎) |
 | 静态检查与任务编排 | `bun run`、tsc 与 Oxlint | 一个检查失败时其余检查继续运行并汇总结果 |
 | 子进程、文件、临时目录与超时 | Effect 的 ChildProcess、FileSystem、Scope 与 Duration | 进程组回收的确认 |
 | JS 打包 | `tsdown` | native 产物的身份校验与归档组装 |

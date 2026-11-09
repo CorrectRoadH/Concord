@@ -7,8 +7,6 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { tmpdir } from '../support/temporary.ts';
-import { gateAdmissionHistoryPath } from '../../scripts/gate-admission-history.ts';
-import { GiB } from '../../scripts/gate-resources.ts';
 import { observeFixedGateMemory, observeTestProcessTree } from '../../scripts/gate-resource-processes.ts';
 import { readTestTimingReport } from '../../scripts/gate-timings.ts';
 
@@ -39,8 +37,8 @@ const Timing = Schema.Struct({ scope: Schema.String, counts: Counts });
 runnerTest('fixed overhead counts shared controllers and excludes only admitted process identities', () => Effect.gen(function*() {
   if (process.platform !== 'linux') return;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const fixed = yield* observeFixedGateMemory(2 * GiB);
-  const admitted = yield* observeTestProcessTree('owned-memory', 2 * GiB, ['owned-memory']);
+  const fixed = yield* observeFixedGateMemory();
+  const admitted = yield* observeTestProcessTree('owned-memory', ['owned-memory']);
   const children = [];
   for (const [name, size] of [['shared-controller', 32], ['owned-memory', 64]] as const) {
     const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', '-e', `const bytes=Buffer.alloc(${size}*1024*1024, 1); process.stdout.write('ready'); setInterval(()=>{bytes[0]++;},1000);`, name], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
@@ -65,39 +63,20 @@ runnerTest('fixed overhead counts shared controllers and excludes only admitted 
 }));
 
 // @feature docs/engineering/testing/cli.md#并发
-runnerTest('real cold and warm file runs use the previous PSS peak while keeping the two GiB reporting budget', root => Effect.gen(function*() {
+runnerTest('file runs report memory observations without a reservation history', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const file = join(root, 'history.test.ts'), cache = join(root, 'cache');
+  const file = join(root, 'sample.test.ts'), cache = join(root, 'cache');
   yield* fs.writeFileString(file, `import test from 'node:test'; test('sampled file', () => {});\n`);
-  const env = { XDG_CACHE_HOME: cache, CONCORD_GATE_MEMORY_MAX: String(7 * GiB) };
-  const Peak = Schema.Struct({ file: Schema.String, budgetBytes: Schema.Number, admittedBytes: Schema.Number, peakBytes: Schema.NullOr(Schema.Number), state: Schema.String });
-  const cold = yield* run([file], env, root);
-  assert.equal(cold.code, 0, cold.text);
-  const timingReport = yield* readTestTimingReport(cold.output);
-  assert.ok(timingReport, 'the persisted admission budgets must decode into the gate report');
-  const coldPeak = Schema.decodeUnknownSync(Schema.fromJsonString(Peak))((yield* fs.readFileString(join(cold.output, 'process-tree-peaks.jsonl'))).trim());
-  assert.equal(coldPeak.admittedBytes, 2 * GiB);
-  assert.equal(coldPeak.budgetBytes, 2 * GiB);
-  const record = gateAdmissionHistoryPath(file, join(cache, 'concord/gate-admission'));
-  if (process.platform === 'linux') {
-    assert.equal(coldPeak.state, 'observed');
-    const stored = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ file: Schema.String, peakBytes: Schema.Number })))(yield* fs.readFileString(record));
-    assert.equal(stored.file, file);
-    assert.equal(stored.peakBytes, coldPeak.peakBytes);
-  }
-  const warm = yield* run([file], env, root);
-  assert.equal(warm.code, 0, warm.text);
-  const warmPeak = Schema.decodeUnknownSync(Schema.fromJsonString(Peak))((yield* fs.readFileString(join(warm.output, 'process-tree-peaks.jsonl'))).trim());
-  assert.equal(warmPeak.budgetBytes, 2 * GiB);
-  assert.equal(warmPeak.admittedBytes, coldPeak.peakBytes === null ? 2 * GiB : Math.max(GiB / 2, Math.ceil(coldPeak.peakBytes / (GiB / 2)) * (GiB / 2)));
-  console.error(`# History admission: cold=${coldPeak.admittedBytes}; coldPeakPss=${coldPeak.peakBytes}; warm=${warmPeak.admittedBytes}; warmPeakPss=${warmPeak.peakBytes}; reportingBudget=${warmPeak.budgetBytes}`);
-  if (process.platform === 'linux') {
-    yield* fs.writeFileString(record, '{broken');
-    const broken = yield* run([file], env, root);
-    assert.equal(broken.code, 1, broken.text);
-    assert.match(broken.text, /GateAdmissionHistoryInvalid/u);
-    assert.doesNotMatch(broken.text, /\(pass\) sampled file/u);
-  }
+  const result = yield* run([file], { XDG_CACHE_HOME: cache }, root);
+  assert.equal(result.code, 0, result.text);
+  const report = yield* readTestTimingReport(result.output);
+  assert.ok(report);
+  const peak = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ file: Schema.String, state: Schema.String, budgetBytes: Schema.optional(Schema.Number), admittedBytes: Schema.optional(Schema.Number) })))((yield* fs.readFileString(join(result.output, 'process-tree-peaks.jsonl'))).trim());
+  assert.equal(peak.file, file);
+  assert.equal(peak.state, process.platform === 'linux' ? 'observed' : 'unavailable');
+  assert.equal('budgetBytes' in peak, false);
+  assert.equal('admittedBytes' in peak, false);
+  assert.equal(yield* fs.exists(join(cache, 'concord/gate-admission')), false);
 }));
 
 // @feature docs/engineering/testing/README.md#检查入口
@@ -331,7 +310,7 @@ runnerTest('cancelling the source runner reaps test processes and descendants th
 }));
 
 // @feature docs/engineering/testing/cli.md#并发
-runnerTest('seven GiB admission bounds override concurrency and releases a failed file before starting its successor', root => Effect.gen(function*() {
+runnerTest('explicit concurrency releases a failed file before starting its successor', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const files: string[] = [];
   const active = join(root, 'active');
@@ -347,12 +326,12 @@ test(${JSON.stringify(name)}, async () => {
   const own = join(${JSON.stringify(active)}, ${JSON.stringify(name)});
   writeFileSync(own, String(process.pid));
   await new Promise(resolve => { const ready = () => { if (existsSync(own + '.release')) { unwatchFile(own + '.release', ready); resolve(); } }; watchFile(own + '.release', {interval:10}, ready); ready(); });
-  try { assert.ok(readdirSync(${JSON.stringify(active)}).filter(name => !name.endsWith('.release')).length <= 2, 'five GiB pool admits at most two cold two-GiB files'); ${name === 'first' ? "assert.fail('intentional admitted failure');" : ''} }
+  try { assert.ok(readdirSync(${JSON.stringify(active)}).filter(name => !name.endsWith('.release')).length <= 2, 'at most two files run concurrently'); ${name === 'first' ? "assert.fail('intentional admitted failure');" : ''} }
   finally { rmSync(own); }
 });\n`);
   }
   let output = '';
-  const running = yield* run([...files], { CONCORD_GATE_MEMORY_MAX: String(7 * 1024 ** 3), CONCORD_TEST_CONCURRENCY: '8', XDG_CACHE_HOME: join(root, 'cold-cache') }, root, chunk => { output += chunk; }).pipe(Effect.forkScoped);
+  const running = yield* run([...files], { CONCORD_TEST_CONCURRENCY: '2', XDG_CACHE_HOME: join(root, 'cold-cache') }, root, chunk => { output += chunk; }).pipe(Effect.forkScoped);
   const waitForActive = (count: number, excluded: readonly string[] = []) => Effect.gen(function*() {
     for (;;) {
       const names = (yield* fs.exists(active)) ? (yield* fs.readDirectory(active)).filter(name => !name.endsWith('.release') && !excluded.includes(name)) : [];
@@ -360,9 +339,9 @@ test(${JSON.stringify(name)}, async () => {
       yield* Effect.sleep('10 millis');
     }
   }).pipe(Effect.timeout('15 seconds'), Effect.tapError(() => Effect.sync(() => console.error(`Admission fixture output: ${output}`))));
-  // History lookup is asynchronous; admission does not promise argument order.
+  // Scheduling does not promise argument order.
   const initial = yield* waitForActive(2);
-  assert.equal(initial.length, 2, 'an explicit concurrency of eight must not bypass the five-GiB pool');
+  assert.equal(initial.length, 2, 'explicit concurrency must be respected');
   const predecessor = initial.includes('first') ? 'first' : initial[0]!;
   const predecessorPid = Number(yield* fs.readFileString(join(active, predecessor)));
   yield* fs.writeFileString(join(active, `${predecessor}.release`), 'release');
@@ -378,9 +357,9 @@ test(${JSON.stringify(name)}, async () => {
   assert.deepEqual(timings.map(row => row.file).sort(), [...files].sort());
   assert.equal(timings.reduce((sum, row) => sum + row.cases, 0), 4);
   assert.deepEqual((yield* fs.readDirectory(active)).filter(name => !name.endsWith('.release')), []);
-  const peaks = (yield* fs.readFileString(join(result.output, 'process-tree-peaks.jsonl'))).trim().split('\n').map(line => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({file: Schema.String, budgetBytes: Schema.Number, state: Schema.String})))(line));
+  const peaks = (yield* fs.readFileString(join(result.output, 'process-tree-peaks.jsonl'))).trim().split('\n').map(line => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({file: Schema.String, state: Schema.String})))(line));
   assert.deepEqual(peaks.map(row => row.file).sort(), [...files].sort());
-  for (const row of peaks) { assert.equal(row.budgetBytes, 2 * 1024 ** 3); assert.equal(row.state, process.platform === 'linux' ? 'observed' : 'unavailable'); }
+  for (const row of peaks) { assert.equal(row.state, process.platform === 'linux' ? 'observed' : 'unavailable'); }
 }));
 
 // @feature docs/engineering/testing/cli.md#并发

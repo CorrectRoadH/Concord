@@ -52,7 +52,6 @@ export default {
       "scripts/compile-startup.ts",
       "scripts/bun-test-report.ts",
       "scripts/distribution.ts",
-      "scripts/gate-admission-history.ts",
       "scripts/gate-build-cache.ts",
       "scripts/gate-queue.ts",
       "scripts/gate-resource-processes.ts",
