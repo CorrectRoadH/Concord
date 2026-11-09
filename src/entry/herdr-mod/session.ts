@@ -4,7 +4,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 // @concord-implements docs/feature/herdr-mod/use-case/use-on-remote-machine.md
 import { Effect, Schema } from 'effect';
-import { ModWorkspaceProjection, ModWorkspaceSnapshot, RenderedPage, WorkspaceWait } from '../../model/herdr-mod/index.ts';
+import { ModWorkspaceProjection, ModWorkspaceSnapshot, RenderedPage, WorkspaceWait, pageSource, type PageSource } from '../../model/herdr-mod/index.ts';
 
 export interface ModHost {
   readonly exec: (command: string, args: string[], options: { cwd?: string; on: string | null }) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -67,6 +67,7 @@ export class ModSession {
   concepts: readonly ModConcept[] = [];
   selected: string | undefined;
   source = '';
+  sourcePage: PageSource = { blocks: [{ start: 0, end: 0, literal: false }], special: [], definitions: '' };
   draft: string | undefined;
   sourceDigest = '';
   workspaceDigest: string | undefined;
@@ -107,6 +108,8 @@ export class ModSession {
 
   private acceptFile(file: typeof File.Type | undefined, reset: boolean): void {
     const body = file?.body ?? '';
+    // File acceptance runs in the read/save task, outside the host's render budget.
+    if (body !== this.source) this.sourcePage = pageSource(body);
     if (reset || (file?.digest !== this.sourceDigest && body !== this.savingBody)) {
       this.draft = undefined; this.reloadVersion += 1;
     }

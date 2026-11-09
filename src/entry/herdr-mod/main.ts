@@ -10,7 +10,7 @@ import { View, div, type AsyncContext, type Context, type Element, type Task } f
 import { h_flex, v_flex, TextView, Editor, EditorState, Textarea, TextareaState, VirtualListScrollHandle } from 'gpui-base';
 import { exec, focused, panes, spaces, run, closeOverlay, home, props as hostProps, theme, settings } from 'herdr';
 import { ModSession, ModFailure, ModDisconnected, failure, markdownTarget } from './session.ts';
-import { pageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
+import { pageSource, type PageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
 import { RenderAssets, type RenderLease } from './render-assets.ts';
 import { codeMarkdown, livePreviewElements } from './rendered-page.ts';
 import { clickableRow, color, heading, icon, mono, row, text, type IconName } from './ui.ts';
@@ -22,7 +22,7 @@ const documentGroups = ['Feature', 'Engineering', 'Roadmap', '项目规则', 'De
 type DocumentGroup = typeof documentGroups[number];
 
 export default class ConcordMod extends View {
-  private sessions = new Map<string, { session: ModSession; expanded: Set<string>; collapsedGroups: Set<string>; pageLease: RenderLease | undefined; renderedPage: RenderedPage | undefined; renderedSource: string; renderedPath: string; renderKey: string; treeScroll: VirtualListScrollHandle; pageScroll: VirtualListScrollHandle }>();
+  private sessions = new Map<string, { session: ModSession; expanded: Set<string>; collapsedGroups: Set<string>; pageLease: RenderLease | undefined; renderedPage: RenderedPage | undefined; renderedBlocks: ReadonlyMap<string, number>; renderedPath: string; renderKey: string; treeScroll: VirtualListScrollHandle; pageScroll: VirtualListScrollHandle }>();
   private treeScroll = VirtualListScrollHandle.new();
   private pageScroll = VirtualListScrollHandle.new();
   private cliMachines = new Set<string | null>();
@@ -31,7 +31,8 @@ export default class ConcordMod extends View {
   private watcher: Task | undefined;
   private polling: Task | undefined;
   private watchedRoot: string | undefined;
-  private editor: { state: TextareaState; block: SourceBlock; base: string } | undefined;
+  private editor: { state: TextareaState; block: SourceBlock; base: string; parsed: PageSource } | undefined;
+  private draftPage: { source: string; parsed: PageSource } | undefined;
   private autoSave: Task | undefined;
   private editorFocus: Task | undefined;
   private editorBlur: Task | undefined;
@@ -72,7 +73,7 @@ export default class ConcordMod extends View {
   private assets = new RenderAssets();
   private pageLease: RenderLease | undefined;
   private renderedPage: RenderedPage | undefined;
-  private renderedSource = '';
+  private renderedBlocks: ReadonlyMap<string, number> = new Map();
   private renderedKey = '';
   private renderTasks = new Set<Task>();
   private renderToken = {};
@@ -245,7 +246,7 @@ export default class ConcordMod extends View {
   private useFolder(cwd: string, machine: string | null, cx: Context): void {
     if (this.session.root) {
       this.session.suspend();
-      this.sessions.set(JSON.stringify([this.session.machine, this.session.root]), { session: this.session, expanded: this.expanded, collapsedGroups: this.collapsedGroups, pageLease: this.pageLease, renderedPage: this.renderedPage, renderedSource: this.renderedSource, renderedPath: this.renderedPath, renderKey: this.renderedKey, treeScroll: this.treeScroll, pageScroll: this.pageScroll });
+      this.sessions.set(JSON.stringify([this.session.machine, this.session.root]), { session: this.session, expanded: this.expanded, collapsedGroups: this.collapsedGroups, pageLease: this.pageLease, renderedPage: this.renderedPage, renderedBlocks: this.renderedBlocks, renderedPath: this.renderedPath, renderKey: this.renderedKey, treeScroll: this.treeScroll, pageScroll: this.pageScroll });
     } else { this.treeScroll.release(); this.pageScroll.release(); }
     this.renderToken = {};
     this.pauseWatch();
@@ -261,7 +262,8 @@ export default class ConcordMod extends View {
     this.cli = this.cliMachines.has(machine) ? 'ready' : 'checking';
     this.pageLease = retained?.pageLease; this.renderedPage = retained?.renderedPage;
     this.rendering = false; this.renderError = '';
-    this.renderedSource = retained?.renderedSource ?? ''; this.renderedPath = retained?.renderedPath ?? ''; this.renderKey = retained?.renderKey ?? ''; this.renderedKey = this.renderKey;
+    this.renderedBlocks = retained?.renderedBlocks ?? new Map(); this.renderedPath = retained?.renderedPath ?? ''; this.renderKey = retained?.renderKey ?? ''; this.renderedKey = this.renderKey;
+    this.draftPage = undefined;
     this.treeScroll = retained?.treeScroll ?? VirtualListScrollHandle.new(); this.pageScroll = retained?.pageScroll ?? VirtualListScrollHandle.new();
     this.reloadVersion = 0; this.pageNavigation = {}; this.pendingPage = undefined; this.saving = undefined;
     this.expanded = retained?.expanded ?? new Set(); this.busy.clear();
@@ -363,7 +365,7 @@ export default class ConcordMod extends View {
 
   private ensureRendered(cx: Context, available: boolean): void {
     const session = this.session, path = session.selected;
-    const source = session.source, digest = session.sourceDigest;
+    const source = session.source, parsed = session.sourcePage, digest = session.sourceDigest;
     const colors = theme();
     const key = available && path && !session.deleted ? JSON.stringify([session.root, session.machine, path, session.sourceDigest, colors]) : '';
     if (key === this.renderKey) return;
@@ -375,7 +377,7 @@ export default class ConcordMod extends View {
     const samePage = Boolean(key) && this.renderedPath === JSON.stringify([session.root, session.machine, path]);
     if (!samePage) {
       const previous = this.pageLease;
-      this.pageLease = undefined; this.renderedPage = undefined; this.renderedPath = ''; this.renderedSource = ''; this.renderedKey = '';
+      this.pageLease = undefined; this.renderedPage = undefined; this.renderedPath = ''; this.renderedBlocks = new Map(); this.renderedKey = '';
       if (previous) this.releaseLease(cx, previous);
     }
     const task = cx.spawn(async next => {
@@ -390,7 +392,10 @@ export default class ConcordMod extends View {
         if (!lease) return;
         if (!current()) { await lease.release(next); return; }
         const replaced = this.pageLease;
-        this.pageLease = lease; this.renderedPage = page; this.renderedKey = key; this.renderedSource = source; this.renderedPath = JSON.stringify([session.root, session.machine, path]);
+        const indexes = page.blocks.flatMap((block, index) => block.type === 'markdown' ? [] : [index]);
+        // Exact fenced source includes import metadata, not just the sketch body.
+        this.renderedBlocks = new Map(parsed.special.map((block, index) => [source.slice(block.start, block.end), indexes[index] ?? -1]));
+        this.pageLease = lease; this.renderedPage = page; this.renderedKey = key; this.renderedPath = JSON.stringify([session.root, session.machine, path]);
         if (replaced) await replaced.release(next);
       } catch (cause) {
         if (!current()) return;
@@ -420,6 +425,7 @@ export default class ConcordMod extends View {
     if (this.reloadVersion === this.session.reloadVersion) return;
     this.reloadVersion = this.session.reloadVersion;
     this.autoSave?.cancel(); this.autoSave = undefined;
+    this.draftPage = undefined;
     this.releaseEditor();
   }
 
@@ -455,7 +461,10 @@ export default class ConcordMod extends View {
   }
 
   private finishEditing(cx: Context): void {
-    this.updateDraft(); this.releaseEditor(); this.queueSave(cx, 0); cx.notify();
+    this.updateDraft();
+    const source = this.session.draft ?? this.session.source;
+    this.draftPage = source === this.session.source ? undefined : { source, parsed: pageSource(source) };
+    this.releaseEditor(); this.queueSave(cx, 0); cx.notify();
   }
 
   private edit(block: SourceBlock, cx: Context): void {
@@ -464,12 +473,15 @@ export default class ConcordMod extends View {
     this.updateDraft();
     const source = this.session.draft ?? this.session.source;
     const offset = previous && block.start >= previous.block.end ? previous.state.value().length - (previous.block.end - previous.block.start) : 0;
-    const selected = pageSource(source).blocks.find(item => item.start === block.start + offset);
+    const parsed = source === this.session.source ? this.session.sourcePage
+      : previous?.base === source ? previous.parsed
+      : this.draftPage?.source === source ? this.draftPage.parsed : pageSource(source);
+    const selected = parsed.blocks.find(item => item.start === block.start + offset);
     if (!selected) return;
     this.releaseEditor();
     const state = TextareaState.new({ value: source.slice(selected.start, selected.end), rows: 1 });
     state.set_auto_grow(1, 40);
-    const editor = { state, block: selected, base: source };
+    const editor = { state, block: selected, base: source, parsed };
     this.editor = editor;
     state.on('change', (_event, current) => {
       if (this.editor !== editor) return;
@@ -788,7 +800,9 @@ export default class ConcordMod extends View {
       TextView.markdown('concord-concept', this.conceptText),
     ]));
     if (!session.deleted) body.push(v_flex().id(`concord-body-${session.selected}`).min_w(0).gap(6).children(livePreviewElements(
-      this.editor?.base ?? session.draft ?? session.source, session.selected, this.renderedPage, this.renderedSource, this.pageLease?.paths ?? new Map(),
+      this.editor?.base ?? session.draft ?? session.source,
+      this.editor?.parsed ?? (this.draftPage && this.draftPage.source === session.draft ? this.draftPage.parsed : session.sourcePage),
+      session.selected, this.renderedPage, this.renderedBlocks, this.pageLease?.paths ?? new Map(),
       this.editor ? { block: this.editor.block, element: Textarea.new(this.editor.state).id('document-editor').min_w(0).font_family(settings().font_family ?? '').text_size(13) } : undefined,
       (block, cx) => this.edit(block, cx), (url, cx) => this.link(url, cx),
       this.rendering, this.renderError,

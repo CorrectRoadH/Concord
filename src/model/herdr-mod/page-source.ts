@@ -12,9 +12,14 @@ export interface SpecialSource extends SourceBlock {
   readonly node: Image | ImageReference | Code;
   readonly source: string;
 }
+export interface PageSource {
+  readonly blocks: readonly SourceBlock[];
+  readonly special: readonly SpecialSource[];
+  readonly definitions: string;
+}
 
 /** Positions refer to the original string; never serialize the syntax tree. */
-export function pageSource(source: string): { blocks: SourceBlock[]; special: SpecialSource[]; definitions: string } {
+export function pageSource(source: string): PageSource {
   const root = fromMarkdown(source);
   const definitions = new Map<string, Definition>();
   const visit = (node: Nodes, callback: (node: Nodes) => void): void => {

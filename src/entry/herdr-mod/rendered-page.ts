@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/herdr-mod/use-case/read-spec.md
 import { div, image, type Context, type Element } from 'gpui-kit';
 import { TextView } from 'gpui-base';
-import { pageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
+import type { PageSource, RenderedPage, SourceBlock } from '../../model/herdr-mod/index.ts';
 import { clickableRow, color, text } from './ui.ts';
 
 export function codeMarkdown(source: string, language: string): string {
@@ -11,12 +11,7 @@ export function codeMarkdown(source: string, language: string): string {
   const fence = '`'.repeat(length);
   return `${fence}${language}\n${source}\n${fence}`;
 }
-export function livePreviewElements(source: string, path: string, page: RenderedPage | undefined, renderedSource: string, assets: ReadonlyMap<number, string>, active: { block: SourceBlock; element: Element } | undefined, edit: (block: SourceBlock, cx: Context) => void, link: (url: string, cx: Context) => void, loading = false, error = ''): Element[] {
-  const parsed = pageSource(source);
-  const renderedSpecial = source === renderedSource ? parsed.special : pageSource(renderedSource).special;
-  const indexes = page?.blocks.flatMap((block, index) => block.type === 'markdown' ? [] : [index]) ?? [];
-  // Include the fence and metadata: identical p5 code can import different files.
-  const renderedIndexes = new Map(renderedSpecial.map((block, index) => [renderedSource.slice(block.start, block.end), indexes[index] ?? -1]));
+export function livePreviewElements(source: string, parsed: PageSource, path: string, page: RenderedPage | undefined, renderedIndexes: ReadonlyMap<string, number>, assets: ReadonlyMap<number, string>, active: { block: SourceBlock; element: Element } | undefined, edit: (block: SourceBlock, cx: Context) => void, link: (url: string, cx: Context) => void, loading = false, error = ''): Element[] {
   return parsed.blocks.map((block, index) => {
     if (active?.block.start === block.start) return active.element;
     const id = `concord-block-${path}-${index}`;
