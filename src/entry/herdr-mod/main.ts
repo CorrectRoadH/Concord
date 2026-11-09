@@ -292,7 +292,9 @@ export default class ConcordMod extends View {
     const digest = session.workspaceDigest, source = session.sourceDigest;
     this.refreshing = true;
     this.run(cx, current => Effect.gen({ self: this }, function*() {
-      yield* session.refresh(() => { this.syncEditor(); current.notify(); });
+      yield* session.refresh(() => { this.syncEditor(); current.notify(); }).pipe(Effect.onError(() => Effect.sync(() => {
+        if (!session.closed && session === this.session) this.pollLater(current);
+      })));
       this.disconnected = false; session.errorDetails = '';
       // Images and imported sketch inputs can change while Markdown stays identical.
       if (session.workspaceDigest !== digest && session.sourceDigest === source) this.renderKey = '';
