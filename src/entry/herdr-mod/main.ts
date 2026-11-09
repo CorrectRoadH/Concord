@@ -56,6 +56,7 @@ export default class ConcordMod extends View {
   private observedTarget = '';
   private resolvedTargets = new Map<string, { root: string; home: string; machine: string | null }>();
   private navigation: Task | undefined;
+  private directoryWatch: Task | undefined;
   private retry: Task | undefined;
   private targetToken = {};
   private directory: 'no-terminal' | 'resolving' | 'not-git' | 'repository' = 'no-terminal';
@@ -105,6 +106,12 @@ export default class ConcordMod extends View {
     this.assets.start(cx);
     this.ownPane = typeof props.pane === 'string' ? props.pane : undefined;
     this.tab = allPanes.find(item => item.pane === this.ownPane)?.tab ?? focus?.tab ?? spaces().find(item => item.active)?.tabs.find(item => item.active)?.id;
+    this.directoryWatch = cx.timer.every(1000, current => {
+      if (this.closed) return;
+      const previous = this.observedTarget;
+      this.followTerminal(current);
+      if (previous !== this.observedTarget) current.notify();
+    });
     this.retry = cx.timer.every(2000, current => {
       if (this.closed || !this.foreground) return;
       if (this.disconnected) { this.observedTarget = ''; this.followTerminal(current); }
@@ -866,7 +873,7 @@ export default class ConcordMod extends View {
   async close(cx: AsyncContext): Promise<void> {
     this.updateDraft(); this.releaseEditor(); this.autoSave?.cancel(); this.autoSave = undefined;
     this.closed = true; this.targetToken = {};
-    this.navigation?.cancel(); this.retry?.cancel();
+    this.navigation?.cancel(); this.directoryWatch?.cancel(); this.retry?.cancel();
     this.renderToken = {};
     this.pauseWatch();
     for (const task of this.tasks) task.cancel();
