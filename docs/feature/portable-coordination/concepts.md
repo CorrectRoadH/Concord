@@ -4,28 +4,26 @@
 
 ## 发布租约 {#publication-lease}
 
-文档写入在提交阶段持有的[租约](../../concepts.md#lease)，由 Git-private 协调目录中的 `publication.lease` 目录实现。读取与准备计划不持有它；它只用 Node 文件 API 实现，不依赖外部锁程序。
+文档与源码写入在提交阶段持有的短期写独占（工作区服务内为进程内写互斥，无服务单次模式下为 Git-private 协调目录锁）。读取与准备计划不持有它。
 
 旧写法：`写锁`、`写入占用`
 
 ## 发布 token {#publication-token}
 
-一次申领发布租约时写进持有者文件的唯一 token。释放与回收只删除观察到的那个 token，之后到来的新持有者不受影响。
+一次独占写入或实例持有的唯一标识 token，用于识别并回收已退出的持有者。
 
 ## 发布修订号 {#publication-revision}
 
-持久化的计数，独占持有者进入和退出时都前进。读取前后的发布修订号不同时，当前结果以 `SourceChanged` 拒绝。
+写入提交完成时递增的计数，用于标识工作区图的受管写入变化。
 
 旧写法：`发布 revision`
 
 ## runner 状态 {#runner-state}
 
-runner 租约与运行记录的协调状态：`absent`、`running` 或 `blocked`，`blocked` 带具名原因。状态不确定时报告 `blocked`，恢复保留现场。
+单槽测试任务的运行状态：`absent`、`running` 或 `blocked`，`blocked` 带具名原因。外部测试子进程组清理不确定时报告 `blocked`。
 
 ## 来源快照 {#source-snapshot}
 
-一次读取记下的文件前像、缺失路径、目录成员与发布修订号。返回前再核对一遍，期间有[漂移](../../concepts.md#drift)或发布就拒绝当前结果。
+一次读取访问的工作区文件视图与摘要记录。通过工作区服务的增量工作区图与 `(mtime, size, inode)` 快速核对一致性，不阻塞并发读取。
 
 旧写法：`乐观快照`
-
-来源快照不持有租约，所以读取可以与另一个写入同时进行。

@@ -46,63 +46,47 @@ runner 在消费者 cwd 下执行。argv 逐参数替换 `{file}`、`{name}`、`
 
 ## 修复核验
 
-只支持线性路径：先提交会失败的回归测试，再提交修复。可观察行为见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
+支持线性路径：先提交会失败的回归测试，再提交修复。可观察行为见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 
-1. 回归测试由 `@issue` 标记选出，`@status retired` 的标记不能用于修复核验。修复提交默认是核验开始时的 HEAD，`--fix` 可以指定其 first-parent 历史中缺陷提交之后的提交。worktree 中他人的未提交改动不参与核验，只要求该 Issue 文件没有未提交改动。
+1. 回归测试由 `@issue` 标记选出，`@status retired` 的标记不能用于修复核验。修复提交默认是核验开始时的 HEAD，`--fix` 可以指定其 first-parent 历史中缺陷提交之后的提交。只要求该 Issue 文件与回归测试文件没有未提交改动。
 2. 缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
-3. 从缺陷提交到修复提交之间，测试文件、`runner.sourceFiles` 与测试指向的 Spec 字节不变；严格解码后的项目配置除 `runner.prepare` 外不变，配置文件的空白与格式不参与比较。区间中有 merge 提交时不支持。
-4. 以 detached worktree 分别检出缺陷提交与修复提交。它们位于系统临时目录下属于当前用户、权限 0700 的私有目录中，在仓库目录树之外，不跟随符号链接。放在仓库之外，是因为仓库之下的 worktree 解析依赖时会向上找到主 worktree 的依赖，使构建结果不同于干净的 worktree。
+3. 从缺陷提交到修复提交之间，回归测试文件与测试指向的 Spec 字节不变；严格解码后的 runner 命令配置不变。
+4. 在工作区服务管理的轻量验证环境（或按依赖锁摘要复用的私有临时 worktree）中分别验证缺陷提交与修复提交。当依赖锁与 `runner.prepare` 输入未变时直接复用已准备好的依赖环境，仅在依赖变化或首次准备时执行 `runner.prepare`。
 
-   每个临时 worktree 先依次执行 `runner.prepare` 的命令（例如安装依赖与构建），再运行回归测试。回归测试所在文件被某个 `testAdapters` 覆盖时，按 `test run --require-native` 的同一条原生选择路径运行，两端都必须是 green 或 red，任一端 invalid 时核验以 `FixUnverifiable` 结束；没有被覆盖时运行 runner。`prepare` 只准备环境：两个 worktree 都取核验开始时 HEAD 的配置，重放同样取当时 HEAD 的配置。它不属于第 3 步的冻结输入，因此早于它出现的提交也能核验。
+   回归测试所在文件被某个 `testAdapters` 覆盖时，按 `test run --require-native` 的同一条原生选择路径运行，两端都必须是 green 或 red，任一端 invalid 时核验以 `FixUnverifiable` 结束；没有被覆盖时运行 runner。
 
-   准备命令以非零码结束、超时或清理未知时，核验报 `FixUnverifiable`，不计为 red。全部命令在 runner 租约与 OwnedProcess 下执行，结束后删除临时 worktree；清理无法确认时按 runner 阻断处理。
+   准备命令以非零码结束、超时或清理未知时，核验报 `FixUnverifiable`，不计为 red。全部命令在单槽测试任务与 OwnedProcess 下执行。
 5. 缺陷提交上同一冻结命令以非零码结束，修复提交上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果。零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
-6. 发布前重新核对 Issue 文件与回归测试文件的前像，变化则拒绝。同一次发布删除 Issue 文件，并删除回归测试源码中指向它的 `@issue` 行；测试本身与其它标记保留。输出的结论包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本，供写进提交说明。
+6. 发布前重新核对 Issue 文件与回归测试文件的期望摘要，变化则拒绝。同一次发布删除 Issue 文件，并删除回归测试源码中指向它的 `@issue` 行；测试本身与其它标记保留。输出的结论包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本，供写进提交说明。
 
-修复核验从当前源码重新构建，不信任缓存的状态判断。
-
-`test verify --defect <D> --fix <F> <test-id>...` 在 D 与 F 的临时 worktree 上重放，核对结论的主张：回归测试在 D 上失败、在 F 上通过。之后的提交改动测试、runner 输入或 Spec 不使这个结论失效，之后的回归由完整测试发现。提交、依赖或运行环境不可获得时报告无法重放。
+`test verify --defect <D> --fix <F> <test-id>...` 在 D 与 F 上重放，核对结论的主张：回归测试在 D 上失败、在 F 上通过。之后的提交改动测试、runner 输入或 Spec 不使这个结论失效，之后的回归由完整测试发现。提交、依赖或运行环境不可获得时报告无法重放。
 
 ## 写入管线
 
-文档 mutation 在取得[发布租约](../portable-coordination/concepts.md#publication-lease)后按以下顺序执行：
+文档与受管源码写入在工作区服务的写互斥下按以下顺序执行：
 
-1. 校验 canonical relative path、每个 symlink 组件与完整前像。
-2. 把全部计划变更写入绑定 root 与 privateDir 的 journal。
-3. 以同文件系统临时文件和原子 rename 逐个发布文件。
-4. 全部提交后才刷新可重建缓存。
+1. 校验规范化相对路径、拒绝受管路径上的 symlink 组件，并核对目标文件的期望摘要（CAS）。
+2. 把全部计划变更写入绑定 root 与 privateDir 的单一 `journal.json`。
+3. 以同目录临时文件和原子 `rename` 逐个发布文件。
+4. 立即增量更新内存工作区图，删除 `journal.json`，并异步刷入持久缓存。
 
-读取遇到未完成的 journal 时，先看它的发布租约：写入者仍持有租约，说明发布正在进行，读取等这次发布结束后再读，等待以该写入自身的期限为界；没有存活的租约持有者，说明发布已中断，读取返回 `RecoveryRequired`，要求显式 recover。内容既不匹配前像也不匹配 planned digest 时，拒绝覆盖外部编辑。
+服务启动或运行恢复时自动处理未完成的 `journal.json`；若外部编辑器已修改目标文件，则保留磁盘当前文件并清理陈旧 `journal.json`，不锁死仓库。
 
-命令助手与 Web 保存都走这条管线。Web 保存以整文件摘要作为前像；源码保存只替换配置范围内既有的 JS/TS 文件，使用完整文件摘要与受限恢复日志。
+命令助手与 Web 保存都走这条管线。Web 保存以整文件摘要作为期望摘要；源码保存只替换配置范围内既有的 JS/TS 文件。
 
-人与 agent 的直接编辑不经过这条管线，由 `concord check` 检查（[操作依赖](#操作依赖)）。
-
-新增配置、来源和写入口必须同时定义资源所有权与恢复授权，写入的可观察保证见[写入保护](use-case/recover-local-state.md#写入保护)。
+人与 agent 的直接编辑不经过这条管线，由文件监听增量合入工作区图并由 `concord check` 检查（[操作依赖](#操作依赖)）。写入的可观察保证见[写入保护](use-case/recover-local-state.md#写入保护)。
 
 ## 步骤改写的发布
 
-`use-case format` 沿用正文编辑的前像与发布协议。
+`use-case format` 沿用正文编辑的期望摘要与发布协议。
 
-`rename-step` 在唯一 journal 与发布租约下使用专用 `step-rename` 授权范围，不串联多次 `source.set` 或文档发布。该范围绑定项目、worktree、冻结配置、Use Case 路径、old-id、new-id、完整文件前后像、摘要与 mode，以及规划时观察的目录成员。
+`rename-step`、`issue close` 与 `move` 均在单一 `journal.json` 与工作区服务的写互斥下一次性完成全部关联文件的原子替换：
 
-`issue close` 使用专用的 `issue-close` 授权范围：在唯一 journal 与发布租约下删除 Issue 文件，并从回归测试源码中删除指向它的 `@issue` 行。
+- `rename-step` 绑定 Use Case 路径、old-id、new-id 与全部受影响文件的期望摘要。
+- `issue close` 删除 Issue 文件，并从回归测试源码中删除指向它的 `@issue` 行，其余字节保持不变。
+- `move` 完成文档移动，并同步改写受管 Markdown 链接、测试标记与代码声明中的目标路径；`unmanagedReferences` 只在规划时扫描并报告，不进入写集。
 
-- 规划在 `app` 中完成，由测试领域的标记解析器找出这些行。
-- 该范围绑定项目、worktree、冻结配置、测试成员集合、Issue 路径、每个被改文件的完整前后像、摘要与 mode。
-- 发布与恢复时经 `PublicationValidation` 以冻结输入重新规划，只接受完全相同的写集：每个测试文件的后像必须恰好等于前像删去这些 `@issue` 行，其余字节不变。
-- 重新规划结果不同、前像不符或无法解码时，保留 journal 并阻断写入。
-
-`move` 使用专用的 `document-move` 授权范围，在唯一 journal 与发布租约下完成全部移动与改写：
-
-- 规划在 `app` 中完成。Markdown 链接改写与 `roadmap start` 共用同一个链接重定位模块；测试标记与代码声明分别由测试领域与代码声明的解析器找出目标，只替换目标路径的字节范围。
-- 该范围绑定项目、worktree、冻结配置、源与目标路径、被移动的文件集合、测试根与源码根的成员集合，以及每个被改文件的完整前后像、摘要与 mode。
-- 发布与恢复时经 `PublicationValidation` 以冻结输入重新规划，只接受完全相同的写集；重新规划结果不同、前像不符或无法解码时，保留 journal 并阻断写入。
-- `unmanagedReferences` 只在规划时扫描并报告，不进入写集，也不参与重新规划的比较。
-
-规划在同一次来源快照中记录引用扫描所需的文件、目录成员和受管引用检查；受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。
-
-正常发布与恢复共用范围校验：从前像复算允许的改写，拒绝超出授权的后像（[写入保护](use-case/recover-local-state.md#写入保护)）。
+规划基于当前增量工作区图完成，提交阶段复核全部被改文件的当前摘要与期望摘要一致后原子替换（[写入保护](use-case/recover-local-state.md#写入保护)）。
 
 ## 代码声明
 
@@ -141,42 +125,13 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ## 路径安全
 
-仓库路径解析分两个入口：
+仓库路径解析执行规范化相对路径校验与 symlink 检查（[写入保护](use-case/recover-local-state.md#写入保护)）：
 
-- **完整检查**：从文件系统根逐级核对 Darwin 字节拼写，并 `lstat` 拒绝 symlink，不读取任何复用信息。写入、建目录与删除、原子替换、journal、发布 preflight 与 apply、恢复、`discoverRoot`、`init`，以及构造期的 privateDir 与 journal 检查使用它。
-- **读取检查**：只读快照内的文件读取与目录扫描使用它，写入前像同样经读取检查取得（[写入保护](use-case/recover-local-state.md#写入保护)）。
-
-**根锚点**：仓库对象构造时对根做一次完整检查，记录从 `/` 到根每一级的 bigint `dev`/`ino`。快照深度 0→1 时打开根目录 fd 并与锚点比对，回到 0 时关闭。
-
-**读取检查**在读字节前完成：逐级 `lstat` 核对锚点 inode，不枚举仓库根之上的目录；仓库内组件先做拼写核对，再 `lstat` 拒绝 symlink。
-
-文件以不跟随 symlink 的方式打开：
-
-- Darwin 用 `O_NOFOLLOW_ANY`，要求 macOS 11 及以上，否则构造以 `UnsupportedHost` 失败。
-- Linux 用 `O_NOFOLLOW`，并以 `/proc/self/fd/<fd>` 比对期望路径，不可用时拒绝读取。
-
-打开后 `fstat` 须为普通文件。大小或 `dev`/`ino` 与最后一次 `lstat` 不一致时，按来源变化报 `SourceChanged`；它在投影刷新中是可重试漂移，不返回部分值。
-
-**快照内目录列表**：拼写核对复用本次快照的目录列表，并记录实际查过的 `dir/segment`。每次目录成员扫描都新鲜枚举，不复用拼写列表作为成员集合。列表不跨快照、不跨进程、不按时间失效；嵌套快照共享外层结构，任何自身写入开始前清空（[性能约束](../../engineering/performance/README.md#性能约束)）。
-
-**结束核验**在三处执行：当前快照核验、投影漂移收集和发布前观察校验。它使用只供本次核验的新列表，重新核对锚点与根 fd，只复核查过的条目仍以原字节存在且无碰撞别名，再比对文件内容与目录观察。
-
-结束核验的结果这样分类：
-
-- 拼写不一致、别名、锚点或 `fstat` 不一致归为来源变化：当前查询与发布报 `FileChangedSinceRead`（`source-observation`），投影把条目路径并入漂移，锚点变化记为 `.`。
-- 只有 symlink、`ELOOP` 与非普通文件报 `UnsafePath`。
-
-这些检查只作用于 Concord 读写的路径：docs、memory、配置声明的源码与测试根、Concord 写入的配置与 skill 目录。目录扫描在这些路径之外遇到 symlink（例如使用者自己链接的 `CLAUDE.md` 或 `.claude/skills/<名称>`）时，不跟随、不读取，也不使检查失败；Concord 写入的 skill 目录内出现 symlink 仍报 `UnsafePath`。
-- 发布先核验后清空列表，写者自身提交不被判为变化。
-
-验收在真实临时目录中进行：
-
-- 快照内祖先或仓库内目录被换成 symlink 或另一真实目录时，下一次读取在读字节前报 `UnsafePath`；叶子在检查与打开之间被换成 symlink 时同样报 `UnsafePath`。
-- 只被读取过的目录新增无关文件时，当前查询成功；被扫描过的目录新增成员时报 `FileChangedSinceRead`。
-- 写者提交后的核验不报 `FileChangedSinceRead`；Darwin 上发布新建目录成功。
-- 仓库根的父目录很宽时，构造之后对仓库根之上的 `readdirSync` 为 0，拼写检查每目录至多枚举一次，构造阶段次数单独计数。
-
-指向仓库外的硬链接与覆盖仓库内目录的挂载不被拒绝；网络文件系统与 overlayfs 上不稳定的 inode 会导致拒绝。
+- 拒绝绝对路径、`..` 穿越以及超出仓库根的路径。
+- 对 Concord 受管路径（docs、memory、配置声明的源码与测试根、Concord 写入的配置与 skill 目录）检查 `lstat` 并拒绝 symlink 组件与非普通文件；Darwin 上核对目录条目的字节拼写，防止大小写与 Unicode 规范化碰撞。
+- 目录扫描在受管路径之外遇到 symlink（例如使用者自己链接的 `CLAUDE.md` 或 `.claude/skills/<名称>`）时，不跟随、不读取，也不使检查失败；Concord 写入的 skill 目录内出现 symlink 仍报 `UnsafePath`。
+- 文件读取按 `(mtime, size, inode)` 判断缓存命中；发生变化或写入提交前，读取最新字节并计算内容摘要，不再对每次读取执行从 `/` 到仓库根的逐级 `dev`/`ino` 巡检或 `/proc/self/fd` 反查。
+- 写入提交前若目标文件摘要与读取时的期望摘要不一致，报 `FileChangedSinceRead`。
 
 ## TypeScript 编译器
 
@@ -224,17 +179,11 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ## 编辑器计算
 
-`concord lsp` 为每个会话维护 URI 到文本、languageId、版本与打开标识的 overlay。未打开的依赖读取受校验磁盘快照，不把历史投影当作当前图。
+`concord lsp` 为每个会话维护 URI 到文本、languageId、版本与打开标识的内存 overlay，并通过本机 RPC 将未保存的 overlay 与查询请求转发给工作区服务单内核计算（无服务模式在本进程内复用同一计算逻辑）。未打开的依赖直接复用工作区服务内存中已热的增量工作区图，不再为每次编辑器计算单独派生新的 Bun 进程组。
 
-每次任务捕获会话标识、全部依赖的 URI、版本、打开标识与磁盘身份，发布或返回前再次核对；任一变化即丢弃结果并重排。步骤、标记、引用解析与写作检查使用同一版本集合。
+每次任务捕获会话标识、依赖的 URI 版本与当前工作区图状态，返回前若缓冲区版本已更新则直接丢弃过期结果。步骤、标记、引用解析与写作检查使用同一版本集合。
 
-每个计算 Job 是固定 Bun 的 editor worker，由独立 OwnedProcess 进程组持有，编译器 supervisor 与原生编译器继承该进程组。editor 不设置进程内存上限，不因 RSS 大小终止计算；输入、输出与时间预算继续独立强制。项目配置不能替换可执行文件、入口或参数。Job 经 stdin 接收单个 JSON 输入、经 stdout 返回单个 JSON，双方严格解码。
-
-每个 Job 有自己的 Scope，收尾后核验进程组归属、清理已检查且后代已消失；缺少清理记录视为未知。
-
-- 未知或失败的清理使会话永久保留 `EditorTaskFailed`，停止新计算，不发布该任务结果。
-- 取消的任务在清理结论取得前仍计入运行集合；shutdown、EOF 与 exit 等待全部收尾。
-- Job 不获得来源写权限或发布租约。
+单个计算任务超时或失败只取消该次任务并返回诊断，不会将整个会话永久锁死在 `EditorTaskFailed`，后续编辑照常触发新计算。编辑器计算任务只读，不修改磁盘文件。
 
 ## 原生 adapter
 

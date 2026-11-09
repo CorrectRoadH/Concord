@@ -24,52 +24,48 @@ Concord 不规定分支或 worktree 的用法：直接在 main 开发、在同�
 
 ```mermaid
 flowchart LR
-  CLI[CLI 命令] -->|写入、发布与恢复| Local[同一套应用与领域服务]
-  CLI -->|查询自动启动或复用：本机 socket / RPC| Server[工作区服务主进程]
-  Local -->|缓存快照与派生行| Server
-  Herdr[Concord mod] -->|公开 CLI 查询| CLI
-  View[concord view] -->|启动或复用，取得 HTTP 租约| Server
+  CLI[CLI 命令] -->|查询、写入与恢复：本机 socket / RPC| Server[工作区服务单内核]
+  Herdr[Concord mod] -->|公开 CLI / RPC| Server
+  LSP[concord lsp] -->|未保存 overlay 与查询| Server
+  View[concord view] -->|启动或复用，开启 HTTP 监听| Server
   Browser[浏览器工作台] -->|HTTP 操作与 SSE 订阅| Server
-  Server -->|调度只读计算| Compute[长期计算进程]
-  Server -->|派发写入与恢复| Operation[单次操作进程]
+  Server -->|进程内调度| Graph[增量工作区图与解析线程池]
   Server --> Cache[(该项目目录的持久 HawDB)]
-  Local --> Sources[worktree 文件与 Git]
-  Compute -->|读取当前来源| Sources
-  Operation -->|校验后发布| Sources
+  Graph -->|按 mtime/inode 增量读取与 CAS 发布| Sources[worktree 文件与 Git]
 ```
 
-服务让解析缓存与投影保持热，并为 Web 提供长期连接。三类调用这样使用它：
+工作区服务是该项目目录唯一的常驻协调与计算内核，保持增量工作区图与解析缓存热，并为 Web、CLI 与编辑器提供统一入口（[一件事只写一次，其余推导](taste.md#t-3)）：
 
-- CLI 查询自动启动或复用服务，每次请求绑定调用者环境。协议相同就复用，不论服务由哪个安装启动；协议不同时换成当前安装的服务（见[启动与裁决](feature/local-data-engine/architecture.md#启动与裁决)）。
-- CLI 写入、发布与恢复按各自入口执行；有服务时，通过快照与派生行使用服务的缓存。
-- 浏览器操作由服务调度。
+- CLI 的查询、写入、发布与恢复自动启动或复用服务，每次请求绑定调用者环境。协议相同就复用，不论服务由哪个安装启动；协议不同时换成当前安装的服务（见[启动与裁决](feature/local-data-engine/architecture.md#启动与裁决)）。
+- 读写互斥、测试单槽任务与增量投影刷新在服务进程内通过内存锁与线程池调度，不派生独立的计算进程、刷新进程或预热操作子进程，也不跨进程搬运缓存快照与派生行。
+- 浏览器操作与 `concord lsp` 共用同一服务内核与增量工作区图。
 
 ### 应用生命周期
 
 | 阶段 | 行为 |
 | --- | --- |
-| 执行命令 | CLI 定位项目目录，组合本次操作需要的 Effect 服务；结束后释放快照、连接与本进程资源 |
-| 启动服务 | 连接已有实例；没有可用实例时启动服务进程，由服务锁决定唯一所有者 |
-| 准备服务 | 主进程先绑定 socket 并进入 `opening`，再打开持久缓存、恢复投影并启动计算能力 |
-| 持续运行 | 主进程接收请求、监督子进程并保存派生结果 |
+| 执行命令 | CLI 定位项目目录，连接或启动工作区服务（`--server=command` 或无服务模式在本进程运行同一内核）；结束后释放连接与本进程资源 |
+| 启动服务 | 连接已有实例；没有可用实例时启动服务进程，由唯一的服务锁决定所有者 |
+| 准备服务 | 主进程绑定 socket 并进入 `opening`，打开持久缓存、自动清理陈旧 journal、恢复工作区投影并初始化解析线程池 |
+| 持续运行 | 单内核接收读写请求、维护增量工作区图、监督外部测试 runner 并持久化派生结果 |
 | 维护缓存 | 停止受理相关新工作、关闭持久句柄后独占清理，完成后重新打开并刷新 |
-| 停止服务 | 先通知订阅者，再收拢在途工作与子进程，最后释放资源 |
+| 停止服务 | 先通知订阅者，再收拢在途工作与外部 runner 子进程，最后释放资源 |
 
 各阶段的补充规则：
 
-- 启动服务的入口是 CLI 查询、`concord view` 与 `concord server start`。
-- 准备服务时缓存打开失败，服务报告降级原因。
-- 持续运行时，来源监听触发刷新；计算进程读取当前文件，主进程核验后接受结果。
+- 启动服务的入口是 CLI 命令、`concord view`、`concord lsp` 与 `concord server start`。
+- 准备服务时缓存打开失败，服务报告降级原因并用内存图继续服务。
+- 持续运行时，来源监听与内部写入直接按变更文件增量更新工作区图，不启动独立的后台全量扫描子进程。
 - 维护缓存前等待在途操作完成；服务锁全程保留。
 - 服务在显式停止、项目目录消失，或无客户端且十分钟无请求时停止。最后释放的是句柄、socket、运行记录与服务锁。
 
-完整状态机、超时与异常退出规则见[启动与裁决](feature/local-data-engine/architecture.md#启动与裁决)及[状态](feature/local-data-engine/architecture.md#状态)。子进程超时或被中断时，必须确认进程组已清理。无法确认写入结果时保留 journal，不自动重跑写入。
+完整状态机、超时与异常退出规则见[启动与裁决](feature/local-data-engine/architecture.md#启动与裁决)及[状态](feature/local-data-engine/architecture.md#状态)。外部 runner 子进程超时或被中断时，必须确认进程组已清理。
 
 ### Web 连接与退出
 
-`concord view` 为选定项目目录的服务申请 HTTP 监听租约，默认地址为 `127.0.0.1:4317`。同一服务的相同地址共用监听；不同服务同时监听同一主机地址时要使用不同端口。浏览器通过 HTTP 读写，通过 SSE 接收投影与任务变化，不连接数据库。
+`concord view` 为选定项目目录的服务开启 HTTP 监听，默认地址为 `127.0.0.1:4317`。同一服务的相同地址共用监听引用；不同服务同时监听同一主机地址时要使用不同端口。浏览器通过 HTTP 读写，通过 SSE 接收投影与任务变化，不连接数据库。
 
-HTTP 监听与工作区服务分别管理生命周期。退出 `view` 只释放它自己的租约；仍有租约或浏览器 SSE 连接时，监听继续存在。最后一个租约与连接结束后关闭监听，服务再按自身的空闲条件退出。关闭浏览器不取消已启动的测试任务。规则见[服务托管](feature/web-workbench/architecture.md#服务托管)。
+HTTP 监听与工作区服务分别管理生命周期。退出 `view` 只释放它自己的监听引用；仍有引用或浏览器 SSE 连接时，监听继续存在。最后一个引用与连接结束后关闭监听，服务再按自身的空闲条件退出。关闭浏览器不取消已启动的测试任务。规则见[服务托管](feature/web-workbench/architecture.md#服务托管)。
 
 默认启动的服务可以在启动它的命令结束后继续运行。`view --in-process` 需要新服务时，把服务子进程纳入当前命令的作用域，命令退出时回收；已有可用服务仍按复用规则处理。`concord server run` 在前台运行服务，`server status` 与 `server stop` 操作选定项目目录的实例。
 
@@ -80,9 +76,9 @@ CI 可以使用 `concord --server=command check`：服务属于本次命令，�
 | 数据 | 所有者与用途 |
 | --- | --- |
 | Spec、代码、测试、配置与 Memory | worktree 中的文件是事实来源，由人、agent 与受校验的操作修改；Git 保存历史 |
-| 发布租约、journal 与 runner 状态 | 项目目录对应的 Git-private 目录保存协调与恢复材料，不能作为缓存删除 |
-| 持久解析缓存、远端观察与诊断投影 | 主进程持有 HawDB；计算进程只接收快照并交回派生行 |
-| 当前查询与历史投影 | 当前查询读取并复核来源；导航与诊断可以读取明确标注的历史投影 |
+| 服务锁、journal 与测试任务状态 | 项目目录对应的 Git-private 目录保存单实例锁与恢复材料，不能作为缓存删除 |
+| 增量工作区图、远端观察与持久缓存 | 工作区服务单内核持有内存工作区图与 HawDB |
+| 当前查询与历史投影 | 查询读取工作区图与投影；历史投影不授权写入或修复核验 |
 
 没有服务时，当前命令按[打开模式](feature/local-data-engine/architecture.md#句柄与打开模式)使用 HawDB。历史投影的结果不授权写入或修复核验。
 
@@ -124,58 +120,43 @@ init 生成布局、`docs/concord.md`、`docs/_template/` 参考模板，以及�
 
 测试关联是测试源码中的 Concord 标记：`@feature <path>` 或 `@use-case <path>`，可附 `@issue <path>`、`@status retired` 与 `@name`。测试身份由文件和标记派生为 `neref_...`，反向关系由当前源码派生，不写回 Spec。标记语法与发现范围见[发现测试](feature/local-sdlc/use-case/discover-annotated-tests.md)。
 
-HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对路径集合、内容摘要与解析器和 schema 身份，命中仍严格解码。损坏、schema 不符或写入失败时回源编译，不返回陈旧结果。
+HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。文件读取按 `(mtime, size, inode)` 与内容摘要做增量核对，命中仍严格解码。损坏、schema 不符或写入失败时回源编译，不返回陈旧结果。
 
-缓存只保存解析结果和投影，不缓存授权或修复核验的判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有，句柄的所有权与打开模式见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。
+缓存只保存解析结果和投影，不缓存授权或修复核验的判定。工作区服务在内存中维护唯一一份增量工作区图，并异步刷入 `cache.hawdb` 作为冷启动持久层。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有，句柄的所有权与打开模式见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。
 
-CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验，解析结果怎样使用缓存见[缓存的使用与维护](feature/local-data-engine/architecture.md#缓存的使用与维护)。Web 工作区导航独立读取[工作区投影](feature/web-workbench/concepts.md#workspace-projection)，不把历史结果用于当前事实授权。
+CLI、Web、Herdr mod 与 LSP 共用工作区服务维护的同一张增量工作区图与[工作区投影](feature/web-workbench/concepts.md#workspace-projection)，解析结果怎样使用缓存见[缓存的使用与维护](feature/local-data-engine/architecture.md#缓存的使用与维护)。历史投影不用于当前事实授权。
 
 ```mermaid
 flowchart TD
-  Check[CLI check / trace check / --fresh] --> Scan[公共扫描与关系校验]
-  Query[CLI trace show / gaps / review] --> QueryCache[HawDB query_cache 诊断投影]
-  Query -. 请求刷新 .-> QueryRefresh[后台刷新进程，每查询键一个 owner]
-  QueryRefresh -->|内部 query-scan-worker| Scan
-  QueryRefresh -->|一致结果，或没有一致结果时标注漂移的结果| QueryCache
-  Web[Web workspace] --> WorkspaceCache[HawDB workspace_projection 工作区投影]
-  WorkspaceRefresh[工作区服务，每项目目录一个] --> Scan
-  WorkspaceRefresh -->|推送结果变化| Clients[Web 与 CLI]
-  WorkspaceRefresh -->|一致的结果| WorkspaceCache
-  Scan --> Sources[当前目录集合与安全文件读取]
-  Sources --> Keys[原文摘要与解析器身份]
-  Keys --> Cache[有界 HawDB 批量查询]
-  Cache --> Decode[严格解码命中结果]
-  Cache --> Parse[未命中或不可用时回源解析]
-  Parse --> Write[批量写入可重建缓存]
-  Decode --> Validate[来源复核与关系校验]
-  Parse --> Validate
-  Validate --> Result[结果与完整性诊断]
-  Result --> Check
+  Clients[CLI / Web / Herdr / LSP] --> Kernel[工作区服务单内核]
+  Watch[fs.watch 与内部写入通知] --> Diff[按 mtime/size/inode 识别变更文件]
+  Diff --> Workers[解析线程池重算变更文件]
+  Workers --> Graph[内存增量工作区图与关系校验]
+  Graph --> Persist[异步批量写入 HawDB 持久缓存]
+  Persist -. 冷启动恢复 .-> Graph
+  Graph --> Kernel
 ```
 
-cache clear 在独占发布租约下执行，锁、删除阶段与保留规则见[数据引擎架构](feature/local-data-engine/architecture.md#清理)。clear 只删除 cache.hawdb 内的缓存数据，不删除源 owner、journal 和 Memory。
+cache clear 在工作区服务的写互斥下执行，锁、删除阶段与保留规则见[数据引擎架构](feature/local-data-engine/architecture.md#清理)。clear 只删除 `cache.hawdb` 内的缓存数据，不删除源 owner、journal 和 Memory。
 
-读写路径拒绝绝对路径、traversal、symlink 组件和超出仓库的 realpath。扫描只读取 Concord 所属目录和格式，错误的受管格式明确报错。
+读写路径拒绝绝对路径、traversal、受管目录下的 symlink 组件和超出仓库的 realpath。扫描只读取 Concord 所属目录和格式，错误的受管格式明确报错。
 
 ## 发布协调
 
-发布协调让多个命令与 agent 在同一项目目录读写而互不覆盖：读取不持锁、返回前核验，写入只在提交时短期独占，中断后按 journal 恢复。读取、写入与恢复的协议、错误和恢复结果由[可移植协调架构](feature/portable-coordination/architecture.md)拥有，支持范围见[跨平台标签发版](feature/cross-platform-release/README.md)。
+发布协调通过工作区服务的进程内读写调度与轻量 CAS 前像校验，让多个命令与 agent 在同一项目目录读写而互不覆盖：读取直接访问当前工作区图，写入在提交阶段短期独占并核对目标文件摘要，中断后按单一 `journal.json` 恢复（[文件是界面，命令只是助手](taste.md#t-6)）。读取、写入与恢复的协议、错误和恢复结果由[可移植协调架构](feature/portable-coordination/architecture.md)拥有，支持范围见[跨平台标签发版](feature/cross-platform-release/README.md)。
 
-Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个项目目录独立；journal 绑定 root 与 privateDir。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
+Git-private 状态在创建工作区时通过 `git rev-parse --git-path concord` 解析一次并缓存，每个项目目录独立；journal 绑定 root 与 privateDir。
 
-发布协调不持有持久缓存句柄。写入、发布与恢复不依赖工作区服务。
+服务启动或执行恢复时，若发现未完成的 journal：目标文件仍等于前像或计划摘要时自动完成或回滚；若外部编辑器已修改目标文件，则以当前工作区文件为准清理陈旧 journal 并输出告警，不锁死仓库。
 
-### runner 租约
+### 测试任务槽位 {#runner-租约}
 
-CLI 与 Web 的测试共用独立的 `runner.lease`，长时间执行不占文档租约。
+CLI 与 Web 的测试共用工作区服务管理的单槽测试任务，长时间执行不阻塞文档读写。
 
-1. run 状态区分 running、finalizing 与 quarantined。只有同主机活进程的 running 允许发布。
-2. 发布前持久标记该 run 失效。A→B→A 的编辑与回滚不撤销失效标记。
-3. run 结束时，在新快照中核对起止 candidate、配置、定义、Spec、失效与清理结果，再写入结果。
-4. 父进程死亡不授权回收 runner；清理未知时保持阻断。
-5. 最终快照无法取得时，留下只收紧权限的 token-bound quarantine 标记。
-
-此协议不观察不合作编辑器的每次瞬时修改。
+1. 任务状态区分 running、finalizing 与 quarantined。
+2. 文档或源码发布时，在内存中直接标记当前活跃任务失效。A→B→A 的编辑与回滚不撤销失效标记。
+3. 任务结束时，核对起止 candidate、配置、定义、Spec、失效标记与进程组清理结果，再写入结果。
+4. 外部测试子进程组清理未知时保持阻断。
 
 ## Design
 
@@ -231,7 +212,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 只有当前格式，没有历史包袱（[写现在，不写过去](taste.md#t-4)）。
 
-1. 配置、owner、journal、证据与缓存只有当前格式。运行时只按当前 Schema 严格解码，其它输入按无效输入返回具名解码错误；不识别旧版本，不提供迁移命令、兼容读取或双轨模型。无法解码的 journal 与锁保留现场并阻断写入，不被普通恢复删除。
+1. 配置、owner、journal、证据与缓存只有当前格式。运行时只按当前 Schema 严格解码，其它输入按无效输入返回具名解码错误；不识别旧版本，不提供迁移命令、兼容读取或双轨模型。无法解码的陈旧 journal 在服务启动或恢复时以当前工作区文件为准清理并输出告警，不锁死仓库。
 2. 格式变化时，Concord 自身仓库与接入项目把文件直接改写为当前格式，缓存与可重建投影直接丢弃重建。缺少当前绑定的证据必须重新取证，不补字段或重算摘要伪装为当前证明。
 3. 品味、Spec 与指南只描述当前格式与行为，不描述格式如何变化，也不说明如何从旧格式过渡。
 4. 本条约束格式边界，不改变领域数据的含义。

@@ -120,49 +120,39 @@ Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git
 
 | 实体 | 身份 | 拥有与生命周期 |
 | --- | --- | --- |
-| 服务主进程 | worktree 的 Git-private 目录 + 协议 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算 |
-| 计算进程 | 由主进程经 `OwnedProcessService` 启动的长期子进程 | 持有内存解析缓存，执行前台只读查询；不打开持久库 |
-| 刷新计算进程 | 由主进程经 `OwnedProcessService` 启动的另一个长期子进程 | 持有自己的内存解析缓存，执行工作区投影的刷新扫描；不打开持久库 |
-| 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动 | 执行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库 |
+| 工作区服务（单内核） | worktree 的 Git-private 目录 + 协议 + 随机实例 token | 持有唯一服务锁、持久 HawDB 句柄、内存增量工作区图、内部解析线程池、socket、HTTP 监听与订阅，执行全部查询、写入、恢复与投影更新 |
+| 解析线程池 | 服务进程内的轻量工作线程 | 执行 CPU 密集的 Markdown 与 TypeScript AST 解析，不直接打开持久库或写源文件 |
 | 服务锁 | `<privateDir>/server/lock`，原生排他文件锁，单链接普通文件，按 device/inode 校验 | 服务存活期间一直持有，清理期间也不释放；进程死亡时由操作系统释放 |
 | 运行记录 | `<privateDir>/server/current.json`：`{state, pid, startedAt, token, lock, installation, protocol, socket}`，严格解码 | 只由服务锁持有者在锁内原子写入与按 token 删除 |
 | socket | `<runtime>/concord-<uid>/<privateDir 的 sha256 前 32 位>.sock`，0600 | 只由服务锁持有者在锁内创建；删除前核对其 inode 与运行记录一致 |
-| HTTP 监听 | `(host, port)`，每次开启返回绑定实例 token 的租约 | 按租约计数，见 [Web 工作台架构](../web-workbench/architecture.md#服务托管) |
+| HTTP 监听 | `(host, port)`，每次开启返回绑定实例 token 的监听引用 | 按引用与活跃连接计数，见 [Web 工作台架构](../web-workbench/architecture.md#服务托管) |
 
-- 服务主进程只在清理时、关闭持久库之后持有发布租约。
-- 计算进程与刷新计算进程无响应或超出预算时，各自整组终止并重启，缓存冷启动。无响应指既没有应答，进程组的 CPU 时间也在 60 秒内没有增长；仍在消耗 CPU 的计算不算无响应，因为同步扫描会阻塞事件循环，进程内心跳不能作为判据。单次请求的预算是 600 秒，超出时这次请求以 `ComputeRequestTimedOut` 失败，附已用时间与上限。重启后不自动重放这次请求。
-- 刷新不阻塞前台查询：前台查询只排在计算进程自己的请求之后，不等待刷新计算进程，也不等待刷新持有的任何锁或信号量。缓存清除等维护操作同时等两个进程空闲（[名字说出区别](../../taste.md#t-13)）。
-- 主进程保持一个已就绪的空闲操作进程。请求到达时交给它，它执行完这一个请求后退出；主进程确认进程组清理，再预热下一个。
-- 空闲的操作进程不持有 lease、journal、来源快照或请求数据。服务进入 draining 或 stopping 时，它与其它操作进程一同回收。
+- 读写互斥、缓存清理与测试单槽任务在服务进程内通过内存信号量与读写锁协调，不再派生独立的计算子进程、刷新计算子进程或预热操作子进程。
+- 单次计算请求的预算是 600 秒，超出时这次请求以 `ComputeRequestTimedOut` 失败，附已用时间与上限。
+- 后台增量刷新不阻塞前台只读查询；缓存清除等维护操作等待在途读写与刷新完成（[名字说出区别](../../taste.md#t-13)）。
 - 服务锁与数据库[协调锁](#协调锁)是两把锁。
 - 运行记录的 `pid` 与 `startedAt` 只用于诊断，不参与裁决。
 
 `<runtime>` 依次取 `XDG_RUNTIME_DIR` 与 `os.tmpdir()`。目录必须属于当前 uid、权限 0700、不是符号链接，socket 路径不超过平台上限（Linux 107 字节），否则不创建服务并报告原因。
 
-主进程把需要的持久数据（远端反馈快照、诊断投影）随请求交给计算进程，计算进程把结果交回主进程写入。持久命名空间只在主进程读写。
+持久命名空间与内存增量工作区图均由服务单内核统一读写。
 
 ### 本地操作的缓存快照
 
-CLI 的本地操作在同一实例的连接作用域内读取缓存快照，来源访问与 runner 仍在调用者进程执行。普通本地操作不因此自动启动服务。
+CLI 的读写与查询操作统一连接工作区服务执行；`--server=command` 或无服务单次模式在本进程内运行同一内核。
 
-可重建的配置、代码、测试观察与写作检查行使用和计算进程相同的派生批次 Schema，在操作成功后、输出成功结果前交回主进程。派生批次不能覆盖远端观察、历史查询或工作区投影。
+可重建的配置、代码、测试观察与写作检查行在操作完成后直接更新内存工作区图并批量写入持久缓存，不再通过跨进程 `cache-snapshot` 与 `cache-derived` 分块会话搬运数据。
 
-传输断开或保存失败时不重跑来源操作：
+持久缓存写入失败时不重跑来源操作：
 
 - 只产出缓存的 `test discover` 与 `code analyze` 返回失败。
-- 其它操作保留完成结果，并输出 `CacheUpdateFailed` 警告；来源写入结果与 journal 保持现状。
-
-`cache-derived` 会话以随机 session 标识，按 begin、append、commit 顺序接收 UTF-8 JSON 字节。每个连接最多一个未完成会话，单批最多 32 MiB，全服务未完成数据合计最多 64 MiB。
-
-commit 在严格解码完整批次后交给既有缓存写入校验；超限、失败或断开都释放会话。快照与派生行只对同协议、持有当前实例 token 及匹配命令作用域的客户端开放，客户端不接收数据库句柄，见[启动与裁决](#启动与裁决)。
+- 其它操作保留完成结果，并输出 `CacheUpdateFailed` 警告；来源写入结果保持现状。
 
 ### 远端观察的合并
 
-远端观察由发起同步的 CLI 或操作进程取得。它完成来源发布并释放发布租约后，以 `feedback-merge` 会话把完整批次分块交给服务（begin、若干 append、commit）。
+远端观察由工作区服务或当前单次命令在完成来源写入后，直接在同一个持久缓存事务中校验单调时间戳与同版本冲突并合并，返回 warnings，不再走跨进程的 `feedback-merge` 分块流式会话。
 
-主进程逐块严格解码并累计到批量上限。commit 时对当前持久行执行单调时间戳与同版本冲突检查，在一个事务中合并并返回 warnings；未 commit 的会话随连接断开丢弃。该请求只更新可丢弃的远端观察缓存，不写来源。
-
-服务不存在、处于降级或合并失败时，按缓存更新失败处理：来源写入结果不变，结果带 warning，不重跑来源写入。没有服务时，由本进程在释放租约后直接合并。
+持久缓存不可用或合并失败时，按缓存更新失败处理：来源写入结果不变，结果带 warning，不重跑来源写入。
 
 ### 启动与裁决
 
@@ -213,19 +203,17 @@ clear、维护与 shutdown 串行执行。
 
 1. 停止受理新工作，向全部订阅者与 SSE 连接发送 `stopping` 事件，并关闭长期订阅。
 2. 在 3 秒内完成或明确失败在途请求。3 秒是请求与交接的等待上限，不授权跳过清理确认。
-3. 经 `OwnedProcessService` 收拢计算进程、刷新计算进程与全部操作进程，确认进程组清理。
-4. 关闭 HTTP 与持久句柄，按 token 删除记录与 socket，最后释放服务锁。
+3. 经 `OwnedProcessService` 收拢正在运行的外部测试 runner 子进程，确认进程组清理。
+4. 关闭解析线程池、HTTP 与持久句柄，按 token 删除记录与 socket，最后释放服务锁。
 
-来源提交结果无法确认的请求返回结果未知，不透明重跑，保留 journal 与未知现场。进程组清理无法确认时按 CleanupFailed 处理。
+进程组清理无法确认时按 CleanupFailed 处理。
 
 ### 刷新与推送
 
-服务是该 worktree 唯一的工作区投影刷新者，服务内的刷新串行执行，不存在两个并发刷新。
+服务是该 worktree 唯一的工作区图与投影维护者，增量刷新在服务进程内执行。
 
-- 监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。
-- 刷新在刷新计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)。
-
-刷新开始时记录来源摘要，完成时重新核对当前来源。只有与计算时一致、身份不变且没有待恢复的 journal，主进程才接受这份结果：在内存中替换当前结果，并写入 `workspace_projection`，作为服务重启后的首份结果与无服务时的历史读取。核对不上的过时结果直接丢弃。
+- 监听只产生变更信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。
+- 收到文件变更信号或内部写入完成后，服务按 `(mtime, size, inode)` 与内容摘要只重新解析变更的文件，增量更新内存工作区图，并异步写入 `workspace_projection` 作为服务重启后的冷启动快照。
 
 订阅、`GET /api/workspace` 与经服务的 `workspace projection` 从内存返回，不读持久库。
 
@@ -239,7 +227,7 @@ clear、维护与 shutdown 串行执行。
 
 客户端写入 socket 失败时返回 `WorkspaceServerUnavailable`，消息保留底层原因（例如 `EPIPE`），不把传输故障作为运行时 defect 逃逸。
 
-- 客户端协议以 `RpcSerialization.layerSchemaBinary` 序列化；计算进程与刷新计算进程的内部 RPC 例外，见[进程能力](../../engineering/code/architecture.md#进程能力)。
+- 客户端协议以 `RpcSerialization.layerSchemaBinary` 序列化。
 - 字节字段以原生二进制传输，不接受 Base64，由真实往返与边界大小测试验收。
 - 领域 Schema 严格解码，显式拒绝未知字段。
 - 单帧、累计、连接、在途与发送字节的准入由传输适配层执行；`maxBufferSize` 只限不完整消息。
@@ -254,9 +242,9 @@ clear、维护与 shutdown 串行执行。
 
 - 来源大小上限按原始字节判定（例如定向文件读取 32 MiB），每个文件的字节不超过来源上限；归属链长度沿用定向读取的上限。
 - `read` 的信封与控制帧的 JSON 合计不超过 1 MiB。
-- 领域请求与结果（例如 `feedback-merge`、`query`）的 JSON 按各自的额度累计。
+- 领域请求与结果（例如 `action`、`query`）的 JSON 按各自的额度累计。
 
-请求同样可以分帧：单帧不超过 1 MiB，`feedback-merge` 的批次按批量上限（1000 条或 16 MiB）累计，以 begin、append 与 commit 分块提交，commit 原子生效。每个连接未完成的输入不超过 32 MiB。超限返回具名失败，不截断。
+每个连接未完成的输入不超过 32 MiB。超限返回具名失败，不截断。
 
 操作的定义、执行位置与 HTTP 对应见[服务操作](../../engineering/code/architecture.md#服务操作)，下表给出 RPC 的应答。
 
@@ -265,29 +253,21 @@ clear、维护与 shutdown 串行执行。
 | `hello`、`shutdown` | 见启动与裁决 |
 | `subscribe {kind: workspace}` | 完整状态，之后的事件 |
 | `workspace` | 内存中已接受的结果 |
-| `refresh` | 受理即应答，不等待刷新 |
+| `refresh` | 受理即应答，触发增量刷新 |
 | `git-status`、`git-diff {path, area}` | 当前 Git 状态与定向 diff |
 | `read {path, ifUnchanged?}` | 与 Web `/api/file` 相同的定向严格读取的原始字节与信封，另附实际摘要 |
-| `query {name, input, environment, cache}` | 白名单只读查询的结果或具名错误，见 CLI 查询 |
-| `http {open \| close, host, port, lease?}` | 监听地址与租约 |
-| `cache-clear` | 按[清理](#清理)执行后应答 |
-| `cache-status`、`cache-rebuild` | 主进程读取状态，或计算派生行后由主进程保存并读取状态 |
-| `cache-snapshot`、`cache-derived begin \| append \| commit` | 本地操作的只读缓存快照与派生批次；见[本地操作的缓存快照](#本地操作的缓存快照) |
-| `feedback-merge begin \| append \| commit` | commit 返回合并后的 warnings；见[远端观察的合并](#远端观察的合并) |
+| `query {name, input, environment, cache}` | 只读及编辑器 overlay 查询的结果或具名错误，见 CLI 查询 |
+| `action {input, environment}` | 写入、恢复、反馈同步或缓存操作的结果 |
+| `http {open \| close, host, port, ref?}` | 监听地址与监听引用 |
+| `cache-clear`、`cache-status`、`cache-rebuild` | 服务内核执行清理、读取状态或重建缓存后应答 |
 
 每个服务最多 64 个连接，每个连接最多 8 个在途请求。全服务最多 256 个尚未应答的请求（含正在执行的；RPC 与 HTTP 共用这一计数），待发送字节合计不超过 64 MiB。超限按请求或连接以 `WorkspaceServerBusy` 失败，其它连接不受影响。
 
 ### CLI 查询
 
-可经由服务的命令是固定白名单：各类 `list` 与 `show`、`trace check`、`check`、`docs check` 与 `list memory`。
+CLI 查询与受管操作默认自动启动或复用同协议的工作区服务，在服务内核中基于增量工作区图与当前文件摘要执行。传输断开后可以重新连接并重试一次；领域错误原样输出，不重算。
 
-每项在计算进程中以一个新的乐观 Repository 快照，执行与本进程相同的领域函数。返回前按该命令原有规则核验文件、缺失路径、目录集合、配置、路径安全、发布修订号与恢复状态。服务只提供热的解析缓存，不提供结果。
-
-`trace show`、`trace gaps` 与 `review` 的历史投影读取保留[异步诊断投影](use-case/query-asynchronous-projections.md)的语义，只是由服务读取投影。
-
-CLI 默认自动启动或复用同协议的服务，再发送 `query`。传输断开后可以重新连接并重试一次；领域错误原样输出，不重算。
-
-`--dry-run` 与 cache-off 调用在本进程执行同一应用查询，不启动或连接工作区服务，也不读取或写入持久缓存，保持[打开模式](#句柄与打开模式)的无持久状态约束。写命令、交互命令、`lsp` 与外部 runner 的执行入口由各自 Feature 拥有。
+`--dry-run` 与 cache-off 调用在本进程执行同一应用查询，不启动或连接工作区服务，也不读取或写入持久缓存，保持[打开模式](#句柄与打开模式)的无持久状态约束。
 
 原生产物缺失或摘要不符时，服务无法取得服务锁。此时查询不启动工作区服务，与 cache-off 调用一样在本进程执行同一应用查询，源码解析回源。
 
@@ -295,7 +275,7 @@ CLI 默认自动启动或复用同协议的服务，再发送 `query`。传输�
 - 需要服务的历史诊断投影报告不可用，不当作空集合。
 - `server start` 与 `server run` 返回 `HawdbUnavailable`。
 
-查询携带本次调用的完整环境映射，最多 256 KiB；缺失变量保持缺失，不从服务启动环境补齐。计算进程为每次查询组合 Workspace，Repository 的环境读取与 adapter 输入身份使用同一映射，查询结束后释放。环境不进入运行记录、缓存、事件、诊断或日志；预热解析缓存不改变来源身份。
+请求携带本次调用的完整环境映射，最多 256 KiB；缺失变量保持缺失，不从服务启动环境补齐。服务为每次请求组合独立的 `RuntimeEnvironment`，请求结束后释放。环境不进入运行记录、缓存、事件、诊断或日志。
 
 ### 命令作用域查询
 
@@ -313,11 +293,11 @@ CLI 默认自动启动或复用同协议的服务，再发送 `query`。传输�
 
 ### 不变量
 
-1. 一个 worktree 任一时刻最多一个工作区服务，由服务锁裁决；服务锁在清理期间也不释放。
-2. Concord 进程在发现运行中的服务后，不打开该 worktree 的持久库；任一时刻最多一个打开者，由数据库协调锁保证。
-3. 持有发布租约的进程不打开持久库；服务主进程只在清理时持有发布租约，且此时已关闭持久库。
+1. 一个 worktree 任一时刻最多一个工作区服务，由唯一服务锁裁决；服务锁在清理期间也不释放。
+2. Concord 进程在发现运行中的服务后，不直接打开该 worktree 的持久库；任一时刻最多一个打开者，由数据库协调锁保证。
+3. 服务内核统一协调读写互斥与持久库访问；清理持久库前先在写互斥下关闭持久句柄。
 4. 客户端不取得数据库句柄；经由服务的查询结果与本进程计算相同。
-5. 写入、发布、恢复与证据仍由来源及 journal 决定；缓存回写失败不改变已完成的来源结果，也不重跑操作。
+5. 写入、发布、恢复与证据仍由来源及 `journal.json` 决定；缓存回写失败不改变已完成的来源结果，也不重跑操作。
 6. 同协议复用已有服务；协议不同时按[启动与裁决](#启动与裁决)停止旧实例并确认清理后替换，不能绕过其缓存所有权。
 
 | 失败 | 结果 |
@@ -327,8 +307,7 @@ CLI 默认自动启动或复用同协议的服务，再发送 `query`。传输�
 | 服务锁无法取得（非 WouldBlock） | `ServerLockUnavailable`，details 给出原因 |
 | 运行目录不符合要求 | 不创建服务，报告原因 |
 | 活跃服务的协议不同 | 停止它并启动当前安装的服务，见[启动与裁决](#启动与裁决) |
-| 计算进程超时或崩溃 | 当前请求以具名错误失败（超出预算为 `ComputeRequestTimedOut`），计算进程重启，后续请求冷启动；不把它报成 `WorkspaceServerUnavailable` |
-| 刷新计算进程超时或崩溃 | 这次刷新按失败记录，保留上一份结果；刷新计算进程重启，下一次刷新冷启动 |
+| 单次计算超出预算 | 当前请求以 `ComputeRequestTimedOut` 失败，不把它报成 `WorkspaceServerUnavailable` |
 | 服务进程被杀 | 操作系统释放服务锁，下一个启动者删除残留 socket 后启动；面板与浏览器显示重连中 |
 
 ## 资源预算
@@ -396,7 +375,7 @@ WAL 上限为 100000 条、replay 128 MiB、单条 64 MiB、每批 50000 次操�
 工作区服务运行时，由服务在空闲时执行同样的回收，不另启维护进程。回收不改变任何命令结果。
 
 - 空闲指没有在途或排队的前台请求。维护在每个阶段开始前确认空闲，有前台请求到达时先让出，前台请求不等待后台刷新完成。原生引擎的 checkpoint 与回收是一次不可中断的同步调用，期间到达的请求等它结束；回收只在体积超过 1 GiB 时发生，这段等待不另设机制规避。
-- 回收只关闭并重开主进程持有的持久句柄。计算进程与刷新计算进程不持有持久句柄，回收不重启它们，它们的内存解析缓存保持热。
+- 回收只关闭并重开服务内核持有的持久句柄，内存中的增量工作区图保持热。
 - 回收后体积仍超过 1 GiB 时，记下回收后的体积；之后只在体积比记录再增长 256 MiB 以上时再次回收，不按固定周期重复。
 
 ### 恢复与退避
@@ -413,33 +392,18 @@ WAL 上限为 100000 条、replay 128 MiB、单条 64 MiB、每批 50000 次操�
 
 ## 诊断投影
 
-诊断投影只服务[异步查询](use-case/query-asynchronous-projections.md)。trace show、trace gaps 与 review 默认读取已完成的投影并请求后台刷新；还没有投影时等待这次刷新发布后再读，刷新失败或超时才返回 `QueryPending`（[首次运行](use-case/query-asynchronous-projections.md#first-run)）。
+诊断投影服务[异步查询](use-case/query-asynchronous-projections.md)。trace show、trace gaps 与 review 默认从工作区服务的增量工作区图与 `query_cache` 投影读取，并触发服务内增量刷新；还没有投影时等待刷新发布后再读，刷新失败或超时才返回 `QueryPending`（[首次运行](use-case/query-asynchronous-projections.md#first-run)）。
 
-缓存命中不加载 Repository，不等待发布租约。check、trace check、Memory 与 Issue 检索、作者读取、写入、恢复与证据裁决不读取 `query_cache`；`--fresh` 与 `--dry-run` 走当前来源扫描。
+check、trace check、Memory 与 Issue 检索、作者读取、写入、恢复与证据裁决直接核对当前增量工作区图；`--fresh` 与 `--dry-run` 走当前来源扫描。
 
 ### 刷新
 
-有工作区服务时，查询刷新由服务执行，扫描仍在下述内部入口的子进程中进行，服务确认消息后写入。没有服务时，每个查询键只有一个活跃的刷新[持有者](../../concepts.md#holder) `query-refresh-worker`，已死亡的持有者可回收。
-
-合并只控制刷新，不限制查询或文档发布。
-
-刷新进程关闭继承的终端输入输出，在 `OwnedProcessService` 下启动内部扫描入口 `query-scan-worker <root> <query-json>`。扫描进程以只读乐观方式打开仓库，关闭持久解析缓存，在[工作区投影](../web-workbench/architecture.md#读取与发布)使用的 `repo.observeProjection(() => run(repo))` 中执行查询。
-
-stdout 只写一条由 `src/query-scan-protocol.ts` 严格编码的消息：
-
-```ts
-type QueryScanMessage =
-  | { format: 'concord.query-scan/v1'; ok: true; scannedAt: number; finishedAt: number;
-      value: QueryValue; complete: boolean; unknown: 'code'[];
-      drift: { files: string[]; directories: string[]; publicationChanged: boolean } }
-  | { format: 'concord.query-scan/v1'; ok: false; scannedAt: number; code: string; message: string; details?: Json };
-```
+查询刷新由工作区服务单内核基于内存增量工作区图直接派生并写入 `query_cache`，不再派生独立的 `query-refresh-worker` 与 `query-scan-worker` 子进程。
 
 投影身份键由 worktree、Git-private 目录、配置字节摘要、命令参数、安装 JS 与原生产物摘要组成。
 
-- 刷新进程在扫描前与收到消息后各计算一次身份键。两次不同时丢弃候选，不写 error 与 lastAttempt，以新键请求一次刷新。
-- 旧键的排队请求在发布前重算身份时同样放弃。
-- 取得租约后，若 `record.scannedAt`、`lastAttempt.scannedAt` 或 `error.scannedAt` 不早于本请求时间，请求已被满足，刷新进程直接退出。
+- 服务在刷新前后核对身份键。两次不同时丢弃候选，不写 error 与 lastAttempt，以新键重新刷新。
+- 若 `record.scannedAt`、`lastAttempt.scannedAt` 或 `error.scannedAt` 不早于本请求时间，请求已被满足。
 
 ### 漂移分拣
 
