@@ -1,7 +1,6 @@
 import { createDocument } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';
 import { createConsumer } from '../support/consumer.ts';
-import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { runCli, type CliResult } from '../support/cli.ts';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,7 +13,7 @@ async function withConsumerAsync(run: (root: string) => Promise<void>): Promise<
   const root = (await createConsumer());
   try {
     await run(root);
-  } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }
+  } finally { await call(root, ['server', 'stop'], 0); rmSync(root, { recursive: true, force: true }); }
 }
 
 async function withRepo(root: string, run: (repo: LocalRepository) => void, access: 'read' | 'write' = 'write'): Promise<void> {
