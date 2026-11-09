@@ -96,7 +96,7 @@ web/            浏览器前端，只调用 HTTP 接口
 
 模块边界与领域依赖方向同时约束值引用和类型引用。类型引用表达编译期耦合，不代表运行时执行；领域依赖层级保证运行时依赖无环。
 
-内部动态加载遵守同一边界。消费项目的可执行模块只在受控进程入口加载，避免把项目代码带入检查与主服务进程。
+内部动态加载遵守同一边界。接入项目的可执行模块只在受控进程入口加载，避免把项目代码带入检查与主服务进程。
 
 ## 公开接口
 
@@ -140,7 +140,7 @@ Concord 只以 CLI 交付，全部模块都是内部实现，不作为包导出�
 
 ### 提交与恢复的视图 {#publication-views}
 
-- **提交**：领域在快照内得到的计划连同它依赖的观测交给 `Publication`。租约内先核验这些观测与前像，提交后把它们封存：外层快照结束时不再核验已封存的观测，成功的提交不会被改报为来源变化。提交后还需要读取来源的操作，重新打开上下文并建立新的快照；写后读取失败不改变已经生效的提交与回执。
+- **提交**：领域在快照内得到的计划连同它依赖的观测交给 `Publication`。租约内先核验这些观测与前像，提交后把它们封存：外层快照结束时不再核验已封存的观测，成功的提交不会被改报为来源变化。提交后还需要读取来源的操作，重新打开上下文并建立新的快照；写后读取失败不改变已经生效的提交与返回结果。
 - **恢复**：恢复从专用入口进入，可以在存在未完成 journal 时建立观测。重算原授权时使用 journal 前像视图：变更集内的路径读 journal 记录的前像，其余输入读当前来源；磁盘现场仍按前像或计划摘要、文件身份、权限与目录成员独立检查。
 - **租约绑定的视图**只免除对自己所持租约的等待，不免除观测、journal 与路径核验；它绑定当前工作区与本次租约，不进入返回值或进程期缓存。
 - **dry-run** 走同样的路径、前像与领域校验，不取写租约、不写 journal、不隐式恢复；只读访问照样可以预览。
@@ -149,7 +149,7 @@ Concord 只以 CLI 交付，全部模块都是内部实现，不作为包导出�
 
 - 读方法只依赖 `Sources` 与 `Cache`；写方法在自己的依赖中显式要求 `Publication`，执行测试的方法显式要求 `OwnedProcess`。每个领域只有一个服务，读与写的差别体现在方法的依赖上，不体现在两套服务上。因此没有 `Publication` 的组合（例如计算进程）仍能构建全部读服务，却无法调用任何写方法；这由类型检查保证。
 - `Publication` 是唯一的提交者。领域先在快照内算出变更计划，不持独占租约；`Publication` 取得短期独占租约后核对已观测来源与前像、调用 `PublicationValidation`、写 journal 并原子替换。租约内的校验读取由 `Publication` 提供绑定本次租约的来源视图，不等待自己持有的租约，也不以参数关闭加锁。`PublicationValidation` 的方法是 Effect，不依赖 `Publication`，避免递归提交。
-- `PersistentCache` 只由工作区服务主进程，或没有服务时的当前 CLI 提供。没有服务时沿用[句柄与打开模式](../../feature/local-data-engine/architecture.md#句柄与打开模式)：最外层快照按需打开、嵌套复用、快照结束时释放，计划阶段可以读取；取得发布租约前必须已经关闭，租约期间不能重新打开。计算进程与后台计算进程只组合 `Cache`、`CacheSnapshot` 与 `CacheDerivations`。缓存选择由 `Cache` 依据 `WorkspaceContext` 的缓存模式完成，不按仓库对象的类型判断，原生句柄不逃出提供它的 Layer。
+- `PersistentCache` 只由工作区服务主进程，或没有服务时的当前 CLI 提供。没有服务时沿用[句柄与打开模式](../../feature/local-data-engine/architecture.md#句柄与打开模式)：最外层快照按需打开、嵌套复用、快照结束时释放，计划阶段可以读取；取得发布租约前必须已经关闭，租约期间不能重新打开。计算进程与刷新计算进程只组合 `Cache`、`CacheSnapshot` 与 `CacheDerivations`。缓存选择由 `Cache` 依据 `WorkspaceContext` 的缓存模式完成，不按仓库对象的类型判断，原生句柄不逃出提供它的 Layer。
 - 纯解析与关系编译保持同步函数，不为形式改成 Effect。
 - 迁移按垂直单元切换：每个单元同时迁移一个领域服务的全部调用者、测试与组合根，提交后不留下同步与 Effect 并存的公开入口。基础端口可以先于调用者准备，但不算作迁移完成。
 
@@ -188,7 +188,7 @@ Remote 在适配层区分可重试的传输失败与领域错误，不在客户�
 | `hello`、`shutdown`、`http` 租约 | 主进程 | 控制 | — | 控制帧 |
 | `subscribe` | 主进程 | 内存中的当前结果与之后的事件 | `GET /api/events`（SSE） | 是 |
 | `workspace` | 主进程 | 已接受的结果（历史） | `GET /api/workspace` | 是 |
-| `refresh` | 主进程申请，计算进程执行 | 申请刷新，不等待 | `POST /api/workspace` | 是 |
+| `refresh` | 主进程申请，刷新计算进程执行 | 申请刷新，不等待 | `POST /api/workspace` | 是 |
 | `read` | 计算进程 | 当前来源的定向严格读取；RPC 返回原始字节与信封，HTTP 返回 `ViewFile` | `GET /api/file` | 是 |
 | `query` | 计算进程 | 白名单当前查询，见[CLI 查询](../../feature/local-data-engine/architecture.md#cli-查询) | — | 是 |
 | `git-status`、`git-diff` | 计算进程 | 当前 Git 状态与定向 diff | `GET /api/git`、`GET /api/git/diff` | 是 |
@@ -210,7 +210,7 @@ Remote 在适配层区分可重试的传输失败与领域错误，不在客户�
 | --- | --- | --- |
 | CLI | Workspace、Sources、Publication、Git、OwnedProcess、Cache、Queries.Remote | — |
 | 工作区服务主进程 | Workspace、Git、Cache 的持久独占写入、工作区投影、RPC 与 HTTP 服务、计算与操作进程的监督 | 领域计算 |
-| 计算进程 | Workspace、Sources、Cache（内存解析、主进程交来的只读快照与 `CacheDerivations`）、Queries.Local | Publication、持久 Cache、OwnedProcess 之外的子进程 |
+| 计算进程与刷新计算进程 | Workspace、Sources、Cache（内存解析、主进程交来的只读快照与 `CacheDerivations`）、Queries.Local | Publication、持久 Cache、OwnedProcess 之外的子进程 |
 | 操作进程 | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存）、远端读取 | 持久 Cache |
 | Concord mod | 原生界面、公开 CLI 查询、正文读写与文件监听，见[mod 数据访问](../../feature/herdr-mod/architecture.md#数据) | 领域计算、持久 Cache |
 

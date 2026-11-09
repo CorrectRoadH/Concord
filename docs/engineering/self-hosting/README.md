@@ -29,9 +29,9 @@ Concord 用自己的流程开发和验收自己。
 
 | 情形 | 做法 |
 | --- | --- |
-| 调整 runner | runner argv 或 sourceFiles 变化会使旧的 [command evidence](concepts.md#command-evidence) 不再代表当前定义。先用 doctor 与 check 验证配置，再按需重新采集 |
+| 调整 runner | runner argv 或 sourceFiles 变化会使旧的[命令证据](concepts.md#command-evidence)不再代表当前定义。先用 doctor 与 check 验证配置，再按需重新采集 |
 | 修复中断写入 | 读取遇到 `RecoveryRequired` 时停止其它写入，检查 journal 与文件内容后运行 `recover`；出现未知编辑时保留现场，由维护者裁决 |
-| 审阅交接 | reviewer 用 trace 与 review 输出定位 Spec、测试和 Memory，再直接审阅正文与源码。Command evidence 是可复核输入，不替代测试设计判断 |
+| 审阅交接 | reviewer 用 trace 与 review 输出定位 Spec、测试和 Memory，再直接审阅正文与源码。命令证据是可复核输入，不替代测试设计判断 |
 
 ## 仓库文档入口
 

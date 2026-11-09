@@ -9,4 +9,4 @@ bun run concord --json --dry-run check
 
 自举检查用源码 CLI 检查当前 worktree。退出 0 表示检查通过，非零表示违规、输入不完整或执行失败；输出由[合并检查](../../feature/documentation-quality/cli.md)拥有。它不递归运行测试。
 
-日常只读检查还可使用 `concord doctor`、`concord test list`、`concord trace check` 与定向 `concord review`。需要真实的 Command evidence 时才使用 `concord test run <case>`。交付分别调用[检查入口](../testing/README.md#检查入口)列出的工具。
+日常只读检查还可使用 `concord doctor`、`concord test list`、`concord trace check` 与定向 `concord review`。需要真实的命令证据时才使用 `concord test run <case>`。交付分别调用[检查入口](../testing/README.md#检查入口)列出的工具。

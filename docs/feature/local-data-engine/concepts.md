@@ -2,17 +2,21 @@
 
 本页定义统一数据引擎中的概念。[投影](../../concepts.md#projection)与[快照](../../concepts.md#snapshot)由[全局术语表](../../concepts.md)定义。
 
-## Cache {#cache}
+## 缓存 {#cache}
 
 可丢弃的派生数据；其缺失或失效不改变事实 owner，复用前核对当前来源身份。
 
-## Cache namespace {#cache-namespace}
+## 缓存命名空间 {#cache-namespace}
 
 统一数据引擎内区分缓存种类与预算的存储分区，不等同于概念与写作规则在文档目录中的生效范围。
 
-## Ownership guard {#ownership-guard}
+旧写法：`Cache namespace`
+
+## 清理守卫 {#ownership-guard}
 
 覆盖整个缓存清理过程的目录所有权锁；取得该锁才允许删缓存数据，锁文件及其 inode 保留。
+
+旧写法：`Ownership guard`
 
 ## 历史投影 {#historical-projection}
 
