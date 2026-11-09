@@ -59,7 +59,7 @@
    | 维护者的选择 | agent 读的指南 |
    | --- | --- |
    | 从零写 | `concord --skill docs-from-scratch` |
-   | 为已有代码补写 | `concord --skill docs-from-code` |
+   | 为已有代码补写 | `concord --skill docs-from-code`，完整路径见[为已有代码补写 Spec 并纳管存量测试](document-existing-code.md) |
 
    每写完一批运行一次：
 

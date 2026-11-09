@@ -23,9 +23,9 @@ Concord 采用 Spec 驱动开发（SDD）：先明确目标行为，再实现，
 
 | 改动 | 怎样推进 |
 | --- | --- |
-| 新增或改变行为 | 先更新 Feature 与受影响的 Use Case，再实现并测试 |
+| 新增或改变行为 | 先更新 Feature 与受影响的 Use Case，再[更新实现与测试](docs/feature/local-sdlc/use-case/evolve-existing-spec.md) |
 | 实现违反 Spec 的缺陷 | 保留目标行为，先提交失败的回归测试，再提交修复并[核验](#修复缺陷) |
-| 保持行为不变的重构 | 保持行为 Spec 稳定，内部设计变化时更新 architecture 页，并验证既有行为 |
+| 保持行为不变的重构 | 保持行为 Spec 稳定，内部设计变化时[更新 architecture 页并验证既有行为](docs/feature/local-sdlc/use-case/refactor-preserving-behavior.md) |
 
 [项目治理 Spec](docs/feature/neutral-project-governance/README.md) 定义共同规则，[Agent 指引](skills/concord/SKILL.md) 说明执行这些步骤时使用的工具。
 

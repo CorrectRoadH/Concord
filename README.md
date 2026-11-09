@@ -25,9 +25,9 @@ The starting point depends on the change:
 
 | Change | How to approach it |
 | --- | --- |
-| New or changed behavior | Update the Feature and affected Use Cases first, then implement and test them |
+| New or changed behavior | Update the Feature and affected Use Cases first, then [implement and test them](docs/feature/local-sdlc/use-case/evolve-existing-spec.md) |
 | A defect against the spec | Keep the intended behavior, commit a failing regression test, then commit the fix and [verify it](#fix-a-defect) |
-| A refactor that preserves behavior | Keep the behavior spec stable; update architecture pages where the internal design changes and verify the existing behavior |
+| A refactor that preserves behavior | Keep the behavior spec stable; [update architecture pages where the internal design changes and verify the existing behavior](docs/feature/local-sdlc/use-case/refactor-preserving-behavior.md) |
 
 The [governance spec](docs/feature/neutral-project-governance/README.md) defines the shared rules; the [agent guide](skills/concord/SKILL.md) explains the tools used to follow them.
 

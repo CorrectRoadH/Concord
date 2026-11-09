@@ -173,6 +173,12 @@ export default function (p: P5) {
 - [规划并采用文档 Spec](use-case/plan-and-adopt-contracts.md)
 - [逐项比较方案并明确裁决](use-case/compare-design-plans.md)
 
+演进 Spec 与重构实现：
+
+- [修改已有 Spec 并更新实现与测试](use-case/evolve-existing-spec.md)
+- [移动 Spec 文档并改写关系](use-case/move-spec-documents.md)
+- [在保持行为不变时重构实现](use-case/refactor-preserving-behavior.md)
+
 把测试和代码连到 Spec：
 
 - [把测试关联到 Use Case 步骤](use-case/link-tests-to-steps.md)
@@ -187,6 +193,7 @@ export default function (p: P5) {
 - [检查 Spec 与 CLI 页面的实现和测试关系缺口](use-case/inspect-relationship-gaps.md)
 - [找出没有关联 Use Case 的测试](use-case/find-unlinked-tests.md)
 - [追踪 Spec 并生成审阅材料](use-case/review-traceability.md)
+- [在 CI 与分支合并时运行检查门禁](use-case/run-check-in-ci.md)
 - [在编辑器中查看 Concord 关系](use-case/use-editor-service.md)
 
 修复缺陷与积累知识：

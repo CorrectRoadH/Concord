@@ -67,6 +67,7 @@ Markdown 支持行内与独立的数学公式、Mermaid 结构图与 [p5 图块]
 - [查看本地未提交变更](use-case/review-local-changes.md)
 - [在工作台查看 Spec 的实现与测试](use-case/inspect-implementation-and-tests.md)
 - [在工作台处理 Issue、Memory 与 Roadmap](use-case/handle-lifecycle-in-workbench.md)
+- [在工作台维护项目设置与反馈连接](use-case/configure-project-in-workbench.md)
 
 写图解与审阅 PR：
 

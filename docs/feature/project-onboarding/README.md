@@ -62,6 +62,7 @@ findings: none
 - [渐进选择并初始化项目](use-case/initialize-project.md)
 - [在还没初始化的仓库里打开 Concord](use-case/open-uninitialized-repo.md)
 - [初始化后开始写 Spec](use-case/start-writing-specs.md)
+- [为已有代码补写 Spec 并纳管存量测试](use-case/document-existing-code.md)
 
 日常维护：
 

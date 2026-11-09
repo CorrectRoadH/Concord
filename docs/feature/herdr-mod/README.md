@@ -53,6 +53,7 @@ Herdr 的 mod 没有网页引擎，所以 Concord 在仓库所在的机器上把
 ## 用户路径
 
 - [在空仓库里初始化 Concord](use-case/init-from-herdr.md)
+- [把安装、升级与命令报错交给 agent 处理](use-case/hand-off-errors-to-agent.md)
 - [阅读 Spec 与它的测试和实现](use-case/read-spec.md)
 - [修改一页文档并检查](use-case/edit-and-check.md)
 - [agent 改了文件，mod 自动刷新](use-case/follow-changes.md)
