@@ -49,7 +49,7 @@ test('poll deadline aborts an in-flight HTTP request and preserves unexpected HT
 }).pipe(Effect.timeout(5000))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('browser fixture shutdown drains a socket with an incomplete HTTP request', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('view fixture shutdown drains a socket with an incomplete HTTP request', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-e2e-lifecycle-'));
   execFileSync('git', ['init', '-q', root]);
   const repo = (await LocalRepository.open(root, { initialize: true }));
@@ -63,6 +63,8 @@ test('browser fixture shutdown drains a socket with an incomplete HTTP request',
     const disconnected = new Promise<void>(resolve => socket.once('close', () => resolve()));
     // Bun defers accepting bare TCP handshakes until data arrives. Keep the
     // request incomplete so cleanup cannot depend on the request handler.
+    // Drain any shutdown response so the readable side can consume FIN and close.
+    socket.resume();
     socket.write('GET / HTTP/1.1\r\n');
     await server.close();
     await disconnected;
