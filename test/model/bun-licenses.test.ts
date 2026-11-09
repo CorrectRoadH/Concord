@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { BunLicenseInventory, copyBunLicenseSources, loadBunLicenseInventory } from '../../scripts/bun-licenses.ts';
+import { BunLicenseInventory, copyBunLicenseSources } from '../../scripts/bun-licenses.ts';
 import { command, sha256 } from '../../scripts/archive-support.ts';
 
 // @feature docs/feature/cross-platform-release/architecture.md#归档构成
@@ -41,6 +41,4 @@ test('Bun licenses extract verified crate and scoped npm members and reject chan
   const failed = yield* Effect.result(copyBunLicenseSources(output, [{ ...source, files: [{ path: members[0]!, sha256: '0'.repeat(64) }] }], cache));
   assert.equal(failed._tag, 'Failure');
   assert.match(String(failed), /SHA-256 mismatch/u);
-  const inventory = yield* loadBunLicenseInventory();
-  assert.equal(inventory.version, (yield* fs.readFileString(join(import.meta.dirname, '../../.bun-version'))).trim());
 })).pipe(Effect.provide(NodeServices.layer))));

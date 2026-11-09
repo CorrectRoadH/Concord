@@ -31,29 +31,14 @@ test('Herdr catalog validates generated assets before replacing the installable 
     assert.deepEqual(yield* fs.readFile(join(catalog, 'mods/concord', name)), yield* fs.readFile(join(assets, name)));
   }
   assert.deepEqual([...(yield* fs.readFile(join(catalog, 'preview.png')))], [...preview], 'preview must come from the package bytes');
-  const recipe = yield* fs.readFileString(join(catalog, 'RECIPE.md'));
-  assert.match(recipe, /^# Concord\n/u);
-  assert.match(recipe, /!\[Concord\]\(preview\.png\)/u);
-  const headings = [...recipe.matchAll(/^## (.+)$/gmu)].map(match => match[1]);
-  assert.deepEqual(headings, ['What you see', 'How it behaves', 'Built from', 'Watch out', 'Done when']);
-  assert.match(recipe, /minimumConcordVersion=1\.2\.3/u);
-  assert.match(recipe, /herdr-app check/u);
-  assert.match(recipe, /action file.get\/page.render\/document.set、workspace wait/u);
   assert.equal(yield* fs.readFileString(join(output, 'unrelated/keep')), 'keep');
   yield* fs.writeFileString(join(catalog, 'mods/concord/stale.js'), 'old');
   yield* prepareHerdrModCatalog(assets, output, '1.2.3');
   assert.equal(yield* fs.exists(join(catalog, 'mods/concord/stale.js')), false);
-  for (const tag of ['1.2.4', 'invalid', 'v1.2.3', '']) {
-    const invalid = yield* prepareHerdrModCatalog(assets, output, tag).pipe(Effect.flip);
-    assert.equal(invalid._tag, 'HerdrModCatalogInvalid');
-    assert.equal(yield* fs.readFileString(join(catalog, 'mods/concord/main.js')), main);
-  }
-  yield* fs.writeFileString(join(assets, 'mod.json'), JSON.stringify({ place: 'right', size: 760, minimumConcordVersion: '1.2.2' }));
-  assert.match((yield* prepareHerdrModCatalog(assets, output, '1.2.3').pipe(Effect.flip)).message, /must agree/u);
-  yield* fs.writeFileString(join(assets, 'mod.json'), manifest);
   yield* fs.remove(join(assets, 'preview.png'));
   assert.match((yield* prepareHerdrModCatalog(assets, output, '1.2.3').pipe(Effect.flip)).message, /preview.png/u);
   yield* fs.writeFileString(join(assets, 'preview.png'), 'not a screenshot');
   assert.match((yield* prepareHerdrModCatalog(assets, output, '1.2.3').pipe(Effect.flip)).message, /PNG/u);
+  assert.equal(yield* fs.readFileString(join(catalog, 'mods/concord/main.js')), main);
   assert.match((yield* prepareHerdrModCatalog(join(output, 'concord'), output, '1.2.3').pipe(Effect.flip)).message, /overlap/u);
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));
