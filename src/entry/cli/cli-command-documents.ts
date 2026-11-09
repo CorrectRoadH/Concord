@@ -3,7 +3,7 @@
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { loadDocuments, readDocumentReference, findDocument } from "../../app/index.ts";
-import { adoptRoadmap } from "../../app/index.ts";
+import { adoptRoadmap, moveDocument } from "../../app/index.ts";
 import { createDocument } from "../../app/index.ts";
 import { documentShow } from "../../app/index.ts";
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../app/index.ts";
@@ -30,6 +30,11 @@ export const newDocument = Command.make('new', {
 export const showDocument = Command.make('show', { id }, args => withQuery({ name: 'documents.show', input: { id: args.id } })).pipe(Command.withDescription('Show a document and its relationships by path or selector.'));
 
 export const listDocuments = Command.make('list', { category: category.pipe(Argument.optional) }, args => withQuery({ name: 'documents.list', input: { kind: Option.getOrUndefined(args.category) } })).pipe(Command.withDescription('List documents, optionally within one category.'));
+
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/cli.md#移动文档
+export const move = Command.make('move', { from: Argument.String('source'), to: Argument.String('target') }, args => withRepo((repo, settings) => moveDocument(repo, args.from, args.to, settings.dryRun))).pipe(Command.withDescription('Move a Spec page or package and rewrite managed references.'));
+// @concord-end
 
 export function docsGroup(kind: Extract<DocumentKind, 'use-case' | 'roadmap'>) {
   const commands = kind === 'roadmap' ? [

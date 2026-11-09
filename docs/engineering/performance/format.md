@@ -73,6 +73,7 @@
 | `view` | 长期运行的服务，请求耗时由 `web-workbench` 场景测量 |
 | `lsp` | 长期运行的编辑器服务 |
 | `new`、`roadmap` | 创建文档与采用 Roadmap 是低频写入，耗时由模板与前像核验决定 |
+| `move` | 移动文档是低频写入，耗时由全仓引用扫描与前像核验决定 |
 | `show` | 与 `trace show` 读取同一份文档与关系，由 `local-sdlc/trace-show-fresh` 覆盖 |
 | `use-case` | 步骤查看与改写是低频操作，解析路径与 `docs check` 相同 |
 | `skills` | 安装工作流 skill 是低频写入 |

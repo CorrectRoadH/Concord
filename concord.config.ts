@@ -120,6 +120,7 @@ export default {
       "test/support/docs-work-domain-fixture.ts",
       "test/support/docs-work-fixture.ts",
       "test/support/document-cache-fixture.ts",
+      "test/support/document-move.ts",
       "test/support/editor-fixture.ts",
       "test/support/external-adapter-fixture.ts",
       "test/support/fix-consumer.ts",

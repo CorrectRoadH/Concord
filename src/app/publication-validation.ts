@@ -4,11 +4,13 @@ import { readWritingPolicy } from "../domain/writing/index.ts";
 import { EMPTY_CONCEPT_CATALOG } from "../model/index.ts";
 import { planIssueClose } from './issue-close.ts';
 import { planStepRename } from "./step-rewrite.ts";
+import { planDocumentMove } from './document-move.ts';
 
 export const PublicationValidationLive = Layer.succeed(PublicationValidation, PublicationValidation.of({
   validateWriting: (source, path) => { readWritingPolicy(source, path); },
   planStepRename,
   planIssueClose,
+  planDocumentMove,
   validateCatalog: (_repo, journal, fail) => {
     if (journal.operation !== 'init') return;
     const catalogs = journal.changes.filter(change => change.path.endsWith('/concepts.md') && !change.path.startsWith('docs/_template/'));

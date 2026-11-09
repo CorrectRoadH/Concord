@@ -4,13 +4,13 @@ import { git, discoverRoot, darwinPathCollisionKey, hasExactDarwinEntry, assertN
 export { git, discoverRoot, darwinPathCollisionKey, hasExactDarwinEntry } from './bootstrap.ts';
 import { adapterRuntimeInputs } from '../process/index.ts';
 import type { PublicationValidation } from "../publication/index.ts";
-import type { StepRename } from "../../model/index.ts";
+import type { StepRename, DocumentMovePlan, DocumentMoveChange } from "../../model/index.ts";
 
 import { canonicalPath } from "../../model/index.ts";
 import { execFileSync } from "node:child_process";
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from "node:crypto";
-import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, rmdirSync, writeFileSync, type BigIntStats } from "node:fs";
+import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, rmdirSync, writeFileSync, type BigIntStats } from "node:fs";
 import { release } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { Schema } from "effect";
@@ -147,17 +147,18 @@ function jsonFile<A>(path: string, schema: Schema.ConstraintDecoder<A, never>): 
   return decode(schema, value, path);
 }
 function syncDirectory(path: string): void { const fd = openSync(path, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); } }
-function atomic(path: string, contents: string, mode = 0o600): void {
+function atomic(path: string, contents: string | Uint8Array, mode = 0o600): void {
   assertNoSymlink(dirname(path));
   const temp = `${path}.${process.pid}.${randomUUID()}.tmp`;
   let fd: number | undefined;
   try {
-    fd = openSync(temp, 'wx', mode); writeFileSync(fd, contents); fsyncSync(fd); closeSync(fd); fd = undefined;
+    fd = openSync(temp, 'wx', mode); fchmodSync(fd, mode); writeFileSync(fd, contents); fsyncSync(fd); closeSync(fd); fd = undefined;
     assertNoSymlink(path); renameSync(temp, path); syncDirectory(dirname(path));
   } finally { if (fd !== undefined) closeSync(fd); if (present(temp)) rmSync(temp); }
 }
-const JournalChangeSchema = Schema.Struct({ path: Text, before: Schema.NullOr(Schema.String), after: Schema.NullOr(Schema.String), beforeDigest: Schema.NullOr(Text), afterDigest: Schema.NullOr(Text), mode: Schema.Int });
+const JournalChangeSchema = Schema.Struct({ path: Text, before: Schema.NullOr(Schema.String), after: Schema.NullOr(Schema.String), beforeDigest: Schema.NullOr(Text), afterDigest: Schema.NullOr(Text), mode: Schema.Int, encoding: Schema.optional(Schema.Literal('base64')) });
 const JournalScopeSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('document-move'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text, from: Text, to: Text, moves: Schema.Array(Schema.Struct({ from: Text, to: Text })), inputsDigest: Text, memberships: Schema.Array(Schema.Struct({ path: Text, scope: Schema.optional(Schema.Literal('source')), observation: Schema.String })) }),
   Schema.Struct({ kind: Schema.Literal('documents'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text }),
   Schema.Struct({ kind: Schema.Literal('source'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text }),
   Schema.Struct({ kind: Schema.Literal('issue-close'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text, issue: Text, inputsDigest: Text, testFiles: Schema.Array(Text) }),
@@ -840,6 +841,30 @@ export class LocalRepository implements Repository {
       scope: { kind: 'step-rename', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, useCase: plan.useCase, oldId: plan.oldId, newId: plan.newId, inputsDigest: plan.inputsDigest, memberships: [...this.observedDirectories.values()].map(({ path, scope, observation }) => ({ path, ...(scope === undefined ? {} : { scope }), observation })) } }, dryRun);
   }
   // @concord-code
+  // @concord-implements docs/feature/local-sdlc/use-case/move-spec-documents.md#apply
+  async publishDocumentMove(plan: DocumentMovePlan, dryRun = false): Promise<MutationReceipt> {
+    if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
+    const frozen = await this.currentSnapshot();
+    const directories = new Set<string>();
+    const changes = plan.changes.map(change => {
+      this.absolute(change.path);
+      if (this.moveImage(change) !== change.before) throw new ConcordError('FileChangedSinceRead', change.path);
+      const origin = plan.moves.find(move => move.to === change.path)?.from;
+      const mode = lstatSync(this.absolute(origin ?? change.path)).mode & 0o777;
+      if (change.after !== null) for (let dir = dirname(change.path); dir !== '.'; dir = dirname(dir)) if (!present(this.absolute(dir))) directories.add(dir);
+      return { ...change, beforeDigest: change.before === null ? null : digest(change.before), afterDigest: change.after === null ? null : digest(change.after), mode };
+    });
+    return this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation: 'move', phase: 'prepared', directories: [...directories].sort((a, b) => a.length - b.length), changes,
+      scope: { kind: 'document-move', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, from: plan.from, to: plan.to, moves: plan.moves, inputsDigest: plan.inputsDigest, memberships: [...this.observedDirectories.values()].map(({ path, scope, observation }) => ({ path, ...(scope === undefined ? {} : { scope }), observation })) } }, dryRun);
+  }
+  private moveImage(change: Pick<DocumentMoveChange, 'path' | 'encoding'>): string | null {
+    if (change.encoding === 'base64') {
+      const bytes = this.readBytes(change.path);
+      return bytes === undefined ? null : Buffer.from(bytes).toString('base64');
+    }
+    return this.read(change.path) ?? null;
+  }
+  // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#data-flow
   private async publishJournal(journal: Journal, dryRun: boolean): Promise<MutationReceipt> {
     return this.underLease(async () => {
@@ -899,14 +924,14 @@ export class LocalRepository implements Repository {
       this.observing = false;
       for (const dir of journal.directories) { const target = this.absolute(dir); mkdirSync(target, { recursive: true }); syncDirectory(dirname(target)); this.clearPathObservations(); }
       for (const change of journal.changes) {
-        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
+        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close' || journal.scope.kind === 'document-move') {
           const current = this.readCurrent(journal.scope.configPath) ?? '';
           if (digest(current) !== journal.scope.configDigest) throw new ConcordError('FileChangedSinceRead', 'Project configuration changed before source replacement');
         }
-        if ((this.read(change.path) ?? null) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before replacement`);
-        this.apply(change.path, change.after, change.mode);
+        if (this.moveImage(change) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before replacement`);
+        this.apply(change.path, change.after, change.mode, change.encoding);
       }
-      if (journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
+      if (journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close' || journal.scope.kind === 'document-move') {
         await this.preflight(journal, true);
         this.validateObservations();
         this.observing = false;
@@ -918,7 +943,7 @@ export class LocalRepository implements Repository {
     }
     try { this.pruneMovedRoadmap(journal); rmSync(journalPath); syncDirectory(this.privateDir); }
     catch {
-      if (journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') throw new ConcordError('RecoveryRequired', 'Step rename committed but cleanup was interrupted; run concord recover');
+      if (journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close' || journal.scope.kind === 'document-move') throw new ConcordError('RecoveryRequired', 'Publication committed but cleanup was interrupted; run concord recover');
       return { operation: journal.operation, dryRun: false, changedPaths, recoveryRequired: true };
     }
     return { operation: journal.operation, dryRun: false, changedPaths };
@@ -935,6 +960,8 @@ export class LocalRepository implements Repository {
     if (new Set(journal.directories).size !== journal.directories.length) fail('Journal contains duplicate directories');
     if (journal.operation === 'close-issue' && journal.scope.kind !== 'issue-close') fail('Issue closure requires its dedicated publication scope');
     if (journal.operation === 'rename-step' && journal.scope.kind !== 'step-rename') fail('Step rename requires its dedicated publication scope');
+    if (journal.operation === 'move' && journal.scope.kind !== 'document-move') fail('Move requires its dedicated publication scope');
+    if (journal.scope.kind !== 'document-move' && journal.changes.some(change => change.encoding !== undefined)) fail('Binary images require document move authorization');
     const policyChanges = journal.changes.filter(change => change.path.endsWith(`/${policyName}`));
     const catalogChanges = journal.changes.filter(change => change.path.endsWith(`/${catalogName}`) && !change.path.split('/').some(part => part === '_template' || part === '.git' || part === 'node_modules'));
     if (journal.operation === 'init' && policyChanges.length > 0) {
@@ -944,7 +971,59 @@ export class LocalRepository implements Repository {
     }
     this.validation!.validateCatalog(this, journal, fail);
     assertDarwinPublicationPaths([...journal.changes.map((change) => change.path), ...journal.directories]);
-    if (journal.scope.kind === 'issue-close') {
+    if (journal.scope.kind === 'document-move') {
+      const scope = journal.scope;
+      if (journal.operation !== 'move') fail('Invalid document move operation');
+      const current = await this.currentSnapshot();
+      if (digest(scope.configSource) !== scope.configDigest || current.digest !== scope.configDigest || current.path !== scope.configPath) fail('Document move configuration changed');
+      const images = new Map(journal.changes.map(change => [change.path, change]));
+      const requiredMemberships = new Set<string>();
+      const readBytes = (path: string): Uint8Array | undefined => {
+        const change = images.get(path);
+        if (journal.directories.includes(path)) return undefined;
+        return change === undefined ? this.readBytes(path) : change.before === null ? undefined : Buffer.from(change.before, change.encoding === 'base64' ? 'base64' : 'utf8');
+      };
+      const files = (path: string, filter?: 'source'): string[] => {
+        requiredMemberships.add(canonical([path, filter ?? 'all']));
+        const paths = new Set(this.files(path, filter));
+        for (const change of journal.changes) if (change.path === path || change.path.startsWith(`${path}/`)) {
+          if (filter === 'source' && excludedSourcePath(change.path, path, this.config.sourceIgnore ?? [])) continue;
+          if (change.before === null) paths.delete(change.path); else paths.add(change.path);
+        }
+        return [...paths].sort();
+      };
+      const reader: Repository = { root: this.root, privateDir: this.privateDir, config: resolveProjectConfig(this.root, current.config), configSnapshot: current,
+        environment: names => this.environment(names), runtimeInputs: (command, names) => this.runtimeInputs(command, names),
+        readBytes, read: path => { const bytes = readBytes(path); return bytes === undefined ? undefined : Buffer.from(bytes).toString('utf8'); }, files,
+        exists: path => images.has(path) ? images.get(path)!.before !== null : journal.directories.includes(path) ? false : this.exists(path),
+        absolute: path => this.absolute(path), publish: () => { throw new ConcordError('InvalidChange', 'Recovery recomputation cannot publish'); } };
+      bindRepositoryRuntime(reader, this.runtime);
+      try {
+        const plan = await this.validation!.planDocumentMove(reader, scope);
+        if (plan.inputsDigest !== scope.inputsDigest || canonical(plan.moves) !== canonical(scope.moves) || canonical(plan.changes) !== canonical(journal.changes.map(({ path, before, after, encoding }) => ({ path, before, after, ...(encoding === undefined ? {} : { encoding }) })))) fail('Document move inputs or complete allowed rewrite differ from the journal');
+        const recorded = new Set(scope.memberships.map(item => canonical([item.path, item.scope ?? 'all'])));
+        if (recorded.size !== scope.memberships.length || [...requiredMemberships].some(key => !recorded.has(key))) fail('Document move requires every observed directory membership');
+        for (const membership of scope.memberships) {
+          const observation = this.scanDirectory(membership.path, membership.scope).observation;
+          const expected = membership.observation === 'absent' ? [] : decode(Schema.Array(Schema.String), JSON.parse(membership.observation), 'move membership');
+          const actual = observation === 'absent' ? [] : decode(Schema.Array(Schema.String), JSON.parse(observation), 'move membership');
+          const normalized = actual.filter(entry => !journal.changes.some(change => entry.startsWith(`${change.path}:file:`)) && !journal.directories.some(dir => entry.startsWith(`${dir}:directory:`)));
+          for (const entry of expected) {
+            if (journal.changes.some(change => change.before !== null && entry.startsWith(`${change.path}:file:`))) normalized.push(entry);
+            else if (recovering && !normalized.includes(entry) && scope.from.split('/').length === 3 && (entry.startsWith(`${scope.from}/`) || entry.startsWith(`${scope.from}:directory:`)) && /:directory:/u.test(entry)) normalized.push(entry);
+          }
+          if (canonical(normalized.sort()) !== canonical([...expected].sort())) fail(`Document move directory membership changed: ${membership.path}`);
+        }
+        for (const change of journal.changes) {
+          if (change.encoding === 'base64') for (const image of [change.before, change.after]) if (image !== null && Buffer.from(image, 'base64').toString('base64') !== image) fail('Invalid binary image');
+          const destination = scope.moves.find(move => move.from === change.path)?.to;
+          if (destination !== undefined && images.get(destination)?.mode !== change.mode) fail('Move must preserve file modes');
+          const stat = this.inspect(change.path);
+          if (stat !== undefined && (!stat.file || (stat.mode & 0o777) !== change.mode)) fail(`${change.path} type or mode changed`);
+        }
+        for (const dir of journal.directories) if (!journal.changes.some(change => change.before === null && change.after !== null && change.path.startsWith(`${dir}/`))) fail('Unrelated move directory');
+      } catch (cause) { fail(`Document move authorization failed: ${cause instanceof Error ? cause.message : String(cause)}`); }
+    } else if (journal.scope.kind === 'issue-close') {
       const scope = journal.scope;
       if (journal.operation !== 'close-issue' || journal.directories.length !== 0) fail('Issue closure has an unauthorized operation or directory write');
       const current = await this.currentSnapshot();
@@ -1049,7 +1128,7 @@ export class LocalRepository implements Repository {
       this.absolute(change.path);
       if (change.before === null && change.after === null) fail('An absent preimage cannot guard an absent target');
       if (change.mode < 0 || change.mode > 0o777 || (change.before === null ? null : digest(change.before)) !== change.beforeDigest || (change.after === null ? null : digest(change.after)) !== change.afterDigest) fail('Invalid journal contents');
-      const current = this.read(change.path) ?? null;
+      const current = this.moveImage(change);
       if (!recovering) {
         if (current !== change.before) fail(`${change.path} changed before publication`);
       } else if (journal.phase === 'committed' ? current !== change.after : current !== change.before && current !== change.after) {
@@ -1057,20 +1136,28 @@ export class LocalRepository implements Repository {
       }
     }
   }
-  private apply(path: string, contents: string | null, mode: number): void {
+  private apply(path: string, contents: string | null, mode: number, encoding?: 'base64'): void {
     this.clearPathObservations();
     const target = this.absolute(path);
     if (contents === null) { if (present(target)) { rmSync(target); syncDirectory(dirname(target)); } }
-    else atomic(target, contents, mode);
+    else atomic(target, encoding === 'base64' ? Buffer.from(contents, 'base64') : contents, mode);
     this.clearPathObservations();
   }
   /** File images are committed first, so prepared recovery can restore every source. */
   private pruneMovedRoadmap(journal: Journal): void {
-    if (journal.operation !== 'roadmap-start') return;
+    if (journal.operation !== 'roadmap-start' && journal.scope.kind !== 'document-move') return;
     const directories = new Set<string>();
+    if (journal.scope.kind === 'document-move' && journal.scope.from.split('/').length === 3) {
+      const from = journal.scope.from;
+      const membership = journal.scope.memberships.find(item => item.path === from && item.scope === undefined);
+      if (membership !== undefined && membership.observation !== 'absent') for (const entry of decode(Schema.Array(Schema.String), JSON.parse(membership.observation), 'moved package directories')) {
+        if (/:directory:[0-9]+:$/u.test(entry)) directories.add(entry.replace(/:directory:[0-9]+:$/u, ''));
+      }
+    }
     for (const change of journal.changes) {
-      if (change.after !== null || !/^docs\/roadmap\/[^/]+\//u.test(change.path)) continue;
-      for (let directory = dirname(change.path); directory !== 'docs/roadmap'; directory = dirname(directory)) directories.add(directory);
+      if (change.after !== null || !/^docs\/(?:roadmap|feature|engineering)\/[^/]+\//u.test(change.path)) continue;
+      if (journal.scope.kind === 'document-move' && journal.scope.from.split('/').length !== 3) continue;
+      for (let directory = dirname(change.path); directory !== change.path.split('/').slice(0, 2).join('/'); directory = dirname(directory)) directories.add(directory);
     }
     for (const directory of [...directories].sort((left, right) => right.length - left.length)) {
       const target = this.absolute(directory);
@@ -1099,13 +1186,13 @@ export class LocalRepository implements Repository {
     if (journal.phase === 'prepared') {
       invalidateActiveRun(this.root, this.executionEnvironment);
       for (const change of [...journal.changes].reverse()) {
-        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
+        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close' || journal.scope.kind === 'document-move') {
           const current = this.readCurrent(journal.scope.configPath) ?? '';
           if (digest(current) !== journal.scope.configDigest) throw new ConcordError('RecoveryConflict', 'Project configuration changed during source recovery');
         }
-        const current = this.read(change.path) ?? null;
+        const current = this.moveImage(change);
         if (current !== change.before && current !== change.after) throw new ConcordError('RecoveryConflict', `${change.path} changed during recovery`);
-        if (current !== change.before) this.apply(change.path, change.before, change.mode);
+        if (current !== change.before) this.apply(change.path, change.before, change.mode, change.encoding);
       }
       for (const dir of [...journal.directories].sort((a,b) => b.length - a.length)) {
         const target = this.absolute(dir);

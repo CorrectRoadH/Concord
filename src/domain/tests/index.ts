@@ -1,6 +1,7 @@
 export { cacheStatus } from './annotations.ts';
 export { clearCache } from './annotations.ts';
 export { parseTestDeclarations } from './annotations.ts';
+export { moveTestTargets } from './move-targets.ts';
 export { previewCacheClear } from './annotations.ts';
 export { scanAnnotations } from './annotations.ts';
 export { commandObservation } from './evidence.ts';

@@ -76,7 +76,7 @@
 
 源或目标不合法、目标已存在、布局不合法或规划期间文件被修改时，命令拒绝执行且不写任何文件；错误码见[移动文档](../cli.md#移动文档)。
 
-Roadmap 采用为 Feature 仍使用[`roadmap start`](plan-and-adopt-contracts.md#adopt)；`move` 不改变文档的类别。
+Roadmap 采用为 Feature 仍使用[`roadmap start`](plan-and-adopt-contracts.md#adopt)；`move` 允许在 Feature 与 Engineering 之间移动，不处理 Roadmap。
 
 ## Spec 来源
 

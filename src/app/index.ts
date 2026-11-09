@@ -42,6 +42,7 @@ export { useCaseSteps } from './step-commands.ts';
 export { formatStepSource } from './step-rewrite.ts';
 export { markdownReferenceTokens } from './step-rewrite.ts';
 export { planStepRename } from './step-rewrite.ts';
+export { moveDocument, planDocumentMove } from './document-move.ts';
 export { scanStepReferences } from './step-rewrite.ts';
 export { pendingJournals } from './recovery.ts';
 export { recoveryFailure } from './recovery.ts';

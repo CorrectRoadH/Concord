@@ -1,7 +1,5 @@
 import type * as ModelTypes from '../model/index.ts';
-import type * as MdastTypes from 'mdast';
 import { posix } from "node:path";
-import { fromMarkdown } from "../model/index.ts";
 import { renderDocument } from "../model/index.ts";
 import { ConcordError, DocumentName, decode, digest, inRepositorySnapshot, type DocumentMeta, type MutationReceipt, type Repository } from "../model/index.ts";
 import { rebaseAdoptedMarkdown } from "../domain/documents/index.ts";
@@ -50,15 +48,7 @@ export async function adoptRoadmap(repo: Repository, selector: string, featureId
       if (JSON.stringify(relations) !== JSON.stringify(record.metadata.relations)) source = renderDocument({ ...record.metadata, relations } as DocumentMeta, record.body);
 
     }
-    // Only documents with an inbound Markdown link need the bounded link transform.
-    const links: { url: string }[] = [];
-    const visit = (node: MdastTypes.Nodes): void => {
-      if (node.type === 'link' || node.type === 'image' || node.type === 'definition') links.push({ url: node.url });
-      if ('children' in node) node.children.forEach(visit);
-    };
-    visit(fromMarkdown(source.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, '')));
-    const inbound = links.some(link => !/^(?:[A-Za-z][A-Za-z0-9+.-]*:|[/#])/u.test(link.url) && mapReference(posix.normalize(posix.join(posix.dirname(path), link.url.split('#')[0]!))) !== posix.normalize(posix.join(posix.dirname(path), link.url.split('#')[0]!)));
-    if (inbound) source = rebaseAdoptedMarkdown(source, path, path, roadmapDirectory, featureDirectory);
+    source = rebaseAdoptedMarkdown(source, path, path, roadmapDirectory, featureDirectory);
     if (source !== before) changes.push({ path, before, after: source });
   }
   // Recheck after the entire plan, including link transforms and promotions.

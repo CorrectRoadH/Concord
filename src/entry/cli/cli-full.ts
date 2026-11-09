@@ -7,7 +7,7 @@ import { skills } from './cli-command-skills.ts';
 import { recover } from "./cli-command-recover.ts";
 import { config } from "./cli-command-config.ts";
 import { taste } from "./cli-command-taste.ts";
-import { docsGroup, newDocument, showDocument, listDocuments } from "./cli-command-documents.ts";
+import { docsGroup, newDocument, showDocument, listDocuments, move } from "./cli-command-documents.ts";
 import { memory } from "./cli-command-memory.ts";
 import { issue } from "./cli-command-issue.ts";
 import { feedback } from "./cli-command-feedback.ts";
@@ -32,4 +32,4 @@ import { herdr } from './cli-command-herdr.ts';
 
 import { schema } from './cli-command-schema.ts';
 
-export const fullCommand = root.pipe(Command.withSubcommands([schema,init,skills,newDocument,showDocument,listDocuments,recover,config,taste,...(['use-case','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,herdr]));
+export const fullCommand = root.pipe(Command.withSubcommands([schema,init,skills,newDocument,showDocument,listDocuments,move,recover,config,taste,...(['use-case','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,herdr]));

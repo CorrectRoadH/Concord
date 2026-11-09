@@ -3,6 +3,8 @@ export type { LeafOwnerKind } from './repo-document-owners.ts';
 export { leafOwners } from './repo-document-owners.ts';
 export { leafOwnerSelection } from './repo-document-owners.ts';
 export { rebaseAdoptedMarkdown } from './adoption.ts';
+export { relocateMarkdown } from './link-relocation.ts';
+export { moveOwnerTargets } from './move-targets.ts';
 export { decodeDocumentSource } from './document-codec.ts';
 export { addPage } from './document-pages.ts';
 export type { DocumentPage } from './document-pages.ts';

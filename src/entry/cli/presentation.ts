@@ -99,6 +99,11 @@ export function humanOutput(value: unknown): string {
     ])].join('\n');
   }
   if ('changedPaths' in value && Array.isArray(value.changedPaths)) {
+    if (value.operation === 'move' && Array.isArray(value.moves) && Array.isArray(value.unmanagedReferences)) return [
+      `${value.dryRun ? 'Would apply' : 'Applied'} move:`, ...value.moves.filter(Predicate.isObject).map(move => `  ${String(move.from)} → ${String(move.to)}`), '',
+      'Changed:', ...value.changedPaths.map(path => `  ${String(path)}`),
+      ...(value.unmanagedReferences.length ? ['', 'Not rewritten:', ...value.unmanagedReferences.filter(Predicate.isObject).map(reference => `  ${String(reference.path)}:${String(reference.line)}`)] : []),
+    ].join('\n');
     const verified = Predicate.isObject(value.verification) ? [`Verified fix — ${String(value.changedPaths[0])}`, `Defect: ${String(value.verification.defect)}`, `Fix: ${String(value.verification.fix)}`, `Tests: ${Array.isArray(value.verification.tests) ? value.verification.tests.join(', ') : ''}`] : [];
     const lines = [...verified, `${value.dryRun ? 'Would apply' : 'Applied'} ${String(value.operation)}:`, ...value.changedPaths.map(path => `  ${String(path)}`)];
     if ((value.operation === 'feedback-sync' || value.operation === 'feedback-import') && typeof value.fetched === 'number' && typeof value.imported === 'number') {

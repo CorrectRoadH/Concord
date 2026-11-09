@@ -1,6 +1,6 @@
 import { RuntimeEnvironment, runtimePath } from '../environment/index.ts';
 import { Context, Effect, Layer, type Scope } from "effect";
-import type { Change, Repository, StepRename } from "../../model/index.ts";
+import type { Change, Repository, StepRename, DocumentMovePlan } from "../../model/index.ts";
 import { failure, ConcordError } from "../../model/index.ts";
 import { acquireTraceLease, releaseTraceLease, type TraceLease } from './coordination.ts';
 import { makePublicationReceiptStore } from './issue-receipts.ts';
@@ -29,6 +29,7 @@ export class PublicationValidation extends Context.Service<PublicationValidation
   readonly validateCatalog: (repo: Repository, journal: PublicationCatalog, fail: (message: string) => never) => void;
   readonly planIssueClose: (repo: Repository, request: { readonly issue: string }) => Promise<IssueClosePlan>;
   readonly planStepRename: (repo: Repository, request: StepRename) => Promise<StepRenamePlan>;
+  readonly planDocumentMove: (repo: Repository, request: { readonly from: string; readonly to: string }) => Promise<DocumentMovePlan>;
 }>()('concord/PublicationValidation') {}
 
 /** A writer can only be constructed from a Publication layer with validation. */
