@@ -906,6 +906,31 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    // @issue docs/issues/herdr-read-error-recovery.md
+    await t.test('first read errors recover on the same target without redraw or overlapping requests', async () => {
+      const b = await start(boundary => {
+        boundary.spaceList[0]!.machine = 'vps';
+        boundary.commandError = { code: 1, stdout: JSON.stringify({ ok: false, error: 'CleanupFailed', message: 'Workspace service shutdown could not be confirmed' }), stderr: '' };
+      }, () => host.output.text().includes('Workspace service shutdown could not be confirmed'));
+      try {
+        b.commandError = undefined;
+        const gate = b.commandGate = pending<void>();
+        const before = b.requests.length;
+        b.fire(2000);
+        await b.until(() => b.requests.length > before);
+        const pendingRequests = b.requests.length;
+        b.fire(2000); b.fire(2000);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(b.requests.length, pendingRequests, 'a slow recovery read remains the only request');
+        assert.match(b.output.text(), /Workspace service shutdown could not be confirmed/u);
+        gate.resolve(); b.commandGate = undefined;
+        await b.until(() => b.output.find(`page-${page}`) !== undefined);
+        assert.doesNotMatch(b.output.text(), /shutdown could not be confirmed/u);
+        assert.deepEqual(b.errors, []);
+      } finally { b.commandGate?.resolve(); await b.close(); }
+      assert.ok(b.tasks.every(task => task.is_done()));
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('layout sidebar follows selected tabs and machines after an earlier CLI error', async () => {
       for (const machine of [null, 'vps']) {
         host = new Boundary();
