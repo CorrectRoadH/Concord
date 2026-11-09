@@ -1035,9 +1035,10 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       }, () => host.output.text().includes('Unrecognized flag'));
       try {
         assert.match(b.output.text(), /vps 上的 Concord 版本过旧/u);
+        assert.match(b.output.text(), /--wait/u);
         b.click('copy-cli');
         assert.match(b.clipboard, /vps/u);
-        assert.match(b.clipboard, /--wait/u);
+        assert.match(b.clipboard, /升级到最新版本/u);
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
