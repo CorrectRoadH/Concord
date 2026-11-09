@@ -12,6 +12,17 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 桥接识别 typed `HawDBError::BranchBusy` 与固定版本的旧目录锁争用，该分类贯穿 schema 与事务准入。事务获取失败保留具名错误，真正的 schema 形状错误为 `HawdbIncompatible`。
 
+### 异步句柄生命周期
+
+工作区服务的持久打开与关闭使用 napi-rs 官方工作线程。顶层 `openCache(path, readOnly, create)` 返回 Promise；`closeAsync()` 等待数据库与协调锁释放后完成。同步 constructor、内存实例与数据操作用于既有同步消费者，不作为异步打开的回退（[用现成的能力](../../taste.md#t-10)）。
+
+打开任务保留共享资源所有权，先完成 JS 类包装，再在 Promise 成功交接后移交给外壳。包装或交接失败时，任务销毁路径排空共享状态，数据库先于协调锁销毁。关闭入口先标记 closing，使用可观察提交结果的 `Env.spawn`；工作线程短暂取走资源后释放 mutex，再执行校验、checkpoint、引擎销毁、目录检查与租约释放。closing 期间数据方法立即以 `HawdbClosed` 拒绝，不能在 JS 主线程等待工作线程的 mutex。关闭失败也先释放资源；提交失败由仍可达的共享状态完成同步异常清理。GC 不取消已经提交的关闭任务。
+
+任务不暴露 AbortSignal。Effect.acquireRelease 的获取与 finalizer 登记不可中断；请求取消要等待打开结束并完成关闭，不能让 Promise 脱离作用域。owner 用一个 Semaphore 许可串行化 open/close，获取失败、中断或 Busy 时先关闭本次局部 Scope；只有成功才发布句柄。重复 close、重开和外层退出都等待真正的释放完成。TypeScript 包装层重复 closeAsync 返回同一个 Promise，不重复提交原生工作。
+
+异步化只保证正常打开与关闭不在事件循环执行数据库工作；原生加载、身份校验、损坏重建、SQL 与回收仍按各自同步 Spec 执行。包装/提交异常的资源清理允许同步执行。真实验收检查打开或关闭尚未完成时 socket 可响应，取消、提交与交接失败后锁可重新取得；阶段故障注入不声称覆盖运行时的全部 N-API 失败。
+
+
 ## 句柄与打开模式
 
 持久库位于 Git-private `cache.hawdb`，各类持久缓存以命名空间隔离。持久句柄只有一个所有者（[缓存与原生边界的约束](#缓存与原生边界的约束)）：

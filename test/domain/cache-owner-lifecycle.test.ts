@@ -30,3 +30,45 @@ test('persistent owner opening and closing allow the service event loop to run',
     })).pipe(Effect.provide(PersistentCache.layer), Effect.provideService(RuntimeEnvironment, runtime)));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+// @feature docs/feature/local-data-engine/architecture.md#协调锁
+test('interrupting persistent owner acquisition releases the late native handle', async () => {
+  const { Fiber } = await import('effect');
+  const { acquireHawdbClearGuard } = await import('../../src/base/cache/index.ts');
+  const directory = mkdtempSync(join(tmpdir(), 'concord-owner-interrupt-'));
+  const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
+  try {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const owner = yield* makePersistentCacheOwner(directory);
+      const opening = yield* Effect.forkChild(owner.open);
+      yield* Effect.yieldNow;
+      yield* Fiber.interrupt(opening);
+      const guard = acquireHawdbClearGuard(join(directory, 'cache.hawdb'), runtime);
+      guard.close();
+      yield* owner.open;
+      yield* owner.close;
+    })).pipe(Effect.provide(PersistentCache.layer), Effect.provideService(RuntimeEnvironment, runtime)));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/architecture.md#协调锁
+test('concurrent persistent owner closes both wait for native lock release', async () => {
+  const { acquireHawdbClearGuard } = await import('../../src/base/cache/index.ts');
+  const directory = mkdtempSync(join(tmpdir(), 'concord-owner-closing-'));
+  const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
+  try {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const owner = yield* makePersistentCacheOwner(directory);
+      yield* owner.open;
+      yield* Effect.promise(async () => {
+        const first = Effect.runPromise(owner.close);
+        try {
+          await Effect.runPromise(owner.close);
+          const guard = acquireHawdbClearGuard(join(directory, 'cache.hawdb'), runtime);
+          guard.close();
+        } finally { await first; }
+      });
+      yield* owner.open;
+    })).pipe(Effect.provide(PersistentCache.layer), Effect.provideService(RuntimeEnvironment, runtime)));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

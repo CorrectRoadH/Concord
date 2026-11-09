@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
-import { Clock, Effect, Exit, Scope } from 'effect';
+import { Clock, Effect, Exit, Scope, Semaphore } from 'effect';
 import { ConcordError } from '../../model/index.ts';
 import { PersistentCache, type PersistentCacheService, type ReadonlyCacheSnapshot } from './service.ts';
 import { HawdbFailure, validateHawdbArtifact, type HawdbDatabase, type HawdbNamespace, type HawdbEntry } from './hawdb-native.ts';
@@ -31,19 +31,29 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     }
     if (validationError) return yield* Effect.fail(validationError);
   });
-  const close = Effect.suspend(() => {
+  const lifecycle = yield* Semaphore.make(1);
+  const closeUnlocked = Effect.suspend(() => {
     snapshots.clear();
     const prior = scope; scope = undefined; database = undefined;
     return prior ? Scope.close(prior, Exit.void) : Effect.void;
   });
-  const open = Effect.gen(function*() {
-    yield* close;
+  const close = Effect.uninterruptible(lifecycle.withPermit(closeUnlocked));
+  const open = lifecycle.withPermit(Effect.uninterruptibleMask(restore => Effect.gen(function*() {
+    yield* closeUnlocked;
     openError = undefined;
     yield* verify;
-    scope = yield* Scope.make();
-    database = yield* openPersistentHandle(privateDir, runtime).pipe(Effect.provideService(Scope.Scope, scope));
-    if (!database) return yield* Effect.fail(new HawdbFailure('HawdbBusy', 'Persistent cache is owned by another command'));
-  }).pipe(Effect.tapError(error => Effect.sync(() => { openError = error; })));
+    const nextScope = yield* Scope.make();
+    const acquired = yield* Effect.exit(restore(openPersistentHandle(privateDir, runtime).pipe(
+      Effect.provideService(Scope.Scope, nextScope),
+      Effect.flatMap(value => value ? Effect.succeed(value) : Effect.fail(new HawdbFailure('HawdbBusy', 'Persistent cache is owned by another command'))),
+    )));
+    if (Exit.isFailure(acquired)) {
+      yield* Scope.close(nextScope, acquired);
+      return yield* Effect.failCause(acquired.cause);
+    }
+    scope = nextScope;
+    database = acquired.value;
+  }))).pipe(Effect.tapError(error => Effect.sync(() => { openError = error; })));
   yield* Effect.addFinalizer(() => close);
   const use = <A>(run: (database: HawdbDatabase) => A) => verify.pipe(Effect.andThen(Effect.try({ try: () => {
     if (!database) throw openError ?? new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');

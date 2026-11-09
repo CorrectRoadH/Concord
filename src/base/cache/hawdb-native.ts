@@ -21,6 +21,7 @@ export interface HawdbDatabase {
   namespaces(): readonly HawdbNamespace[];
   reclaim(): HawdbReclamation;
   close(): void;
+  closeAsync(): Promise<void>;
 }
 export type HawdbFailureCode = 'HawdbBusy' | 'HawdbUnavailable' | 'HawdbIncompatible' | 'HawdbLimit' | 'HawdbClosed' | 'UnsafePath';
 export class HawdbFailure extends Error {
@@ -63,9 +64,11 @@ interface NativeBridge {
   namespaces(): unknown;
   reclaim(): unknown;
   close(): void;
+  closeAsync(): Promise<void>;
 }
 interface NativeModule {
   nativeIdentity(): unknown;
+  openCache(path: string, readOnly: boolean, create: boolean): Promise<NativeBridge>;
   CacheBridge: { new(path: string, readOnly: boolean, create: boolean): NativeBridge; memory(): NativeBridge };
   OwnerGuard: new(path: string) => { verify(): void; close(): void };
 }
@@ -126,6 +129,7 @@ export function validateHawdbArtifact(runtime: RuntimeEnvironmentSnapshot = defa
 export function verifyHawdbArtifact(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): void { boundary(() => { verifiedArtifact(runtime); }); }
 class Database implements HawdbDatabase {
   private readonly native: NativeBridge;
+  private closing: Promise<void> | undefined;
   constructor(native: NativeBridge) { this.native = native; }
   get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[] {
     return boundary(() => readEntries(this.native.get(decodeNamespace(namespace), [...decodeKeys(keys)])));
@@ -148,9 +152,25 @@ class Database implements HawdbDatabase {
     return boundary(() => Schema.decodeUnknownSync(Schema.Struct({ reclaimedObjects: Schema.Int, reclaimedBytes: Schema.Int, deferredForActiveLeases: Schema.Boolean }), { onExcessProperty: 'error' })(this.native.reclaim()));
   }
   close(): void { boundary(() => this.native.close()); }
+  closeAsync(): Promise<void> {
+    if (this.closing) return this.closing;
+    try { this.closing = this.native.closeAsync().catch(cause => { throw asFailure(cause); }); }
+    catch (cause) { this.closing = Promise.reject(asFailure(cause)); }
+    return this.closing;
+  }
 }
 export function openHawdb(path: string, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot = defaultRuntime): HawdbDatabase {
   return boundary(() => { const mode = decodeOptions(options); return new Database(new (load(runtime).CacheBridge)(decodePath(path), mode.readOnly, mode.create)); });
+}
+/** Service owners await native work without blocking their socket event loop. */
+export async function openHawdbAsync(path: string, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot = defaultRuntime): Promise<HawdbDatabase> {
+  try {
+    const mode = decodeOptions(options), native = load(runtime);
+    // Missing lifecycle APIs are installation failures, never permission to
+    // clear an otherwise compatible database or fall back to a blocking open.
+    if (typeof native.openCache !== 'function') throw new HawdbFailure('HawdbUnavailable', 'Native artifact does not support asynchronous cache ownership');
+    return new Database(await native.openCache(decodePath(path), mode.readOnly, mode.create));
+  } catch (cause) { throw asFailure(cause); }
 }
 export function createMemoryHawdb(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): HawdbDatabase { return boundary(() => new Database(load(runtime).CacheBridge.memory())); }
 export function acquireHawdbClearGuard(path: string, runtime: RuntimeEnvironmentSnapshot = defaultRuntime): { verify(): void; close(): void } {
