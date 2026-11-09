@@ -1027,7 +1027,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md
-    // @issue docs/issues/herdr-cli-flag-upgrade.md
     await t.test('unrecognized CLI flags show the remote upgrade request', async () => {
       const b = await start(boundary => {
         boundary.spaceList[0]!.machine = 'vps';
