@@ -151,10 +151,14 @@ class Boundary {
       open_url: url => { this.urls.push(url); },
       write_to_clipboard: value => { this.clipboard = value; },
       sleep: () => new Promise(resolve => setImmediate(resolve)),
-      notify: () => { assert.equal(this.closed || owner?.cancelled === true, false, 'fresh live context'); this.draw(); },
+      notify: () => {
+        assert.equal(this.drawing, false, 'cx.notify() is not allowed during the `render` phase; request a re-render from an event handler instead');
+        assert.equal(this.closed || owner?.cancelled === true, false, 'fresh live context'); this.draw();
+      },
       spawn: body => {
         const task = this.task();
-        void Promise.resolve().then(() => task.cancelled ? undefined : body(this.context(task))).catch(cause => this.errors.push(cause)).finally(() => { task.done = true; });
+        // Native spawn starts the async body immediately; only an awaited host operation yields.
+        void Promise.resolve(body(this.context(task))).catch(cause => this.errors.push(cause)).finally(() => { task.done = true; });
         return task;
       },
       timer: {
@@ -320,6 +324,27 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       await host.until(ready);
       return host;
     };
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    // @issue docs/issues/herdr-visible-directory-mismatch.md
+    await t.test('cached local and remote repository switches finish outside the native render phase', async () => {
+      const b = await start();
+      try {
+        b.selectTab('local', '/other');
+        await b.until(() => b.output.find('initialize') !== undefined);
+        b.selectTab('remote', '/repo', 'vps');
+        await b.until(() => b.output.find(`page-${page}`) !== undefined && b.output.text().includes('vps:/repo'));
+        b.selectTab('local', '/other');
+        await b.until(() => b.output.find('initialize') !== undefined);
+        assert.equal(b.output.find('concord-repository')!.text(), '/other');
+        assert.doesNotMatch(b.output.text(), /vps:|Concord 命令失败/u);
+        assert.deepEqual(b.requests.at(-1)?.options, { cwd: '/other', on: null });
+        b.selectTab('remote', '/repo', 'vps');
+        await b.until(() => b.output.find(`page-${page}`) !== undefined && b.output.text().includes('vps:/repo'));
+        assert.doesNotMatch(b.output.text(), /Concord 命令失败/u);
+        assert.deepEqual(b.errors, []);
+      } finally { await b.close(); }
+      assert.ok(b.tasks.every(task => task.is_done()));
+    });
     // @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-feature
     await t.test('long documents prepare their Markdown outside redraw and reuse it while editing', async () => {
       const source = '# Cart\n\n' + Array.from({ length: 140 }, (_, index) => `Paragraph ${index}: 中文🙂 [link](./architecture.md) and **text**.\n\n`).join('');
