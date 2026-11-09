@@ -4,16 +4,9 @@
 
 ## 文档路径与 frontmatter {#owner}
 
-文档的分组、位置、页面种类与 frontmatter 字段由[文档模型](../../document-model.md)定义。本节给出路径与名称的识别规则，以及 Issue 与 Memory 的 frontmatter 写法。
+文档的分组、位置、[身份](../../document-model.md#身份)与[页面种类](../../document-model.md#页面种类)由[文档模型](../../document-model.md)定义：canonical 仓库相对路径是唯一身份，同类别内可用[短选择器](concepts.md#short-selector)（歧义时具名拒绝，例如两个 Feature 都有 `use-case/create.md` 时 `show create` 要求写出路径），名称取自 Markdown 语法树中正文唯一的一级标题（代码块中的标题不计）。创建时间与修订历史由 Git 提供（[只写当前声明](../../document-model.md#只写当前声明)）。
 
-- canonical 仓库相对路径是唯一身份。移动文件即改变身份，`check` 报告全部失效的精确引用。
-- Feature 目录名、Use Case 文件名、Issue 与 Memory 文件名是短选择器。同一类别中歧义时具名拒绝，例如两个 Feature 都有 `use-case/create.md` 时，`show create` 要求写出路径。
-- 名称取自正文唯一的一级标题，可以与路径名不同。标题按 Markdown 语法树识别，代码块中的标题不计；名称保留 Unicode 原拼写与组合标记。
-- 普通正文链接只是导航。frontmatter 中的路径值一律是仓库相对路径，字段只在非空时出现。
-- Design 是一页还没定下来的取舍，见[文档模型](../../document-model.md#design)。
-- 文档类别（Feature、Use Case、Engineering、Roadmap 等）决定关系与短选择器；页面种类（cli、api、format 等）只说明附页回答哪个问题，不产生新的文档类别。种类目录中的页面属于所在的 Feature 或 Engineering。
-
-创建时间、采用来源与修订历史由 Git 提供（[只写当前声明](../../document-model.md#只写当前声明)）。测试源码拥有 case 身份和正向关系。
+普通正文链接只是导航。只有 Issue 与 Memory 使用 frontmatter，路径值一律是仓库相对路径，字段只在非空时出现（[一件事只写一次，其余推导](../../taste.md#t-3)）。
 
 ### Issue
 
