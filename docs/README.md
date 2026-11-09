@@ -14,8 +14,9 @@
 - [统一的本地缓存与检索引擎](feature/local-data-engine/README.md)
 - [本地 SDLC 闭环](feature/local-sdlc/README.md)
 - [统一项目治理与中立测试接入](feature/neutral-project-governance/README.md)
-- [Portable coordination with short publication leases](feature/portable-coordination/README.md)
+- [用短发布租约协调本地写入](feature/portable-coordination/README.md)
 - [渐进式项目初始化与品味治理](feature/project-onboarding/README.md)
+- [写下项目的品味](feature/taste/README.md)
 - [面向人的项目工作台](feature/web-workbench/README.md)
 
 ## 这个项目看重什么
@@ -32,6 +33,6 @@
 
 ## 还在路上的
 
-- [多客户端共享项目后台](roadmap/shared-project-service/README.md)：CLI、Herdr 与 Web 共享运行状态的目标方案。
+- [多客户端共享工作区服务操作](roadmap/shared-project-service/README.md)：CLI、Herdr 与 Web 通过工作区服务共享写入与测试任务的目标方案。
 - [Roadmap](roadmap/README.md)：还没开始实现的方向。
 - [Issue](issues/README.md)：待处理的问题与请求。

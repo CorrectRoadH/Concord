@@ -1,5 +1,5 @@
 # Issue
 
-Issue 保存待调查的本地 Observation 与 Memory 关联，不代表 GitHub 或其它远端系统的状态，不发送外部消息。
+Issue 保存还要处理的缺陷、请求或观察，处理完就删除（[Issue](../document-model.md#issue)）。本地 Issue 与远端对象分别维护状态，本地编辑与关闭不自动写回远端。
 
-使用 `concord issue create` 创建，`concord issue index` 与 `concord issue recall <query>` 查询，`concord --skill feedback` 读取完整流程。
+使用 `concord new issue <名称>` 创建，`concord list issue` 与 `concord issue search <关键词>` 查询，`concord issue close <名称>` 关闭；完整流程见 `concord --skill feedback`。

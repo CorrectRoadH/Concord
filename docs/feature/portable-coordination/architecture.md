@@ -72,7 +72,7 @@ dry-run 决定计划是否发布，与 access 无关；它复用来源快照，�
 
 ## Trace 发布与恢复协议
 
-`concord repo` 的关系写入、结构写入和 Feedback 信封导入共用一套 Trace 发布协议。基础 CLI 的本地 Issue 写入使用基础发布 journal，由 `concord recover` 恢复。两者争用同一 `publication.lease`，不并发发布。短期租约、读者准入与恢复结果见上文[访问模式](#access-modes)，本节只声明 Trace 专属的 journal 与恢复规则。
+关系写入、目录创建与 Feedback 导入共用一套 Trace 发布协议，其它本地写入使用 `concord/journal.json`。两者争用同一 `publication.lease`，不并发发布，均由 `concord recover` 恢复。短期租约、读者准入与恢复结果见上文[访问模式](#access-modes)，本节只声明 Trace 专属的 journal 与恢复规则。
 
 ### 协调目录与租约
 
@@ -86,7 +86,7 @@ dry-run 决定计划是否发布，与 access 无关；它复用来源快照，�
 
 读者不取得租约。返回结果前，读者必须重新核对它读过的每个文件的摘要与目录集合，并确认没有未完成的 journal：
 
-- 存在 journal 时返回 `TraceRecoveryRequired`，提示运行 `concord repo docs trace recover`。
+- 存在 journal 时返回 `TraceRecoveryRequired`，提示运行 `concord recover`。
 - 任何读过的文件或目录集合变化时，按[一致读取](#一致读取)重试或失败。
 
 读者不修改 owner 或 journal；首次读取可以初始化 coordination-id。
@@ -124,7 +124,7 @@ dry-run 决定计划是否发布，与 access 无关；它复用来源快照，�
 
 ### 恢复规则
 
-`trace recover` 按 journal 的阶段判断：
+Trace journal 的恢复按阶段判断：
 
 - 已到 `committed`：只在全部 owner 匹配 planned digest 且没有残留临时文件时完成 journal。
 - 未到 `committed`：只在每个 owner 匹配前像或 planned digest 时回滚到前像并丢弃临时文件。
