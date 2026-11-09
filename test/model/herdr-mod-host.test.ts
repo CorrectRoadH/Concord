@@ -906,7 +906,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-    // @issue docs/issues/herdr-read-error-recovery.md
     await t.test('first read errors recover on the same target without redraw or overlapping requests', async () => {
       const b = await start(boundary => {
         boundary.spaceList[0]!.machine = 'vps';
