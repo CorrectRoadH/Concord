@@ -200,6 +200,7 @@ class Boundary {
     await this.commandGate?.promise;
     if (this.commandError) return this.commandError;
     const operation = args.includes('--root') ? args.slice(args.indexOf('--root') + 2) : args.slice(2); this.calls.push(operation);
+    if (operation[0] === 'server' && operation[1] === 'status') return { code: 0, stdout: JSON.stringify({ state: 'running' }), stderr: '' };
     if (operation[0] === 'workspace' && operation[1] === 'wait') {
       const result = pending<{ code: number; stdout: string; stderr: string }>();
       this.watches.push({ root: options?.cwd ?? '', result });
@@ -903,6 +904,28 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         await new Promise<void>(resolve => setImmediate(resolve));
         assert.equal(b.calls.length, calls, 'a previous repository watch cannot refresh the selected repository');
         assert.match(b.output.text(), /\/other/u);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    // @issue docs/issues/herdr-remote-service-lifetime.md
+    await t.test('same repository tab switches preserve the active editor and watch without another command', async () => {
+      const b = await start();
+      try {
+        b.click(`page-${page}`);
+        await b.until(() => b.output.find(`concord-body-${page}`) !== undefined && b.calls.some(call => call.some(arg => arg.includes('page.render'))));
+        await new Promise<void>(resolve => setImmediate(resolve));
+        b.click('preview-block-0');
+        const editor = b.output.find('document-editor')!.state!;
+        editor.input('# Still editing', b.context());
+        const requests = b.requests.length, watches = b.watches.length;
+        b.selectTab('same-repository', '/repo');
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(b.requests.length, requests, 'tab identity alone must not reconnect or refresh');
+        assert.equal(b.watches.length, watches);
+        assert.equal(b.output.find('document-editor')!.state, editor);
+        assert.equal(editor.value(), '# Still editing');
+        assert.equal(editor.released, false);
+        assert.doesNotMatch(b.output.text(), /正在切换仓库|正在读取 Concord 仓库/u);
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md

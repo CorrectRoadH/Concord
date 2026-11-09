@@ -6,18 +6,30 @@ Concord mod 是可独立分发、也随归档提供的一组 JavaScript 文件�
 
 ## 数据
 
-- 目标 tab：布局侧栏在每次渲染时从 `focused()` 读取当前 tab；没有当前 tab 时显示没有终端。带 `props.pane` 的独立 pane 从 `panes()` 查所属 tab，只跟随这个 tab。切换目标 tab 时停止旧的变化等待，重新解析机器与仓库根；前一目标的异步解析结果不能覆盖当前目标。
-- 仓库地址：mod 按 tab 记住最近聚焦的终端 pane，取它的实时 `cwd`（`panes()`）与所在 space 的 `machine`。机器与根目录共同确定仓库；只是进入同一仓库的子目录时保留当前内容。切换 tab 后即使仓库相同也立即刷新，保留选中的文档；换仓库时不显示前一仓库的错误。
+- 目标 tab：布局侧栏在每次渲染时从 `focused()` 读取当前 tab；没有当前 tab 时显示没有终端。带 `props.pane` 的独立 pane 从 `panes()` 查所属 tab，只跟随这个 tab。切换目标 tab 时先比较仓库地址；前一目标的异步解析结果不能覆盖当前目标。
+- 仓库地址：mod 按 tab 记住最近聚焦的终端 pane，取它的实时 `cwd`（`panes()`）与所在 space 的 `machine`。机器与根目录共同确定仓库；只是进入同一仓库的子目录时保留当前内容。布局侧栏在同一机器、同一仓库的 tab 之间切换时，保留页面、滚动位置、编辑状态与正在进行的变化等待，不触发刷新或 CLI 检测；机器与 cwd 都没变时也不重新解析根目录。换仓库时停止旧的等待，不显示前一仓库的错误。
 - 仓库会话：mod 为每个仓库地址保留一份会话：最近一次读到的导航结果与它的 `sourceDigest`、打开的页面与它的渲染结果、滚动位置、文档树展开状态、init 后交给 agent 的请求。切走时会话只挂起：停止变化等待、提交当前输入，结果与状态留在内存。切回时先原样显示保留的内容，同时读一次投影，摘要不同才一次替换，不经过“正在读取”。mod 最多保留最近使用的 8 个会话，超出时关闭最久没用的一个；关闭 mod 时全部释放。只有还没有会话的仓库显示“正在读取 Concord 仓库…”。会话只存在于 mod 进程的内存里，不写文件。
 - CLI 检测：按机器记住结果。同一台机器检测通过后，换仓库不再检测；`exec` 找不到 `concord`，或 Concord 回答不认识 mod 用到的命令时，才把这台机器标回未检测并按状态页重新检测。
 - 编辑中换仓库：先提交当前输入到原仓库，再切换到最新目标；没有保存或放弃确认。mod 不提供目录选择器，跟随终端已覆盖换仓库的需要。
-- 通路：mod 与 Concord 之间没有常驻连接。每个操作是一次 `exec('concord', ['--json', ...], { cwd, on })`，`on` 是仓库地址的机器（本机为 null）；命令在那台机器上找到仓库根，经本机 socket 使用该仓库的[工作区服务](../local-data-engine/architecture.md#cli-查询)。CLI 检测同样带 `on`。本机与远程是同一条通路，mod 不使用 `readTextFile`、`writeTextFile`、`watchFolder` 或 `pickFolder`：后三个只作用于本机，正文与它的摘要又要来自同一次读取。
+- 通路：mod 与 Concord 之间没有常驻连接。每个操作是一次 `exec('concord', ['--json', ...], { cwd, on })`，`on` 是仓库地址的机器（本机为 null）；命令在那台机器上找到仓库根，经本机 socket 使用该仓库的[工作区服务](../local-data-engine/architecture.md#cli-查询)。CLI 检测同样带 `on`。远程服务启动由下述 Herdr 托管通路负责。mod 不使用 `readTextFile`、`writeTextFile`、`watchFolder` 或 `pickFolder`：后三个只作用于本机，正文与它的摘要又要来自同一次读取。
 - 读取：导航数据来自一次 `concord --json workspace projection`。它返回工作区服务内存中最近接受的[工作区投影](../web-workbench/cli.md#工作区投影)：文档与页面标题、Use Case 的测试与实现、关系、finding 与概念目录，一次 `exec` 就够，不按文档逐个运行 `show`，也不带 `--fresh`。投影的 `current` 恒为 `false`，只用于显示；写入仍以 `file.get` 的摘要为前像。打开的页面另用 `file.get` 与 `page.render` 读当前来源，品味页的依据位置在打开时运行 `taste`。投影报告 `WorkspaceProjectionPending`（服务刚启动或配置刚变化）时，先运行不带 `--after` 的 `workspace wait` 等首份结果再读；服务无法运行（例如 `HawdbUnavailable`，投影报告 `WorkspaceProjectionUnavailable`）时改用一次 `workspace show`，它在本进程扫描当前来源，返回同样的导航结构；仓库还没有初始化时命令返回 `ProjectNotInitialized`。没有运行中的服务时，投影直接读持久保存的上一份结果，刷新循环里的 `workspace wait` 随后启动服务并在新结果就绪时返回。mod 不保存结论到文件：会话里的结果只是上一次读取，每次刷新都以新投影替换。
 - 读取成本：已经初始化、服务在运行的仓库，一次刷新是一次 `workspace projection`，与 Feature 数量无关；切回有会话的仓库在拿到新投影之前不运行任何命令就能显示。
 - 写入：停止输入 800ms 或离开块时运行 `concord --json action --input-text <JSON>`，执行 `document.set`。每次写入先用 `file.get` 取得当前摘要作为 `expectedDigest`；遇到 `FileChangedSinceRead` 重新读取并提交当前输入。最多连续尝试三次，持续竞争时报告保存失败。相同文件的写入串行执行，成功后检查；请求返回时只确认它提交的版本，更晚的输入留给下一次保存。文件被删除时不重建。
 - 重载：当前文件内容变化时直接替换正文，释放块编辑状态、取消延迟保存并使旧读取与保存回调失效；已经提交给 CLI 的写入由磁盘的实际顺序决定。自身正在提交或刚提交的内容只更新基线，不释放编辑器或清掉后续输入。后台重载不保存被替换的草稿，也不弹冲突与合并界面。
 - 刷新：布局侧栏或所属 tab 在前台的独立 pane 循环运行 `concord --json workspace wait --after <sourceDigest>`，命令返回新的 `sourceDigest` 时重新读一次投影；当前打开的文档与滚动位置保持不变，正文按重载规则更新。独立 pane 所属 tab 不在前台时不等待，回到前台时立即刷新一次。服务不可用（例如 `HawdbUnavailable`）或仓库还没有初始化时，改为每 2 秒重新取一次，所以在终端里运行 `concord init` 后 mod 自动显示文档。
 - 连接：`exec` 因机器不可达而失败时显示“连不上 <机器>”，每 2 秒重试，恢复后自动继续。
+
+### 远程服务与读取终止
+
+Herdr 的远程 `exec` 经 `hc exec` 执行；这个调用结束时会回收它的全部后代，包括 detached 进程。Concord mod 因此在每次远程 `workspace wait` 之前运行 `concord --json server status`。服务不存在时，在同一机器与仓库目录执行 `hc run --bg --no-parent --rm -- concord server run --root <root>`，由 Herdr core 创建独立后台终端托管前台服务。已有服务时直接等待，不启动新终端。本机保持原有 CLI 启动方式。
+
+终端不创建 pane 或 tab，不抢焦点，不附加界面标签；没有父终端，不依赖短查询或 mod 的生命周期。工作区服务仍拥有持久句柄、服务锁与子进程，按既有退出协议回收；服务退出后 `--rm` 删除终端。mod 切换仓库、关闭或重连不停止共享服务。并发启动由 Concord 的服务锁裁决，落败进程退出，其终端同样自动删除。不得通过删除 `HC_SCOPE` 等宿主标记逃避回收，也不修改 Herdr 的全局环境或启动普通查询之外的应用。
+
+`hc run` 返回零只说明终端创建成功。创建后先运行 `concord --json server status --wait`，这个只读命令最多等 10 秒，直到服务完成握手，绝不自动启动服务；它成功后才运行 `workspace wait`，避免查询抢先启动一个随 exec 退出的临时服务。投影可读仍由随后成功的 `workspace projection` 证明。创建终端的非零结果转换为 `HerdrServiceStartFailed`，保留 stdout/stderr 供交给 agent；机器不可达仍按连接失败处理。握手超时报告 `WorkspaceServerUnavailable`。服务在 status 与 wait 之间退出，或 CLI 因协议变化替换服务时，本轮结果不能证明服务仍存在，下一次等待重新检查并按需托管；不重放写入。服务升级、锁争用与不可用的错误继续由 Concord 的公开命令处理。
+
+一次刷新最多读取三次投影，中间最多等待两次；等待不带 `--after`，使用 CLI 默认的 25 秒期限。第三次仍返回 `WorkspaceProjectionPending` 时，将这个具名错误交给状态页，停止本轮读取，不再等待。已经读到的内容保留；没有内容时显示错误和交给 agent 的请求。切换目标后旧读取不能更新新会话。后台变化等待保留 `--after <sourceDigest>`，每次等待前同样确认远程服务；这项控制查询不计作导航刷新，不改变已运行服务的一次投影读取成本（[快到每次都愿意跑](../../taste.md#t-7)）。
+
+验收用真实 CLI 与临时仓库观察：远程短命令回收完其后代后，独立托管的工作区服务仍能被后续命令复用；mod 先启动后由终端直接查询、终端先启动后由 mod 查询，两种顺序都保持同一个服务 PID；两个并发启动最多保留一个服务；停止服务后托管终端删除。持续 pending 的替身只模拟命令边界，验证第三次失败能到达状态页，不复制服务实现。
 
 ## 正文渲染
 

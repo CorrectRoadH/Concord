@@ -37,6 +37,8 @@
 
 本页其余各节给出这些命令的调用、输出与错误。
 
+`concord server status --wait` 等待外部启动的工作区服务完成握手，最多 10 秒；不启动、替换或停止服务。成功输出与普通 `server status` 相同，可以是 `opening`；超时以 `WorkspaceServerUnavailable` 非零退出。省略 `--wait` 时立即返回已有状态或 `absent`。此选项用于[远程 mod 的服务托管](../herdr-mod/architecture.md#远程服务与读取终止)。
+
 ## 通用约定
 
 - 每个命令都接受 `--json`。Agent 与脚本读取 JSON，不解析人读输出。JSON 字段是公开 Spec。

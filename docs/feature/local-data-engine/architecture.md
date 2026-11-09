@@ -157,6 +157,10 @@ commit 在严格解码完整批次后交给既有缓存写入校验；超限、�
 
 CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选定项目目录的服务。`concord server run` 是前台服务入口。`server status` 与 `server stop` 不启动服务。`view --in-process` 需要新服务时，以受当前命令管理的子进程启动；已有服务仍可复用。所有启动方式先取得同一服务锁。
 
+会回收全部命令后代的宿主必须独立托管前台 `server run`，不能只依靠 detached 使服务越过宿主的回收边界。Herdr 的远程托管由 [Concord mod](../herdr-mod/architecture.md#远程服务与读取终止)拥有；服务本身的锁、句柄与退出协议不变，普通 CLI 不依赖 Herdr。
+
+`server status --wait` 只观察外部启动者创建的服务，复用同一个 10 秒握手期限；连接可握手即返回状态（可以仍为 `opening`），超时返回 `WorkspaceServerUnavailable`。每次失败尝试释放连接，不启动、替换或停止服务。无 `--wait` 时仍立即返回状态或 `absent`。
+
 1. 启动者读取运行记录，核对 worktree、privateDir 与协议，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
 3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者。权限、I/O、类型或身份失败以具名错误 `ServerLockUnavailable` 报告。

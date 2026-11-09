@@ -33,8 +33,13 @@ mod 只通过公开 CLI 取数据和执行操作，不读取 Concord 的私有�
 | 渲染一页给 mod 显示 | `concord --json action --input-text <JSON>`，执行 `page.render`，见[渲染一页](#渲染一页) |
 | 保存一页文档 | `concord --json action --input-text <JSON>`，执行 `document.set` |
 | 等待下一份结果；等首份结果 | `concord --json workspace wait --after <sourceDigest>`；不带 `--after` |
+| 远程等待前检查工作区服务 | `concord --json server status` |
+| 远程服务不存在时由 Herdr core 托管 | `hc run --bg --no-parent --rm -- concord server run --root <root>`，在目标机器与仓库目录运行 |
+| 托管终端创建后等待服务握手 | `concord --json server status --wait`，最多 10 秒，只观察，不启动服务 |
 
 除 `page.render` 外，这些命令的输出见各自 Feature 的 cli 页，mod 不另定义字段。mod 不带 `--fresh`：显示用工作区服务已接受的结果，变化由 `workspace wait` 通知。
+
+`hc run` 是 Herdr 提供的进程托管入口，失败时 mod 显示 `HerdrServiceStartFailed`。终端创建结果不当作服务就绪；读取失败与生命周期见[远程服务与读取终止](architecture.md#远程服务与读取终止)。
 
 ## 渲染一页
 

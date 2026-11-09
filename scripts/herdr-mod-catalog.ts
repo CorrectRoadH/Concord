@@ -32,6 +32,8 @@ function recipe(version: string): string {
 
 mods/concord/main.js 是从源码构建的原生 Herdr View，依赖 gpui-kit、gpui-base 和 herdr，不使用网页视图或内置 mod。mod.json 声明 place=right、size=760、minimumConcordVersion=${version}；icons/ 是构建时从固定版本 lucide-react 生成的 SVG；NOTICE.txt 保留 Effect 与 Lucide 的许可证。View 使用 v_flex、h_flex、v_virtual_list、TextView、Editor、svg 与 on_size_change；props.overlay 标识打开命令的浮层。通过 focused、panes、spaces 确定目录，调用 pane.focus、pane.split、closeOverlay 管理面板，通过 theme 与 settings 跟随主题和等宽字体，write_to_clipboard 复制交给 agent 的请求。exec 在终端所在机器运行 concord --version 和公开 CLI 查询及写入命令，包括 --json doctor、init、list、show、concepts index、taste、check 以及 --skill、action file.get/page.render/document.set、workspace wait。截图来自 src/entry/herdr-mod/preview.png，是在真实 Herdr 主机上截取的界面，不生成占位图。
 
+远程等待前会运行 concord server status；服务不存在时，调用目标机器的 hc run --bg --no-parent --rm -- concord server run --root <目录>，由 Herdr core 独立托管，不创建 pane/tab。随后用 concord server status --wait 确认握手。服务与终端 CLI 共用，关闭 mod 不停止它，服务退出后托管终端自动删除。首次读取连续两次等待仍未取得投影时显示错误；同机器同仓库的 tab 切换保留页面、编辑状态和原等待，不额外刷新。
+
 ## Watch out
 
 先读 Herdr 配置目录的 AGENTS.md 和所有 mod 文件，向用户说明会运行 concord 并读写当前项目文件；mod 自身不发网络请求。需要 PATH 上的 ${required}，安装命令为 curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh；Homebrew 与 Nix 安装方式见 Concord README。读取 src/entry/herdr-mod/ 来重建，使用固定 Bun 工具链运行 bun run build:herdr，保留原生 Herdr 导入、icons/ 和 NOTICE。只复制 mods/concord/（含 icons/）到用户 mods 目录，名称冲突时按 Herdr 指南调整；不复制本说明和预览，不修改布局或快捷键。没有 Git 目录时，在同一 tab 的终端里 cd 到仓库。
