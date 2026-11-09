@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { plugin } from 'bun';
 import { mock } from 'bun:test';
+import { fromMarkdown } from 'mdast-util-from-markdown';
 import test from 'node:test';
 import { digest } from '../../src/model/index.ts';
 import type { RenderedPage } from '../../src/model/herdr-mod/index.ts';
@@ -137,6 +138,8 @@ class Boundary {
   output = new Element();
   frames: Element[] = [];
   frameRequests: number[] = [];
+  drawing = false;
+  parses: { source: string; drawing: boolean }[] = [];
   view: { render(cx: Context): unknown; close(cx: AsyncContext): void | Promise<void> } | undefined;
   task(): HostTask {
     const task = { done: false, cancelled: false, cancel() { this.cancelled = true; }, is_done() { return this.done || this.cancelled; } };
@@ -170,7 +173,12 @@ class Boundary {
       timer.body(this.context(timer.task));
     }
   }
-  draw() { if (this.view) { this.output = this.view.render(this.context()) as Element; this.frames.push(this.output); this.frameRequests.push(this.requests.length); } }
+  draw() {
+    if (!this.view) return;
+    this.drawing = true;
+    try { this.output = this.view.render(this.context()) as Element; this.frames.push(this.output); this.frameRequests.push(this.requests.length); }
+    finally { this.drawing = false; }
+  }
   selectTab(tab: string, cwd: string, machine: string | null = null) {
     this.focusedTab = tab;
     for (const pane of this.paneList) pane.focused = false;
@@ -281,6 +289,13 @@ const global = globalThis as typeof globalThis & { __concordHostSync?: typeof ex
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
 test('source mod obeys native host invalidation and retained-state boundaries', async t => {
   global.__concordHostSync = external;
+  // Observe the real parser; only host drawing is simulated. No clock-based
+  // failure depends on machine load or on Bun matching QuickJS's throughput.
+  const parse = fromMarkdown;
+  mock.module('mdast-util-from-markdown', () => ({ fromMarkdown: (...args: Parameters<typeof fromMarkdown>) => {
+    if (host) host.parses.push({ source: String(args[0]), drawing: host.drawing });
+    return parse(...args);
+  } }));
   const names: Record<string, string[]> = {
     'gpui-kit': ['View', 'div', 'image', 'svg'],
     'gpui-base': ['h_flex', 'v_flex', 'v_virtual_list', 'VirtualListScrollHandle', 'TextView', 'Editor', 'EditorState', 'Textarea', 'TextareaState'],
@@ -305,6 +320,35 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       await host.until(ready);
       return host;
     };
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-feature
+    // @issue docs/issues/herdr-render-interrupted.md
+    await t.test('long documents prepare their Markdown outside redraw and reuse it while editing', async () => {
+      const source = '# Cart\n\n' + Array.from({ length: 140 }, (_, index) => `Paragraph ${index}: 中文🙂 [link](./architecture.md) and **text**.\n\n`).join('');
+      const b = await start(boundary => { boundary.files.set(`/repo/${page}`, source); });
+      try {
+        b.click(`page-${page}`);
+        await b.until(() => b.output.text().includes('Paragraph 139:'));
+        assert.equal(b.parses.filter(item => item.drawing).length, 0, 'the native render deadline must not include Markdown parsing');
+        const parsed = b.parses.length;
+        for (let index = 0; index < 4; index++) b.draw();
+        b.output.sizeChanged!({ width: 900, height: 600 }, b.context());
+        assert.equal(b.parses.length, parsed, 'unchanged redraws reuse prepared blocks');
+        b.click('preview-block-8');
+        const editor = b.output.find('document-editor')!.state!;
+        const editing = b.parses.length;
+        editor.input('Updated paragraph.', b.context());
+        b.draw();
+        assert.equal(b.parses.length, editing, 'typing retains the surrounding preview');
+        editor.blur(b.context()); b.fire(0);
+        await b.until(() => b.output.text().includes('Updated paragraph.') && b.output.find('document-editor') === undefined);
+        assert.match(b.output.text(), /Paragraph 139:/u);
+        b.files.set(`/repo/${page}`, '# External replacement\n\nLast paragraph.\n');
+        b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'replacement' }), stderr: '' });
+        await b.until(() => b.output.text().includes('Last paragraph.'));
+        assert.doesNotMatch(b.output.text(), /Paragraph 139:/u);
+        assert.equal(b.parses.filter(item => item.drawing).length, 0);
+      } finally { await b.close(); }
+    });
     // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#edit
     await t.test('live preview opens only the clicked paragraph without edit controls', async () => {
       const b = await start(boundary => { boundary.files.set(`/repo/${page}`, '# Cart\n\nFirst paragraph.\n\nSecond paragraph.\n'); });
