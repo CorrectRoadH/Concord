@@ -31,7 +31,7 @@ concord test marker --contract <use-case 路径>
 concord code marker --contract <use-case 路径> --scope file
 ```
 
-完整语法见 `concord --skill test` 与 `concord --skill code`。运行 `concord trace`，查看哪些 Use Case 还没有测试守护、哪些测试还没有关联 Spec。标记表示关联，不表示覆盖。
+完整语法见 `concord --skill test` 与 `concord --skill code`。运行 `concord trace gaps <feature>` 与 `concord docs check docs/feature/<feature>`，先聚焦查看当前批次的缺口与写作问题；全部批次处理后再用无参 `concord trace gaps` 与 `concord check` 检查全仓。标记表示关联，不表示覆盖。
 
 需要 `test run` 或修复核验时，在 `concord.config.ts` 配置 `runner`；测试或源码不在 `test/`、`tests/`、`src/` 时配置 `testRoots` 与 `sourceRoots`，见 `concord --skill init`。
 

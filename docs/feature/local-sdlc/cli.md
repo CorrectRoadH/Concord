@@ -10,11 +10,11 @@
 | --- | --- |
 | `init` | 创建布局、`AGENTS.md` 区块与可选配置 |
 | `new <类别> <名称>` | 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Issue 或 Memory |
-| `show <路径或选择器>` | 一个文档及其关系、测试与实现 |
+| `show <路径、选择器或路径#anchor>` | 一个文档或精确 anchor 及其关系、测试与实现 |
 | `list [类别]` | 列出文档 |
 | `check` | 放置、关系、概念、写作与修复核验记录 |
-| `trace` | 关系图与缺口 |
-| `test` | `list`、`show`、`discover`、`marker`、`run`、`verify <issue>` |
+| `trace` | 关系图与缺口；`trace show` 支持 `<路径#anchor>`，`trace gaps` 支持 `[<路径或选择器>]` |
+| `test` | `list`、`show`、`discover`、`marker`、`run <case-id或spec-ref>`、`verify <issue>` |
 | `code` | `marker`、`list`、`at`、`analyze`：实现与 Spec 的关联 |
 | `use-case` | `steps`、`format`、`rename-step`：Use Case 步骤 |
 | `issue` | `close`（删除 Issue，fixed 时先核验）、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
@@ -94,7 +94,7 @@ Inspect configuration: concord doctor
 {
   "operation": "doctor",
   "ok": true,
-  "configuration": {"testRoots": ["test", "tests"], "sourceRoots": ["src"], "runner": {"kind": "node-test", "timeoutMs": 60000}},
+  "configuration": {"testRoots": ["test", "tests"], "sourceRoots": ["src"], "runner": {"argv": ["node", "--test", "{file}"], "timeoutMs": 60000}},
   "missingTestRoots": ["tests"],
   "missingSourceRoots": [],
   "documents": 3,
@@ -192,7 +192,7 @@ concord --json new use-case add-item --feature cart --title "加入商品"
 
 ### 查看一个文档包
 
-`show` 一个 Feature、Engineering 或 Roadmap 时，结果另有 `pages`，列出文档包内的全部页面，按路径排序。以下为预期输出：
+`show` 一个 Feature、Engineering 或 Roadmap 时，结果另有 `pages`，列出文档包内的全部页面，按路径排序。页面类别由路径直接推导（[路径与识别](../../document-model.md#路径与识别)），不再重复输出 `kind` 字段。以下为预期输出：
 
 ```sh
 concord --json show cart
@@ -202,28 +202,15 @@ concord --json show cart
 {
   "operation": "show",
   "pages": [
-    {"path": "docs/feature/cart/README.md", "kind": "readme", "name": "购物车"},
-    {"path": "docs/feature/cart/architecture.md", "kind": "architecture", "name": "购物车的实现"},
-    {"path": "docs/feature/cart/cli.md", "kind": "cli", "name": "购物车命令"},
-    {"path": "docs/feature/cart/use-case/add-item.md", "kind": "use-case", "name": "加入商品"}
+    {"path": "docs/feature/cart/README.md", "name": "购物车"},
+    {"path": "docs/feature/cart/architecture.md", "name": "购物车的实现"},
+    {"path": "docs/feature/cart/cli.md", "name": "购物车命令"},
+    {"path": "docs/feature/cart/use-case/add-item.md", "name": "加入商品"}
   ]
 }
 ```
 
-（省略关系、测试与实现字段。）`name` 是页面的一级标题。人读输出在关系之前列出这些页面。`show` 其它类别的文档时没有 `pages`。
-
-`kind` 按[路径与识别](../../document-model.md#路径与识别)取值：
-
-| `kind` | 页面 |
-| --- | --- |
-| `readme` | 文档包入口 `README.md` |
-| `use-case-index` | `use-case/README.md` 导航页 |
-| `use-case` | `use-case/<u>.md` 旅程 |
-| `cli`、`library`、`api`、`format`、`ui`、`performance`、`architecture`、`data-model` | 种类单页，或该种类目录中的页面，包括目录入口 `<种类>/README.md` |
-| `concepts`、`writing` | 文档包内各层的 `concepts.md` 与 `writing.md` |
-| `unknown` | 无法归类的页面；`check` 同时报告 [`UnknownPageKind`](../documentation-quality/cli.md#页面种类) |
-
-种类目录中的页面取目录的种类，例如 `docs/feature/cart/architecture/checkout-flow.md` 的 `kind` 为 `architecture`。
+（省略关系、测试与实现字段。）`name` 是页面的一级标题。人读输出在关系之前列出这些页面。`show` 其它类别的文档时没有 `pages`。无法归类的页面由 `check` 报告 [`UnknownPageKind`](../documentation-quality/cli.md#页面种类)。
 
 创建之后直接编辑文件。Web 工作台的保存带整文件摘要；文件在读取后被外部改过时返回 `FileChangedSinceRead`，需要重新读取并合并。摘要只防止覆盖并发编辑，不是授权边界。
 
@@ -294,12 +281,12 @@ codeDeclarations: 1
 
 ## 追踪关系
 
-`concord trace show --fresh <path>` 返回一份 Spec 的正文、关系、测试与代码声明。`subject` 的 `kind`、`title` 与 `feature` 由路径和一级标题推导，以下为预期输出。不加 `--fresh` 且尚无快照时，先等待后台刷新建成快照。`--json` 的顶层字段为 `operation`、`subject`、`relatedPaths`、`incoming`、`outgoing`、`tests`、`codeDeclarations`、`stepGroups`、`cache` 与 `analysis`：
+`concord trace show --fresh <path>` 返回一份 Spec 的正文、关系、测试与代码声明。`subject` 的 `title` 与 `feature` 由路径和一级标题推导，不重复携带可由路径推导的 `kind` 字段。以下为预期输出。不加 `--fresh` 且尚无快照时，先等待后台刷新建成快照。`--json` 的顶层字段为 `operation`、`subject`、`relatedPaths`、`incoming`、`outgoing`、`tests`、`codeDeclarations`、`stepGroups`、`cache` 与 `analysis`：
 
 ```json
 {
   "operation": "trace-show",
-  "subject": {"path": "docs/feature/cart/use-case/add-item.md", "kind": "use-case", "title": "加入商品", "feature": "docs/feature/cart/README.md", "digest": "sha256:..."},
+  "subject": {"path": "docs/feature/cart/use-case/add-item.md", "title": "加入商品", "feature": "docs/feature/cart/README.md", "digest": "sha256:..."},
   "incoming": [{"from": "case:neref_854212737ecad7effc4666629752cb98", "to": "docs/feature/cart/use-case/add-item.md", "relation": "contract"}],
   "outgoing": [{"from": "docs/feature/cart/use-case/add-item.md", "to": "docs/feature/cart/README.md", "relation": "feature"}],
   "tests": [{"id": "neref_854212737ecad7effc4666629752cb98", "file": "test/cart.test.js", "line": 5, "contract": "docs/feature/cart/use-case/add-item.md", "issues": ["docs/issues/duplicate-sku.md"], "status": "active"}],
@@ -308,7 +295,11 @@ codeDeclarations: 1
 }
 ```
 
-`codeDeclarations` 为空表示没有代码直接声明实现这个 Use Case。示例中的代码声明指向 Feature README，在 Feature 的 `trace show` 中列出。`trace gaps --json` 列出缺少实现或测试关联的 Spec。`trace check` 只做关系检查。`review` 生成审阅材料。这些命令都不运行测试。
+`codeDeclarations` 为空表示没有代码直接声明实现这个 Use Case。示例中的代码声明指向 Feature README，在 Feature 的 `trace show` 中列出。
+
+`show` 与 `trace show` 还接受 `<路径>#<anchor>`（例如 `docs/feature/cart/use-case/add-item.md#add`）：命令先校验该步骤或标题 anchor 在目标文档中存在（不存在时返回 `AnchorNotFound`，退出 1），再将返回的 `tests`、`codeDeclarations` 与 `incoming` 过滤为直接指向该 `<路径>#<anchor>` 的条目，方便 agent 在修改或删除单个步骤前直接查看它的局部影响面。
+
+`trace gaps [--fresh] [<路径或选择器>]` 列出缺少实现或测试关联的 Spec。省略参数时检查整个仓库；传入 Feature、Use Case 或 Engineering 的路径或短选择器时，只输出该目标范围内的 `contracts`、`cliPages` 与 `unmarkedLists`（Feature 包含自身、附页与所属 Use Case）。`trace check` 只做关系检查。`review` 生成审阅材料。这些命令都不运行测试。
 
 ## Use Case 步骤
 
@@ -337,10 +328,15 @@ codeDeclarations: 1
 `concord --json test list` 列出测试根中的标记。`cases[].id` 是 `test run` 使用的 case ID：
 
 ```json
-{"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"contract":"docs/feature/cart/use-case/add-item.md","contractKind":"use-case","issues":[],"status":"active","framework":"marker","skipped":false}],"observations":[]}
+{"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"contract":"docs/feature/cart/use-case/add-item.md","issues":[],"status":"active","framework":"marker","skipped":false}],"observations":[]}
 ```
 
-`concord test run <case-id>` 用配置的 runner 运行 case 所在文件，argv 不经过 shell。人读输出：
+`concord test run <case-id或spec-ref>` 用配置的 runner 运行测试，argv 不经过 shell：
+
+- 传入 `neref_...` 测试关联 ID 时，运行该测试声明所在文件。
+- 传入 Feature、Use Case、Engineering 的路径、短选择器或 `<路径>#<anchor>`（例如 `docs/feature/cart/use-case/add-item.md#add`）时，解析指向该目标的全部 `active` 测试声明（跳过 `@status retired`），按 case ID 顺序依次执行，agent 不必先运行 `test list` 或 `show` 查找哈希 ID。Feature 汇总自身、附页与所属 Use Case；Use Case 汇总自身与步骤；`<路径>#<anchor>` 只取直接指向该步骤或 anchor 的声明。目标不存在时返回 `ReferenceNotFound` 或 `AnchorNotFound`；目标没有任何 `active` 测试声明时返回 `TestNotFound`（退出 1）。
+
+人读输出：
 
 ```text
 Command fail — neref_854212737ecad7effc4666629752cb98
@@ -405,7 +401,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 `concord test run <case-id>` 重新收集并绑定当前原生集合；`--require-native` 要求精确原生选择。范围不足时可以在源码标记块添加 `@native <native-id>`；它不参与 v1 关联身份。无法精确绑定时执行范围为文件级 command；显式要求 native 时具名失败。
 
-配置 `testAdapters` 按测试根内的路径段匹配且不得重叠。每项声明 `id`、`include`、`builtin` 或外部 `argv`、`implementationFiles`、`inputRoots`、`frameworkVersion`、`lockFiles` 与 `envNames`；超时和预算只可缩小硬上限。未覆盖的文件使用原 runner。
+配置 `testAdapters` 按测试根内的路径段匹配且不得重叠。每项声明 `id`、`include` 与 `builtin` 或外部 `argv`（可选覆盖超时、预算与允许传递的 `envNames`）；不需要手工枚举 `implementationFiles`、`inputRoots`、`frameworkVersion` 或 `lockFiles`。未覆盖的文件使用原 runner。
 
 原生运行结果包含 requested、observed、Invocation 状态及输入摘要。green、red 与 invalid 表达逐项执行裁决；command scope 的 pass/fail 不表述为原生通过。缺少、重复、额外、skip、超时或清理未知均为 invalid，不能作为修复核验的任一端。能力与边界见[原生 adapter Use Case](use-case/run-native-test-adapters.md)。
 

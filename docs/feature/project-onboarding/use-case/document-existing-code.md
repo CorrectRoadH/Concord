@@ -34,9 +34,11 @@
 
 3. 关联已有实现与测试，清点未关联的存量测试。 {#link-existing-sources}
 
-   用 `concord code marker` 与 `concord test marker` 生成注释，加到这一批 Feature 对应的实现源码与现有测试上。配置了 adapter 时，收集原生测试清单并查看剩余缺口：
+   用 `concord code marker` 与 `concord test marker` 生成注释，加到这一批 Feature 对应的实现源码与现有测试上。先检查当前 Feature 的关系缺口与写作规则；配置了 adapter 时，再收集原生测试清单查看剩余未关联测试：
 
    ```sh
+   concord --fresh trace gaps cart
+   concord docs check docs/feature/cart
    concord test discover
    concord --fresh trace gaps
    ```

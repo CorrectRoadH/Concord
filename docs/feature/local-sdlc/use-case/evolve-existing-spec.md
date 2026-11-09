@@ -32,7 +32,7 @@
        Implements: docs/feature/cart/use-case/add-item.md#add
    ```
 
-   输出列出当前指向该 Use Case 及各步骤的 `tests` 与 `codeDeclarations`，作为本次改动的影响范围。
+   输出列出当前指向该 Use Case 及各步骤的 `tests` 与 `codeDeclarations`，作为本次改动的影响范围。只改某一步时，也可以直接传 `<路径>#<step-id>`（例如 `concord --fresh show docs/feature/cart/use-case/add-item.md#merge`），只看直接指向这一步的测试与代码声明。
 
 2. 先修改 Use Case，再检查断开的引用。 {#update-spec}
 
@@ -65,11 +65,12 @@
 
    把行为页中受影响的输出示例更新为新实现的实际运行输出。
 
-4. 重新检查关系与缺口。 {#verify-updated-links}
+4. 重新检查关系、缺口并运行关联测试。 {#verify-updated-links}
 
    ```sh
    concord check
-   concord --fresh trace gaps
+   concord --fresh trace gaps cart
+   concord test run docs/feature/cart/use-case/add-item.md
    ```
 
    ```text
@@ -79,7 +80,7 @@
    findings: none
    ```
 
-   `check` 确认全部引用有效且写作规则通过，`trace gaps` 确认修改后的步骤没有遗漏实现或测试关联。
+   `check` 确认全部引用有效且写作规则通过，`trace gaps cart` 确认该 Feature 修改后的步骤没有遗漏实现或测试关联，`test run` 直接按 Use Case 路径运行当前全部 `active` 测试（自动跳过 `@status retired`）。
 
 ## 结果
 

@@ -48,10 +48,11 @@ concord test list --json
 concord test show <derived-reference> --json
 ```
 
-`test run` 执行项目 runner 或匹配的 adapter，返回本次结果。`test discover` 也会显式启动 adapter 和框架收集进程：
+`test run` 执行项目 runner 或匹配的 adapter，返回本次结果；既可以传 `neref_...` 测试关联 ID，也可以直接传 Feature、Use Case、Engineering 的路径、短选择器或 `<path>#<anchor>`（按 case ID 顺序运行指向该目标的全部 `active` 测试声明，自动跳过 `@status retired`）。`test discover` 也会显式启动 adapter 和框架收集进程：
 
 ```sh
-concord test run <derived-reference> --json
+concord test run <derived-reference-or-spec-ref> --json
+concord test run docs/feature/login/use-case/expired-token.md#reject-token --json
 concord test verify <issue> --json
 ```
 

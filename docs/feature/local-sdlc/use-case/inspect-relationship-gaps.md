@@ -16,6 +16,8 @@
    concord --fresh --json trace gaps
    ```
 
+   只看单个 Feature 或 Use Case 的缺口时，传入它的路径或短选择器，例如 `concord --fresh --json trace gaps cart`。
+
    ```json
    {
      "operation": "trace-gaps",

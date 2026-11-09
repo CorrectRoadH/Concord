@@ -43,15 +43,15 @@
 
    `test/cart.test.js` 中的 `@use-case` 标记保持不变。
 
-3. 检查关系并运行关联测试。 {#verify-refactor}
+3. 检查关系并按步骤直接运行关联测试。 {#verify-refactor}
 
    ```sh
    concord check
-   concord --fresh show docs/feature/cart/use-case/add-item.md
-   concord test run neref_854212737ecad7effc4666629752cb98
+   concord --fresh show docs/feature/cart/use-case/add-item.md#add
+   concord test run docs/feature/cart/use-case/add-item.md#add
    ```
 
-   `show` 反映迁移后的新源码位置，测试关联 ID 不变：
+   `show` 反映迁移后的新源码位置，`test run` 直接按步骤引用运行守护该步骤的测试，不需要先复制 `neref_...` 哈希：
 
    ```text
    codeDeclarations:

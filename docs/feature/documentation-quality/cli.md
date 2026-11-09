@@ -43,10 +43,12 @@ Feature、Engineering 与 Roadmap 文档包内的每个 Markdown 页面必须属
 ## 写作检查
 
 ```sh
-concord docs check
+concord docs check [<路径>...]
 ```
 
-只检查写作与术语；`concord check` 把它和关系检查合在一起，见[合并检查](#合并检查)。finding 带文件、行号、规则与建议写法：
+只检查写作与术语；`concord check` 把它和关系检查合在一起，见[合并检查](#合并检查)。省略 `<路径>` 时检查 `docs/writing.md` 声明的全部检查范围；传入一个或多个仓库相对文件或目录路径（例如 `concord docs check docs/feature/cart`）时，按各文件所在目录生效的 `concepts.md` 与 `writing.md` 只检查所选范围内的 Markdown 正文（局部选择时不报告范围外的 `unusedConcept`），供编辑单篇文档或单个 Feature 时快速验证。交付前的门禁仍运行无参数的 `concord check`。
+
+finding 带文件、行号、规则与建议写法：
 
 ```text
 docs/feature/cart/README.md:27 [bannedTerm] 单子: use 订单; docs/concepts.md#order
