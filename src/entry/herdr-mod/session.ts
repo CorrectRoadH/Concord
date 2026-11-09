@@ -71,6 +71,8 @@ export class ModSession {
   workspaceDigest: string | undefined;
   reloadVersion = 0;
   saving = false;
+  checking = false;
+  checkFailed = false;
   deleted = false;
   error = '';
   errorDetails = '';
@@ -206,14 +208,15 @@ export class ModSession {
     if (!this.closed && token === this.selection) this.detail = this.detailFor(canonical);
   });
 
-  save = Effect.fn('ModSession.save')(function*(this: ModSession, body?: string) {
+  save = Effect.fn('ModSession.save')(function*(this: ModSession, body?: string, notify: () => void = () => {}) {
     if (body !== undefined) this.setDraft(body);
     if (!this.selected || this.draft === undefined || this.closed || this.saving) return;
     const path = this.selected, draft = this.draft, selection = this.selection, version = this.reloadVersion;
     const current = () => !this.closed && selection === this.selection && version === this.reloadVersion;
-    this.saving = true; this.savingBody = draft;
+    this.saving = true; this.savingBody = draft; this.checkFailed = false;
+    notify();
     this.fileObservation += 1;
-    try {
+    yield* Effect.gen({ self: this }, function*() {
       for (let attempt = 0; attempt < 3; attempt++) {
         const file = yield* this.readFile(path);
         if (!current()) return;
@@ -230,11 +233,16 @@ export class ModSession {
         this.acceptFile(confirmed, false);
         if (this.draft === draft) this.draft = undefined;
         if (!current()) return;
-        const check = yield* this.command(['check'], Check, true);
-        if (current()) this.check = check;
+        this.checking = true; this.check = undefined; notify();
+        const check = yield* Effect.result(this.command(['check'], Check, true));
+        if (!current()) return;
+        if (check._tag === 'Failure') { this.checkFailed = true; return yield* Effect.fail(check.failure); }
+        this.check = check.success;
         return;
       }
-    } finally { this.saving = false; this.savingBody = undefined; }
+    }).pipe(Effect.ensuring(Effect.sync(() => {
+      this.saving = false; this.checking = false; this.savingBody = undefined; notify();
+    })));
   });
 
   initialize = Effect.fn('ModSession.initialize')(function*(this: ModSession) {

@@ -11,7 +11,7 @@ export function codeMarkdown(source: string, language: string): string {
   const fence = '`'.repeat(length);
   return `${fence}${language}\n${source}\n${fence}`;
 }
-export function livePreviewElements(source: string, path: string, page: RenderedPage | undefined, renderedSource: string, assets: ReadonlyMap<number, string>, active: { block: SourceBlock; element: Element } | undefined, edit: (block: SourceBlock, cx: Context) => void, link: (url: string, cx: Context) => void): Element[] {
+export function livePreviewElements(source: string, path: string, page: RenderedPage | undefined, renderedSource: string, assets: ReadonlyMap<number, string>, active: { block: SourceBlock; element: Element } | undefined, edit: (block: SourceBlock, cx: Context) => void, link: (url: string, cx: Context) => void, loading = false, error = ''): Element[] {
   const parsed = pageSource(source);
   const renderedSpecial = source === renderedSource ? parsed.special : pageSource(renderedSource).special;
   const indexes = page?.blocks.flatMap((block, index) => block.type === 'markdown' ? [] : [index]) ?? [];
@@ -34,7 +34,10 @@ export function livePreviewElements(source: string, path: string, page: Rendered
         const asset = rendered?.type === type ? assets.get(renderedIndex) : undefined;
         if (rendered && 'error' in rendered) children.push(text(rendered.error).text_color(color('blocked')));
         if (asset && (type === 'image' || type === 'mermaid')) children.push(image(asset).max_w_full());
-        else {
+        else if (!rendered && loading && (type === 'image' || type === 'mermaid')) {
+          children.push(text(type === 'image' ? '正在加载图片…' : '正在渲染图表…').text_color(color('dim')).min_h(96));
+        } else {
+          if (!rendered && error) children.push(text(error).text_color(color('blocked')));
           if (rendered?.type === 'p5' && rendered.description) children.push(text(rendered.description));
           children.push(markdown(codeMarkdown(source.slice(special.start, special.end), 'markdown'), `-${special.start}-source`));
           if (asset && type === 'p5') children.push(clickableRow(`${id}-play`).child(text('在浏览器中播放')).on_click((_event, cx) => { cx.stop_propagation(); cx.open_url(asset); }));

@@ -121,6 +121,8 @@ class Boundary {
   beforeUnlink: (() => Promise<void>) | undefined;
   renderGate: ReturnType<typeof pending<void>> | undefined;
   beforeRoot: ((cwd: string) => Promise<void>) | undefined;
+  beforeFileRead: ((path: string) => Promise<void>) | undefined;
+  beforeCheck: (() => Promise<void>) | undefined;
   installedVersion: string | undefined = 'dev';
   props: Record<string, unknown> = {};
   files = new Map([[`/repo/${page}`, '# Cart\n'], ['/repo/docs/taste.md', '# Taste\n']]);
@@ -207,7 +209,10 @@ class Boundary {
       const input = JSON.parse(operation.filter(value => value.startsWith('--input-text=')).map(value => value.slice('--input-text='.length)).join('')) as { action: string; path: string; body: string; expectedDigest: string };
       const absolute = `${options?.cwd}/${input.path}`, source = this.files.get(absolute);
       const error = (name: string) => ({ code: 1, stdout: '', stderr: JSON.stringify({ error: name, message: name }) });
-      if (input.action === 'file.get') return source === undefined ? error('FileNotFound') : { code: 0, stdout: JSON.stringify({ path: input.path, body: source, digest: digest(source) }), stderr: '' };
+      if (input.action === 'file.get') {
+        await this.beforeFileRead?.(input.path);
+        return source === undefined ? error('FileNotFound') : { code: 0, stdout: JSON.stringify({ path: input.path, body: source, digest: digest(source) }), stderr: '' };
+      }
       if (input.action === 'page.render') {
         const reply = { code: 0, stdout: JSON.stringify({ path: input.path, blocks: this.rendered ?? [{ type: 'markdown', text: source ?? '' }] }), stderr: '' };
         await this.renderGate?.promise; return reply;
@@ -224,6 +229,7 @@ class Boundary {
       projection.projection.sourceDigest = digest(JSON.stringify([projection.snapshot, this.rendered]));
       return { code: 0, stdout: JSON.stringify(projection), stderr: '' };
     }
+    if (operation[0] === 'check') await this.beforeCheck?.();
     const data = operation[0] === 'init' ? { createdPaths: ['docs/taste.md'] }
       : operation[0] === 'check' ? { ok: true, findings: [] } : {};
     if (operation[0] === 'init') this.files.set(`${options?.cwd}/docs/taste.md`, '# Taste');
@@ -572,19 +578,146 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         b.click(`page-${page}`); await b.until(() => b.output.find(`code-${page}#add-0`) !== undefined);
         assert.match(b.output.find('concord-relationships')!.text(), /守护它的测试[\s\S]*加入商品[\s\S]*adds an item[\s\S]*实现它的代码[\s\S]*addItem/u);
         b.click(`code-${page}#add-0`);
-        await b.until(() => b.output.find('concord-source-preview') !== undefined);
+        assert.match(b.output.find('concord-source-preview')!.text(), /正在读取源码/u);
+        await b.until(() => b.output.find('concord-source-editor') !== undefined);
         assert.match(b.output.find('concord-source-preview')!.text(), /src\/cart.ts:1/u);
         assert.equal(b.output.find('concord-source-editor')!.state!.readOnly, true);
         assert.match(b.output.find('concord-source-editor')!.state!.value(), /export const addItem = 1/u);
         b.click('close-preview'); assert.equal(b.output.find('concord-source-preview'), undefined);
         b.output.find(`concord-block-${page}-0`)!.link!('../../concepts.md#cart', b.context());
-        await b.until(() => b.output.find('concord-concept-card') !== undefined);
+        assert.match(b.output.find('concord-concept-card')!.text(), /购物车[\s\S]*正在读取定义/u);
+        await b.until(() => b.output.find('concord-concept-card')?.text().includes('商品和数量的集合。') === true);
         const card = b.output.find('concord-concept-card')!;
         assert.match(card.text(), /购物车[\s\S]*商品和数量的集合。[\s\S]*docs\/concepts.md/u);
         assert.doesNotMatch(card.text(), /Unrelated definition/u);
         b.click('close-concept'); assert.equal(b.output.find('concord-concept-card'), undefined);
         assert.ok(b.output.find(`concord-body-${page}`));
       } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md
+    await t.test('detail loading ignores superseded reads, closing, navigation and stale failures', async () => {
+      const b = await start(boundary => {
+        boundary.files.set('/repo/src/first.ts', 'first source'); boundary.files.set('/repo/src/second.ts', 'second source');
+        boundary.files.set('/repo/docs/concepts.md', '# Terms\n\n## First {#first}\n\nFirst definition\n\n## Second {#second}\n\nSecond definition\n');
+        boundary.concepts.push(...['first', 'second'].map(id => ({ reference: `docs/concepts.md#${id}`, path: 'docs/concepts.md', concept: { id, term: id, definition: `${id} definition` } })));
+        boundary.relationships.codeDeclarations.push(...['first', 'second'].map(name => ({ file: `src/${name}.ts`, line: 1, symbol: name, contracts: [page] })));
+      });
+      const gate = pending<void>();
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`code-${page}-0`) !== undefined);
+        b.beforeFileRead = async path => { if (path === 'src/first.ts') await gate.promise; };
+        b.click(`code-${page}-0`); const firstTask = b.tasks.at(-1)!;
+        assert.match(b.output.find('concord-source-preview')!.text(), /first.ts:1[\s\S]*正在读取源码/u);
+        b.click(`code-${page}-1`);
+        await b.until(() => b.output.find('concord-source-editor')?.state?.value().includes('second source') === true);
+        gate.reject(new Error('late read failure'));
+        await b.until(() => firstTask.is_done());
+        assert.match(b.output.find('concord-source-editor')!.state!.value(), /second source/u);
+        assert.equal(b.output.find('concord-error'), undefined);
+        for (const destination of ['close', 'page', 'repository'] as const) {
+          const delayed = pending<void>();
+          b.beforeFileRead = async path => { if (path === 'docs/concepts.md' || path === 'src/first.ts') await delayed.promise; };
+          const link = b.output.find(`concord-block-${page}-0`)!.link!;
+          b.click(`code-${page}-0`); const sourceTask = b.tasks.at(-1)!;
+          link('../../concepts.md#first', b.context()); const conceptTask = b.tasks.at(-1)!;
+          assert.match(b.output.find('concord-concept-card')!.text(), /first[\s\S]*正在读取定义/u);
+          if (destination === 'close') { b.click('close-preview'); b.click('close-concept'); }
+          else if (destination === 'page') { link('../../taste.md', b.context()); await b.until(() => b.output.find('concord-body-docs/taste.md') !== undefined); }
+          else { b.selectTab('t2', '/other'); await b.until(() => b.output.find('initialize') !== undefined); }
+          delayed.resolve();
+          await b.until(() => sourceTask.is_done() && conceptTask.is_done());
+          assert.equal(b.output.find('concord-source-preview'), undefined);
+          assert.equal(b.output.find('concord-concept-card'), undefined);
+          if (destination === 'page') { b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined); }
+        }
+      } finally { gate.resolve(); await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-concept
+    await t.test('a new concept replaces pending content and failures end the card loading state', async () => {
+      const b = await start(boundary => {
+        for (const id of ['first', 'second']) {
+          const path = `docs/${id}/concepts.md`;
+          boundary.files.set(`/repo/${path}`, `# Terms\n\n## ${id} {#term}\n\n${id} definition\n`);
+          boundary.concepts.push({ reference: `${path}#term`, path, concept: { id: 'term', term: id, definition: `${id} definition` } });
+        }
+      });
+      const delayed = pending<void>();
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-block-${page}-0`) !== undefined);
+        b.beforeFileRead = async path => { if (path === 'docs/first/concepts.md') await delayed.promise; };
+        const link = b.output.find(`concord-block-${page}-0`)!.link!;
+        link('../../first/concepts.md#term', b.context()); const task = b.tasks.at(-1)!;
+        link('../../second/concepts.md#term', b.context());
+        await b.until(() => b.output.find('concord-concept-card')?.text().includes('second definition') === true);
+        delayed.resolve(); await b.until(() => task.is_done());
+        assert.doesNotMatch(b.output.find('concord-concept-card')!.text(), /first definition/u);
+        b.beforeFileRead = async () => { throw new Error('read failed'); };
+        link('../../first/concepts.md#term', b.context());
+        await b.until(() => b.output.find('concord-concept-card')?.text().includes('Concord 命令失败') === true);
+        assert.doesNotMatch(b.output.find('concord-concept-card')!.text(), /正在读取定义/u);
+      } finally { delayed.resolve(); await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+    await t.test('saving and checking report separate phases and navigation waits for the original page', async () => {
+      for (const navigate of [false, true]) {
+        const b = await start(); const writeGate = pending<void>(), checkGate = pending<void>();
+        let writing = false, checking = false;
+        try {
+          b.click(`page-${page}`); await b.until(() => b.output.find('preview-block-0') !== undefined);
+          b.click('preview-block-0'); b.output.find('document-editor')!.state!.input('# Edited', b.context());
+          b.beforeFileRead = async path => { if (path === page) { writing = true; await writeGate.promise; } };
+          b.beforeCheck = async () => { checking = true; await checkGate.promise; };
+          // The active block is an editor; use the project navigation for the second page.
+          if (navigate) { b.click('category-项目规则'); b.click('page-docs/taste.md'); }
+          else b.fire(800);
+          await b.until(() => writing);
+          assert.match(b.output.text(), navigate ? /正在保存上一页/u : /正在保存…/u);
+          writeGate.resolve(); await b.until(() => checking);
+          assert.equal(b.files.get(`/repo/${page}`), '# Edited\n');
+          assert.match(b.output.text(), navigate ? /正在检查上一页/u : /已保存，正在检查/u);
+          if (navigate) {
+            checkGate.resolve(); await b.until(() => b.output.find('concord-body-docs/taste.md') !== undefined);
+          } else {
+            checkGate.reject(new Error('check failed'));
+            await b.until(() => b.output.text().includes('已保存，检查失败'));
+            assert.doesNotMatch(b.output.text(), /正在保存|正在检查/u);
+          }
+        } finally { writeGate.resolve(); checkGate.resolve(); await b.close(); }
+      }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    await t.test('unresolved repository targets immediately hide the old editable page and discard late resolution', async () => {
+      const b = await start(); const delayed = pending<void>();
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find('preview-block-0') !== undefined);
+        b.beforeRoot = async cwd => { if (cwd === '/other') await delayed.promise; };
+        b.selectTab('t2', '/other');
+        const navigation = b.tasks.at(-1)!;
+        assert.match(b.output.text(), /\/other[\s\S]*正在切换仓库/u);
+        assert.equal(b.output.find('preview-block-0'), undefined);
+        b.selectTab('t1', '/repo'); await b.until(() => b.output.find('preview-block-0') !== undefined);
+        delayed.resolve(); await b.until(() => navigation.done);
+        assert.equal(b.output.find('concord-repository')!.text(), '/repo');
+        assert.ok(b.output.find('preview-block-0'));
+      } finally { delayed.resolve(); await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-feature
+    await t.test('pending diagrams use local placeholders, remain editable and expose source on render failure', async () => {
+      const source = '# Readable text\n\n![Plot](plot.svg)\n\n```mermaid\ngraph LR; A-->B\n```\n';
+      const b = await start(boundary => { boundary.files.set(`/repo/${page}`, source); });
+      const delayed = b.renderGate = pending<void>();
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.text().includes('正在渲染图表'));
+        assert.match(b.output.text(), /Readable text[\s\S]*正在加载图片/u);
+        assert.doesNotMatch(b.output.text(), /graph LR/u);
+        b.click(`preview-block-${source.indexOf('```mermaid')}`);
+        assert.match(b.output.find('document-editor')!.state!.value(), /graph LR/u);
+        b.output.find('document-editor')!.state!.blur(b.context()); b.fire(0);
+        delayed.reject(new Error('render failed'));
+        await b.until(() => b.output.text().includes('Concord 命令失败'));
+        assert.match(b.output.find(`concord-body-${page}`)!.text(), /graph LR/u);
+        assert.doesNotMatch(b.output.text(), /正在渲染图表|正在加载图片/u);
+      } finally { delayed.resolve(); await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/read-spec.md
     await t.test('native blocks load completed files, expose Mermaid source and open an offline p5 file, then react to theme changes', async () => {

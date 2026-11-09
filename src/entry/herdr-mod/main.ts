@@ -41,7 +41,12 @@ export default class ConcordMod extends View {
   private pendingPage: string | undefined;
   private preview: EditorState | undefined;
   private previewLabel = '';
+  private previewToken = {};
+  private previewLoading = false;
+  private previewError = '';
   private conceptText: string | undefined;
+  private conceptToken = {};
+  private switchingTarget = false;
   private cli: 'checking' | 'missing' | 'outdated' | 'ready' = 'checking';
   private unknownCommand = '';
   private tab: string | undefined;
@@ -73,6 +78,8 @@ export default class ConcordMod extends View {
   private renderToken = {};
   private renderKey = '';
   private renderedPath = '';
+  private rendering = false;
+  private renderError = '';
   private expanded = new Set<string>();
   private collapsedGroups = new Set<string>(documentGroups.filter(name => name !== 'Feature' && name !== 'Engineering'));
   private panelWidth = 480;
@@ -160,6 +167,7 @@ export default class ConcordMod extends View {
     const space = spaces().find(item => item.tabs.some(item => item.id === tab));
     if (!pane?.cwd || !space) {
       this.directory = 'no-terminal'; this.target = undefined;
+      this.switchingTarget = false; this.clearDetails();
       this.pauseWatch();
       this.navigation?.cancel(); this.targetToken = {}; this.observedTarget = '';
       return;
@@ -171,6 +179,8 @@ export default class ConcordMod extends View {
       return;
     }
     this.target = target; this.observedTarget = key;
+    this.switchingTarget = !this.resolvedTargets.has(key) || this.session.draft !== undefined || Boolean(this.saving);
+    this.clearDetails();
     this.navigation?.cancel();
     const token = this.targetToken = {};
     const current = () => !this.closed && token === this.targetToken;
@@ -187,9 +197,10 @@ export default class ConcordMod extends View {
         const different = this.session.root !== resolved.root || this.session.machine !== target.machine;
         if (different) this.finishEditing(next);
         if (different && (this.session.draft !== undefined || this.saving)) {
-          await this.flush();
+          await this.flush(() => { if (current()) next.notify(); });
           if (!current()) return;
         }
+        this.switchingTarget = false;
         if (!resolved.root) { this.directory = 'not-git'; this.pauseWatch(); next.notify(); return; }
         this.directory = 'repository';
         if (!different && this.cli === 'ready') {
@@ -203,6 +214,7 @@ export default class ConcordMod extends View {
         if (this.cli === 'ready') this.refresh(next);
       } catch (cause) {
         if (!current()) return;
+        this.switchingTarget = false;
         if (target.machine !== null) this.disconnected = true;
         else this.reportFailure(cause);
       }
@@ -241,14 +253,14 @@ export default class ConcordMod extends View {
     this.tasks.clear(); this.watchedRoot = undefined;
     this.refreshing = false; this.refreshQueued = false;
     this.releaseEditor(); this.autoSave?.cancel(); this.autoSave = undefined;
-    this.preview?.release(); this.preview = undefined;
-    this.conceptText = undefined;
+    this.clearDetails();
     const key = JSON.stringify([machine, cwd]);
     const retained = this.sessions.get(key);
     this.sessions.delete(key);
     this.session = retained?.session ?? new ModSession({ exec }, cwd, machine);
     this.cli = this.cliMachines.has(machine) ? 'ready' : 'checking';
     this.pageLease = retained?.pageLease; this.renderedPage = retained?.renderedPage;
+    this.rendering = false; this.renderError = '';
     this.renderedSource = retained?.renderedSource ?? ''; this.renderedPath = retained?.renderedPath ?? ''; this.renderKey = retained?.renderKey ?? ''; this.renderedKey = this.renderKey;
     this.treeScroll = retained?.treeScroll ?? VirtualListScrollHandle.new(); this.pageScroll = retained?.pageScroll ?? VirtualListScrollHandle.new();
     this.reloadVersion = 0; this.pageNavigation = {}; this.pendingPage = undefined; this.saving = undefined;
@@ -327,18 +339,19 @@ export default class ConcordMod extends View {
     if (!this.pendingPage && path === this.session.selected && !this.session.error) { this.expandPath(path); cx.notify(); return; }
     const session = this.session, navigation = this.pageNavigation = {};
     const current = () => !session.closed && session === this.session && navigation === this.pageNavigation;
+    this.clearDetails();
     this.finishEditing(cx);
     this.pendingPage = path;
     this.expandPath(path);
     cx.notify();
-    this.run(cx, Effect.tryPromise({ try: async () => {
+    this.run(cx, next => Effect.tryPromise({ try: async () => {
       try {
-        await this.flush();
+        await this.flush(() => { if (current()) next.notify(); });
         if (!current()) return;
+        next.notify();
         await runEffect(session.open(path));
         if (!current()) return;
-        this.preview?.release(); this.preview = undefined;
-        this.conceptText = undefined;
+        this.clearDetails();
         this.syncEditor();
       } catch (cause) {
         if (current()) throw cause;
@@ -355,6 +368,7 @@ export default class ConcordMod extends View {
     const key = available && path && !session.deleted ? JSON.stringify([session.root, session.machine, path, session.sourceDigest, colors]) : '';
     if (key === this.renderKey) return;
     this.renderKey = key;
+    this.rendering = Boolean(key); this.renderError = '';
     const token = this.renderToken = {};
     const current = () => !this.closed && token === this.renderToken && session === this.session && path === session.selected;
     // The same page stays on screen until its new rendering is ready, so a refresh swaps it in one step.
@@ -380,10 +394,11 @@ export default class ConcordMod extends View {
         if (replaced) await replaced.release(next);
       } catch (cause) {
         if (!current()) return;
+        this.renderError = failure(cause).message;
         if (cause instanceof ModDisconnected) this.disconnected = true;
         else this.reportFailure(cause, session);
       }
-      finally { this.renderTasks.delete(task); }
+      finally { this.renderTasks.delete(task); if (current()) this.rendering = false; }
       if (current()) next.notify();
     });
     this.renderTasks.add(task);
@@ -420,18 +435,18 @@ export default class ConcordMod extends View {
     this.autoSave = cx.timer.after(delay, next => {
       this.autoSave = undefined;
       if (this.closed || session !== this.session || session.reloadVersion !== version) return;
-      this.run(next, Effect.tryPromise({ try: () => this.flush(), catch: failure }));
+      this.run(next, current => Effect.tryPromise({ try: () => this.flush(() => current.notify()), catch: failure }));
       next.notify();
     });
   }
 
-  private flush(): Promise<void> {
+  private flush(notify: () => void = () => {}): Promise<void> {
     this.autoSave?.cancel(); this.autoSave = undefined;
     if (this.saving) return this.saving;
     const session = this.session;
     const pending = (async () => {
       while (!session.closed && session.draft !== undefined) {
-        await runEffect(session.save());
+        await runEffect(session.save(undefined, () => { if (!this.closed && session === this.session) notify(); }));
         if (!this.closed && session === this.session) this.syncEditor();
       }
     })();
@@ -470,17 +485,32 @@ export default class ConcordMod extends View {
   }
 
   private location(path: string, line: number, cx: Context): void {
-    const session = this.session;
-    this.run(cx, Effect.gen({ self: this }, function*() {
-      const source = yield* session.read(path);
-      if (session.closed || session !== this.session) return;
-      this.preview?.release();
-      const start = Math.max(0, line - 4);
-      const excerpt = (source ?? '文件不存在').split('\n').slice(start, line + 20).map((value, index) => `${start + index + 1}  ${value}`).join('\n');
-      this.preview = EditorState.new({ language: path.split('.').at(-1) ?? 'text', value: excerpt, readonly: true, font_family: settings().font_family, font_size: 12 });
-      this.previewLabel = `${path}:${line}`;
-    }));
+    this.closePreview();
+    const session = this.session, token = this.previewToken;
+    const current = () => !this.closed && !session.closed && session === this.session && token === this.previewToken;
+    this.previewLabel = `${path}:${line}`; this.previewLoading = true;
+    cx.notify();
+    this.run(cx, Effect.tryPromise({ try: async () => {
+      try {
+        const source = await runEffect(session.read(path));
+        if (!current()) return;
+        const start = Math.max(0, line - 4);
+        const excerpt = (source ?? '文件不存在').split('\n').slice(start, line + 20).map((value, index) => `${start + index + 1}  ${value}`).join('\n');
+        this.preview = EditorState.new({ language: path.split('.').at(-1) ?? 'text', value: excerpt, readonly: true, font_family: settings().font_family, font_size: 12 });
+      } catch (cause) {
+        if (current()) this.previewError = failure(cause).message;
+      } finally { if (current()) this.previewLoading = false; }
+    }, catch: failure }));
   }
+
+  private closePreview(): void {
+    this.previewToken = {}; this.previewLoading = false; this.previewError = ''; this.previewLabel = '';
+    this.preview?.release(); this.preview = undefined;
+  }
+
+  private closeConcept(): void { this.conceptToken = {}; this.conceptText = undefined; }
+
+  private clearDetails(): void { this.closePreview(); this.closeConcept(); }
 
   private link(target: string, cx: Context): void {
     const path = markdownTarget(this.session.selected ?? 'docs/README.md', target);
@@ -488,16 +518,24 @@ export default class ConcordMod extends View {
     const anchor = target.split('#')[1];
     const concept = this.session.concepts.find(item => item.path === path && item.concept.id === anchor);
     if (concept) {
-      const session = this.session;
-      this.run(cx, session.read(path).pipe(Effect.tap(source => Effect.sync(() => {
-        if (session !== this.session) return;
-        const lines = (source ?? '').split('\n');
-        const heading = lines.findIndex(line => /^##\s/u.test(line) && line.includes(`{#${anchor}}`));
-        const remaining = heading < 0 ? [] : lines.slice(heading + 1);
-        const next = remaining.findIndex(line => /^##\s/u.test(line));
-        const definition = (next < 0 ? remaining : remaining.slice(0, next)).join('\n').trim().split(/\n\s*\n/u)[0] ?? '';
-        this.conceptText = `### ${concept.concept.term}\n\n${definition}\n\n${concept.path}`;
-      }))));
+      const session = this.session, token = this.conceptToken = {};
+      const current = () => !this.closed && !session.closed && session === this.session && token === this.conceptToken;
+      this.conceptText = `### ${concept.concept.term}\n\n正在读取定义…\n\n${concept.path}`;
+      cx.notify();
+      this.run(cx, Effect.tryPromise({ try: async () => {
+        try {
+          const source = await runEffect(session.read(path));
+          if (!current()) return;
+          const lines = (source ?? '').split('\n');
+          const heading = lines.findIndex(line => /^##\s/u.test(line) && line.includes(`{#${anchor}}`));
+          const remaining = heading < 0 ? [] : lines.slice(heading + 1);
+          const next = remaining.findIndex(line => /^##\s/u.test(line));
+          const definition = heading < 0 ? '定义已不存在' : (next < 0 ? remaining : remaining.slice(0, next)).join('\n').trim().split(/\n\s*\n/u)[0] ?? '';
+          this.conceptText = `### ${concept.concept.term}\n\n${definition}\n\n${concept.path}`;
+        } catch (cause) {
+          if (current()) this.conceptText = `### ${concept.concept.term}\n\n${failure(cause).message}\n\n${concept.path}`;
+        }
+      }, catch: failure }));
     } else this.open(path, cx);
   }
 
@@ -733,30 +771,31 @@ export default class ConcordMod extends View {
     if (this.pendingPage) return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).children([
       h_flex().id('page-toolbar').flex_none().min_w(0).h(42).px(12).items_center().border_b(1).border_color(color('border'))
         .child(text(this.pendingPage).text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate()),
-      v_flex().id('concord-page-loading').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text('正在读取文档…').text_color(color('dim'))),
+      v_flex().id('concord-page-loading').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text(session.checking ? '正在检查上一页…' : session.saving || session.draft !== undefined ? '正在保存上一页…' : '正在读取文档…').text_color(color('dim'))),
     ]);
     if (!session.selected) return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text('选一页开始阅读').text_color(color('dim')));
     const toolbar = h_flex().id('page-toolbar').flex_none().min_w(0).h(42).px(12).gap(6).items_center().border_b(1).border_color(color('border')).children([
       text(session.selected).text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate(),
-      text(session.saving ? '正在保存…' : session.draft !== undefined ? session.error ? '保存失败' : '等待保存…' : session.check?.ok ? '已保存' : '').text_size(11).text_color(color('dim')),
+      text(session.checking ? '已保存，正在检查…' : session.saving ? '正在保存…' : session.draft !== undefined ? session.error ? '保存失败' : '等待保存…' : session.checkFailed ? '已保存，检查失败' : session.check?.ok ? '已保存' : '').text_size(11).text_color(color('dim')),
     ]);
     const banners: Element[] = [];
-    if (session.check && !session.check.ok) banners.push(this.banner('concord-check', `${session.check.findings.length} 个问题`, session.check.findings.map((finding, index) =>
+    if (!session.checking && session.check && !session.check.ok) banners.push(this.banner('concord-check', `${session.check.findings.length} 个问题`, session.check.findings.map((finding, index) =>
       clickableRow(`finding-${index}`).children([mono(`${finding.path}:${finding.line ?? 1}`), text(finding.message).min_w(0).truncate()]).on_click((_event, cx) => this.location(finding.path, finding.line ?? 1, cx))), session.check.ok ? 'done' : 'blocked'));
     if (session.deleted) banners.push(this.banner('concord-deleted', '这页已被删除', []));
     const body: Element[] = [];
     if (this.conceptText) body.push(v_flex().id('concord-concept-card').p(12).gap(6).rounded(7).bg(color('raised')).children([
-      h_flex().child(div().flex_1()).child(this.closeButton('close-concept', cx => { this.conceptText = undefined; cx.notify(); })),
+      h_flex().child(div().flex_1()).child(this.closeButton('close-concept', cx => { this.closeConcept(); cx.notify(); })),
       TextView.markdown('concord-concept', this.conceptText),
     ]));
     if (!session.deleted) body.push(v_flex().id(`concord-body-${session.selected}`).min_w(0).gap(6).children(livePreviewElements(
       this.editor?.base ?? session.draft ?? session.source, session.selected, this.renderedPage, this.renderedSource, this.pageLease?.paths ?? new Map(),
       this.editor ? { block: this.editor.block, element: Textarea.new(this.editor.state).id('document-editor').min_w(0).font_family(settings().font_family ?? '').text_size(13) } : undefined,
       (block, cx) => this.edit(block, cx), (url, cx) => this.link(url, cx),
+      this.rendering, this.renderError,
     )), ...this.relationshipElements());
-    if (this.preview) body.push(v_flex().id('concord-source-preview').gap(6).border_t(1).border_color(color('border')).py(12).children([
-      h_flex().gap(6).items_center().children([mono(this.previewLabel).flex_1().min_w(0).truncate(), this.closeButton('close-preview', cx => { this.preview?.release(); this.preview = undefined; cx.notify(); })]),
-      Editor.new(this.preview).id('concord-source-editor').h(240).min_h(0),
+    if (this.previewLabel) body.push(v_flex().id('concord-source-preview').gap(6).border_t(1).border_color(color('border')).py(12).children([
+      h_flex().gap(6).items_center().children([mono(this.previewLabel).flex_1().min_w(0).truncate(), this.closeButton('close-preview', cx => { this.closePreview(); cx.notify(); })]),
+      this.preview ? Editor.new(this.preview).id('concord-source-editor').h(240).min_h(0) : text(this.previewLoading ? '正在读取源码…' : this.previewError).text_color(color(this.previewLoading ? 'dim' : 'blocked')),
     ]));
     return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).children([toolbar, ...banners,
       v_flex().id(`concord-document-${session.selected}`).track_scroll(this.pageScroll).flex_1().min_w(0).min_h(0).overflow_y_scroll().p(12).gap(10).children(body),
@@ -768,14 +807,15 @@ export default class ConcordMod extends View {
     this.syncEditor();
     const session = this.session;
     const available = this.directory === 'repository' && this.cli === 'ready' && !this.disconnected;
-    const machine = this.directory === 'not-git' ? this.target?.machine ?? null : session.machine;
-    const path = this.directory === 'no-terminal' ? '' : this.directory === 'not-git' ? this.target?.cwd ?? '' : session.root || this.target?.cwd || '';
+    const machine = this.switchingTarget || this.directory === 'not-git' ? this.target?.machine ?? null : session.machine;
+    const path = this.directory === 'no-terminal' ? '' : this.switchingTarget || this.directory === 'not-git' ? this.target?.cwd ?? '' : session.root || this.target?.cwd || '';
     const location = path ? this.locationLabel(path, machine) : '';
     const toolbar = h_flex().id('concord-toolbar').h(42).flex_none().min_w(0).px(14).gap(8).items_center().border_b(1).border_color(color('border')).children([
       ...(available && session.initialized ? [clickableRow('toggle-documents').w(28).child(icon(this.treeHidden ? 'panel-left-open' : 'panel-left-close')).on_click((_event, current) => { this.treeHidden = !this.treeHidden; current.notify(); })] : []),
       text('Concord').font_semibold(), text(location).id('concord-repository').text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate(),
     ]);
     if (this.directory === 'no-terminal') return this.statusPage(toolbar, '先在这个 tab 里打开一个终端', '终端报告目录后，Concord 会自动跟随');
+    if (this.switchingTarget) return this.statusPage(toolbar, session.checking ? '正在检查原仓库的修改…' : session.draft !== undefined || session.saving ? '正在保存原仓库的修改…' : '正在切换仓库…', location);
     if (this.disconnected) return this.statusPage(toolbar, `连不上 ${this.target?.machine ?? session.machine}`, 'Herdr 恢复连接后自动重试');
     if (this.directory === 'not-git') return this.statusPage(toolbar, '这里不是 Git 仓库', location, [text('在终端里 cd 到一个 Git 仓库，mod 会跟着切换')]);
     if (this.cli !== 'ready') {
@@ -817,7 +857,7 @@ export default class ConcordMod extends View {
     this.pauseWatch();
     for (const task of this.tasks) task.cancel();
     this.tasks.clear();
-    this.preview?.release();
+    this.clearDetails();
     // Start both within the host's bounded close window; a slow write must not delay asset cleanup.
     const save = this.session.saving ? Promise.resolve() : runEffect(this.session.save()).catch(() => {});
     await Promise.all([save, this.assets.close(cx)]);
