@@ -32,9 +32,9 @@
 
 Concord 只使用 [HawDB fork](https://github.com/CorrectRoadH/hawdb) 发布的二进制。本仓库不保留 Rust 源码、Cargo 清单或工具链配置，本机开发、测试、CI 与产品发版均不编译 HawDB，也不回退到 Cargo（[复用已有计算](../../taste.md#t-7)）。
 
-fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。发行版本跟随上游，例如 `hawdb-0.28.0`，没有独立版本后缀。fork 拥有桥接、引擎编译、许可证收集与 macOS 签名；发布 Linux x64 glibc 和 macOS arm64 的生产与故障注入包。构建与真实绑定测试成功后才发布；已有版本只验证和复用，不覆盖。
+fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。引擎版本是上游正式版本；桥接发行版本可以等于引擎版本，也可以追加 `-concord.<正整数>`。桥接修订不改变引擎版本或提交标识；修订号不含前导零，不能用其它预发布或 build metadata 后缀。fork 拥有桥接、引擎编译、许可证收集与 macOS 签名；发布 Linux x64 glibc 和 macOS arm64 的生产与故障注入包。构建与真实绑定测试成功后才发布；已有版本只验证和复用，不覆盖。
 
-`native-release.json` 固定版本、下载仓库、四份资产和 SHA-256。准备入口先校验本机共享缓存，未命中时下载固定版本；归档先校验 SHA-256，再安全解包并核对 target、ABI、引擎 revision、来源与锁摘要、二进制及完整许可证。缺失、离线、下载失败或身份不符均具名失败，不编译替代品。普通 TypeScript 修改不改变该二进制依赖。
+`native-release.json` 的 `version` 固定桥接发行版本，`engineVersion` 固定上游版本，去掉可选桥接修订后的 `version` 必须等于 `engineVersion`；`tag` 必须严格等于 `hawdb-<version>`。清单同时固定下载仓库、四份资产和 SHA-256。准备入口先校验本机共享缓存，未命中时下载固定版本；归档先校验 SHA-256，再安全解包并核对 target、ABI、引擎提交标识、来源与锁摘要、二进制及完整许可证。缺失、离线、下载失败或身份不符均具名失败，不编译替代品。普通 TypeScript 修改不改变该二进制依赖。
 
 缓存为 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<发行标签>/`，版本间隔离。生产产物在 `<target>/`；故障注入产物在 `test-hooks/<target>/`。替换文件通过 rename，不能截断其它进程已映射的绑定。
 

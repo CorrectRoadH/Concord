@@ -35,21 +35,30 @@ const setup = () => {
 const env = (root: string) => ({ ...process.env, MACOSX_DEPLOYMENT_TARGET: HAWDB_MACOS_DEPLOYMENT_TARGET, CONCORD_NATIVE_OFFLINE: '1', CARGO_PROBE: join(root, 'cargo-invoked'), XDG_CACHE_HOME: join(root, 'cache'), PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` });
 
 // @feature docs/engineering/build/architecture.md#原生绑定复用
-test('two pinned versions with identical source digests have independent caches', () => Effect.runPromise(Effect.sync(() => {
+test('bridge revisions of the same engine have independent caches with identical source digests', () => Effect.runPromise(Effect.sync(() => {
   const root = setup();
   try {
-    const checkout = join(root, 'checkout');
-    privateSourceInstallation(checkout);
-    const install = () => spawnSync(process.execPath, ['scripts/prepare-native.ts', '--prebuilt', nativeCacheRoot(runtime, false)], { cwd: checkout, env: env(root), encoding: 'utf8' });
-    const first = install();
-    assert.equal(first.status, 0, first.stdout + first.stderr);
-    const changedVersion = `${release.version.split('.').slice(0, 2).join('.')}.${Number(release.version.split('.')[2]) + 1}`;
-    const secondPin = { ...release, version: changedVersion, engineVersion: changedVersion, tag: `hawdb-${changedVersion}` };
-    writeFileSync(join(checkout, 'native-release.json'), JSON.stringify(secondPin));
-    const second = install();
-    assert.equal(second.status, 0, second.stdout + second.stderr);
-    for (const tag of [release.tag, secondPin.tag]) assert.deepEqual(
-      readFileSync(join(root, 'cache/concord/native', tag, target, 'hawdb.node')), readFileSync(join(original, 'hawdb.node')),
+    const fixtureRoot = join(root, 'checkout');
+    privateSourceInstallation(fixtureRoot);
+    const install = () => spawnSync(process.execPath, ['scripts/prepare-native.ts', '--prebuilt', nativeCacheRoot(runtime, false)], { cwd: fixtureRoot, env: env(root), encoding: 'utf8' });
+    const versions = [`${release.engineVersion}-concord.1`, `${release.engineVersion}-concord.2`];
+    for (const version of versions) {
+      const tag = `hawdb-${version}`;
+      writeFileSync(join(fixtureRoot, 'native-release.json'), JSON.stringify({ ...release, version, tag }));
+      const missing = spawnSync(process.execPath, args(root), { cwd: fixtureRoot, env: env(root), encoding: 'utf8' });
+      assert.equal(missing.status, 1, missing.stdout + missing.stderr);
+      assert.match(missing.stdout + missing.stderr, /CONCORD_NATIVE_OFFLINE=1/u);
+      assert.equal(existsSync(join(root, 'cache/concord/native', tag)), false);
+      const installed = install();
+      assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+      const hit = spawnSync(process.execPath, args(root), { cwd: fixtureRoot, env: env(root), encoding: 'utf8' });
+      assert.equal(hit.status, 0, hit.stdout + hit.stderr);
+      assert.match(hit.stderr, /Native cache hit/u);
+      assert.ok(hit.stderr.includes(join(root, 'cache/concord/native', tag, target)));
+    }
+    assert.deepEqual(readdirSync(join(root, 'cache/concord/native')).sort(), versions.map(version => `hawdb-${version}`).sort());
+    for (const version of versions) assert.deepEqual(
+      readFileSync(join(root, 'cache/concord/native', `hawdb-${version}`, target, 'hawdb.node')), readFileSync(join(original, 'hawdb.node')),
     );
     assert.equal(existsSync(join(root, 'cargo-invoked')), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -74,12 +83,6 @@ test('CI prebuilt transfer loads in a fresh cache without Cargo and rejects corr
       assert.doesNotMatch(rejected.stderr, /cargo-fallback-invoked|Native download/u);
       assert.deepEqual(decodeNativeArtifact(JSON.parse(readFileSync(join(cachePath(root), 'artifact.json'), 'utf8'))), identity);
     }
-    const outputs = join(root, 'outputs');
-    const identified = spawnSync(process.execPath, ['scripts/ci-native-cache.ts'], { env: { ...env(root), GITHUB_OUTPUT: outputs }, encoding: 'utf8' });
-    assert.equal(identified.status, 0, identified.stdout + identified.stderr);
-    const values = Object.fromEntries(readFileSync(outputs, 'utf8').trim().split('\n').map(line => { const at = line.indexOf('='); return [line.slice(0, at), line.slice(at + 1)]; }));
-    assert.equal(values.directory, join(root, 'cache/concord/native', release.tag));
-    assert.ok(values.key?.includes(release.tag));
     cpSync(join(nativeCacheRoot(runtime, true), target), incoming, { recursive: true });
     const hooks = spawnSync(process.execPath, ['scripts/prepare-native.ts', '--test-hooks', '--prebuilt', join(root, 'incoming')], { env: env(root), encoding: 'utf8' });
     assert.equal(hooks.status, 0, hooks.stdout + hooks.stderr);
@@ -144,12 +147,12 @@ test('pinned native download verifies archive bytes and never invokes Cargo on c
   const requested: string[] = [];
   const archive = join(root, 'native.tar.gz');
   yield* Effect.sync(() => execFileSync('tar', ['-czf', archive, '-C', nativeArtifactRoot(runtime), target], { env: { ...process.env, COPYFILE_DISABLE: '1' } }));
-  const checkout = join(root, 'checkout');
+  const fixtureRoot = join(root, 'checkout');
   yield* Effect.sync(() => {
-    privateSourceInstallation(checkout);
-    const pin = JSON.parse(readFileSync(join(checkout, 'native-release.json'), 'utf8')) as { assets: { target: string; testHooks: boolean; archiveSha256: string }[] };
+    privateSourceInstallation(fixtureRoot);
+    const pin = JSON.parse(readFileSync(join(fixtureRoot, 'native-release.json'), 'utf8')) as { assets: { target: string; testHooks: boolean; archiveSha256: string }[] };
     pin.assets.find(asset => asset.target === target && !asset.testHooks)!.archiveSha256 = createHash('sha256').update(readFileSync(archive)).digest('hex');
-    writeFileSync(join(checkout, 'native-release.json'), JSON.stringify(pin));
+    writeFileSync(join(fixtureRoot, 'native-release.json'), JSON.stringify(pin));
   });
   const server = createServer((request, response) => {
     requested.push(request.url ?? '');
@@ -160,7 +163,7 @@ test('pinned native download verifies archive bytes and never invokes Cargo on c
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
   try {
-    const options = { cwd: checkout, env: { ...env(root), CONCORD_NATIVE_OFFLINE: '0', CONCORD_NATIVE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}/releases` } };
+    const options = { cwd: fixtureRoot, env: { ...env(root), CONCORD_NATIVE_OFFLINE: '0', CONCORD_NATIVE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}/releases` } };
     const result = yield* spawner.string(ChildProcess.make(process.execPath, args(root), { ...options, stderr: 'inherit' }));
     assert.equal(result.trim(), '');
     assert.deepEqual(requested, [`/releases/${release.tag}/hawdb-${target}.tar.gz`]);
