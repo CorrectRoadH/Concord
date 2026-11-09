@@ -251,7 +251,7 @@ clear、维护与 shutdown 串行执行。
 | 请求 | 应答 |
 | --- | --- |
 | `hello`、`shutdown` | 见启动与裁决 |
-| `subscribe {kind: workspace}` | 完整状态，之后的事件 |
+| `subscribe` | 完整状态，之后的事件 |
 | `workspace` | 内存中已接受的结果 |
 | `refresh` | 受理即应答，触发增量刷新 |
 | `git-status`、`git-diff {path, area}` | 当前 Git 状态与定向 diff |

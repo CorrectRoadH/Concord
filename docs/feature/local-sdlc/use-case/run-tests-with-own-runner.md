@@ -31,15 +31,10 @@
      id: 'e2e',
      include: ['e2e'],
      argv: ['node', 'tools/e2e-adapter.mjs'],
-     implementationFiles: ['tools/e2e-adapter.mjs'],
-     inputRoots: ['e2e'],
-     frameworkVersion: 'e2e-adapter/1',
-     lockFiles: ['bun.lock'],
-     envNames: ['PATH', 'HOME'],
    }],
    ```
 
-   `implementationFiles`、`inputRoots` 与 `lockFiles` 告诉 Concord 哪些文件决定这个执行器的结果，输入身份由 Concord 计算。字段与上限见 [adapter 协议](../cli.md#adapter-协议)。
+   每项只需声明 `id`、`include` 与 `argv`（或 `builtin`），输入身份由 Concord 按当前工作区图自动计算。字段与上限见 [adapter 协议](../cli.md#adapter-协议)。
 
 3. 让 Concord 收集用例。 {#discover}
 

@@ -8,8 +8,6 @@ Feature、Engineering 与 Roadmap 的 owner 是目录的 README，附页按最�
 
 ## 编辑期间的检查
 
-目录观察记录路径、类型、大小与权限；扫描器可以按大小跳过文件，因此未读取文件的大小变化也参与观察。
+公共 `check` 直接基于工作区服务的内存增量工作区图执行关系与写作检查：未发生 `(mtime, size, inode)` 变化的文件直接复用已解析结果，仅对变更文件重读字节、校验摘要并增量重算 finding，不再每次重建 `LocalRepository` 或关闭持久缓存句柄。
 
-公共 check 的每次尝试创建新的 LocalRepository，完整执行关系与写作检查后验证同一快照，并在下一次尝试前关闭缓存句柄与快照。只有来源观察产生的 `FileChangedSinceRead` 与 `SourceChanged` 属于可重试漂移，不按异常消息匹配。检查成功或产生 findings 后都验证快照，findings 中已确认的 `SourceChanged` 也触发重试；普通格式错误先验证已观察快照，确有漂移才重试，否则返回原错误。权限、`UnsafePath` 与 `RecoveryRequired` 不被漂移覆盖。
-
-快照核验先比较读过的文件摘要与目录集合，再判断 journal；下一次尝试仍重新检查未完成 journal。新仓库遇到存活发布者的暂态现场时，只使用发布租约获取阶段的既有等待；无法证明有存活合作写者的 `RecoveryRequired` 立即失败。重试不用于写操作、runner、证据签发或 dry-run 写入。
+检查期间若检测到正在进行的并发修改，等待增量合并完成后返回一致结论；陈旧或中断的 `journal.json` 在服务启动或恢复时自动清理，不以 `RecoveryRequired` 阻断只读检查。

@@ -28,15 +28,10 @@
      id: 'go',
      include: ['test/cart'],
      builtin: 'go',
-     implementationFiles: [],
-     inputRoots: ['test/cart'],
-     frameworkVersion: 'go1.26.10',
-     lockFiles: ['go.mod'],
-     envNames: ['PATH', 'HOME', 'GOCACHE', 'GOPATH'],
    }],
    ```
 
-   每项声明唯一 `id`、按路径段匹配的 `include`、`builtin` 或 `argv`、`implementationFiles`、`inputRoots`、精确 `frameworkVersion`、`lockFiles` 和环境变量名白名单 `envNames`。`include` 必须处于 `testRoots` 内，各项的匹配范围不得相交。没被任何 adapter 覆盖的文件继续使用原 `runner`。超时与预算见[超时与预算](../cli.md#超时与预算)。
+   每项声明唯一 `id`、按路径段匹配的 `include`，以及 `builtin` 或外部 `argv`（可选配置 `envNames`、超时与预算）。`include` 必须处于 `testRoots` 内，各项的匹配范围不得相交。没被任何 adapter 覆盖的文件继续使用原 `runner`。超时与预算见[超时与预算](../cli.md#超时与预算)。
 
 2. 收集原生清单。 {#discover}
 
@@ -148,7 +143,7 @@
 
 - 原生 ID 包含 provider 命名空间。收集和选择能力与执行框架的精确版本绑定；缺少完整范围时不从 location 点推断范围。Go 顶层列举不证明动态子测试清单完整，额外原生结果不能计为通过。
 - 外部 adapter 按 [adapter 协议](../cli.md#adapter-协议) 通信，超时与预算只能缩小[默认上限](../cli.md#超时与预算)。
-- `inputScope` 展示纳入的仓库内成员摘要、排除项和版本记录。输入根内的文件、受管配置、adapter 实现与 `sourceFiles` 在结束后全部复核；排除项不得隐去实际依赖。系统库、工具链安装、外部服务与包缓存无法冻结时保留 `ExternalInputUnknown`。运行结果中的 `complete` 表示逐项报告完整，不能表示环境已冻结。
+- `inputScope` 展示纳入的仓库内成员摘要与版本记录。当前工作区图的测试文件、源码与配置摘要在运行后核对。系统库、工具链安装、外部服务与包缓存无法冻结时保留 `ExternalInputUnknown`。运行结果中的 `complete` 表示逐项报告完整，不能表示环境已冻结。
 - Cargo 多模块源码归属不能核实时返回 `CargoFileMembershipUnknown`。受管报告目录当前仅在 Linux 通过目录句柄安全读取，其它平台返回 `ReportUnsafe`。
 - Node test 不具备已核实的独立原生收集能力时，观察显示 `NodeCollectionUnsupported`，不据此声明原生精确选择。Node 测试按文件级 command scope 执行。
 - [修复核验](resolve-with-command-evidence.md)在缺陷提交与修复提交上各运行一次。缺陷提交上的结果须为 red，修复提交上须为 green；任一次为 invalid 时返回 `FixUnverifiable`。

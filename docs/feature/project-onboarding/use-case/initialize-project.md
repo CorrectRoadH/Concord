@@ -69,7 +69,7 @@
    concord init --test-root spec --runner-config runner.json
    ```
 
-   `runner.json` 是一个 runner 对象，例如 `{"kind":"command","argv":["node","--test","{file}"],"sourceFiles":[],"timeoutMs":60000}`。init 据此创建 `concord.config.ts`：
+   `runner.json` 是一个 runner 对象，例如 `{"argv":["node","--test","{file}"],"timeoutMs":60000}`。init 据此创建 `concord.config.ts`：
 
    ```ts
    export default {
@@ -77,13 +77,11 @@
        "spec"
      ],
      "runner": {
-       "kind": "command",
        "argv": [
          "node",
          "--test",
          "{file}"
        ],
-       "sourceFiles": [],
        "timeoutMs": 60000
      }
    };
@@ -137,5 +135,5 @@
 | 非 TTY | 不等待交互，结果确定 |
 | 配置无效 | 返回具名错误，保留原文件，不执行配置模块，见[校验错误](../format.md#校验错误) |
 | `--dry-run` | 不写项目文件 |
-| 仓库已有 owner 或租约文件 | 预览遵守未完成 journal 的障碍；确认后在短期独占提交中重验前像 |
+| 仓库已有 owner 或未完成 journal | 预览遵守未完成 journal 的障碍；确认后在写互斥下重验期望摘要 |
 | 没有 owner、没有锁的新仓库 | 不创建私有状态 |

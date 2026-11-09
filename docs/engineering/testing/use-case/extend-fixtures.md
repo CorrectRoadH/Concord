@@ -100,8 +100,6 @@
 
    改动了 `test/support/` 时显式运行 `bun run test` 全套（[测试入口](../cli.md#测试入口)），避免与本机其它重负载检查或性能采样同时运行。
 
-   被修复核验冻结的支持文件列在 `concord.config.ts` 的 `runner.sourceFiles`，见 [Runner 适配](../architecture.md#runner-适配)。
-
 ## 结果
 
 重复的准备收进一个有名字的 Fixture，资源随 Scope 释放，受管内容仍由格式 owner 生成。

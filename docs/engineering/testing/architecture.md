@@ -42,15 +42,7 @@ Bun 拥有测试 worker；Fixture 与 Effect Scope 拥有临时仓库、服务�
 
 ### 修复核验冻结的文件
 
-`runner.sourceFiles` 列出测试运行依赖、修复核验期间不得改变的全部非产品文件。清单从导入图推导：
-
-1. 入口是全部测试文件，以及 runner 的 `argv` 与 `prepare` 直接执行的脚本。
-2. 从入口沿两类边求传递闭包：相对导入（含 `import type` 与字面 `import()`），以及以字面路径加载模块的位置，例如作为 `--import` 或子进程入口的 `new URL('../x.ts', import.meta.url)`。
-3. 结果去掉 `src/` 下的文件、测试文件本身、依赖包与 `concord.config.ts`；入口脚本本身计入。runner 配置由修复核验单独冻结。
-4. 无法静态枚举的加载目标使推导失败，不静默跳过。
-5. `.bun-version`、`native-release.json`、`package.json`、`bun.lock` 与 `tsconfig.test.json` 决定运行时与依赖，但不在导入图中，固定列入。
-
-清单留在 `concord.config.ts`。`test/model/runner-source-files.test.ts` 从导入图推导期望集合并与清单比较，缺项或多出的项都失败。owner 测试直接写出声明，不通过包装函数隐藏。
+修复核验只核对与本次缺陷直接相关的输入：关联 `@issue` 的回归测试文件、测试指向的 Spec 文件，以及 `concord.config.ts` 中的 `runner` 命令配置。不在 `concord.config.ts` 中维护手工 `runner.sourceFiles` 清单，也不维护单独的 `runner.prepare` 命令（[一件事只写一次，其余推导](../../taste.md#t-3)）。
 
 ## CI 任务
 

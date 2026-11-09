@@ -39,7 +39,7 @@
    ```
 
    ```json
-   {"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"name":"docs/feature/cart/use-case/add-item.md#0","contract":"docs/feature/cart/use-case/add-item.md","contractKind":"use-case","issues":[],"status":"active","framework":"marker","skipped":false,"named":false,"markerEndLine":5}],"observations":[]}
+   {"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"name":"docs/feature/cart/use-case/add-item.md#0","contract":"docs/feature/cart/use-case/add-item.md","issues":[],"status":"active","framework":"marker","skipped":false,"named":false,"markerEndLine":5}],"observations":[]}
    ```
 
    每个标记块是一个 case。`id` 由文件与标记位置派生，不需要手写。`concord --json test show <id>` 返回单个 case，附 `evidenceScope` 与 `analysis`。
@@ -85,7 +85,7 @@ sourceIgnore: ['games/ljkx/generated', 'tests/fixtures/vendor']
 - 同时作用于 `sourceRoots` 与 `testRoots` 的自动发现。断链也能被排除。
 - 显式配置的来源根优先：根自身和包含该根的忽略项不排除根内发现，根内更具体的忽略项仍然生效。
 - 扫描、目录复核与工作台监听使用同一套匹配。配置改变后旧结果失效，监听范围重新计算。
-- 文档、Memory、`runner.sourceFiles` 和显式读写不受 `sourceIgnore` 影响。它不是诊断过滤器。
+- 文档、Memory 和显式读写不受 `sourceIgnore` 影响。它不是诊断过滤器。
 
 不论是否配置，自动发现都按路径段排除 `.env`、`.env.*` 与 `dist`，不读取、不解析、不跟随这些路径，规则与 Git ignore 无关。普通文件、symlink 与断链按同一规则排除。显式指定的来源根不受这条排除规则影响，但仍要通过路径安全校验。这条规则只作用于源码自动发现。候选源码中的 symlink 仍然具名拒绝。
 

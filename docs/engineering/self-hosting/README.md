@@ -16,7 +16,6 @@ Concord 用自己的流程开发和验收自己。
 
 - 自举配置使用公开 runner argv，不依赖 shell 或 NiceEval。
 - sourceRoots 覆盖 `src`、`repository`、`web` 与 `scripts`；testRoots 覆盖 `test`。
-- sourceFiles 纳入测试支持、TypeScript 配置、包清单与锁文件。
 - 自举检查只读检查当前仓库的配置与可扫描标记，不递归运行完整门禁，也不修改当前仓库。命令见[自举检查命令](cli.md)，隔离副本的机制见[自举实现](architecture.md)。
 
 ## 维护流程
@@ -29,7 +28,7 @@ Concord 用自己的流程开发和验收自己。
 
 | 情形 | 做法 |
 | --- | --- |
-| 调整 runner | runner argv 或 sourceFiles 变化会使旧的[命令证据](concepts.md#command-evidence)不再代表当前定义。先用 doctor 与 check 验证配置，再按需重新采集 |
+| 调整 runner | runner argv 变化会使旧的[命令证据](concepts.md#command-evidence)不再代表当前定义。先用 doctor 与 check 验证配置，再按需重新采集 |
 | 修复中断写入 | 读取遇到 `RecoveryRequired` 时停止其它写入，检查 journal 与文件内容后运行 `recover`；出现未知编辑时保留现场，由维护者裁决 |
 | 审阅交接 | reviewer 用 trace 与 review 输出定位 Spec、测试和 Memory，再直接审阅正文与源码。命令证据是可复核输入，不替代测试设计判断 |
 

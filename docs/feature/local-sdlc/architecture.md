@@ -51,11 +51,9 @@ runner 在消费者 cwd 下执行。argv 逐参数替换 `{file}`、`{name}`、`
 1. 回归测试由 `@issue` 标记选出，`@status retired` 的标记不能用于修复核验。修复提交默认是核验开始时的 HEAD，`--fix` 可以指定其 first-parent 历史中缺陷提交之后的提交。只要求该 Issue 文件与回归测试文件没有未提交改动。
 2. 缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
 3. 从缺陷提交到修复提交之间，回归测试文件与测试指向的 Spec 字节不变；严格解码后的 runner 命令配置不变。
-4. 在工作区服务管理的轻量验证环境（或按依赖锁摘要复用的私有临时 worktree）中分别验证缺陷提交与修复提交。当依赖锁与 `runner.prepare` 输入未变时直接复用已准备好的依赖环境，仅在依赖变化或首次准备时执行 `runner.prepare`。
+4. 在工作区服务管理的轻量临时 worktree 中分别检出缺陷提交与修复提交，直接复用当前工作区已安装的依赖环境（如链接主 worktree 的 `node_modules`），无需配置或执行单独的 `prepare` 命令，也不维护手工 `sourceFiles` 清单。
 
-   回归测试所在文件被某个 `testAdapters` 覆盖时，按 `test run --require-native` 的同一条原生选择路径运行，两端都必须是 green 或 red，任一端 invalid 时核验以 `FixUnverifiable` 结束；没有被覆盖时运行 runner。
-
-   准备命令以非零码结束、超时或清理未知时，核验报 `FixUnverifiable`，不计为 red。全部命令在单槽测试任务与 OwnedProcess 下执行。
+   回归测试所在文件被某个 `testAdapters` 覆盖时，按 `test run --require-native` 的同一条原生选择路径运行，两端都必须是 green 或 red，任一端 invalid 时核验以 `FixUnverifiable` 结束；没有被覆盖时运行与 `test run` 相同的 runner 命令。全部命令在单槽测试任务与 OwnedProcess 下执行。
 5. 缺陷提交上同一冻结命令以非零码结束，修复提交上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果。零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
 6. 发布前重新核对 Issue 文件与回归测试文件的期望摘要，变化则拒绝。同一次发布删除 Issue 文件，并删除回归测试源码中指向它的 `@issue` 行；测试本身与其它标记保留。输出的结论包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本，供写进提交说明。
 
@@ -139,13 +137,13 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 - 产品使用官方 `typescript/async`。`withTypeScript`、`withTypeScriptFiles` 与 `withTypeScriptSource` 返回 Promise，回调允许值或 Promise。`withTypeScript` 用 AsyncLocalStorage 隔离调用链并惰性取得 API；同链嵌套复用，独立并发调用互不借用。`withTypeScriptFiles` 总是独立捕获作用域。关闭后访问 API 报 `TypeScriptScopeViolation`，包括已提取的方法；所有子调用必须等待 settle 后才关闭作用域。API、AST、snapshot 与 program 不逃逸，缓存仅保存投影后的领域值。纯 AST 操作仍从 `typescript/ast` 同步执行。
 - API 固定 `runExternalCode: false`，使用包内可执行文件，不接受项目路径覆盖。默认文件系统回调拒绝读写，允许的文件只来自完整的请求虚拟文件系统，不回落到宿主。项目配置与 MDX content mapper 不获得执行权限。
-- `withTypeScriptSource` 等待只含当前文件的虚拟快照、SourceFile 与真实语法诊断；领域投影结束后逆序 await snapshot、解析租约和 API 的释放。官方 close 只证明会话关闭，进程退出由进程 owner 另行确认。已有领域主失败保留其错误码，释放失败写入同一错误的 cleanup 诊断；无主失败而清理失败为 TypeScriptUnavailable，不能报告成功。任何单项释放失败都不能阻止其余释放尝试。
+- `withTypeScriptSource` 等待只含当前文件的虚拟快照、SourceFile 与真实语法诊断；领域投影结束后逆序 await snapshot、解析句柄和 API 的释放。官方 close 只证明会话关闭，进程退出由进程 owner 另行确认。已有领域主失败保留其错误码，释放失败写入同一错误的 cleanup 诊断；无主失败而清理失败为 TypeScriptUnavailable，不能报告成功。任何单项释放失败都不能阻止其余释放尝试。
 - `withTypeScriptFiles` 只提供已捕获文件与派生目录，在捕获集合内解析 tsconfig（含 extends）并解析模块。失败保留既有缺口，不读取宿主 tsconfig 或 node_modules。
 - p5 在建立快照前递归捕获静态 import/export、import type、ImportTypeNode 与三斜线相对类型路径，经既有预算与路径校验后固定闭包，解析期间不修改虚拟文件系统。p5 lib 与声明来自固定编译器包与发行包。
 - 配置解析、代码/测试声明分析、依赖分析与 p5 调用链显式 await 编译结果。Effect 边界等待拥有资源的 Promise 完成再释放外层 scope，不允许 Effect 产出未完成的 Promise receipt。
 - 内容缓存的异步方法只在 miss 时等待 parser，保持输入顺序和逐文件失败语义；命中不启动编译器，失败不缓存。跨 await 只保留领域值与待写行，写入时重新取得有效 cache handle，不保留可能被 owner 淘汰的 native handle。
 - `PersistentCache.withView` 及 analysis reader 的借用绑定持续到异步回调 settle；成功、失败和取消均先完成 callback 收尾，再解绑 cache/来源。
-- `LocalRepository.open` 是异步工厂；返回前验证配置并归还初始化 FD、lease 与缓存资源，成功返回不代表已有活动 snapshot。写工厂仍要求 publication validation 能力，不公开未初始化对象。
+- `LocalRepository.open` 是异步工厂；返回前验证配置并归还初始化 FD 与缓存资源，成功返回不代表已有活动 snapshot。写工厂仍要求 publication validation 能力，不公开未初始化对象。
 - 诊断映射回 `InvalidConfigSyntax`、`CodeParseError` 及依赖与 p5 的既有具名边界，编译器不可用统一为 `TypeScriptUnavailable`；位置按 UTF-16。
 
 ## 多语言分析
@@ -167,13 +165,13 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 - 观察总带 `OpenWorldCalls`；空数组、`null` 或全部请求成功都不推导未调用。
 - 预算耗尽分别记 `DepthLimit`、`NodeLimit`、`RequestLimit`，非故障截断可发布已有正向观察。
 
-**输入身份**：项目、root、worktree 与 server/profile 构成一个分析单元。`inputs` 覆盖源码与测试成员及字节、Spec、配置、构建与模块配置、server 实现与版本、选项、profile 与算法版本、预算、位置编码，以及所用原生清单、绑定与选择集合。任一变化使整个单元失效，不能只比对声明所在文件。
+**输入身份**：项目、root、worktree 与 server/profile 构成一个分析单元，`inputs` 按当前增量工作区图的源码、测试与配置摘要计算。
 
 **生命周期**：
 
-1. 启动任何外部进程前，取得 runner 所有权并捕获完整输入，随后关闭来源快照与 HawDB 持久句柄。分析与测试收集不并发占用同一 runner。
-2. 进程组在 Effect Scope 内运行。取消时先发协议取消，再平衡关闭文档、`shutdown`、`exit`；超时后 TERM 再 KILL，并核对进程组与输出管道终结。
-3. 清理成功后，用新快照核验成员、摘要、配置与 run 失效标记，并确认没有未完成的 journal，再在短发布协调中写投影。
+1. 外部进程在工作区服务的单槽任务与 Effect Scope 内运行，不需要因此关闭工作区服务的持久缓存句柄。
+2. 取消时先发协议取消，再平衡关闭文档、`shutdown`、`exit`；超时后 TERM 再 KILL，并核对进程组与输出管道终结。
+3. 清理成功后，若运行期间未发生源码写入失效，直接将观察更新到内存工作区图与持久缓存。
 
 **信任**：server 是受信程序，进程组管理不是文件或网络沙箱。client 不发 `workspace/executeCommand`，对 `workspace/applyEdit` 回 `applied: false`，其它请求按方法白名单严格解码。配置响应只含显式公开项；凭据与原始环境不进入缓存或诊断。
 
@@ -187,7 +185,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ## 原生 adapter
 
-项目测试运行时与 Concord 内部角色分开。内置 Node test 和 Vitest 的版本查询与项目执行从项目环境的 PATH 选择 `node`；Vitest 收集角色由 Concord 自身启动，并从显式项目根加载框架。编译后的 `process.execPath` 不能用于解释任意项目 JavaScript。adapter 实现身份绑定源码或实际编译程序，运行时身份绑定实际项目命令。
+项目测试运行时与 Concord 内部角色分开。内置 Node test 和 Vitest 的版本查询与项目执行从项目环境的 PATH 选择 `node`；Vitest 收集角色由 Concord 自身启动，并从显式项目根加载框架。编译后的 `process.execPath` 不能用于解释任意项目 JavaScript。
 
 **绑定**：先按 provider 的 group key（项目、文件、声明范围与组身份）归并参数项，不凭同名合并。
 
@@ -197,22 +195,15 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 - `@native` 与可验证的自动绑定不一致时报 `NativeSelectorConflict`，歧义报 `AmbiguousNativeBinding`；二者都是执行前失败，不是 check finding。
 - 执行集按 native ID 去重，一次结果可投射到多个关联。
 
-**输入身份**：`inputs` 绑定项目与 root、测试与源码及配置成员集合和字节、fixture、导入支持文件、构建配置、conftest 与 lockfile。它还绑定框架与运行时版本、adapter 真实脚本及传递实现文件、选择能力、算法版本与选中组范围；`node adapter.js` 摘要 adapter.js 而非 node。
+**输入身份与协调**：`inputs` 绑定当前工作区图的测试文件、源码与 adapter 配置摘要，无需手工枚举传递实现文件或构建锁文件。adapter 进程在工作区服务的单槽测试任务下运行，不需要关闭持久缓存句柄；运行期间若源码或测试发生修改，则标记本次观察非当前（`current: false`）。
 
-**协调**：任何 adapter 进程启动前，取得与 runner 相同的运行租约与失效标记，捕获完整快照后关闭来源句柄，再运行外部进程。run 所有权贯穿收集、选择、执行、报告与终结，短发布协调不跨外部调用。
-
-结束后重读全部输入与成员。有漂移、非零收集退出、截断、缺失调用或清理未知时不发布当前清单，旧清单只作历史展示。
-
-**报告**：每个 run 分配新报告目录，每个 Invocation 独占一个执行前为空的子目录。文件以安全目录句柄读取并复核身份，读取后变化也拒绝。
-
-- 拒绝 symlink、多重硬链接、特殊文件、目录逃逸与非本次产生的文件；XML 禁止 DTD 与外部实体。
-- 目录在最后一个使用者结束后清理；清理失败时保留恢复信息，不发布有效原生结果。
+**报告**：每个 run 分配新报告目录，每个 Invocation 独占一个执行前为空的子目录。拒绝 symlink 与目录逃逸；XML 禁止 DTD 与外部实体。目录在最后一个使用者结束后清理。
 
 ## 文档身份
 
 名称语法、分类根、package 与 leaf 布局及短选择器由同一政策模块定义，严格解析共用 codec。类别由路径决定；名称取正文唯一的一级标题，按 Markdown 语法树识别，代码块中的标题不计。大小写与 Unicode 规范化碰撞按[路径安全](#路径安全)保护。
 
-CLI、Web 与页面编辑把选择器解析到实际路径后，冻结路径、类别与完整前像，在租约内重新核对映射，漂移即拒绝。各入口保留自己的错误协议、租约与发布日志，恢复只使用日志中的实际路径。
+CLI、Web 与页面编辑把选择器解析到实际路径后，在工作区服务的写互斥下核对目标路径与期望摘要，变化即拒绝。
 
 ## 生命周期
 
@@ -222,7 +213,7 @@ CLI、Web 与页面编辑把选择器解析到实际路径后，冻结路径、�
 
 Roadmap 采用把目录原子移入 `docs/feature/`，规则见[采用 Roadmap](use-case/plan-and-adopt-contracts.md)。
 
-- 在一个 journal 中写入新路径、改写指向原路径的链接与关系，并删除原目录。
+- 在单一 `journal.json` 中写入新路径、改写指向原路径的链接与关系，并删除原目录。
 - 集合内的相对链接改写，集合外链接保持原目标。
 - 目标冲突与采用期间的来源变化在提交前拒绝。
 - 当前语义转由新 Feature 拥有，采用历史在 Git。
@@ -237,7 +228,7 @@ Memory 没有生命周期状态，过时就改写或删除，历史在 Git。
 
 ### 退役与恢复
 
-测试关系用 `@status retired` 明示退役。缓存可随时 clear/rebuild。未完成写入由 recover 根据 journal 恢复；未知编辑导致具名冲突，必须由维护者裁决。
+测试关系用 `@status retired` 明示退役。缓存可随时 clear/rebuild。未完成写入由服务启动或 `recover` 根据 `journal.json` 自动恢复；遇到外部编辑冲突时保留磁盘当前文件并清理陈旧 journal。
 
 ## 独立与本地
 
@@ -250,7 +241,7 @@ Memory 没有生命周期状态，过时就改写或删除，历史在 Git。
 
 ## 信任边界
 
-仓库作者负责 runner 命令及 sourceFiles 声明。摘要能发现声明范围内的漂移，但不证明忽略依赖、外部服务、完整环境或断言充分性。工具不自动触碰生产、远端或凭据。
+仓库作者负责 runner 命令声明。工具不自动触碰生产、远端或凭据。
 
 ## 操作依赖
 

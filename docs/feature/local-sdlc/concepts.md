@@ -26,7 +26,7 @@ Concord 扫描代码声明的目录。默认取存在的 `src/`，由 `concord.c
 
 ## runner {#runner}
 
-项目在 `concord.config.ts` 中配置的测试执行命令，`kind` 为 `node-test` 或 `command`。Concord 只按它的退出码解释结果。
+项目在 `concord.config.ts` 中配置的测试执行命令（`argv` 与可选 `timeoutMs`）。Concord 只按它的退出码解释结果。
 
 旧写法：`测试运行器`
 

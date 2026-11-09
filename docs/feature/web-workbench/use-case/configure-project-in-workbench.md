@@ -19,7 +19,7 @@
    concord.config.ts
    testRoots: test, tests
    sourceRoots: src
-   runner: node-test
+   runner: node --test {file}
    ```
 
 2. 修改配置并自动保存。 {#save-config}

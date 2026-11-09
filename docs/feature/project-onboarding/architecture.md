@@ -6,28 +6,23 @@
 
 `ConfigSnapshot` 为 `{path: "concord.config.ts", source, digest, config}`：`source` 是实际原文，`digest` 绑定其完整字节。`config` 由 TypeScript 语法树静态求值后按 `ProjectSchema` 严格解码，不加载模块，不解析类型依赖。
 
-配置文件不存在时快照记为 absent，`config` 取[默认值](use-case/maintain-project-config.md#配置项)。项目目录的身份取 worktree 根与 Git-private 目录，配置快照只绑定原文摘要。同一次读取的 `source` 直接作为发布前像。新事务冻结该快照；普通文档与源码写入要求当前配置仍等于冻结 `source`。`config.set` action 单独发布并重写规范化 TS 全文，不与 Memory 修改同批；普通发布不得删除或改名唯一配置。
+配置文件不存在时快照记为 absent，`config` 取[默认值](use-case/maintain-project-config.md#配置项)。项目目录的身份取 worktree 根与 Git-private 目录（在创建工作区时解析一次并缓存），配置在文件 `(mtime, size, inode)` 变化时重新读取与解码。`config.set` action 单独发布并重写规范化 TS 全文，不与 Memory 修改同批；普通发布不得删除或改名唯一配置。
 
 ## 运行时格式识别
 
-安全定位消费者后，先只读识别 Git-private 目录中的 journal。
+定位项目目录后，工作区服务在启动或恢复时自动检查 Git-private 目录中的 `journal.json`：
 
-| 现场 | 结果 |
-| --- | --- |
-| journal、配置或 TS scope 不符合当前 Schema | `InvalidData`，保留现场并阻断写入 |
-| 摘要或前像冲突 | 恢复错误 |
-
-锁外识别只能拒绝，不授权读写；可继续者仍取得共享或独占租约并在锁内重验。拒绝路径不创建、删除、chmod 或改写配置、journal、通用锁、`publication.lock`、事务目标与临时文件。
+- 目标文件仍匹配写入前摘要或计划摘要时，自动回滚或补完并清理 `journal.json`。
+- 目标文件已被外部编辑器修改，或 `journal.json` 属于陈旧格式时，保留磁盘上的当前文件、清理陈旧 `journal.json` 并输出告警，不锁死仓库。
+- `concord.config.ts` 本身不符合当前 Schema 时返回 `InvalidData` 或 `InvalidConfigSyntax`，保留配置文件原文。
 
 ## Journal 与恢复授权
 
-每个 journal scope 携带 `configPath: "concord.config.ts"`、`configSource` 与 `configDigest`。恢复按冻结快照授权：双配置或外部配置编辑不扩大授权，committed 要求完整 after。`config.set` 与 source journal 按精确 before/after 恢复。
-
-配置缺失时只有完整匹配的 prepared-init 可恢复：冻结 `source` 为空且摘要正确，唯一的配置 change 为 `before: null` 与合法非空 after；当前配置不存在或等于 after，全部目标通过前像校验。默认配置不授予恢复权。
+`journal.json` 记录本次写入涉及的目标路径、写入前摘要与计划摘要。`config.set`、文档写入与源码写入共用同一套 `journal.json` 与 CAS 摘要校验，不维护多套锁文件（如 `publication.lock`）。
 
 ## 初始化规划
 
-init 的配置路径与发现范围取自最终计划配置快照；新建目录只能是计划文件的必要祖先。发布与恢复检查 canonical 路径、symlink 与完整前像集合。预览采用来源快照，并遵守未完成 journal 的障碍；确认后才取得独占所有权并重验全部前像，确认期间变化的创建或保留文件返回 `FileChangedSinceRead`。
+init 的配置路径与发现范围取自最终计划配置快照；新建目录只能是计划文件的必要祖先。预览使用只读[来源快照](../portable-coordination/concepts.md#source-snapshot)；正式提交在工作区服务的写互斥下核对期望摘要并原子写入，期间目标文件被外部修改时返回 `FileChangedSinceRead`。
 
 ## 品味
 

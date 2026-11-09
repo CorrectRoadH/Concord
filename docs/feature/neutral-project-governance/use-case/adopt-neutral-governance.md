@@ -17,7 +17,7 @@
    concord init --test-root spec --runner-config runner.json
    ```
 
-   `runner.json` 为 `{"kind":"command","argv":["node","--test","{file}"],"sourceFiles":[],"timeoutMs":60000}`。init 把 `testRoots` 与 `runner` 写进 `concord.config.ts`，其余按约定，见[渐进选择并初始化项目](../../project-onboarding/use-case/initialize-project.md#runner)。品味文件存在即生效。
+   `runner.json` 为 `{"argv":["node","--test","{file}"],"timeoutMs":60000}`。init 把 `testRoots` 与 `runner` 写进 `concord.config.ts`，其余按约定，见[渐进选择并初始化项目](../../project-onboarding/use-case/initialize-project.md#runner)。品味文件存在即生效。
 
 2. 写 Feature 与 Use Case，给测试加标记。 {#link}
 
