@@ -21,7 +21,6 @@ test('waiting for a server handshake times out without creating a service', { ti
 // Only Herdr's exec/run ownership boundary is simulated; every Concord call,
 // server, handshake, projection and shutdown uses the actual public CLI.
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
-// @issue docs/issues/herdr-remote-service-lifetime.md
 test('remote cold reads survive short-command cleanup and terminal queries reuse their hosted service', { timeout: 30_000 }, async () => {
   const root = await fixture();
   let serving: ReturnType<typeof command> | undefined;

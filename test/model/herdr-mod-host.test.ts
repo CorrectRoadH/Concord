@@ -909,7 +909,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-    // @issue docs/issues/herdr-remote-service-lifetime.md
     await t.test('same repository tab switches preserve the active editor and watch without another command', async () => {
       const b = await start();
       try {

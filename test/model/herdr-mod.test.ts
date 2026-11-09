@@ -210,7 +210,6 @@ test('initialization keeps waiting if its first wake-up precedes a readable proj
 });
 
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
-// @issue docs/issues/herdr-remote-service-lifetime.md
 test('remote cold loading keeps its service outside short execs and confirms its handshake before waiting', async () => {
   const b = boundary(), execute = b.host.exec;
   let managed = false, handshaken = false, projections = 0;
@@ -248,7 +247,6 @@ test('remote cold loading keeps its service outside short execs and confirms its
 });
 
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
-// @issue docs/issues/herdr-remote-service-lifetime.md
 test('unreadable initial projections report pending after two waits instead of looping', async () => {
   let projections = 0, waits = 0;
   const session = new ModSession({ exec: async (_command, args) => {
