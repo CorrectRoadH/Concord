@@ -35,6 +35,7 @@ class Element {
   width: number | undefined;
   pointer = false;
   hovered = false;
+  background: string | undefined;
   sizeChanged: ((size: { width: number; height: number }, cx: Context) => void) | undefined;
   private consumed = false;
   id(key: string) { this.key = key; return this; }
@@ -48,7 +49,7 @@ class Element {
   max_w_full() { return this; }
   w(v: number) { this.width = v; return this; } h(_v: number) { return this; } gap(_v: number) { return this; }
   p(_v: number) { return this; } px(_v: number) { return this; } py(_v: number) { return this; }
-  bg(_v: string) { return this; } text_color(_v: string) { return this; } text_size(_v: number) { return this; }
+  bg(v: string) { this.background = v; return this; } text_color(_v: string) { return this; } text_size(_v: number) { return this; }
   rounded(_v: number) { return this; } overflow_y_scroll() { return this; }
   items_stretch() { return this; } overflow_hidden() { return this; }
   size(_v: number) { return this; } flex_none() { return this; }
@@ -404,6 +405,60 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.ok(b.output.find(`page-${page}`), 'package rows are drawn');
         b.click(`page-${page}`);
         await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-use-case
+    await t.test('navigation selects immediately, shows loading and only reveals the latest requested page', async () => {
+      const second = 'docs/feature/cart/second.md', third = 'docs/feature/cart/third.md';
+      const b = await start(boundary => {
+        boundary.colors = { selected: 'selected', hover: 'hover' };
+        boundary.files.set(`/repo/${second}`, '# Second\n');
+        boundary.files.set(`/repo/${third}`, '# Third\n');
+      });
+      try {
+        b.click(`page-${page}`);
+        await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        const before = b.requests.length;
+        b.click(`page-${page}`);
+        assert.equal(b.requests.length, before, 'clicking the open page does not reload');
+        assert.equal(b.output.find('concord-page-loading'), undefined);
+        b.commandGate = pending<void>();
+        b.click(`page-${second}`);
+        assert.equal(b.output.find(`page-${second}`)!.background, 'selected');
+        assert.equal(b.output.find(`page-${second}`)!.hovered, true, 'hover and selection belong to the same full row');
+        assert.equal(b.output.find(`page-${page}`)!.background, undefined);
+        assert.ok(b.output.find('concord-page-loading'));
+        assert.equal(b.output.find('page-toolbar')!.text(), second);
+        assert.equal(b.output.find(`concord-body-${page}`), undefined);
+        await b.until(() => b.requests.some(request => request.args.some(arg => arg.includes(second))));
+        const frame = b.frames.length;
+        b.click(`page-${third}`);
+        assert.equal(b.output.find(`page-${third}`)!.background, 'selected');
+        assert.equal(b.output.find('page-toolbar')!.text(), third);
+        b.commandGate.resolve(); b.commandGate = undefined;
+        await b.until(() => b.output.find(`concord-body-${third}`) !== undefined);
+        assert.equal(b.output.find('concord-page-loading'), undefined);
+        assert.ok(b.frames.slice(frame).every(output => output.find(`concord-body-${second}`) === undefined));
+      } finally { b.commandGate?.resolve(); await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md#open-use-case
+    await t.test('a failed page read ends loading and restores the open page and its selection', async () => {
+      const second = 'docs/feature/cart/second.md';
+      const b = await start(boundary => {
+        boundary.colors = { selected: 'selected' };
+        boundary.files.set(`/repo/${second}`, '# Second\n');
+      });
+      try {
+        b.click(`page-${page}`);
+        await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'ReadFailed', message: 'Unable to read page' }) };
+        b.click(`page-${second}`);
+        assert.ok(b.output.find('concord-page-loading'));
+        await b.until(() => b.output.text().includes('Unable to read page'));
+        assert.equal(b.output.find('concord-page-loading'), undefined);
+        assert.ok(b.output.find(`concord-body-${page}`));
+        assert.equal(b.output.find(`page-${page}`)!.background, 'selected');
+        assert.equal(b.output.find(`page-${second}`)!.background, undefined);
       } finally { await b.close(); }
     });
     // @feature docs/feature/herdr-mod/ui.md#文档列表

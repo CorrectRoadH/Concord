@@ -178,7 +178,7 @@ test('source mod initializes through the real CLI, copies the agent request and 
       const rootPage = `docs/${kind}/cart/README.md`;
       output!.find(`page-${rootPage}`)!.click!(undefined, context);
       await wait(() => output?.find(`concord-body-${rootPage}`) !== undefined);
-      const folder = output!.find(`tree-row-${directory}`);
+      const folder = output!.find(`page-${directory}/README.md`);
       assert.ok(folder, 'kind directory is a navigation node');
       assert.equal(output!.find(`page-${directory}/storage.md`), undefined, 'kind directory starts folded');
       await clickPage(`${directory}/README.md`, `# ${kind} Cart architecture\n`);

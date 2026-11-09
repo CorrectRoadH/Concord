@@ -38,6 +38,7 @@ export default class ConcordMod extends View {
   private saving: Promise<void> | undefined;
   private reloadVersion = 0;
   private pageNavigation = {};
+  private pendingPage: string | undefined;
   private preview: EditorState | undefined;
   private previewLabel = '';
   private conceptText: string | undefined;
@@ -250,7 +251,7 @@ export default class ConcordMod extends View {
     this.pageLease = retained?.pageLease; this.renderedPage = retained?.renderedPage;
     this.renderedSource = retained?.renderedSource ?? ''; this.renderedPath = retained?.renderedPath ?? ''; this.renderKey = retained?.renderKey ?? ''; this.renderedKey = this.renderKey;
     this.treeScroll = retained?.treeScroll ?? VirtualListScrollHandle.new(); this.pageScroll = retained?.pageScroll ?? VirtualListScrollHandle.new();
-    this.reloadVersion = 0; this.pageNavigation = {}; this.saving = undefined;
+    this.reloadVersion = 0; this.pageNavigation = {}; this.pendingPage = undefined; this.saving = undefined;
     this.expanded = retained?.expanded ?? new Set(); this.busy.clear();
     this.collapsedGroups = retained?.collapsedGroups ?? new Set(documentGroups.filter(name => name !== 'Feature' && name !== 'Engineering'));
     while (this.sessions.size > 7) {
@@ -323,16 +324,27 @@ export default class ConcordMod extends View {
   }
 
   private open(path: string, cx: Context): void {
+    if (!this.pendingPage && path === this.session.selected && !this.session.error) { this.expandPath(path); cx.notify(); return; }
     const session = this.session, navigation = this.pageNavigation = {};
+    const current = () => !session.closed && session === this.session && navigation === this.pageNavigation;
     this.finishEditing(cx);
+    this.pendingPage = path;
+    this.expandPath(path);
+    cx.notify();
     this.run(cx, Effect.tryPromise({ try: async () => {
-      await this.flush();
-      if (session.closed || session !== this.session || navigation !== this.pageNavigation) return;
-      this.preview?.release(); this.preview = undefined;
-      this.conceptText = undefined;
-      this.expandPath(path);
-      await runEffect(session.open(path));
-      this.syncEditor();
+      try {
+        await this.flush();
+        if (!current()) return;
+        await runEffect(session.open(path));
+        if (!current()) return;
+        this.preview?.release(); this.preview = undefined;
+        this.conceptText = undefined;
+        this.syncEditor();
+      } catch (cause) {
+        if (current()) throw cause;
+      } finally {
+        if (current()) this.pendingPage = undefined;
+      }
     }, catch: failure }));
   }
 
@@ -631,16 +643,16 @@ export default class ConcordMod extends View {
         const open = this.expanded.has(node.path);
         const glyph: IconName = directory ? open ? 'folder-open' : 'folder' : page?.kind === 'use-case' ? 'route' : 'file-text';
         rows.push({ key: node.path, render: () => {
-          const element = row(`tree-row-${node.path}`).pl(8 + depth * 18).pr(6);
-          if (page?.path === this.session.selected) element.bg(color('selected'));
+          const element = clickableRow(page ? `page-${page.path}` : `directory-${node.path}`).pl(8 + depth * 18).pr(6);
+          if (page?.path === (this.pendingPage ?? this.session.selected)) element.bg(color('selected'));
           const marker = directory ? clickableRow(`toggle-${node.path}`).w(20).px(3).child(icon(glyph).text_color(color('muted'))).on_click((_event, cx) => {
             cx.stop_propagation();
             if (this.expanded.has(node.path)) this.expanded.delete(node.path); else this.expanded.add(node.path);
             cx.notify();
           }) : h_flex().w(20).px(3).flex_none().child(icon(glyph).text_color(color('muted')));
-          const label = h_flex().id(page ? `page-${page.path}` : `directory-${node.path}`).h(28).flex_1().min_w(0).gap(7).items_center().rounded(7).cursor_pointer().hover(element => element.bg(color('hover')))
+          const label = h_flex().h(28).flex_1().min_w(0).gap(7).items_center()
             .children([marker, text(title).flex_1().min_w(0).truncate()]);
-          label.on_click((_event, cx) => {
+          element.on_click((_event, cx) => {
             if (page) { if (directory) this.expanded.add(node.path); this.open(page.path, cx); }
             else { if (open) this.expanded.delete(node.path); else this.expanded.add(node.path); cx.notify(); }
           });
@@ -671,7 +683,7 @@ export default class ConcordMod extends View {
       const prefix = label === 'Feature' ? 'docs/feature/' : label === 'Engineering' ? 'docs/engineering/' : label === 'Roadmap' ? 'docs/roadmap/' : undefined;
       const children = prefix ? this.pageTree(pages, prefix) : pages.map(page => ({ key: page.path, render: () => {
         const element = clickableRow(`page-${page.path}`).children([icon('file-text').text_color(color('muted')), text(page.name === page.path ? page.path.split('/').at(-1)!.replace(/\.md$/u, '') : page.name).min_w(0).flex_1().truncate()]);
-        if (page.path === session.selected) element.bg(color('selected'));
+        if (page.path === (this.pendingPage ?? session.selected)) element.bg(color('selected'));
         return element.on_click((_event, cx) => this.open(page.path, cx));
       } }));
       return [header, ...children];
@@ -718,6 +730,11 @@ export default class ConcordMod extends View {
 
   private pageView(): Element {
     const session = this.session;
+    if (this.pendingPage) return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).children([
+      h_flex().id('page-toolbar').flex_none().min_w(0).h(42).px(12).items_center().border_b(1).border_color(color('border'))
+        .child(text(this.pendingPage).text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate()),
+      v_flex().id('concord-page-loading').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text('正在读取文档…').text_color(color('dim'))),
+    ]);
     if (!session.selected) return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text('选一页开始阅读').text_color(color('dim')));
     const toolbar = h_flex().id('page-toolbar').flex_none().min_w(0).h(42).px(12).gap(6).items_center().border_b(1).border_color(color('border')).children([
       text(session.selected).text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate(),
