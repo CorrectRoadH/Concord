@@ -777,8 +777,10 @@ export default class ConcordMod extends View {
         const anchor = ref.split('#')[1];
         const step = anchor ? [...session.source.matchAll(/^.*\{#([^}]+)\}.*$/gmu)].find(match => match[1] === anchor)?.[0].replace(/^\s*(?:#+|\d+\.)\s*/u, '').replace(/\s*\{#[^}]+\}.*$/u, '') ?? anchor : '整页关联';
         sections.push(heading(step));
-        for (const [index, item] of group.entries()) sections.push(clickableRow(`${glyph}-${ref}-${index}`).children([
-          icon(glyph), text(item.name).min_w(0).flex_1().truncate(), mono(`${item.file}:${item.line}`).text_color(color('dim')).truncate(),
+        for (const [index, item] of group.entries()) sections.push(clickableRow(`${glyph}-${ref}-${index}`).h(48).items_start().py(6).children([
+          icon(glyph), v_flex().min_w(0).flex_1().gap(2).children([
+            text(item.name).min_w(0).truncate(), mono(`${item.file}:${item.line}`).min_w(0).text_color(color('dim')).truncate(),
+          ]),
         ]).on_click((_event, cx) => this.location(item.file, item.line, cx)));
       }
     }
