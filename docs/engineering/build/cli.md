@@ -16,7 +16,7 @@
 
 原生绑定只在 `native-release.json` 固定版本升级时更新。`build:native` 下载并校验本机的生产与测试绑定；遇到缺包、下载失败或校验不一致时非零退出，绝不调用编译器。
 
-`bun run gate` 是检查入口，不是构建命令，见[检查入口](../testing/README.md#检查入口)。任务结果不缓存。
+`bun run test` 运行测试，静态检查使用各自入口，见[检查入口](../testing/README.md#检查入口)。任务结果不缓存。
 
 ## 环境变量
 

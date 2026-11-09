@@ -16,7 +16,13 @@
 1. 在已推送的 commit 上完成 Concord 驱动的 Spec、实现与测试工作。 {#prepare}
 
    ```sh
-   bun run gate --changed
+   bun run typecheck
+   bun run typecheck:test
+   bun run typecheck:scripts
+   bun run typecheck:web
+   bun run lint
+   bun run concord --json --dry-run check
+   bun run test --changed
    git push origin master
    ```
 

@@ -4,7 +4,7 @@ import type { Scope } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import { Effect, FileSystem } from 'effect';
 import { acquireRecoverablePublicationLease, CoordinationError, releaseFileLease } from '../src/base/publication/file-lease.ts';
-import { buildCacheTree } from './gate-build-cache.ts';
+import { buildCacheTree } from './build-cache.ts';
 import { ArchiveFailed, sha256 } from './archive-support.ts';
 
 

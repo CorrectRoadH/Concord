@@ -1,9 +1,16 @@
-import { defineBenchmarks } from '../scripts/perf/scenario.ts';
+import type { Scope } from 'effect';
+import { bench } from 'mitata';
+import { pageSource } from '../src/model/herdr-mod/index.ts';
+import { runBenchmarks } from './run.ts';
 
-// Actual built mod and public CLI; the external native UI boundary is substituted.
-export default defineBenchmarks('herdr-mod', [
-  { id: 'herdr-mod/first-screen', consumer: 'fixture:mod', state: 'warm', run: { mod: 'first-screen' }, expect: { exitCode: 0 } },
-  { id: 'herdr-mod/switch-back', consumer: 'fixture:mod', server: 'running', state: 'warm', run: { mod: 'switch-back' }, expect: { exitCode: 0 } },
-  { id: 'herdr-mod/switch-new', consumer: 'fixture:mod', server: 'running', state: 'warm', run: { mod: 'switch-new' }, expect: { exitCode: 0 } },
-  { id: 'herdr-mod/push', consumer: 'fixture:mod', state: 'warm', run: { mod: 'push' }, expect: { exitCode: 0 } },
-]);
+export function registerBenchmarks(_scope: Scope.Scope): void {
+  // Fixed ~4 KiB Markdown: paragraphs, definitions, images, Mermaid and p5 blocks. No host/CLI timing.
+  const source = '# Read a page\n\n' + 'A Snapshot keeps current facts and a readable [reference][page].\n\n'.repeat(57)
+    + '![preview](image.png)\n\n[page]: page.md\n\n```mermaid\nflowchart LR\n A --> B\n```\n\n```p5\nfunction setup() { createCanvas(100, 100); }\n```\n';
+  bench('herdr-mod/page-source', () => {
+    const result = pageSource(source);
+    if (result.special.length !== 3) throw new Error('Page source lost its image or live blocks');
+    return result;
+  });
+}
+if (import.meta.main) runBenchmarks(registerBenchmarks);

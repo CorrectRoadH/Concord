@@ -25,7 +25,7 @@ Mac 的 production-monitor 布局中，终端 `pwd` 与标题为 `~/Code/reader`
 
 ## 复现
 
-先打开本地仓库，再切到远端仓库，再切回已缓存的本地仓库。通过真实 View 与同步启动任务的宿主边界运行：`bun run gate test/model/herdr-mod-host.test.ts`。
+先打开本地仓库，再切到远端仓库，再切回已缓存的本地仓库。通过真实 View 与同步启动任务的宿主边界运行：`bun run test test/model/herdr-mod-host.test.ts`。
 
 ## 期望
 

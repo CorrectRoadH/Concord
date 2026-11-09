@@ -12,8 +12,10 @@ cd Concord
 bun install --frozen-lockfile
 bun run build:native # 下载并校验固定版本的 HawDB 二进制
 bun run concord --help
-bun run gate
+bun run test
 ```
+
+交付另行执行[检查入口](../testing/README.md#检查入口)中的类型检查、lint 与自举检查；性能受影响时独立运行 benchmark。
 
 任务运行使用 `bun run`；Vite、tsdown 与 Oxlint 使用项目锁定的本地版本，并由 Bun 执行。依赖通过 `bun install` 管理。
 
@@ -23,7 +25,7 @@ bun run gate
 
 ## 运行时版本
 
-Concord 运行在 Bun 上。开发、测试、CI 与发版归档使用同一个 Bun 精确版本，唯一记录在仓库根目录的 `.bun-version` 中；`package.json` 不声明 `engines`。启动与模块加载是高频 CLI 的成本，交付按真实命令测量，不以空进程或模块加载的耗时代替产品性能验收（[快到每次都愿意跑](../../taste.md#t-7)）。
+Concord 运行在 Bun 上。开发、测试、CI 与发版归档使用同一个 Bun 精确版本，唯一记录在仓库根目录的 `.bun-version` 中；`package.json` 不声明 `engines`。性能测量默认直接调用业务操作，启动成本按需要单独分析，不能用空操作代替业务测量（[快到每次都愿意跑](../../taste.md#t-7)）。
 
 产品代码可以使用该版本 Bun 的 API，以及它实现的 Node.js 兼容 API。开发工具与测试控制器也运行在 Bun 上，不要求安装 Node.js。`node:` 导入与 `@types/node` 声明只使用 Bun 提供的兼容 API。Vitest 开发依赖仅提供产品 adapter 的上游 API 类型；运行时从消费项目加载，不在门禁执行 Vitest。升级产品运行时更新 `.bun-version`，交付前跑完整门禁与归档构建。
 

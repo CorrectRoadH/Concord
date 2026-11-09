@@ -1,4 +1,4 @@
-// 跨进程保证：服务与 IPC——CLI fixture 在官方测试文件退出前停止所有消费者服务，确认 PID 消失后才删除目录。
+// 跨进程保证：服务与 IPC——CLI fixture 在官方 worker 复用前停止所有消费者服务，确认 PID 消失后才删除目录。
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
@@ -8,30 +8,44 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
-test('the CLI fixture stops every real consumer service before its test file exits', { timeout: 45_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+test('the CLI fixture stops every real consumer service before the worker starts another file', { timeout: 90_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-cli-cleanup-' });
-  const file = join(root, 'fixture.test.ts'), receipt = join(root, 'pids.json');
-  yield* fs.writeFileString(file, `import { consumer, call, write, test, CheckOutput } from ${JSON.stringify(new URL('../support/cli-fixture.ts', import.meta.url).href)};
-import { readFileSync, writeFileSync } from 'node:fs';
+  const files = ['first', 'second'].map(name => join(root, `${name}.test.ts`)), receipt = join(root, 'pids.json');
+  for (const file of files) yield* fs.writeFileString(file, `import { consumer, call, scratch, test, CheckOutput } from ${JSON.stringify(new URL('../support/cli-fixture.ts', import.meta.url).href)};
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 test('two consumer services', async () => {
+  const previous = existsSync(${JSON.stringify(receipt)}) ? JSON.parse(readFileSync(${JSON.stringify(receipt)}, 'utf8')) : [];
+  for (const record of previous) {
+    assert.equal(existsSync(record.scratch), false, 'previous file scratch survived its after hook');
+    for (const pid of record.pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+  }
   const pids = [];
   for (const name of ['first', 'second']) {
     const root = await consumer(name);
     await call(root, ['docs', 'check'], CheckOutput);
     pids.push(JSON.parse(readFileSync(join(root, '.git/concord/server/current.json'), 'utf8')).pid);
   }
-  writeFileSync(${JSON.stringify(receipt)}, JSON.stringify(pids));
+  writeFileSync(${JSON.stringify(receipt)}, JSON.stringify([...previous, {pids, scratch, worker: process.pid}]));
 });
 `);
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--no-env-file', '--config=/dev/null', resolve('scripts/test-built.ts'), file], {
-    env: { ...process.env, CONCORD_TEST_TIMINGS: undefined, CONCORD_TEST_COMPILE_CACHE: undefined }, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['test', '--no-env-file', '--config=/dev/null', '--conditions=concord-source', '--preload',
+    resolve('test/support/source-runtime.ts'), '--parallel=1', '--timeout=60000', ...files], {
+    env: { ...process.env, NODE_TEST_CONTEXT: undefined }, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
   }));
   const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.all)), child.exitCode], { concurrency: 'unbounded' });
   assert.equal(Number(code), 0, text);
-  const pids = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.Int)))(yield* fs.readFileString(receipt));
-  assert.equal(pids.length, 2);
-  for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `consumer service ${pid} survived official runner exit`);
+  const records = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.Struct({
+    pids: Schema.Array(Schema.Int), scratch: Schema.String, worker: Schema.Int,
+  }))))(yield* fs.readFileString(receipt));
+  assert.equal(records.length, 2);
+  assert.equal(records[0]?.worker, records[1]?.worker);
+  for (const record of records) {
+    assert.equal(record.pids.length, 2);
+    assert.equal(yield* fs.exists(record.scratch), false);
+    for (const pid of record.pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `consumer service ${pid} survived official runner exit`);
+  }
 })).pipe(Effect.provide(NodeServices.layer))));

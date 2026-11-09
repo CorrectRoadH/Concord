@@ -40,7 +40,7 @@ export const compileApplication = Effect.fn('build.compileApplication')(function
   const input = () => Effect.gen(function*() {
     const current = yield* bunCompilerIdentity(repository, target);
     return yield* archivePartInput(repository, ['src', 'native-release.json', 'package.json', 'bun.lock', 'patches', '.bun-version',
-    'tsconfig.json', 'scripts/compile-application.ts', 'scripts/compile-startup.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts',
+    'tsconfig.json', 'scripts/compile-application.ts', 'scripts/compile-startup.ts', 'scripts/application-cache.ts', 'scripts/build-cache.ts',
     'scripts/archive-support.ts', 'node_modules/typescript/package.json'], current);
   });
   const compiled = yield* cachedArchivePart('compiled', yield* input(), output => Effect.gen(function*() {

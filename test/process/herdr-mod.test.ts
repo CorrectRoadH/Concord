@@ -20,14 +20,14 @@ test('the native mod reads and refreshes through the public CLI and a shared wor
     }
     const path = join(root, 'docs/feature/measured/README.md'), original = readFileSync(path, 'utf8');
     for (const mode of ['first-screen', 'push']) {
-      const reply = spawnSync(process.execPath, [resolve('scripts/herdr-mod-host.ts'), cli, root, mode], { encoding: 'utf8', timeout: 40_000 });
+      const reply = spawnSync(process.execPath, [resolve('test/support/herdr-mod-host.ts'), cli, root, mode], { encoding: 'utf8', timeout: 40_000 });
       assert.equal(reply.status, 0, reply.stdout + reply.stderr);
-      const result = JSON.parse(reply.stdout) as { ms: number; text: string; boundary: string; calls: string[][] };
-      assert.ok(result.ms > 0); assert.match(result.text, /measured/u);
+      const result = JSON.parse(reply.stdout) as { text: string; boundary: string; calls: string[][] };
+      assert.match(result.text, /measured/u);
       assert.match(result.boundary, /no native drawing/u);
       assert.ok(result.calls.every(call => ['--version', 'doctor', 'list', 'show', 'concepts', 'taste', 'action', 'workspace', 'rev-parse'].includes(call[0]!)));
       assert.equal(existsSync(join(root, '.git/concord/server/current.json')), true);
-      assert.equal(readFileSync(path, 'utf8'), original, 'measurement restores its edited consumer source');
+      assert.equal(readFileSync(path, 'utf8'), original, 'host restores its edited consumer source');
       if (mode === 'push') assert.match(result.text, /MOD_PUSH_/u);
     }
   } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }

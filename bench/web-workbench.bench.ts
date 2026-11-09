@@ -1,40 +1,52 @@
-import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { Effect, FileSystem, Schema, type Scope } from 'effect';
 import { join } from 'node:path';
-import { io } from '../scripts/perf/process.ts';
-import { Effect, Schema } from 'effect';
-import { defineBenchmarks, type BenchScenario } from '../scripts/perf/scenario.ts';
-import { prepareView, WorkspaceResponse } from './fixtures/view.ts';
-const Response = Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json });
-const actionBody = (context: Parameters<typeof prepareView>[0]) => {
-  const path = 'docs/feature/measured/format/page-0.md', body = readFileSync(join(context.consumer.root, path), 'utf8');
-  return { action: 'document.set', path, body, expectedDigest: `sha256:${createHash('sha256').update(body).digest('hex')}` };
-};
-const requests = [
-  { name: 'workspace', path: 'api/workspace' },
-  { name: 'jobs', path: 'api/jobs', delayMs: 10 },
-  { name: 'file', path: 'api/file?path=docs%2Ffeature%2Fmeasured%2Fformat%2Fpage-0.md', delayMs: 10 },
-  { name: 'document-set', path: 'api/action', delayMs: 10, body: actionBody },
-];
-const scenarios: BenchScenario[] = requests.map(({ name, ...request }) => ({
-  id: `web-workbench/${name}`, consumer: 'fixture:web', state: 'warm',
-  prepare: context => context.smoke ? prepareView(context) : Effect.succeed(undefined),
-  beforeEach: context => context.smoke ? Effect.succeed(undefined) : prepareView(context),
-  run: { request: { ...request, companions: requests.filter(other => other.name !== name).map(({ name: _name, ...other }) => other) } },
-  expect: { exitCode: 0, json: name === 'workspace' ? WorkspaceResponse : Response },
-}));
-const actionArgv = ['action', '--input', ''];
-export default defineBenchmarks('web-workbench', [
-  ...scenarios,
-  { id: 'web-workbench/action', consumer: 'fixture:web', state: 'warm',
-    prepare: context => io('Prepare shared action input', () => {
-      const path = 'docs/feature/measured/format/page-0.md', body = readFileSync(join(context.consumer.root, path), 'utf8');
-      actionArgv[2] = join(context.outputDir, 'action-input.json');
-      writeFileSync(actionArgv[2]!, JSON.stringify({ action: 'document.set', path, body, expectedDigest: `sha256:${createHash('sha256').update(body).digest('hex')}` }));
-    }), run: actionArgv, expect: { exitCode: 0 } },
-  { id: 'web-workbench/git-status', consumer: 'self', state: 'warm', run: ['git', 'status'], expect: { exitCode: 0 } },
-  { id: 'web-workbench/workspace-projection', consumer: 'fixture:web', state: 'warm',
-    prepare: context => prepareView(context).pipe(Effect.scoped),
-    beforeEach: context => prepareView(context).pipe(Effect.scoped),
-    run: ['workspace', 'projection', '--json'], expect: { exitCode: 0 } },
-]);
+import { bench } from 'mitata';
+import { executeViewAction, getViewFile, getViewGitStatus, getWorkspaceSnapshot } from '../src/app/index.ts';
+import { digest } from '../src/model/index.ts';
+import { documentBody, featurePath, repositoryFixture } from './fixtures/index.ts';
+import { runBenchmarks } from './run.ts';
+
+const Mutation = Schema.Struct({ changedPaths: Schema.Array(Schema.String) });
+export function registerBenchmarks(scope: Scope.Scope): void {
+  // Representative frozen repository, real app operations; no HTTP/CLI latency claims.
+  bench('web-workbench/file-read', async function*() {
+    const fixture = await repositoryFixture(scope);
+    yield async () => {
+      const file = await fixture.runtime.runPromise(getViewFile(fixture.root, featurePath));
+      if (file.body !== documentBody) throw new Error('Unexpected page source');
+      return file;
+    };
+    await fixture.close();
+  });
+  bench('web-workbench/git-status', async function*() {
+    const fixture = await repositoryFixture(scope);
+    yield async () => fixture.runtime.runPromise(getViewGitStatus(fixture.root));
+    await fixture.close();
+  });
+  bench('web-workbench/document-write', async function*() {
+    const fixture = await repositoryFixture(scope);
+    const changedBody = `${documentBody}\nA new current fact.\n`;
+    // Reset by rename and then publish different bytes every callback; reset/readback cost is INCLUDED.
+    yield async () => fixture.runtime.runPromise(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      const target = join(fixture.root, featurePath), temporary = `${target}.benchmark-tmp`;
+      yield* fs.writeFileString(temporary, documentBody);
+      yield* fs.rename(temporary, target);
+      const result = yield* executeViewAction(fixture.root, { action: 'document.set', path: featurePath, body: changedBody, expectedDigest: digest(documentBody) });
+      const receipt = yield* Schema.decodeUnknownEffect(Mutation, { onExcessProperty: 'ignore' })(result);
+      if (!receipt.changedPaths.includes(featurePath) || (yield* fs.readFileString(target)) !== changedBody) throw new Error('Document write did not publish its changed body');
+      return receipt;
+    }));
+    await fixture.close();
+  });
+  bench('web-workbench/workspace-build', async function*() {
+    const fixture = await repositoryFixture(scope);
+    yield async () => {
+      const snapshot = await fixture.runtime.runPromise(getWorkspaceSnapshot(fixture.root, 'use'));
+      if (!snapshot.complete || snapshot.documents.length !== 110) throw new Error(JSON.stringify(snapshot.findings));
+      return snapshot;
+    };
+    await fixture.close();
+  });
+}
+if (import.meta.main) runBenchmarks(registerBenchmarks);

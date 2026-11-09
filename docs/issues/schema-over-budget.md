@@ -12,4 +12,4 @@ relations:
 
 ## 期望
 
-p50 不超过 [性能预算](../feature/local-sdlc/performance.md)。先用 `bench:profile local-sdlc/schema` 分出 CLI 启动、模块加载与 JSON Schema 生成各自的耗时，再改占比最大的一段；不提高预算。
+定位 CLI 启动、模块加载与 JSON Schema 生成各自的成本。使用 Bun 的 CPU profiler 运行真实 `schema` 命令，采样边界与上面的整进程观测保持一致；进程内 Mitata 场景不证明这一启动成本。建立同边界的参照与验收阈值后再评价优化，不将不同工具和边界的数值直接比较。

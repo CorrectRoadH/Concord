@@ -1,19 +1,20 @@
-# 面向人的项目工作台的性能预算
+# 项目工作台的性能测量
 
-本页声明 web-workbench 高频操作的性能预算，测量方法见[性能测量](../../engineering/performance/README.md#测量方法)，表格写法见[预算表](../../engineering/performance/format.md#预算表)。
+本页拥有 web-workbench 的测量场景与预算，方法见[性能测量](../../engineering/performance/README.md#测量方法)。场景直接使用 Mitata，入口为 `bench/web-workbench.bench.ts`。
 
-## 性能预算
+## 测量场景
 
-测量场景为 `bench/web-workbench.bench.ts`。四路 HTTP 场景使用独立客户端与服务进程，在冻结的 1112 个源码文件、110 个附页消费者上测量：workspace 请求先发出，10ms 后并发 jobs、file 与 document.set，每次样本的服务准备与关闭不计入请求耗时。document.set 使用相同正文与真实前像摘要，结束后消费者内容与提交保持不变。原生产物正常与摘要不匹配回源分别采样。
+| 场景 | 测量内容 |
+| --- | --- |
+| `web-workbench/file-read` | 通过应用操作读取正文 |
+| `web-workbench/git-status` | 读取真实 Git 状态 |
+| `web-workbench/document-write` | 重置并执行真实文档写入 |
+| `web-workbench/workspace-build` | 构建当前工作区快照 |
 
-| 场景 | 测量内容 | p50 预算 |
-| --- | --- | ---: |
-| `web-workbench/workspace` | 已有可读结果时的 `GET /api/workspace` | 250ms |
-| `web-workbench/jobs` | 并发任务请求 | 211ms |
-| `web-workbench/file` | 并发文件请求 | 280ms |
-| `web-workbench/document-set` | 并发 document.set 请求 | 550ms |
-| `web-workbench/action` | CLI 共享文档动作 | 860ms |
-| `web-workbench/git-status` | CLI Git 状态 | 460ms |
-| `web-workbench/workspace-projection` | 新进程 `workspace projection --json` | 600ms |
+计时边界为进程内真实操作与其自身资源释放，排除 CLI 宿主启动和格式化。固定输入、消费者与缓存状态由场景源码声明；修改这些条件时重新建立参照结果，不使用整进程数字作为操作预算。
 
-`GET /api/workspace` 的 warm p95 另不超过 600ms。就绪请求不含全量扫描；首次构建另报时长与状态，不计入 warm。jobs、file、document.set、action 与 git-status 的阈值为参照实测 p50 加约 20% 余量取整。
+Mitata 的成功退出表示测量完成，预算由交付者对照适用条件与原生统计判断。没有相同边界的参照证据时只报告测量结果，不宣称预算通过。
+
+## 用户可见目标
+
+应用操作的数字不证明 HTTP 请求耗时。已就绪的 `GET /api/workspace` 目标仍为 p50 250ms、p95 600ms；首次构建单独报告。HTTP 并发、响应完成与连接回收由真实协议路径验证，不能以函数微基准替代。

@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  gate:
-    uses: ./.github/workflows/gate.yml
+  tests:
+    uses: ./.github/workflows/test.yml
     with:
       ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
 
@@ -146,7 +146,7 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: [package, gate]
+    needs: [package, tests]
     timeout-minutes: 3
     if: inputs.tag != ''
     runs-on: ubuntu-24.04
@@ -185,7 +185,7 @@ jobs:
           if ! grep -q 'HTTP 404' ../release-api-error; then cat ../release-api-error >&2; exit 1; fi
           gh release create "$RELEASE_TAG" "${expected[@]}" SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --verify-tag --target "$RELEASE_COMMIT" --title "Concord $version" \
-            --notes "Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives. Archives built on Ubuntu 24.04 and macOS 15; the same tag commit passed the repository gate. Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
+            --notes "Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives. Archives built on Ubuntu 24.04 and macOS 15; the same tag commit passed repository tests and static checks. Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
       - name: Notify Homebrew tap of the published release
         env:
           GH_TOKEN: ${{ github.token }}

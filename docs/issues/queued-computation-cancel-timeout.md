@@ -15,4 +15,4 @@ relations:
 
 ## 复现
 
-重复运行 `bun run gate test/process/workspace-computation.test.ts`，若干次内出现 30 秒超时。
+重复运行 `bun run test test/process/workspace-computation.test.ts`，若干次内出现 30 秒超时。

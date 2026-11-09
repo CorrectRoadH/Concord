@@ -85,7 +85,7 @@ findings: none
 
 ## 验收方式
 
-使用打包后的公开 CLI 在隔离的 Git 接入项目中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `bun run gate`，并使用 Concord 的 check、trace 与 review 检查自身 Spec 关联。
+使用打包后的公开 CLI 在隔离的 Git 接入项目中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `bun run test`，并使用 Concord 的 check、trace 与 review 检查自身 Spec 关联。
 
 ## 细节
 

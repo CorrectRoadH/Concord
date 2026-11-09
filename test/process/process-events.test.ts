@@ -8,7 +8,6 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, FileSystem, Schema } from 'effect';
 import { NodeServices } from '@effect/platform-node';
-import { writeProcessEventReport } from '../../scripts/process-events.ts';
 import { ProcessEvent } from '../../src/base/process/index.ts';
 
 // @feature docs/engineering/testing/README.md#成本与稳定
@@ -17,8 +16,8 @@ test('isolated Bun files preserve exact observed starts without claiming complet
   const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-process-events-' });
   const fixture = join(root, 'fixture.test.ts');
   const unknown = join(root, 'unknown.test.ts');
-  const output = join(root, 'output');
-  yield* fs.makeDirectory(output);
+  const eventsDirectory = join(root, 'events');
+  yield* fs.makeDirectory(eventsDirectory);
   const cli = resolve('src/entry/cli/entry.ts');
   const owned = new URL('../../src/base/process/index.ts', import.meta.url).href;
   const runtime = new URL('../../src/base/environment/index.ts', import.meta.url).href;
@@ -46,23 +45,13 @@ test('starts', async () => {
 });
 `);
   yield* fs.writeFileString(unknown, `import test from 'node:test'; import { spawnSync } from 'node:child_process'; test('unknown', () => { spawnSync('sh', ['-c', 'true']); });`);
-  const reporter = new URL('../../scripts/test-reporter.ts', import.meta.url).href;
-  const reports = new URL('../../scripts/process-events.ts', import.meta.url).href;
-  const services = import.meta.resolve('@effect/platform-node/NodeServices');
-  const program = `import { Effect } from ${JSON.stringify(effect)}; import * as NodeServices from ${JSON.stringify(services)}; import { runNodeTests } from ${JSON.stringify(reporter)}; import { writeProcessEventReport } from ${JSON.stringify(reports)}; await Effect.runPromise(Effect.scoped(Effect.gen(function*(){ const failed = yield* runNodeTests({ files: ${JSON.stringify([fixture, unknown])}, concurrency: 1, timeout: 60000 }, ${JSON.stringify(output)}); yield* writeProcessEventReport(${JSON.stringify(output)}, ${JSON.stringify([fixture, unknown])}); if(failed) process.exitCode=1; })).pipe(Effect.provide(NodeServices.layer)));`;
-  const runner = join(root, 'runner.ts');
-  yield* fs.writeFileString(runner, program);
-  const result = yield* Effect.sync(() => spawnSync(process.execPath, [runner], { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, CONCORD_TEST_EVENT_DIRECTORY: join(root, 'events'), NODE_TEST_CONTEXT: undefined } }));
+  const result = yield* Effect.sync(() => spawnSync(process.execPath, ['test', '--no-env-file', '--config=/dev/null',
+    '--conditions=concord-source', '--preload', resolve('test/support/source-runtime.ts'), '--parallel=1', '--timeout=60000', fixture, unknown], {
+    cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, CONCORD_TEST_RUN_ID: 'file-lifecycle-run',
+      CONCORD_TEST_EVENT_DIRECTORY: eventsDirectory, CONCORD_TEST_FILE_ID: undefined, NODE_TEST_CONTEXT: undefined },
+  }));
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  const report = yield* writeProcessEventReport(output, [fixture, unknown]);
-  // Bun cannot guarantee all named builtin exports were observed. The known
-  // starts stay exact, including the adapter start, while total coverage is unknown.
-  assert.equal(report.files[0]?.status, 'unknown', JSON.stringify(report));
-  assert.equal(report.files[0]?.counts, null);
-  assert.deepEqual(report.files[0]?.observed, { cli: 7, worker: 0, service: 0, compute: 0, operation: 0 });
-  assert.equal(report.files[1]?.status, 'unknown');
-  assert.equal(report.files[1]?.counts, null);
-  const entries = yield* fs.readDirectory(join(root, 'events'));
+  const entries = yield* fs.readDirectory(eventsDirectory);
   const events: ProcessEvent[] = [];
   for (const entry of entries) {
     const content = yield* fs.readFileString(join(root, 'events', entry));
@@ -71,7 +60,17 @@ test('starts', async () => {
   const roots = events.filter(event => event.kind === 'coverage-start');
   assert.equal(roots.filter(event => event.file === fixture).length, 1);
   assert.equal(roots.filter(event => event.file === unknown).length, 1);
-  assert.notEqual(roots[0]?.pid, roots[1]?.pid);
+  assert.equal(roots[0]?.pid, roots[1]?.pid, 'one official worker can execute both isolated files');
+  for (const file of [fixture, unknown]) {
+    const started = events.filter(event => event.file === file && event.kind === 'coverage-start');
+    const ended = events.filter(event => event.file === file && event.kind === 'coverage-end');
+    assert.equal(started.length, 1);
+    assert.equal(ended.length, 1, 'the real file after hook must close each association');
+    assert.equal(ended[0]?.pid, started[0]?.pid);
+    assert.equal(ended[0]?.healthy, false, 'incomplete Bun hooks cannot claim complete coverage');
+    assert.ok(events.some(event => event.file === file && event.kind === 'unknown'));
+  }
+  assert.ok(events.every(event => event.run === 'file-lifecycle-run'));
   assert.ok(roots.every(event => event.pid !== event.ppid));
   assert.equal(events.filter(event => event.kind === 'spawn' && event.role === 'cli').length, 7);
   assert.equal(new Set(events.filter(event => event.kind === 'spawn' && event.role === 'cli').map(event => event.id)).size, 7);

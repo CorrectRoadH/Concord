@@ -84,20 +84,17 @@
 6. 运行受改动影响的测试。 {#run}
 
    ```sh
-   bun run gate --changed
+   bun run test --changed
    ```
 
    预期输出（节选）：
 
    ```text
-   # Subtest: issue close refuses with a named error and exit 1
-       ok 1 - another Issue links it
-       ok 2 - the Issue does not exist
-   ok 1 - issue close refuses with a named error and exit 1
-   # Node layer cli: files=1; cases=3; countedFiles=1; 2.932s (sum of file durations)
+   (pass) issue close refuses with a named error and exit 1 > another Issue links it
+   (pass) issue close refuses with a named error and exit 1 > the Issue does not exist
    ```
 
-   `--changed` 的选择规则见[完整门禁](../cli.md#完整门禁)；交付说明写明运行的是 `--changed`。
+   `--changed` 的选择规则见[测试入口](../cli.md#测试入口)；交付说明写明运行的是 `--changed`。
 
 ## 结果
 

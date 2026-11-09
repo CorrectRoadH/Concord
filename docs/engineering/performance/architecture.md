@@ -1,114 +1,78 @@
-# 性能测量实现
+# 基准测试架构
 
-本页声明测量脚本的模块、写入范围与数据流。测量方法见[性能测量](README.md)，命令见[测量命令](cli.md)。
+维护者用 benchmark 定位业务操作的性能变化。Bun 执行 TypeScript，Mitata 负责预热、采样、计时、统计与报告；Concord 只拥有场景、Fixture 和预算关联（[用现成的能力，不重写](../../taste.md#t-10)）。工具选择依据 [Bun 的基准测试建议](https://bun.sh/docs/project/benchmarking)与 [Mitata 文档](https://github.com/evanwashere/mitata)。
 
-## 写入范围
+## 测量边界
 
-被测产物是当前 worktree 构建出的归档，默认消费者是本仓库某个 commit 的独立 clone。写入范围按对象区分：
+默认直接测量 CLI 与服务使用的应用操作或领域函数。一次迭代从调用开始，到结果可用且操作本身的资源释放完成为止。异步操作必须等待完成，不能把启动异步任务的时间当成执行耗时。
 
-- 入口把被测归档构建到临时目录。
-- `--compare` 的基线归档位于用户缓存目录。
-- `self`、`scale` 与 fixture 消费者及进程输出位于临时工作目录，结束后删除（`--keep` 除外）。
-- 路径消费者原地测量，只改动其 Git-private 目录中的可丢弃 HawDB 缓存；`--out` 指定测量或 profile 输出位置。
+| 对象 | 入口与边界 |
+| --- | --- |
+| 解析、索引与关系计算 | 通过所属模块出口调用真实实现，使用固定输入 |
+| 仓库查询与写入 | 进程内调用应用操作，使用真实临时仓库与存储适配 |
+| 缓存与投影读取 | 准备确定的缓存状态后调用操作；命中、未命中与刷新分为不同场景 |
+| HTTP 或 mod 操作 | 预算关心该边界时保留真实协议或事件路径，不把驱动程序启动计入操作耗时 |
 
-测量不修改 Spec、不写 Memory，测量者审阅记录后用 Concord 的 Memory 命令保存结论。
+CLI 参数、输出和退出码由[进程内 CLI 测试](../testing/architecture.md#进程内-cli)验证。默认 benchmark 不测 CLI 宿主启动、模块加载与格式化，也不要求每个命令组有一个性能场景。明确分析启动成本时才单独测量整个命令，不把它作为所有操作的交付条件。
 
-所有工作目录先取 realpath，因为 macOS 的临时目录位于 symlink 之后，Concord 会拒绝该路径。
+进程内操作耗时不能证明用户调用 CLI 的总耗时。预算必须与计时边界、缓存状态、规模和环境对应。整进程预算不能直接用于操作级验收，改变边界后必须重新测量并建立对应预算（[只声称证明过的](../../taste.md#t-5)）。
 
-## 基线
+## 场景与入口
 
-`--compare` 自动准备基线产物，位置为 `${XDG_CACHE_HOME:-~/.cache}/concord/bench/baseline/<commit>/`。准备时把基线提交克隆为该目录下独立的 Git clone，执行 `bun install --frozen-lockfile --offline`，再用 `bun run build` 调用该提交自带的构建入口。原生产物按[原生绑定复用](../build/architecture.md#原生绑定复用)取得，不需要 Cargo。
+`bench/<feature-id>.bench.ts` 直接使用 Mitata 的 `bench` 注册场景。场景名使用 `<feature-id>/<名称>`，与 Feature 的 `performance.md` 对应；不维护 `defineBenchmarks`、自定义 `BenchRun` 联合类型或通用场景执行器。
 
-这个 clone 不是开发 worktree，其中出现 `dist/` 不违反开发 worktree 没有 `dist/` 的规则。
+每个文件导出 `registerBenchmarks(scope)`，在传入的外层 Scope 下直接调用 Mitata `bench` 注册。`import.meta.main` 分支通过共用的资源入口注册本文件并调用一次 `run({ throw: true })`。导入文件只定义注册函数，不开始测量。
 
-同一提交的基线产物在后续测量中复用，构建前后都校验产物身份；保留最近 3 个基线，更早的 clone 直接删除。候选产物可以有未提交改动，记录中 `dirty` 为 true。
+全量入口 `bench/index.ts` 静态导入各文件的注册函数，在同一个外层 Scope 注册全部场景，再调用一次 Mitata。共用入口只组合 Scope、注册和上游 `run`，不解析参数、不枚举文件、不调度子进程、不生成报告或预算结论。
 
-测量器按每份产物自身的入口运行扫描：编译归档使用内部角色，携带 Node 的基线使用其随包 Node 与实际扫描模块，源码使用固定 Bun 和 TypeScript 入口。缺少相应入口时报告 `PerfError`；不改写基线，也不借用当前源码替代被测实现。
+过滤、报告格式和统计参数直接使用固定 Mitata 版本的 API。`bun run bench` 仅为固定入口的包脚本，不另设 `--compare`、`--consumer`、`--samples`、`--quick` 等自研命令协议。定向测量直接选择场景文件或配置 Mitata 的过滤条件。
 
-## 数据流
+`bench/` 与共享 Fixture 纳入严格 TypeScript 检查。业务副作用与资源通过 Effect 管理；纯计算场景直接调用函数。异步场景向 Mitata 返回真实完成的 Promise，不复制业务实现。
 
-```mermaid
-flowchart TD
-  subgraph Repo[当前仓库]
-    Src[源码，构建为临时目录中的被测归档]
-    Docs[Feature performance.md 预算表]
-    Benches[bench/*.bench.ts 场景]
-    Fixtures[bench/fixtures/ 生成函数]
-    Git[Git 历史与未提交的改动]
-  end
-  subgraph Scripts[scripts]
-    Bench[bench.ts]
-    Profile[profile.ts]
-    subgraph Perf[perf/]
-      Scenario[scenario.ts 场景类型与 defineBenchmarks]
-      Budgets[budgets.ts 预算行派生]
-      Select[selection.ts 场景选择]
-      Baseline[baseline.ts 基线产物缓存]
-      Stats[stats.ts 统计与判定]
-      Process[process.ts 计时进程]
-      Consumer[consumer.ts 消费者 Fixture]
-      Artifact[artifact.ts 产物身份]
-      Cpu[cpu-profile.ts 热点汇总]
-      Counter[fs-counter.ts fs 计数]
-    end
-  end
-  subgraph Cache[用户缓存目录]
-    Base[bench/baseline/<commit>/]
-  end
-  subgraph Work[临时工作目录]
-    Clone[self clone、scale 或 fixture 仓库]
-    Runs[stdout/stderr 文件]
-    Out[cpuprofile 与计数文件]
-  end
-  Docs --> Budgets
-  Benches --> Scenario
-  Fixtures --> Consumer
-  Git --> Select
-  Git --> Baseline
-  Baseline --> Base
-  Budgets --> Bench
-  Scenario --> Bench
-  Select --> Bench
-  Bench --> Stats
-  Bench --> Process
-  Profile --> Scenario
-  Profile --> Process
-  Profile --> Cpu
-  Process --> Runs
-  Process -->|编译时固定 preload| Counter
-  Counter --> Out
-  Src --> Process
-  Base --> Process
-  Process --> Clone
-```
+## Fixture 与生命周期
 
-## 模块
+Fixture 只构造数据和持有资源，不决定采样次数、计时方式或样本有效性。可复用测试中的仓库生成能力，不能复用带断言、重试和超时的测试 runner 来驱动 benchmark。
 
-`scripts/perf/` 中的模块按职责划分：
+一次运行创建私有临时消费者，使用固定内容与规模，结束或失败时释放资源并删除目录。需要来源快照时记录提交或输入摘要，不自动构建候选与历史归档，不在用户仓库原地重置状态。
 
-- `scenario.ts` 定义场景的严格类型、`defineBenchmarks` 与场景执行器；执行器只通过公开 CLI、HTTP 与文件系统操作消费者。
-- `budgets.ts` 读取 `docs/feature/*/performance.md`，解析 `性能预算` 与 `刷新上限` 标题下的预算表，返回所在页面、标题、场景 ID 与阈值；解析函数不访问文件系统，便于测试直接喂入页面正文。
-- `selection.ts` 把场景 ID、feature-id 与 `--changed` 的改动文件映射为场景集合；文件到 Feature 的映射读取当前构建 CLI 的代码归属声明输出，不自行解析注释。
-- `baseline.ts` 准备、校验、复用与淘汰基线产物，失败使用具名 `PerfError`。
-- `stats.ts` 只做 p50、有效性、回退和上限判定，是纯函数。
-- `process.ts` 以文件描述符重定向 stdout 与 stderr 并计时，失败使用具名 `PerfError`。
-- `consumer.ts` 准备 `self`、`scale`、fixture 与路径消费者，返回带 commit 的冻结描述，并在每次 `beforeEach` 后恢复冻结状态。
-- `artifact.ts` 读取产物 commit、源码是否有未提交改动及安装目录摘要，摘要覆盖 `.js`、`.node` 与 `artifact.json`。
-- `cpu-profile.ts` 严格解码 `.cpuprofile` 并按函数和层汇总自身耗时。
-- `fs-counter.ts` 由 profile 专用可执行文件的固定 preload 预加载，包装 `node:fs` 调用，退出时按 pid 写出计数与 `process.resourceUsage()`；它不改变调用结果，未设置输出目录环境变量时不做任何事。
+预热与采样次数由 Mitata 管理。准备仓库、填充缓存与等待服务就绪放在测量区间外；真实操作所需的安全校验、存储访问与结果消费留在区间内。不能复用已经完成的 Promise，让场景退化为空操作。
 
-`scripts/bench.ts`、`scripts/profile.ts` 与 `scripts/perf/*.ts` 是严格 TypeScript，由 Node 自带的类型擦除直接执行，副作用通过 Effect 管理；`bench/` 与 `scripts/` 一同纳入 `tsconfig.scripts.json` 的严格类型检查。不新增 JavaScript 脚本或测量依赖。
+共享可变仓库的场景在每次真实回调中重置状态，并把重置成本计入声明的边界。只读输入可以共享。需要排除准备成本时，每次输入必须互相独立；不能通过批次预生成参数反复重置同一路径，也不自写时钟扣减。
 
-消费者准备与 cli/view 路径走公开 CLI；刷新测量调用构建产物中的内部 query-scan-worker，并以 `src/query-scan-protocol` 的 Schema 解码其消息。fs 计数模块与 CPU profiler 只在 profile 路径注入，bench 样本不带任何注入。profile 先复制归档到自己的临时目录，保留 symlink 的原始内容，再用同一 Bun 编译参数重新生成其中的可执行文件，通过 `--compile-exec-argv` 固定 `--cpu-prof`、输出目录与计数模块。内部子进程复用这个可执行文件，因此一同采样；共享归档与 bench 产物不被改写。记录绑定 profile 专用产物摘要，收尾停止自有服务后读取所有进程证据。
+冷缓存场景明确清除的是应用缓存、进程缓存还是系统缓存，不能互相代替。warm 场景等待真实缓存或投影状态就绪，固定 sleep 不构成就绪证据。
 
-汇总只纳入注入本次采样环境的进程，以 fs counter 标识这些进程；真正 run 前已写出的准备和预热 counter 不进入汇总，长期服务在收尾时写出的 counter 保留。纳入汇总的每个 counter 必须有同 pid 的 CPU profile，缺少本次测量证据时失败。准备和清理调用可因编译参数产生 CPU 文件，但未注入采样环境的进程不进入汇总；原始文件保留在输出目录（[只声称证明过的](../../taste.md#t-5)）。
+资源在测量开始后按场景创建，由场景子 Scope 持有并挂入整次 Mitata 调用的外层 Scope。正常完成场景后立即关闭子 Scope；异常和取消时外层仍负责关闭。Mitata generator 抛错可能跳过 yield 后段，不能只依赖该位置清理。
 
-冷启动记录执行场景本身并校验其预期结果；mod、HTTP 与扫描操作不能替换为没有执行该操作的 CLI 调用。准备失败与采样失败均即时输出场景及原因；对照进度包含双方的 p50、最大值和样本有效性。中断前的进度不是完成全部产物与消费者复核后的验收记录。
+模块导入只注册场景，不启动服务或打开句柄。确认不了资源关闭时失败并保留诊断。原生绑定来自固定版本的已校验缓存，不为 benchmark 构建完整归档。
 
-清理只识别同时匹配刷新角色和完整消费者根参数的进程，覆盖编译内部角色、TypeScript 源码与基线 JavaScript 入口；准备前已有的进程不属于本次测量。等待和超时终止采用同一识别规则，不以根路径子串授权终止其它进程。
+## 统计与结果
 
-## 测试
+Mitata 输出是采样与统计来源。默认使用其报告，机器消费使用其 JSON 输出；不维护 `concord.bench` 格式、自写中位数、离群值剔除、整组重试或 reporter。
 
-- `test/perf-budgets.test.ts` 用当前 `performance.md` 正文验证预算表能被解析、每条命令的子命令存在于当前 CLI，并覆盖 p50、无效样本、回退与上限判定。它不运行测量路径，也不断言绝对耗时。
-- `test/perf-coverage.test.ts` 检查[覆盖规则](format.md#覆盖规则)的一致性、命令覆盖与冒烟；冒烟复用 `scenario.ts` 的执行器，只把消费者换成小规模 fixture 并跳过计时判定。
-- `test/cli-startup.test.ts` 保护只读命令的模块加载范围。
+预算由交付者对照原生报告与 Feature 页面判断，不实现自动预算裁决器。`run({ throw: true })` 的成功只表示测量完成，不表示预算通过。对照 JSON 时使用对应场景的 `benchmarks[].runs[].stats.p50 / 1_000_000` 转为毫秒；缺失、异常、非有限值、重复歧义或边界不匹配均不能报告预算通过。
+
+对照只比较相同机器、Bun 与 Mitata 版本、输入、状态和边界下的结果。测量期间不同时运行测试或其它已知重负载；交错执行不保证干扰等量。保留工具给出的波动与诊断，不靠删样本让结果通过。
+
+不同提交的比较由维护者固定两边来源，分别在相同条件运行同一场景。没有可比入口或数据时明确无法比较，不自动修补基线或保留历史运行时适配。
+
+刷新上限是单次操作的墙钟约束，Mitata 的批次均值或吞吐统计不能证明它。需要该证据时单独测量真实操作并写明边界，不把所有 benchmark 变成刷新进程测试。
+
+## Profiling
+
+热点定位直接使用 Bun CPU profiler 运行场景文件，读取官方 profile。需要观察服务时单独采集该服务，父进程 profile 不代表子进程。
+
+带 profiler 的运行只用于定位，不作为无注入的预算结果。不维护通用 profile CLI、CPU profile 重编码或全局 fs 包装器；业务需要的观测放在对应模块并独立说明。
+
+## 删除范围与验收
+
+自写 benchmark CLI、采样循环、计时进程封装、统计与重试、场景 DSL、基线归档缓存和报告框架均删除，不留兼容层。删除测试按断言判断，不按 perf 文件名批删；其中 CLI 输出、mod 流程、资源回收等产品断言迁回普通功能测试，Fixture 保留真实需要的能力。
+
+验收检查：
+
+1. 单个场景文件由固定 Bun 直接运行，Mitata 报告真实结果；业务操作失败使运行失败。
+2. 场景调用产品模块出口，完整等待异步结果；初始化、重置与清理不污染另一个场景。
+3. warm、cold、只读与写入场景在重复采样后仍执行声明的工作，不退化为空操作。
+4. 缺失预算所需的结果不能通过；计时边界变化后建立新参照测量，不沿用整进程数字证明操作性能。
+5. 中断和失败释放自有资源；源码、依赖、包脚本、CI 与文档没有对被删框架的调用。
+
+功能测试由 Bun 负责，benchmark 由 Mitata 负责；`bun run test` 不运行性能采样。工具的调度与统计不由 Concord 的测试套件重复验证。

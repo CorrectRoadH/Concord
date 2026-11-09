@@ -247,16 +247,23 @@ test('unconfirmed real service cleanup preserves the consumer and its diagnostic
 const ChildRecord = Schema.Struct({ root: Schema.String, pid: Schema.Int, instance: Schema.Struct({ pid: Schema.Int, socket: Schema.Struct({ path: Schema.String }) }) });
 
 // @feature docs/engineering/testing/architecture.md#共享服务
-test('the real Bun file after hooks stop the singleton before consumer template cleanup', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('the real Bun file after hooks stop the singleton before the worker runs another file', () => Effect.runPromise(Effect.tryPromise(async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-shared-after-'));
   const marker = join(scratch, 'instance.json');
-  const entry = join(scratch, 'after.test.ts');
+  const entries = ['first', 'second'].map(name => join(scratch, `${name}.test.ts`));
   let owned: typeof ChildRecord.Type | undefined;
-  writeFileSync(entry, `
+  for (const entry of entries) writeFileSync(entry, `
     import test from 'node:test';
-    import { writeFileSync } from 'node:fs';
+    import assert from 'node:assert/strict';
+    import { existsSync, readFileSync, writeFileSync } from 'node:fs';
     import { sharedWorkspace } from ${JSON.stringify(new URL('../support/shared-service.ts', import.meta.url).href)};
     test('file owns its singleton until the real after hooks', async () => {
+      if (existsSync(${JSON.stringify(marker)})) {
+        const previous = JSON.parse(readFileSync(${JSON.stringify(marker)}, 'utf8'));
+        assert.equal(existsSync(previous.root), false);
+        assert.equal(existsSync(previous.instance.socket.path), false);
+        for (const pid of [previous.pid, previous.instance.pid]) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+      }
       const workspace = await sharedWorkspace();
       await workspace.run(async current => {
         const { pid, socket } = current.instance;
@@ -268,7 +275,7 @@ test('the real Bun file after hooks stop the singleton before consumer template 
     const env = { ...process.env };
     // The nested runner is a separate lifecycle subject, not another file of its parent runner.
     delete env.NODE_TEST_CONTEXT;
-    const child = spawn(process.execPath, ['test', '--no-env-file', '--config=/dev/null', '--conditions=concord-source', '--preload', new URL('../support/source-runtime.ts', import.meta.url).pathname, '--timeout=60000', entry], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, ['test', '--no-env-file', '--config=/dev/null', '--conditions=concord-source', '--preload', new URL('../support/source-runtime.ts', import.meta.url).pathname, '--parallel=1', '--timeout=60000', ...entries], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
     child.stdout.on('data', data => { stdout += String(data); });
     child.stderr.on('data', data => { stderr += String(data); });

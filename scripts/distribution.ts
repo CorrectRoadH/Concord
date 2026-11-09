@@ -72,10 +72,10 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
   const repository = resolve(import.meta.dirname, '..');
   const destination = yield* externalBuildOutput(output);
   yield* typecheck();
-  const tooling = ['scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts', 'scripts/pack-javascript.ts',
+  const tooling = ['scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/build-cache.ts', 'scripts/pack-javascript.ts',
     'scripts/build-herdr-mod.ts', 'scripts/herdr-mod-catalog.ts', 'scripts/build-identity.ts', 'scripts/build-output.ts', 'bun.lock', 'patches', 'package.json', 'tsconfig.json', 'tsconfig.web.json', 'node_modules/typescript/package.json', 'node_modules/esbuild/package.json', 'node_modules/vite/package.json'];
   const resourcePaths = ['docs', 'skills', 'templates', ...(yield* fs.readDirectory(repository)).filter(name => /^README(?:\..+)?\.md$/u.test(name))];
-  const resourceInput = () => archivePartInput(repository, [...resourcePaths, 'scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts']);
+  const resourceInput = () => archivePartInput(repository, [...resourcePaths, 'scripts/distribution.ts', 'scripts/application-cache.ts', 'scripts/build-cache.ts']);
   const resourceDigest = yield* resourceInput();
   const resources = yield* cachedArchivePart('resources', resourceDigest, directory => Effect.gen(function*() {
     yield* fs.makeDirectory(directory, { recursive: true });

@@ -74,7 +74,7 @@ export const ubuntuRuntimeMetadata = Effect.fn('archive.ubuntuMetadata')(functio
 export const ubuntuRuntimeLibraries = Effect.fn('archive.ubuntuLibraries')(function*() {
   const fs = yield* FileSystem.FileSystem;
   const packages = yield* ubuntuRuntimeMetadata();
-  const input = yield* archivePartInput(resolve(import.meta.dirname, '..'), ['scripts/archive-linux.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'], packages);
+  const input = yield* archivePartInput(resolve(import.meta.dirname, '..'), ['scripts/archive-linux.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/build-cache.ts'], packages);
   const scratch = yield* cachedArchivePart('linux-runtime', input, scratch => Effect.gen(function*() {
     yield* fs.makeDirectory(scratch, { recursive: true });
     for (const { name, filename, digest } of packages) {

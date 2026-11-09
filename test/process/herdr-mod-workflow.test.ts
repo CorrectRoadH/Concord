@@ -13,7 +13,7 @@ test('native mod initializes, edits in place, autosaves and reloads external cha
   const root = mkdtempSync(join(tmpdir(), 'concord-herdr-workflow-'));
   try {
     execFileSync('git', ['init', '-q', root]);
-    const reply = spawnSync(process.execPath, [resolve('scripts/herdr-mod-host.ts'), installedConcordCli(), root, 'workflow'], { encoding: 'utf8', timeout: 70_000 });
+    const reply = spawnSync(process.execPath, [resolve('test/support/herdr-mod-host.ts'), installedConcordCli(), root, 'workflow'], { encoding: 'utf8', timeout: 70_000 });
     assert.equal(reply.status, 0, reply.stdout + reply.stderr);
     const result = JSON.parse(reply.stdout) as { workflow: string; calls: string[][] };
     assert.match(result.workflow, /autosaved, checked, reloaded external update/u);

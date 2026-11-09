@@ -13,7 +13,7 @@ relations:
 
 ## 复现
 
-现场未保存可重放的触发序列。`bun run gate test/process/workspace-server-shutdown.test.ts` 验证了两条尚未复现故障的路径：暂停空闲操作进程后停止服务，以及 HTTP 操作进行中中断服务。两条路径均能释放资源；OwnedProcess 的平台 kill 实际已经包含信号升级，不能把问题归因于缺少 SIGKILL。
+现场未保存可重放的触发序列。`bun run test test/process/workspace-server-shutdown.test.ts` 验证了两条尚未复现故障的路径：暂停空闲操作进程后停止服务，以及 HTTP 操作进行中中断服务。两条路径均能释放资源；OwnedProcess 的平台 kill 实际已经包含信号升级，不能把问题归因于缺少 SIGKILL。
 
 ## 期望
 

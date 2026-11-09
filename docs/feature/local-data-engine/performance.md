@@ -1,22 +1,18 @@
-# 统一的本地缓存与检索引擎的性能预算
+# 本地数据引擎的性能测量
 
-本页声明 local-data-engine 高频操作的性能预算，测量方法见[性能测量](../../engineering/performance/README.md#测量方法)，表格写法见[预算表](../../engineering/performance/format.md#预算表)。
+本页拥有 local-data-engine 的测量场景与预算，方法见[性能测量](../../engineering/performance/README.md#测量方法)。场景直接使用 Mitata，入口为 `bench/local-data-engine.bench.ts`。
 
-## 性能预算
+## 测量场景
 
-按[性能测量](../../engineering/performance/README.md#测量方法)的参照消费者、环境及七次新进程采样，已有可读投影的读取命令满足以下 warm p50 预算。没有投影的首次读取等待后台刷新，耗时受[刷新上限](#刷新上限)约束，不计入 warm 预算。当前来源模式另外执行原有命令预算和同机交错对照。
+| 场景 | 测量内容 |
+| --- | --- |
+| `local-data-engine/source-scan` | 当前来源关系扫描 |
+| `local-data-engine/cache-status` | 读取真实缓存状态 |
 
-| 场景 | 测量内容 | p50 预算 |
-| --- | --- | ---: |
-| `local-data-engine/trace-gaps-warm`、`local-data-engine/trace-show-warm`、`local-data-engine/review-warm` | 已有诊断投影的历史读取 | 600ms |
-| `local-data-engine/cache-status` | 缓存状态 | 670ms |
+计时边界为进程内真实操作与其自身资源释放，排除 CLI 宿主启动和格式化。固定输入、消费者与缓存状态由场景源码声明；修改这些条件时重新建立参照结果，不使用整进程数字作为操作预算。
+
+Mitata 的成功退出表示测量完成，预算由交付者对照适用条件与原生统计判断。没有相同边界的参照证据时只报告测量结果，不宣称预算通过。
 
 ## 刷新上限
 
-后台刷新进程通过内部扫描入口执行下表场景的当前来源扫描，三类查询各有一行；测量对象是该内部入口。从刷新进程开始等待同键刷新到扫描子进程退出的总时间不得超过上限；超出即终止扫描，结果不发布，此时没有上一代投影的首次读取返回 QueryPending。上限按最大值在任何机器判定，测量规模包括[性能测量](../../engineering/performance/cli.md#消费者)的 `scale` 消费者。
-
-| 场景 | 测量内容 | 上限 |
-| --- | --- | ---: |
-| `local-data-engine/trace-gaps-refresh` | 关系缺口来源扫描 | 120000ms |
-| `local-data-engine/trace-show-refresh` | 单个 Feature 关系扫描 | 120000ms |
-| `local-data-engine/review-refresh` | 审阅材料来源扫描 | 120000ms |
+后台关系缺口、Feature 关系与审阅材料刷新，从等待同键刷新到扫描子进程退出的总时间不得超过 120000ms。超出即终止扫描、不发布结果，没有上一代投影时返回 QueryPending。该约束需要真实刷新生命周期证据，不能由 Mitata 的批次统计或 `stats.max` 证明。

@@ -1,19 +1,27 @@
-import { defineBenchmarks } from '../scripts/perf/scenario.ts';
-const commands: Readonly<Record<string, readonly string[]>> = {
-  help: ['--help'], skill: ['--skill'], schema: ['schema', 'test-adapter'],
-  'memory-list': ['list', 'memory'], 'memory-search': ['memory', 'search', 'HawDB'],
-  'issue-list': ['list', 'issue'], 'issue-search': ['issue', 'search', 'HawDB'],
-  'feature-list': ['list', 'feature'], 'use-case-list': ['list', 'use-case'], 'design-list': ['list', 'design'], 'roadmap-list': ['list', 'roadmap'], 'engineering-list': ['list', 'engineering'],
-  'docs-check': ['docs', 'check'], 'trace-show-fresh': ['--fresh', 'trace', 'show', 'docs/feature/local-sdlc/README.md'], 'trace-check': ['trace', 'check'], check: ['check'],
-  'code-list': ['code', 'list'], 'test-list': ['test', 'list'], 'template-list': ['template', 'list'],
+import type { Scope } from 'effect';
+import { bench } from 'mitata';
+import { executeQuery, type QueryRequest } from '../src/app/index.ts';
+import { repositoryFixture } from './fixtures/index.ts';
+import { runBenchmarks } from './run.ts';
 
-};
-const helpEnvironment: NodeJS.ProcessEnv = { NO_COLOR: '1', TERM: 'dumb', FORCE_COLOR: undefined, NODE_DISABLE_COMPILE_CACHE: '1', NODE_COMPILE_CACHE: undefined, NODE_OPTIONS: '' };
-const reads = Object.entries(commands).map(([name, run]) => ({
-  id: `local-sdlc/${name}`, consumer: 'self' as const, state: 'warm' as const, run, ...(name === 'help' ? { env: helpEnvironment } : {}), expect: { exitCode: 0 },
-}));
-
-export default defineBenchmarks('local-sdlc', [...reads, ...['trace-check', 'trace-show-fresh', 'check'].map(name => ({
-  id: `local-sdlc/${name}-server`, consumer: 'self' as const, state: 'warm' as const, server: 'running' as const,
-  run: commands[name]!, expect: { exitCode: 0 },
-}))]);
+export function registerBenchmarks(scope: Scope.Scope): void {
+  // Each operation has a private frozen representative repository and prefilled application caches.
+  const queries = [
+    ['documents-list', { name: 'documents.list', input: {} }],
+    ['memory-search', { name: 'memory.search', input: { query: 'Snapshot' } }],
+    ['trace-check', { name: 'trace.check', input: {} }],
+    ['check', { name: 'check', input: {} }],
+    ['code-list', { name: 'code.list', input: {} }],
+    ['test-list', { name: 'test.list', input: {} }],
+  ] satisfies readonly (readonly [string, QueryRequest])[];
+  for (const [name, query] of queries) bench(`local-sdlc/${name}`, async function*() {
+    const fixture = await repositoryFixture(scope);
+    yield async () => {
+      const result = await fixture.runtime.runPromise(executeQuery(fixture.root, query));
+      if (result.exitCode !== 0) throw new Error(JSON.stringify(result.value));
+      return result.value;
+    };
+    await fixture.close();
+  });
+}
+if (import.meta.main) runBenchmarks(registerBenchmarks);

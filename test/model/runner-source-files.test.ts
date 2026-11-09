@@ -62,12 +62,10 @@ test('runner sourceFiles equals the static closure of test and runner entrypoint
             if (argument && (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument))) addRelative(argument.text);
             else {
               const text = argument?.getText(source.sourceFile);
-              if (file === 'scripts/perf/scenario.ts' && text === "pathToFileURL(join(root, 'bench', name)).href") {
-                for (const candidate of files) if (/^bench\/[^/]+\.bench\.ts$/u.test(candidate)) targets.add(candidate);
-              } else if (file === 'test/process/herdr-writing-guide.test.ts' && text === "pathToFileURL(resolve('src/entry/herdr-mod/main.ts')).href") targets.add('src/entry/herdr-mod/main.ts');
-              else if (file === 'scripts/herdr-mod-host.ts' && text === 'mod') {
+              if (file === 'test/process/herdr-writing-guide.test.ts' && text === "pathToFileURL(resolve('src/entry/herdr-mod/main.ts')).href") targets.add('src/entry/herdr-mod/main.ts');
+              else if (file === 'test/support/herdr-mod-host.ts' && text === 'mod') {
                 // Both branches load the same product module, from source or its packaged copy.
-                assert.match(readFileSync(join(root, file), 'utf8'), /new URL\('\.\.\/src\/entry\/herdr-mod\/main\.ts', import\.meta\.url\)/u);
+                assert.match(readFileSync(join(root, file), 'utf8'), /new URL\('\.\.\/\.\.\/src\/entry\/herdr-mod\/main\.ts', import\.meta\.url\)/u);
                 targets.add('src/entry/herdr-mod/main.ts');
               } else invalid.push(`${file}: cannot enumerate import(${text})`);
             }

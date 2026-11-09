@@ -6,34 +6,21 @@
 
 ## 起始状态
 
-- 最近一次门禁已运行完，`.test-results/run-*` 中有本次报告。
+- 最近一次门禁已运行完，已通过 `--timings=.test-results/timings.json --update-timings` 保存官方文件耗时。
 - 上限见[成本与稳定](../README.md#成本与稳定)与[分层](../README.md#分层)。
 
 ## 完整路径
 
 1. 找到慢的文件。 {#find}
 
-   门禁输出开头的 `# Test diagnostics:` 给出报告目录，其中 `file-timings.json` 按耗时从长到短列出测试文件：
-
-   ```json
-   [
-     {
-       "file": "/home/me/Code/Concord/test/cli/onboarding-independent.test.ts",
-       "duration_ms": 103939.737281,
-       "success": true,
-       "cases": 8
-     }
-   ]
-   ```
-
-   `layer-timings.json` 按层汇总文件数、用例数与耗时。每个文件结束时，门禁输出中也有一行 `# Node file: <路径>; <秒>s; success=<结果>; logs=<目录>`。
+   查看 Bun 生成的 `.test-results/timings.json`，定位超过 60 秒的文件；用官方控制台与 JUnit 定位用例耗时和失败。保留原始报告，不生成另一套文件或层级统计格式。
 
 2. 确认耗时来自测试本身。 {#confirm}
 
-   门禁输出开头的 `# Machine load:` 行记录运行时的 load average。过载或并发运行其它门禁时，在空闲机器上复跑这个文件后再判断（[共享资源与同步](../README.md#共享资源与同步)）：
+   同时记录机器负载。过载或并发运行其它门禁时，在空闲机器上复跑这个文件后再判断（[共享资源与同步](../README.md#共享资源与同步)）：
 
    ```sh
-   bun run gate test/cli/onboarding-independent.test.ts
+   bun run test test/cli/onboarding-independent.test.ts
    ```
 
 3. 先把领域情形下沉一层。 {#sink}
@@ -53,10 +40,10 @@
 5. 运行拆分后的文件，核对耗时。 {#run}
 
    ```sh
-   bun run gate test/process/editor-lsp.test.ts test/process/editor-lsp-2.test.ts
+   bun run test test/process/editor-lsp.test.ts test/process/editor-lsp-2.test.ts
    ```
 
-   在新的 `file-timings.json` 中，每个文件都不超过 60 秒，用例总数与拆分前相同。交付前运行 `bun run gate --changed`；改动了 `test/support/` 时它选中全部测试（[扩展 Fixture](extend-fixtures.md#run)）。
+   在本次官方 timings 中，每个文件都不超过 60 秒，用例总数与拆分前相同。交付前运行 `bun run test --changed`；改动了 `test/support/` 时显式运行全套（[扩展 Fixture](extend-fixtures.md#run)）。
 
 ## 结果
 
@@ -67,6 +54,6 @@
 | 只在负载高时超出 | 空闲机器复跑后仍超出才处理；复跑通过的失败登记为 Issue |
 | 一个测试本身就超过层上限 | 拆分文件无济于事；下沉领域情形，或找出等待中的固定时长与重复启动 |
 | 测试靠 `sleep` 等待 | 改为等待真实状态（[扩展 Fixture](extend-fixtures.md#wait)） |
-| 拆分后用例数变少 | 有测试在移动时丢失；按 `cases` 对照补回 |
+| 拆分后用例数变少 | 有测试在移动时丢失；按官方报告的用例清单对照补回 |
 | 想提高上限或把文件超时调大 | 不提高上限（[成本与稳定](../README.md#成本与稳定)） |
 | 拆分后的文件依赖执行顺序 | 每个文件独立准备自己的状态；依赖全局状态的用例留在同一文件内串行 |

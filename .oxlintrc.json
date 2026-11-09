@@ -26,7 +26,6 @@
     {
       "files": [
         "src/entry/herdr-mod/main.ts",
-        "bench/*.bench.ts",
         "*.config.ts"
       ],
       "rules": {

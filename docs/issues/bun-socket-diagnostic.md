@@ -15,4 +15,4 @@ relations:
 
 ## 复现
 
-运行 `pnpm gate test/process/workspace-client-write-failure.test.ts`，真实 RPC 客户端的 socket 写入边界抛出 `EPIPE`，核对返回的错误码与消息。
+运行 `bun run test test/process/workspace-client-write-failure.test.ts`，真实 RPC 客户端的 socket 写入边界抛出 `EPIPE`，核对返回的错误码与消息。

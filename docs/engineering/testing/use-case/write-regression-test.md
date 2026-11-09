@@ -7,7 +7,7 @@
 ## 起始状态
 
 - 被违反的条目已在 Spec 中，例如 `issue close` 在仍有其它 Issue 链接时应拒绝，见[无外部服务时管理本地 Issue](../../../feature/feedback/use-case/manage-local-observations.md#结果)。Spec 本身不对时先改 Spec，不走这条路径。
-- 本仓库的 `concord.config.ts` 已配置 `runner`：`prepare` 安装依赖并准备原生绑定，`argv` 用 `node scripts/test-built.ts` 运行一个测试文件。
+- 本仓库的 `concord.config.ts` 已配置 `runner`：`prepare` 安装依赖并准备原生绑定，`argv` 用 `bun run test` 调用官方 Bun 运行一个测试文件。
 
 ## 完整路径
 
@@ -56,14 +56,13 @@
 4. 确认它在当前代码上失败，单独提交。 {#commit-test}
 
    ```sh
-   bun run gate test/domain/issue-close-links.test.ts
+   bun run test test/domain/issue-close-links.test.ts
    ```
 
    预期输出（节选）：
 
    ```text
-   not ok 1 - close refuses while another Issue links the target
-   # Node file: /home/me/Code/Concord/test/domain/issue-close-links.test.ts; 1.402s; success=false; logs=…
+   (fail) close refuses while another Issue links the target
    ```
 
    ```sh
@@ -75,7 +74,7 @@
 
 5. 修复并单独提交。 {#commit-fix}
 
-   只改产品文件。修复提交不改回归测试、runner 配置、`runner.sourceFiles` 与测试指向的 Spec，否则核验返回 `FixUnverifiable`。提交前运行 `bun run gate --changed` 与 `bun run concord check`。
+   只改产品文件。修复提交不改回归测试、runner 配置、`runner.sourceFiles` 与测试指向的 Spec，否则核验返回 `FixUnverifiable`。提交前运行 `bun run test --changed` 与 `bun run concord check`。
 
 6. 核验并关闭 Issue。 {#close}
 

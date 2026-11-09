@@ -1,13 +1,12 @@
 # 自举检查命令
 
-自举 runner 为：
+自举 runner 直接调用 Bun test，完整参数由 `concord.config.ts` 拥有。文件与标题占位符逐 argv 参数替换，不经过 shell。`prepare` 在修复核验的临时 checkout 中安装冻结依赖并准备原生绑定，不是测试执行框架。
 
-```text
-node scripts/test-built.ts --test-name-pattern {pattern} {file}
+```sh
+bun run test --test-name-pattern='<表达式>' <文件>
+bun run concord --json --dry-run check
 ```
 
-占位符逐 argv 参数替换，不经过 shell。日常只读检查依次使用 `concord doctor`、`concord check`、`concord test list`、`concord trace check`、定向 `concord trace show local-sdlc` 与 `concord review local-sdlc`。需要真实的 Command evidence 时才使用 `concord test run <case>`。
+自举检查用源码 CLI 检查当前 worktree。退出 0 表示检查通过，非零表示违规、输入不完整或执行失败；输出由[合并检查](../../feature/documentation-quality/cli.md)拥有。它不递归运行测试。
 
-`bun run gate` 的静态检查阶段用源码 CLI 检查当前 worktree，输出 `concord --json --dry-run check` 的结果。退出 0 表示检查通过，非零表示违规、输入不完整或执行失败；输出由[合并检查](../../feature/documentation-quality/cli.md)拥有。
-
-最终仓库验收由父流程执行 `bun run gate`；自举检查不在 Node test 内递归调用该命令。
+日常只读检查还可使用 `concord doctor`、`concord test list`、`concord trace check` 与定向 `concord review`。需要真实的 Command evidence 时才使用 `concord test run <case>`。交付分别调用[检查入口](../testing/README.md#检查入口)列出的工具。

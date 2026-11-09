@@ -1,48 +1,31 @@
 # 测试命令
 
-本页给出运行本仓库测试的命令、参数与环境变量。检查阶段与验收规则见[测试](README.md)，写测试的完整步骤见其中的 [Use Case](README.md#use-case)。
+`test` 直接调用固定版本的官方 Bun，`bench` 独立调用 Mitata。工具职责见[测试引擎](architecture.md#bun-测试引擎)。
 
-## 完整门禁
+## 测试入口
 
 ```sh
-bun run gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<序号>/<总数>] [<测试文件>...]
+bun run test
+bun run test test/domain/issue-close-links.test.ts
+bun run test --test-name-pattern='close refuses'
+bun run test --changed=origin/master
+bun run test --shard=1/16
 ```
 
-| 参数 | 作用 |
-| --- | --- |
-| 测试文件 | 只运行这些文件。省略时递归发现 `test/` 下的 `*.test.ts` |
-| `--changed [<base>]` | 只运行受改动影响的测试，选择规则见下文 |
-| `--test-name-pattern=<表达式>` | 只运行标题匹配的测试 |
-| `--test-shard=<序号>/<总数>` | 运行一个源码分片。分片作用于 Bun 源码测试；所有分片的并集覆盖完整集合，不保证与以往相同的分组 |
+文件、标题、改动与分片选择使用 Bun 原生语义。文档、共享支持代码、依赖或运行配置变化后显式运行全套；交付说明写明选择范围。测试不触发类型检查、lint 或 benchmark，这些任务分别调用，见[检查入口](README.md#检查入口)。
 
-`--changed` 的改动是 `<base>` 到 worktree 当前文件的全部差异，`<base>` 默认是 `origin/master` 与 HEAD 的 merge-base。它选中改动的测试文件，以及按下面的规则与改动有关的测试。改动了 `test/support/`、`scripts/`、`package.json` 或锁文件时，选中全部测试。
+可选官方报告：
 
-选择分两步。先找出改动涉及的 Spec 页面：改动的 Spec 文件，以及改动的源码文件在 `<base>` 与 worktree 两侧的代码声明指向的页面（删除的声明按 `<base>` 一侧计入）。页面按文件匹配，忽略锚点。再按页面选测试：
+```sh
+bun run test --reporter=junit --reporter-outfile=.test-results/junit.xml --timings=.test-results/timings.json --update-timings
+```
 
-| 涉及的页面 | 选中的测试 |
-| --- | --- |
-| 一个 Use Case | 标记指向该 Use Case 的测试，以及标记指向它所属 Feature 或 Engineering 整体的测试 |
-| 文档包内其它页面（README、cli、architecture 等） | 标记指向该 Feature 或 Engineering，或指向其中任一页面的测试 |
-| 文档包外的项目规则与普通文档 | 不因此选中测试；`concord check` 仍完整执行 |
+使用独立输出路径区分不同运行，保留原始报告与退出码。`--timings` 可读取官方耗时供调度使用，`--update-timings` 写回本次观测，不是独立的执行完成证明。零匹配与报告生成遵循上游行为。
 
-本机门禁按名额排队：定向门禁占 1 个名额，选中全部测试的门禁占全部名额（[负载](README.md#共享资源与同步)）。退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。任一测试或静态检查失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
-
-本地交付运行 `bun run gate --changed`。推送到 master 后，CI 的原生产物准备、测试分片与故障注入任务均在 GitHub Actions 托管的 `ubuntu-24.04` runner 上运行：十六个分片各运行 `bun run gate --test-shard=<序号>/16`，并集是完整集合；每个任务一台新机器，代码只经 Git 推送到达，结果只经 CI 返回。失败由引入它的人立即修复。
-
-CI 先统一下载固定版本的生产与测试原生产物，分片只校验并使用。故障注入由独立任务选择预编译的测试产物，再运行 `bun run gate test/process/hawdb-native.test.ts`。全部任务必须通过；任务依赖与产物传递见[CI 任务](architecture.md#ci-任务)。
-
-报告写入每次调用独立的 `.test-results/run-*`，其中有按耗时排序的测试文件与子进程启动次数。CI 按分片上传报告。
-
-`test/**/*.test.ts` 交给官方 `bun test`，支持按文件与标题过滤。Bun 用例计数遵循[测试引擎](architecture.md#bun-测试引擎)的执行与跳过规则，不能把动态子测试当作独立报告项。
+CI 在 `ubuntu-24.04` 上运行十六个官方分片。故障注入单独运行 `CONCORD_NATIVE_TEST_HOOKS=1 bun run test test/process/hawdb-native.test.ts`，依赖的生产与测试绑定由准备任务下载和校验。
 
 ## 并发
 
-| 变量 | 作用 | 默认值 |
-| --- | --- | --- |
-| `CONCORD_TEST_CONCURRENCY` | Bun 源码测试的文件进程并发上限，必须为正整数 | `min(8, floor(可用 CPU / 2))`，至少 1 |
+默认 `--parallel` 使用 Bun 的 CPU 数策略；需要限制文件 worker 时直接传 `--parallel=8`。`--max-concurrency` 只控制文件内并发，与文件 worker 数不同。文件隔离、文件内串行，Fixture 主动回收自己的资源。
 
-测试文件只按该并发数调度，不按内存大小、机器物理内存或历史 PSS 记录排队。本地与 CI 使用同一规则；每个文件的完整进程树退出后才释放并发名额。
-
-门禁记录整体与各测试进程树的内存峰值，不设置内存或 swap 上限，不使用低内存运行模式。PSS 把共享页按进程平摊；报告中的峰值用于诊断，不作为通过、失败或后续文件准入的条件。无法观测的字段标为未知，不写成零。
-
-进程清理未确认仍阻止后续测试，并报告具名错误。测试失败、超时、输入或输出越界的判定独立于内存观测。
+不设置内存或 swap 上限，不维护仓库级运行队列。交付者避免测试与性能采样同时运行；负载导致的超时或连接重置在空闲机器上复跑后再归因。

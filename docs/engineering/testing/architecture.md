@@ -1,22 +1,42 @@
 # 测试实现
 
-本页声明本仓库测试的 runner 适配、架构守护、Fixture 与门禁的内存隔离。测试规则见[测试](README.md)。
+本页设计本仓库测试的执行入口、架构守护、Fixture 与资源回收。测试规则见[测试](README.md)，性能测量的工具边界见[基准测试架构](../performance/architecture.md)。
 
 ## Runner 适配
 
-`bun run gate` 的测试阶段调度 Bun 源码测试，全部运行当前 worktree 的源码。子进程以[从源码运行](../build/architecture.md#从源码运行)的方式启动，Web 页面来自共享的 Web 产物，原生产物来自共享缓存。归档由 CI 发版工作流构建。门禁控制器、开发工具、被测 Concord 代码与源码测试均由固定版本的 Bun 执行。
-
-Bun 直接加载 TypeScript 测试源码，并兼容 `node:test` 声明。同步测试体使用 `Effect.sync`，测试回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
+`bun run test` 直接运行固定版本的 Bun test，测试当前 worktree 的 TypeScript 源码。子进程按[从源码运行](../build/architecture.md#从源码运行)启动，Web 与原生产物来自各自缓存。Bun 兼容现有 `node:test` 声明；同步测试体使用 `Effect.sync`，异步回调用 `Effect.runPromise`，资源型测试用 `Effect.scoped` 与 acquire/release。
 
 ### Bun 测试引擎
 
-现有 gate 负责文件发现、changed 选择、文件分片与 Effect 文件并发；每个获准文件由一个独立的官方 `bun test` 进程执行，不复用测试进程。官方引擎负责用例执行、名称过滤、超时与报告，不实现替代测试引擎（[用现成的能力，不重写](../../taste.md#t-10)）。
+Bun 拥有文件发现、并行、隔离、分片、筛选、超时和报告，仓库直接配置官方命令（[用现成的能力，不重写](../../taste.md#t-10)）。依据是固定版本的 `bun test --help` 与[官方并行文档](https://bun.sh/docs/test/parallel)。
 
-- 每个文件使用新的临时 timings 路径，传入 `--timings <文件> --update-timings`，以官方 JUnit 记录用例结果。名称筛选传 `--test-name-pattern`；零匹配允许成功，报告执行数为零，不能把过滤跳过算成执行。动态 `t.test` 子测试的失败归其父测试，计数遵循 Bun 官方报告，不能声称逐个子测试独立计数。
-- 成功要求正常退出 0、没有信号终止，并且本次 timings 含所选文件的完整记录；主动 `process.exit(0)` 缺少完成记录也失败。旧报告不能复用。空文件可以没有 JUnit，但须有本次文件完成记录，执行数为零。导入失败、断言失败、超时、报告损坏或非预期文件均失败。
-- 单文件有 5 分钟的进程期限；终止后等待整个自有进程组退出再归还准入。测试自带的更短超时继续交给官方引擎，取消不能返回成功。
-- 预加载使用真实文件路径，事件上下文通过显式环境传递，不依赖文件 URL query。启动关闭 cwd dotenv 和 bunfig 自动加载。每个文件记录真实 PID 与进程出生身份，观测不到的计数记为未知；不依赖 Bun 没有实现的 Node diagnostics channel，也不填造零值。
-- gate 保持现有路径、changed、名称与分片选项、完整静态检查、单文件日志、层耗时、内存观测及失败聚合。报告必须区分执行、跳过和未知计数。
+| 职责 | 官方能力 |
+| --- | --- |
+| 文件与标题筛选 | 文件参数、`--test-name-pattern` |
+| 文件并行与隔离 | `--parallel`、`--isolate` |
+| CI 分片 | `--shard=<序号>/<总数>` |
+| 文件耗时与调度 | `--timings`、`--update-timings` |
+| 输出 | 控制台报告、JUnit |
+| 代码依赖变化选择 | `--changed` |
+
+文档与共享配置不一定在代码导入图中。修改这些输入后，交付者显式运行全套；不增加选择包装器或第二套依赖图。退出码与零匹配行为遵循 Bun，不解析控制台输出，不用自写完成证据协议覆盖上游结果。固定版本中，测试直接调用 `process.exit(0)` 可能提前成功退出；测试体禁止这样结束，验证产品退出语义使用子进程。
+
+`--parallel` 隔离 JavaScript 全局和模块环境，不保证每个文件使用新 OS 进程。文件内保持串行，不全局启用 `--concurrent` 或 `--no-isolate`。原生句柄、消费者状态与环境不能依靠进程退出释放。
+
+### 执行与资源边界
+
+Bun 拥有测试 worker；Fixture 与 Effect Scope 拥有临时仓库、服务、后代进程与原生句柄。文件结束前通过 `after` 或 Scope finalizer 等待产品资源退出再删除目录；清理失败必须传播，不能把 Bun 强制关闭资源当成正常清理的证明。
+
+预加载只设置项目测试环境与可选产品生命周期诊断，文件结束事件使用每文件 hook。命令关闭 cwd dotenv 与 bunfig 自动加载。超时交给 Bun，整个 CI 调用期限交给 Actions；测试结束与取消依赖 Fixture 和官方进程管理，不实现调用队列、资源调度器或自写 reporter。
+
+### 架构验收
+
+通过正式 `bun run test` 验证真实业务与生命周期（[只声称证明过的](../../taste.md#t-5)）：
+
+1. 文件、标题与分片参数直接进入官方引擎；静态检查由各自入口执行。
+2. 同 worker 连续使用原生绑定时能够 close/reopen，文件结束显式释放产品资源。
+3. 产品服务停止、取消和清理通过真实边界测试，未确认的清理不得声称完成。
+4. runner 配置、冻结文件清单与 CI 不再引用删除的框架。
 
 ### 修复核验冻结的文件
 
@@ -32,19 +52,16 @@ Bun 直接加载 TypeScript 测试源码，并兼容 `node:test` 声明。同步
 
 ## CI 任务
 
-GitHub Actions 的 `gate.yml` 使用现有构建与门禁入口，任务之间只传递经校验的生产与故障注入原生产物。任务使用同一提交；手动指定的 ref 先由准备任务解析为提交 SHA，其余任务检出这个 SHA（[复用已有计算](../../taste.md#t-7)）。
+GitHub Actions 的 `test.yml` 分别执行静态工具与测试，任务之间只传递经校验的生产与故障注入原生产物。准备任务将 ref 解析为提交 SHA，其余任务检出同一 SHA（[复用已有计算](../../taste.md#t-7)）。
 
 | 任务 | 职责与依赖 |
 | --- | --- |
-| `prepare-native` | 恢复并校验两模式的最终原生产物缓存；未命中时按[原生绑定复用](../build/architecture.md#原生绑定复用)下载固定发行，不编译 |
-| `gate` | 等待准备成功；十六个源码分片分别下载、校验产物，再运行对应的完整门禁 |
-| `native-hooks` | 检出与准备任务相同的 SHA 后使用准备好的故障注入产物，运行 `bun run gate test/process/hawdb-native.test.ts`；它不属于源码分片 |
+| `prepare-native` | 恢复或下载并校验两种模式的固定原生产物 |
+| `static` | 分别运行四项类型检查、lint 与 `concord check` |
+| `test` | 十六个源码分片分别调用 `bun run test --shard`，保存官方报告 |
+| `native-hooks` | 使用故障注入产物运行真实原生事务与恢复测试 |
 
-准备任务上传的产物只包含本目标的二进制、身份与许可证。所有任务均不为 HawDB 安装 Rust 工具链、恢复 Cargo 缓存或编译；测试 Cargo adapter 的用户项目功能仍使用真实 Cargo。源码分片按需要准备外部 adapter。静态检查在各次门禁中完整执行，测试结果不缓存。
-
-带钩子的最终产物与生产产物分别存放，故障注入只选择测试目录。它等待准备任务给出提交 SHA，再与分片并行。任何必需任务失败或被取消，整条 CI 都不通过；一个分片失败不取消其它分片。
-
-共享产物按实际分发路径验收：把真实生产产物交给空缓存的消费者，在编译器不可用时完成校验和加载；破坏身份或二进制时必须失败。CI 保存各任务的失败诊断，性能验收按[成本与稳定](README.md#成本与稳定)计算完整任务及依赖链。
+发布工作流复用这些任务；benchmark 根据受影响场景单独运行，不混入测试或发布采样。
 
 ## 架构守护
 
@@ -94,14 +111,3 @@ CLI 层的测试在测试进程里运行和真实 CLI 相同的命令程序，�
 被测对象本身就是仓库初始状态时，测试自己构造仓库，并在用例中写明原因。这类状态包括未初始化仓库、非 Git 目录、shallow clone、特定提交历史或 merge 结构。可用的 Fixture 与新增方式见[扩展 Fixture](use-case/extend-fixtures.md)。
 
 受管文件的内容只由格式的 owner 生成：Spec 与 Memory 通过领域写入入口或 `renderDocument`，品味由 `initialize` 写入的模板生成，配置通过 `renderTypeScriptConfig`，写作规则与 concepts 通过各自的写入入口。格式改变时只改格式 owner，测试不随之修改（[当前格式](../../architecture.md#当前格式)）。
-
-## 内存观测
-
-门禁按[共享资源](README.md#共享资源与同步)规则记录内存峰值，不设置内存上限：
-
-1. 有 systemd user scope 时，门禁在自己拥有的 scope 与 slice 中运行，仅启用 `MemoryAccounting`。不设置 `MemoryMax`、`MemorySwapMax` 或因内存占用终止进程的策略。
-2. 报告峰值读自 slice；scope 与 slice 的归属验证、结束回收及存活进程确认保持独立。
-3. `resources.json` 的 `memoryMaxBytes` 与 `memorySwapMaxBytes` 为 `null`，表示未设置上限；整体和各测试进程树仍记录可观测的峰值。测试时间报告只保存文件并发数及进程树报告路径，不保存准入容量或预算。
-4. 每文件进程树的观测不判超预算，不写入用于调度的历史内存记录；进程清理失败仍返回具名错误并停止后续调度。
-
-没有 systemd user scope 时直接运行，报告写明 `memoryIsolation: "unavailable"` 与原因；有 scope 时该字段为 `systemd-scope`，表示独立的观测与回收边界，不表示内存受限。

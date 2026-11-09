@@ -21,7 +21,13 @@
 2. 验证可安装目录。 {#verify}
 
    ```sh
-   bun run gate --changed
+   bun run typecheck
+   bun run typecheck:test
+   bun run typecheck:scripts
+   bun run typecheck:web
+   bun run lint
+   bun run concord --json --dry-run check
+   bun run test --changed
    herdr-app check concord/mods/concord
    ```
 

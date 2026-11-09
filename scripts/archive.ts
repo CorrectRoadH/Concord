@@ -96,7 +96,7 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
     if (!assetEntries.has(name)) return yield* new ArchiveFailed({ message: `Application contains an execution module instead of resources: dist/${name}` });
   }
   const dependencyInput = () => archivePartInput(repository,
-    ['package.json', 'bun.lock', '.bun-version', 'patches', 'scripts/archive.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'],
+    ['package.json', 'bun.lock', '.bun-version', 'patches', 'scripts/archive.ts', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/build-cache.ts'],
     { target });
   const dependencies = yield* cachedArchivePart('dependencies', yield* dependencyInput(), directory => Effect.gen(function*() {
     yield* fs.makeDirectory(directory, { recursive: true });
@@ -127,7 +127,7 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
   const runtimeInput = () => Effect.gen(function*() {
     const signed = target === 'darwin-arm64' && sources !== undefined
       ? yield* archivePartInput(resolve(sources), [target]) : null;
-    return yield* archivePartInput(repository, ['.bun-version', 'runtime-deps.json', 'scripts/archive-runtime.ts', 'scripts/bun-licenses.ts', 'scripts/bun-license-sources.json', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/gate-build-cache.ts'], { target, signed });
+    return yield* archivePartInput(repository, ['.bun-version', 'runtime-deps.json', 'scripts/archive-runtime.ts', 'scripts/bun-licenses.ts', 'scripts/bun-license-sources.json', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/build-cache.ts'], { target, signed });
   });
   const runtime = yield* cachedArchivePart('runtime', yield* runtimeInput(), directory => prepareRuntime(directory, repository, target, sources), runtimeInput);
   for (const name of ['runtime', 'licenses']) yield* fs.copy(join(runtime, name), join(root, name));

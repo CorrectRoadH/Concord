@@ -22,7 +22,7 @@ import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts
 import { parseDocumentRecord } from "../../src/domain/documents/index.ts";
 import { renderDocument } from "../../src/model/index.ts";
 import { hawdb_native_HAWDB_REVISION as HAWDB_REVISION, openHawdb } from "../../src/base/cache/index.ts";
-import { settleRefreshes } from '../../scripts/perf/process.ts';
+import { settleRefreshes } from './query-refresh-cleanup.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 export const Ack = Schema.Struct({});
