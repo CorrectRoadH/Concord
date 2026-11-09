@@ -7,6 +7,8 @@ import { hawdbTarget } from "./hawdb-native-contract.ts";
 import { ConcordError } from "../../model/index.ts";
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { installationIdentity } from './identity-cache.ts';
+import { workspaceIdentity } from './workspace-identity.ts';
+import { installedConcordVersion } from './library-version.ts';
 import { sourceInstallation, runtimeDirectory, runtimeLoader } from './runtime.ts';
 
 const directory = runtimeDirectory;
@@ -55,7 +57,7 @@ export function queryInstallationIdentity(runtime: RuntimeEnvironmentSnapshot = 
 export function workspaceInstallationIdentity(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): string {
   requireNativeArtifacts(runtime);
   const runtimeIdentity = [['mode', sourceInstallation ? 'source' : 'compiled'], ['bun', process.versions.bun ?? 'unavailable']];
-  return sourceInstallation
+  const contentDigest = sourceInstallation
     ? installationIdentity(directory, [{ root: directory, prefix: 'src', accept: () => true }, { root: join(packageRoot, 'web'), prefix: 'web', accept: () => true }, { root: nativeArtifactRoot(runtime), prefix: 'native', accept: () => true },
       ...['package.json', 'bun.lock', '.bun-version', 'native-release.json', 'patches'].map(path => ({ root: join(packageRoot, path), prefix: path, accept: () => true })),
     ], runtimeIdentity, runtime)
@@ -63,5 +65,6 @@ export function workspaceInstallationIdentity(runtime: RuntimeEnvironmentSnapsho
       { root: packageRoot, prefix: 'app', accept: () => true, linkRoot: realpathSync(packageRoot) },
       { root: realpathSync(process.execPath), prefix: 'bin/concord', accept: () => true },
     ], runtimeIdentity, runtime);
+  return workspaceIdentity(sourceInstallation ? 'dev' : installedConcordVersion(), contentDigest);
 }
 

@@ -17,3 +17,4 @@ export { installedConcordVersion } from './library-version.ts';
 export { installationUseMarker } from './use-marker.ts';
 export { applicationRoot, archiveRootForApplication, packagedRuntimeForApplication } from './archive-location.ts';
 export { compiledInstallation } from './compilation.ts';
+export { workspaceIdentity } from './workspace-identity.ts';

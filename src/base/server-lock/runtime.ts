@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Context, Effect, Layer, Schema } from 'effect';
-import { ConcordError, digest, failure } from '../../model/index.ts';
-import { workspaceInstallationIdentity, packageRoot, sourceInstallation, installationUseMarker } from '../installation/index.ts';
+import { ConcordError, digest, failure, WORKSPACE_PROTOCOL } from '../../model/index.ts';
+import { workspaceInstallationIdentity, workspaceIdentity, packageRoot, sourceInstallation, installationUseMarker } from '../installation/index.ts';
 import { ensureGenericPrivateDirectorySync } from '../publication/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment, runtimePath, runtimeTemporaryDirectory, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { scopedServerLock } from './index.ts';
@@ -19,7 +19,7 @@ export const ServerRecord = Schema.Struct({
   socket: Schema.Struct({ path: Schema.String, device: Schema.String, inode: Schema.String }),
 });
 export type ServerRecord = typeof ServerRecord.Type;
-export function serverInstallation(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? digest(`source:${realpathSync(packageRoot)}`) : workspaceInstallationIdentity(runtime); }
+export function serverInstallation(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? workspaceIdentity('dev', digest(`source:${realpathSync(packageRoot)}`)) : workspaceInstallationIdentity(runtime); }
 export function serverSourceDigest(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? workspaceInstallationIdentity(runtime) : undefined; }
 export const serverCwd = packageRoot;
 const identity = (path: string) => {
@@ -113,7 +113,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
       chmodSync(socketPath, 0o600);
       const socket = { path: socketPath, ...identity(socketPath) };
       if (current && (current.socket.device !== socket.device || current.socket.inode !== socket.inode)) throw new ConcordError('ServerLockUnavailable', 'Socket identity changed');
-      current = { state, token, pid: process.pid, startedAt: current?.startedAt ?? new Date().toISOString(), lock: lock.identity, installation, protocol: 'concord.workspace/v2', socket, ...(sourceDigest === undefined ? {} : { sourceDigest }) };
+      current = { state, token, pid: process.pid, startedAt: current?.startedAt ?? new Date().toISOString(), lock: lock.identity, installation, protocol: WORKSPACE_PROTOCOL, socket, ...(sourceDigest === undefined ? {} : { sourceDigest }) };
       const temporary = join(directory, `current-${token}.tmp`);
       try { writeFileSync(temporary, `${JSON.stringify(current)}\n`, { flag: 'wx', mode: 0o600 }); renameSync(temporary, recordPath); }
       finally { try { unlinkSync(temporary); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause; } }

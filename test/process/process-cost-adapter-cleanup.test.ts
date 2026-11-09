@@ -1,6 +1,6 @@
 // 跨进程保证：服务与 IPC——adapter fixture使用真实stop回收服务，停止失败时保留消费者现场。
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
@@ -21,12 +21,16 @@ test('an adapter fixture retains its consumer when service shutdown cannot be co
       const fixture = yield* externalCase();
       yield* Effect.sync(() => {
         root = fixture.consumer;
-        // Reclaim the actual service before injecting an invalid ownership record.
+        // A dead malformed record alone is recoverable; an invalid lock prevents
+        // proving absence and must retain the consumer for inspection.
         stopWorkspaceServer(root);
         const path = join(root, '.git/concord/server/current.json');
         assert.equal(existsSync(path), false);
         writeFileSync(join(root, 'cleanup-evidence.txt'), 'retain these consumer bytes\n');
         writeFileSync(path, '{broken');
+        const lock = join(root, '.git/concord/server/lock');
+        rmSync(lock);
+        mkdirSync(lock);
       });
     }))), /Fixture service cleanup failed/u);
     assert.ok(root !== undefined && existsSync(root), 'failed stop must not remove the consumer');

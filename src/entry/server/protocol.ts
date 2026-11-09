@@ -6,10 +6,10 @@ import { Effect, Schema, Stream } from 'effect';
 import * as Rpc from 'effect/rpc/Rpc';
 import * as RpcGroup from 'effect/rpc/RpcGroup';
 import * as SchemaBinary from 'effect/encoding/SchemaBinary';
-import { WorkspaceRead } from '../../model/index.ts';
+import { WorkspaceRead, WORKSPACE_PROTOCOL } from '../../model/index.ts';
 import { isAbsolute } from 'node:path';
 
-export const PROTOCOL = 'concord.workspace/v2';
+export const PROTOCOL = WORKSPACE_PROTOCOL;
 export const FRAME_LIMIT = 1024 * 1024;
 export const RESULT_LIMIT = 32 * FRAME_LIMIT;
 export const ReadCodec = SchemaBinary.toCodec(WorkspaceRead);

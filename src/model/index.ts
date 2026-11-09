@@ -1,4 +1,5 @@
 export { DocsConflictError } from './repo-docs-errors.ts';
+export { WORKSPACE_PROTOCOL } from './workspace-protocol.ts';
 export { packagePageKind, pageKindSuggestions, PACKAGE_PAGE_KINDS, SPLIT_PAGE_KINDS } from './page-kinds.ts';
 export type { PackagePageKind } from './page-kinds.ts';
 export { DocsDecodeError } from './repo-docs-errors.ts';

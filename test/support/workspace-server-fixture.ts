@@ -17,9 +17,9 @@ export const fixture = async () => {
   writeFileSync(join(root, 'docs/feature/reader/README.md'), '# Reader\n\nFirst generation.\n');
   return root;
 };
-export const command = (root: string, args: readonly string[], entry = installedConcordCli()) => new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+export const command = (root: string, args: readonly string[], entry = installedConcordCli(), env: NodeJS.ProcessEnv = process.env) => new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
   const [executable, ...prefix] = entry.endsWith('.ts') ? sourceCliCommand(entry) : packageCommand(entry);
-  const child = spawn(executable, [...prefix, '--root', root, '--json', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(executable, [...prefix, '--root', root, '--json', ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '', stderr = '';
   child.stdout.on('data', data => { stdout += String(data); }); child.stderr.on('data', data => { stderr += String(data); });
   child.once('error', reject); child.once('close', status => resolve({ status, stdout, stderr }));

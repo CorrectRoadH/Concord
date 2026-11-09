@@ -444,7 +444,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerScoped', message: 'This service belongs to another command scope' }))
       : !commandScope && scope !== undefined ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerScopeExpired', message: 'The command service has ended' })) : Effect.void;
     const authorize = (request: { token: string; installation: string; deadline: number; scope?: string }, subscription = false) => runtime.verify.pipe(Effect.andThen(authorizeScope(request.scope)), Effect.andThen(Effect.gen(function*() {
-      if (request.token !== runtime.token || request.installation !== installation) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Service identity differs' }));
+      if (request.token !== runtime.token) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Service identity differs' }));
       if (request.deadline < (yield* Clock.currentTimeMillis)) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerDeadline', message: 'Request deadline has expired' }));
       const state = yield* SubscriptionRef.get(service.state.value);
       if (!subscription && !['running', 'degraded', 'draining'].includes(state.state)) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerBusy', message: `Service is ${state.state}` }));
@@ -529,7 +529,7 @@ export const feedbackWriterLayer = Layer.effect(FeedbackCacheWriter, Effect.gen(
   return FeedbackCacheWriter.of({ merge: (root, connectionId, items) => Effect.scoped(Effect.gen(function*() {
     const connection = yield* existingWorkspace(root).pipe(Effect.provideService(RuntimeEnvironment, execution), Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.catch(() => Effect.succeed(undefined)));
     if (!connection) return yield* mergeLocalFeedbackObservation(root, connectionId, items).pipe(Effect.provideService(Workspace, workspace));
-    if (connection.hello.installation !== runtime.installation()) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Feedback owner has another installation identity'));
+    if (connection.hello.protocol !== PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Feedback owner has another protocol'));
     return yield* submitFeedback(connection, connectionId, items);
   })) });
 }));

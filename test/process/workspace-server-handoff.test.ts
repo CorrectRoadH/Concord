@@ -1,48 +1,71 @@
-// 跨进程保证：服务与 IPC——不同安装冲突保留旧服务直到显式停止，同源码安装变更后才退出旧owner并交接新实例。
+// 跨进程保证：服务与 IPC——同协议的不同安装共享实例，协议或源码变化在旧 owner 退出后交接。
 import assert from 'node:assert/strict';
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
-import { Effect, Schema, Stream } from 'effect';
-import { installationRootForBin } from '../../src/base/installation/index.ts';
+import { Effect } from 'effect';
 import { installedConcordCli, pollUntil } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
-import { startViewServer } from '../support/view-server.ts';
-import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
-import { sourceCli } from '../support/source-consumer.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';
 
-import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.ts';
+import { recordPath, record, fixture, command, stop } from '../support/workspace-server-fixture.ts';
+import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/environment/index.ts';
+import { ServerRuntime } from '../../src/base/server-lock/index.ts';
 
-// @feature docs/feature/local-data-engine/README.md
-test('C23 another installation reports a version conflict and preserves the existing service until explicit stop', { timeout: 30_000 }, async () => {
+const processExited = (pid: number) => Effect.runPromise(Effect.gen(function*() {
+  return yield* (yield* ServerRuntime).processExited(pid);
+}).pipe(Effect.provide(ServerRuntime.layer), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env))));
+
+// @use-case docs/feature/cross-platform-release/use-case/install-with-script.md#upgrade-running-service
+test('another installation shares the same protocol service without changing its token', { timeout: 30_000 }, async () => {
   const root = (await fixture()), installation = mkdtempSync(join(tmpdir(), 'concord-server-handoff-'));
-  const old = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
-    privateSourceInstallation(installation);
-    const installed = installation;
-    const entry = sourceCli(installed);
-    writeFileSync(join(dirname(entry), 'handoff-identity-fixture.ts'), 'export {};\n');
+    const entry = privateSourceInstallation(installation);
+    const started = await command(root, ['server', 'start'], entry);
+    assert.equal(started.status, 0, started.stderr);
     const before = record(root);
-    for (const args of [['server', 'start'], ['check']]) {
-      const rejected = await command(root, args, entry);
-      assert.equal(rejected.status, 1, rejected.stdout);
-      assert.equal(JSON.parse(rejected.stderr).error, 'WorkspaceServerVersionConflict');
+    const inherited = { ...process.env, CONCORD_SERVER_SCOPE: JSON.stringify({ root, privateDir: join(root, '.git/concord'), key: crypto.randomUUID() }) };
+    for (const args of [['check'], ['cache', 'status'], ['server', 'start']]) {
+      const scoped = await command(root, args, installedConcordCli(), inherited);
+      assert.equal(scoped.status, 1, scoped.stdout);
+      assert.equal(JSON.parse(scoped.stderr).error, 'WorkspaceServerScopeExpired');
+      assert.equal(record(root).token, before.token, 'inherited scopes cannot replace another installation');
+      assert.equal(await processExited(before.pid), false);
+    }
+    const query = await command(root, ['list', 'feature']);
+    assert.equal(query.status, 0, query.stderr);
+    assert.match(query.stdout, /Reader/);
+    const after = record(root);
+    assert.equal(after.token, before.token);
+    assert.equal(after.installation, before.installation);
+    assert.equal(await processExited(before.pid), false);
+    for (const input of [{ action: 'file.get', path: 'docs/feature/reader/README.md' }, { action: 'page.render', path: 'docs/feature/reader/README.md', theme: { background: '#fff', foreground: '#000' } }]) {
+      const read = await command(root, ['action', '--input-text', JSON.stringify(input)]);
+      assert.equal(read.status, 0, read.stderr);
       assert.equal(record(root).token, before.token);
     }
-    assert.equal((await fetch(old.address, { headers: { connection: 'close' } })).ok, true);
-    assert.equal((await command(root, ['server', 'stop'], entry)).status, 0);
-    await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'explicit stop releases the previous service', timeoutMs: 8000 });
-    const started = await command(root, ['server', 'start'], entry); assert.equal(started.status, 0, started.stderr);
-    const after = record(root);
-    assert.notEqual(after.token, before.token);
-    assert.notEqual(after.installation, before.installation);
-    assert.equal((await command(root, ['list', 'feature'], entry)).status, 0);
-    await command(root, ['server', 'stop'], entry);
+    await command(root, ['server', 'stop']);
     await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'replacement service releases ownership', timeoutMs: 8000 });
-  } finally { await old.close(); await stop(root); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/architecture.md#启动与裁决
+test('a different data protocol retains control frames for automatic service replacement', { timeout: 30_000 }, async () => {
+  const root = await fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-protocol-handoff-'));
+  try {
+    const entry = privateSourceInstallation(installation);
+    for (const path of ['src/model/workspace-protocol.ts']) {
+      const target = join(installation, path);
+      writeFileSync(target, readFileSync(target, 'utf8').replaceAll('concord.workspace/v3', 'concord.workspace/takeover-fixture'));
+    }
+    const started = await command(root, ['server', 'start'], entry);
+    assert.equal(started.status, 0, started.stderr);
+    const before = record(root);
+    const query = await command(root, ['check']);
+    assert.equal(query.status, 0, query.stderr);
+    assert.notEqual(record(root).token, before.token);
+    assert.equal(await processExited(before.pid), true);
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });
 
 
@@ -63,6 +86,7 @@ test('source edits replace the same checkout service only after the previous own
     assert.notEqual(after.token, before.token);
     assert.equal(after.installation, before.installation);
     assert.notEqual(after.sourceDigest, before.sourceDigest);
+    assert.equal(await processExited(before.pid), true);
     assert.equal((await command(root, ['server', 'stop'], entry)).status, 0);
     assert.equal(existsSync(recordPath(root)), false);
   } finally { if (entry) await command(root, ['server', 'stop'], entry); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
