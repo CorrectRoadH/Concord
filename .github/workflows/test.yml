@@ -144,3 +144,33 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
+
+  darwin:
+    needs: prepare-native
+    timeout-minutes: 15
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare-native.outputs.sha }}
+      - name: Record the Darwin host architecture
+        run: uname -sm
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: '.bun-version'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Prepare both pinned native modes for this host
+        run: bun run build:native
+      - name: Verify Darwin path safety and native recovery from source
+        env:
+          CONCORD_NATIVE_TEST_HOOKS: '1'
+        run: bun run test --parallel=1 test/domain/path-safety-cost.test.ts test/process/hawdb-native.test.ts --reporter=junit --reporter-outfile=.test-results/junit.xml
+      - name: Preserve Darwin test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: test-diagnostics-darwin
+          path: .test-results/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7

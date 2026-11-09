@@ -60,6 +60,7 @@ GitHub Actions 的 `test.yml` 分别执行静态工具与测试，任务之间�
 | `static` | 分别运行四项类型检查、lint 与 `concord check` |
 | `test` | 十六个源码分片分别调用 `bun run test --shard`，保存官方报告 |
 | `native-hooks` | 使用故障注入产物运行真实原生事务与恢复测试 |
+| `darwin` | 在 macOS 宿主用固定 Bun 与该宿主原生绑定执行 Darwin 大小写路径守护及原生事务、恢复测试 |
 
 发布工作流复用这些任务；benchmark 根据受影响场景单独运行，不混入测试或发布采样。
 
