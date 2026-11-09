@@ -210,17 +210,19 @@ test('initialization keeps waiting if its first wake-up precedes a readable proj
 });
 
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
+// @issue docs/issues/herdr-remote-host-launch.md
 test('remote cold loading keeps its service outside short execs and confirms its handshake before waiting', async () => {
   const b = boundary(), execute = b.host.exec;
   let managed = false, handshaken = false, projections = 0;
   const control: string[][] = [];
   b.host.exec = async (command, args, options) => {
-    assert.deepEqual(options, { cwd: '/repo', on: 'vps' });
     if (command === 'hc') {
+      assert.deepEqual(options, { on: null }, 'hosting runs on the Herdr client without using a remote cwd locally');
       control.push(args);
       managed = true;
       return { code: 0, stdout: '{"address":"t1"}', stderr: '' };
     }
+    assert.deepEqual(options, { cwd: '/repo', on: 'vps' });
     const operation = args.slice(args.indexOf('--root') + 2);
     if (operation[0] === 'server') {
       control.push(operation);
@@ -241,7 +243,7 @@ test('remote cold loading keeps its service outside short execs and confirms its
   assert.deepEqual(session.documents.map(document => document.path), [path]);
   assert.deepEqual(control, [
     ['server', 'status'],
-    ['run', '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', '/repo'],
+    ['run', '--on', 'vps', '--cwd', '/repo', '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', '/repo'],
     ['server', 'status', '--wait'],
   ]);
 });
@@ -278,4 +280,14 @@ test('remote hosting failure preserves the host output as a named failure', asyn
     : { code: 0, stdout: JSON.stringify(args.includes('status') ? { state: 'absent' } : { operation: 'workspace-wait', changed: false, sourceDigest: 'old' }), stderr: '' },
   }, '/repo', 'vps');
   await assert.rejects(Effect.runPromise(session.wait()), error => error instanceof ModFailure && error.code === 'HerdrServiceStartFailed' && error.details === 'terminal quota exceeded');
+});
+
+// @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
+// @issue docs/issues/herdr-remote-host-launch.md
+test('remote hosting spawn failure preserves diagnostics instead of reporting a lost machine', async () => {
+  const session = new ModSession({ exec: async (command) => {
+    if (command === 'hc') throw new Error('cannot run hc: permission denied');
+    return { code: 0, stdout: JSON.stringify({ state: 'absent' }), stderr: '' };
+  } }, '/repo', 'vps');
+  await assert.rejects(Effect.runPromise(session.wait()), error => error instanceof ModFailure && error.code === 'HerdrServiceStartFailed' && error.details === 'cannot run hc: permission denied');
 });

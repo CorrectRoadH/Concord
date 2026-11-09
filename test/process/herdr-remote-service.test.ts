@@ -26,12 +26,13 @@ test('remote cold reads survive short-command cleanup and terminal queries reuse
   let serving: ReturnType<typeof command> | undefined;
   let projections = 0;
   const host: ModHost = { exec: async (program, args, options) => {
-    assert.deepEqual(options, { cwd: root, on: 'vps' });
     if (program === 'hc') {
-      assert.deepEqual(args, ['run', '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', root]);
+      assert.deepEqual(options, { on: null });
+      assert.deepEqual(args, ['run', '--on', 'vps', '--cwd', root, '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', root]);
       serving = command(root, ['server', 'run']);
       return { code: 0, stdout: '{"address":"hosted"}', stderr: '' };
     }
+    assert.deepEqual(options, { cwd: root, on: 'vps' });
     assert.equal(program, 'concord');
     const operation = args.slice(args.indexOf('--root') + 2);
     if (operation[1] === 'projection' && ++projections > 3) return { code: 1, stdout: '', stderr: JSON.stringify({ error: 'ProbeLimit', message: 'No persistent service after three reads' }) };

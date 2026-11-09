@@ -21,7 +21,7 @@ Concord mod 是可独立分发、也随归档提供的一组 JavaScript 文件�
 
 ### 远程服务与读取终止
 
-Herdr 的远程 `exec` 经 `hc exec` 执行；这个调用结束时会回收它的全部后代，包括 detached 进程。Concord mod 因此在每次远程 `workspace wait` 之前运行 `concord --json server status`。服务不存在时，在同一机器与仓库目录执行 `hc run --bg --no-parent --rm -- concord server run --root <root>`，由 Herdr core 创建独立后台终端托管前台服务。已有服务时直接等待，不启动新终端。本机保持原有 CLI 启动方式。
+Herdr 的远程 `exec` 经 `hc exec` 执行；这个调用结束时会回收它的全部后代，包括 detached 进程。Concord mod 因此在每次远程 `workspace wait` 之前运行 `concord --json server status`。服务不存在时，在 Herdr 宿主本机执行 `hc run --on <machine> --cwd <root> --bg --no-parent --rm -- concord server run --root <root>`，由 Herdr core 在指定机器与仓库创建独立后台终端托管前台服务。启动不依赖远端命令环境能从 PATH 找到 `hc`。已有服务时直接等待，不启动新终端。本机保持原有 CLI 启动方式。
 
 终端不创建 pane 或 tab，不抢焦点，不附加界面标签；没有父终端，不依赖短查询或 mod 的生命周期。工作区服务仍拥有持久句柄、服务锁与子进程，按既有退出协议回收；服务退出后 `--rm` 删除终端。mod 切换仓库、关闭或重连不停止共享服务。并发启动由 Concord 的服务锁裁决，落败进程退出，其终端同样自动删除。不得通过删除 `HC_SCOPE` 等宿主标记逃避回收，也不修改 Herdr 的全局环境或启动普通查询之外的应用。
 
@@ -30,6 +30,8 @@ Herdr 的远程 `exec` 经 `hc exec` 执行；这个调用结束时会回收它�
 一次刷新最多读取三次投影，中间最多等待两次；等待不带 `--after`，使用 CLI 默认的 25 秒期限。第三次仍返回 `WorkspaceProjectionPending` 时，将这个具名错误交给状态页，停止本轮读取，不再等待。已经读到的内容保留；没有内容时显示错误和交给 agent 的请求。切换目标后旧读取不能更新新会话。后台变化等待保留 `--after <sourceDigest>`，每次等待前同样确认远程服务；这项控制查询不计作导航刷新，不改变已运行服务的一次投影读取成本（[快到每次都愿意跑](../../taste.md#t-7)）。
 
 验收用真实 CLI 与临时仓库观察：远程短命令回收完其后代后，独立托管的工作区服务仍能被后续命令复用；mod 先启动后由终端直接查询、终端先启动后由 mod 查询，两种顺序都保持同一个服务 PID；两个并发启动最多保留一个服务；停止服务后托管终端删除。持续 pending 的替身只模拟命令边界，验证第三次失败能到达状态页，不复制服务实现。
+
+宿主启动命令自身无法运行时也报告 `HerdrServiceStartFailed`，保留异常详情；远端查询仍按连接错误处理。宿主启动失败不能显示成远端机器断线。
 
 ## 正文渲染
 
