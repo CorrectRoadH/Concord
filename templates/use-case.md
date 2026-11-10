@@ -2,7 +2,7 @@
 
 ## User Goal
 
-State who wants what and why, in the user's language. One goal per Use Case.
+State who wants what and why, in the user's language. This goal motivates the concrete usage below; a requirement alone is not a Use Case.
 
 ## Starting State
 
@@ -10,13 +10,15 @@ List what must already be true: configuration, existing documents, data, and any
 
 ## Complete Path
 
-Write one numbered item per user action. Show the exact command or call and its output. Copy real output once the feature runs; before that, mark it as expected output. End the first paragraph of each item with a stable step ID such as `{#run-red}` so tests and code can point at that step.
+Write one numbered item per user action that shows how to meet the need. Use the actual interface: UI actions, commands, calls, or a combination with external tools. Show what the user observes at each step; label results as expected until verified. End the first paragraph of each item with a stable step ID such as `{#run-red}` so tests and code can point at that step.
+
+When external tools participate, state their prerequisites, what data or entrypoint the product hands over, and how the user continues. Verify external commands and guarantees against authoritative documentation. Distinguish each party's responsibility and visible failures; do not turn an internal dependency choice into a user step.
 
 For interactive explanations, an optional `p5` fence can show the process. State the initial conditions, controls and expected observation in prose. Readers explicitly run sketches; animation does not replace acceptance evidence. Keep Mermaid for static flows and read `concord --skill view` for p5 authoring and project library configuration.
 
 ## Result
 
-Describe the observable end state, where to observe it, and what would make the journey fail acceptance. Check relevant side effects such as persisted data, messages, or released resources alongside the visible output. List every failure the user can see in a table of error code and trigger, with one real error output.
+Describe how the user confirms that the need is met, where to observe that result, and what would fail acceptance. Check relevant side effects such as persisted data, messages, or released resources alongside the visible result. Describe visible failures and their triggers; include error codes and real output when the interface provides them.
 
 For retries, cancellation, concurrency, or recovery, describe the applicable failure paths, termination conditions, and state retained after failure. Reuse the steps and result table; link shared guarantees instead of maintaining a second checklist. Verification setup and cleanup belong in the project's Engineering pages.
 
