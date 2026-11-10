@@ -1,5 +1,7 @@
 ---
 relations:
+  - role: root-cause
+    target: memory/accepted-socket-shutdown.md
   - role: spec
     target: docs/feature/local-data-engine/architecture.md#退出
   - role: spec

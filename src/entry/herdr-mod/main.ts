@@ -855,7 +855,7 @@ export default class ConcordMod extends View {
           : this.unknownCommand,
         this.handoff('copy-cli', this.cliRequest(machine)));
     }
-    if (session.error && !session.loaded) return this.statusPage(toolbar, session.error, location, this.handoff('copy-error', this.errorRequest(false), this.errorRequest(true)));
+    if (session.error && (!session.loaded || !session.initialized)) return this.statusPage(toolbar, session.error, location, this.handoff('copy-error', this.errorRequest(false), this.errorRequest(true)));
     // Background reads keep the page as it is; only the first read of a repository says it is reading.
     if (!session.loaded) return this.statusPage(toolbar, '正在读取 Concord 仓库…', location);
     if (!session.initialized) return this.statusPage(toolbar, '这个仓库还没有初始化 Concord', location, [

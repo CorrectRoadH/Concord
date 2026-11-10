@@ -16,6 +16,7 @@ export const ServerRecord = Schema.Struct({
   pid: Schema.Int, startedAt: Schema.String, token: Schema.String,
   lock: Identity, installation: Schema.String, protocol: Schema.String,
   sourceDigest: Schema.optional(Schema.String),
+  cleanup: Schema.optional(Schema.Struct({ phase: Schema.Literals(['requests', 'operations', 'foreground-computation', 'background-computation', 'rpc', 'http', 'cache', 'resources']), pid: Schema.Int })),
   socket: Schema.Struct({ path: Schema.String, device: Schema.String, inode: Schema.String }),
 });
 export type ServerRecord = typeof ServerRecord.Type;
@@ -107,13 +108,17 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
   const installation = serverInstallation(runtime);
   const sourceDigest = serverSourceDigest(runtime);
   let current: ServerRecord | undefined;
+  let cleanup: ServerRecord['cleanup'];
   const publish = (state: ServerRecord['state']) => Effect.gen(function*() {
     yield* lock.verify;
     yield* Effect.try({ try: () => {
-      chmodSync(socketPath, 0o600);
-      const socket = { path: socketPath, ...identity(socketPath) };
+      if (!current) chmodSync(socketPath, 0o600);
+      // The socket scope is released before later cache/resource finalizers.
+      // While it exists, still verify its identity before publishing progress.
+      const stat = lstatSync(socketPath, { throwIfNoEntry: false });
+      const socket = stat ? { path: socketPath, ...identity(socketPath) } : cleanup && current ? current.socket : { path: socketPath, ...identity(socketPath) };
       if (current && (current.socket.device !== socket.device || current.socket.inode !== socket.inode)) throw new ConcordError('ServerLockUnavailable', 'Socket identity changed');
-      current = { state, token, pid: process.pid, startedAt: current?.startedAt ?? new Date().toISOString(), lock: lock.identity, installation, protocol: WORKSPACE_PROTOCOL, socket, ...(sourceDigest === undefined ? {} : { sourceDigest }) };
+      current = { state: cleanup ? 'stopping' : state, token, pid: process.pid, startedAt: current?.startedAt ?? new Date().toISOString(), lock: lock.identity, installation, protocol: WORKSPACE_PROTOCOL, socket, ...(sourceDigest === undefined ? {} : { sourceDigest }), ...(cleanup === undefined ? {} : { cleanup }) };
       const temporary = join(directory, `current-${token}.tmp`);
       try { writeFileSync(temporary, `${JSON.stringify(current)}\n`, { flag: 'wx', mode: 0o600 }); renameSync(temporary, recordPath); }
       finally { try { unlinkSync(temporary); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause; } }
@@ -130,7 +135,11 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
       if (actual.device === current.socket.device && actual.inode === current.socket.inode) unlinkSync(socketPath);
     } catch { /* A missing or replaced socket is not ours. */ }
   }));
-  return { token, socketPath, publish, verify: lock.verify };
+  const cleaning = (phase: NonNullable<ServerRecord['cleanup']>['phase'], pid = process.pid) => Effect.suspend(() => {
+    cleanup = { phase, pid };
+    return publish('stopping');
+  });
+  return { token, socketPath, publish, cleaning, verify: lock.verify };
 });
 export class ServerRuntime extends Context.Service<ServerRuntime, {
   readonly acquire: (root: string, privateDir: string) => Effect.Effect<Effect.Success<ReturnType<typeof acquireServerRuntime>>, Effect.Error<ReturnType<typeof acquireServerRuntime>>, Exclude<Effect.Services<ReturnType<typeof acquireServerRuntime>>, RuntimeEnvironment>>;
