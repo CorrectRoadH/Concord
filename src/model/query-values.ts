@@ -24,7 +24,7 @@ const StepGroup = Schema.Struct({
 });
 export const TraceGapsValue = Schema.Struct({
   operation: Schema.Literal('trace-gaps'), semantics: Schema.Literal('missing-explicit-relationships-not-coverage'), limitations: Schema.Array(Schema.String),
-  contracts: Schema.Array(Schema.Struct({ path: Schema.String, kind: Schema.Literals(['feature', 'use-case']), title: Schema.String, missing: Schema.Array(Relationship), relationships: counts })),
+  contracts: Schema.Array(Schema.Struct({ path: Schema.String, title: Schema.String, missing: Schema.Array(Relationship), relationships: counts })),
   cliPages: Schema.Array(Schema.Struct({ path: Schema.String, feature: Schema.String, title: Schema.String, missing: Schema.Array(Relationship), relationships: counts })),
   unmarkedLists: Schema.Array(Schema.Struct({ path: Schema.String, lists: Schema.Array(RootOrderedList) })),
   cache: Cache, codeCache: Schema.optional(Cache),

@@ -126,12 +126,12 @@ test('a docs-only change still changes gaps while the code parse cache hits', ()
     (await createDocument(repo, 'feature', { id: 'orders', title: 'Orders', pages: ['cli'] }));
     (await createDocument(repo, 'use-case', { id: 'create-order', title: 'Create order', feature: 'orders' }));
     const first = (await traceGaps(repo));
-    assert.equal(first.contracts.find(item => item.kind === 'use-case')?.title, 'Create order');
+    assert.equal(first.contracts.find(item => item.path.includes('use-case/create-order'))?.title, 'Create order');
     assert.equal(first.codeCache?.status, 'miss');
     const page = join(root, 'docs/feature/orders/use-case/create-order.md');
     writeFileSync(page, readFileSync(page, 'utf8').replaceAll('Create order', 'Create revised order'));
     const second = (await traceGaps(repo));
-    assert.equal(second.contracts.find(item => item.kind === 'use-case')?.title, 'Create revised order');
+    assert.equal(second.contracts.find(item => item.path.includes('use-case/create-order'))?.title, 'Create revised order');
     assert.equal(second.codeCache?.status, 'hit');
     assert.notDeepEqual(second.contracts, first.contracts);
   } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }

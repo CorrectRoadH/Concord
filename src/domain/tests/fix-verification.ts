@@ -17,7 +17,7 @@ import { OwnedProcess } from "../../base/process/index.ts";
 import { runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.ts";
 import { LocalRepository, git, parseTypeScriptConfig } from "../../base/workspace/index.ts";
 import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema, type ProjectConfig, type Runner } from "../../model/index.ts";
-import { commitRepository, firstParentPath, gitBlobBytes, resolveCommit } from "../../base/git/index.ts";
+import { commitRepository, firstParentPath, gitBlobBytes, resolveCommit, linkWorktreeDependencies } from "../../base/git/index.ts";
 
 import { PersistentCache } from '../../base/cache/index.ts';
 import { RuntimeEnvironment } from '../../base/environment/index.ts';
@@ -38,11 +38,11 @@ async function selectedTests(repo: Repository, issue: string, testId?: string): 
 }
 function configurationWithoutPreparation(config: ProjectConfig): ProjectConfig {
   if (config.runner === undefined) return config;
-  const { prepare: _prepare, ...runner } = config.runner;
-  return { ...config, runner };
+  const { prepare: _prepare, sourceFiles: _sourceFiles, ...runner } = config.runner as unknown as { prepare?: unknown; sourceFiles?: unknown; [key: string]: unknown };
+  return { ...config, runner: runner as Runner };
 }
 function frozenInputs(repo: Repository, tests: readonly AnnotatedCase[], commit: string | undefined, environment: Readonly<Record<string, string | undefined>>) {
-  const paths = [...new Set([...tests.map(test => test.file), ...(tests.some(test => !adapterFor(repo, test.file)) ? requireRunner(repo).sourceFiles : repo.config.runner?.sourceFiles ?? []), ...tests.map(test => test.contract.split('#')[0]!)])].filter(path => path !== repo.configSnapshot.path).sort();
+  const paths = [...new Set([...tests.map(test => test.file), ...(tests.some(test => !adapterFor(repo, test.file)) ? (requireRunner(repo).sourceFiles ?? []) : repo.config.runner?.sourceFiles ?? []), ...tests.map(test => test.contract.split('#')[0]!)])].filter(path => path !== repo.configSnapshot.path).sort();
   return { runner: objectDigest(configurationWithoutPreparation(repo.configSnapshot.config)), configuration: repo.configSnapshot.path, tests: tests.map(test => test.id), files: paths.map(path => {
     const source = repo.read(path); if (source === undefined) unavailable(`Frozen runner input is unavailable: ${path}`);
     return { path, digest: digest(commit === undefined ? snapshotBytes(repo, path)! : gitBlobBytes(repo.root, commit, path, environment)) };
@@ -94,6 +94,7 @@ const inWorktree = <A>(repo: LocalRepository, commit: string, cleanupUnknown: ()
     yield* scratch.remove;
   }).pipe(Effect.catch(error => Effect.sync(() => { preserve(); throw new ConcordError('FixUnverifiable', `Verification worktree cleanup is unconfirmed: ${root}`, error); })), Effect.orDie));
   yield* invoke(['worktree', 'add', '--detach', root, commit]);
+  yield* sync(() => linkWorktreeDependencies(repo.root, root));
   return yield* run(root, preserve);
 }));
 
@@ -109,9 +110,9 @@ const assertFrozenRoot = Effect.fn('fixVerification.assertFrozenRoot')(function*
 });
 
 const prepareCheckout = Effect.fn('fixVerification.prepare')(function*(root: string, runner: Runner | undefined, cleanupUnknown: () => void) {
-  if (runner === undefined) return;
+  if (runner === undefined || runner.prepare === undefined || runner.prepare.length === 0) return;
   const environment = (yield* OwnedProcess).environment.env;
-  for (const [index, argv] of (runner.prepare ?? []).entries()) {
+  for (const [index, argv] of runner.prepare.entries()) {
     const result = yield* runOwnedProcess(argv, { cwd: root, env: safeRunnerEnvironment(environment), timeoutMs: runner.timeoutMs }).pipe(Effect.scoped, Effect.mapError(error => new ConcordError('FixUnverifiable', `Runner preparation failed: ${error.message}`)));
     const cleanupOk = hasConfirmedOwnedGroupCleanup(result);
     if (!cleanupOk) yield* sync(cleanupUnknown);

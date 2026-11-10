@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#修复核验
-import { lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import { makeRuntimeEnvironment } from '../environment/index.ts';
 import { isAbsolute, join } from "node:path";
 import { snapshot } from "../workspace/index.ts";
@@ -69,4 +69,12 @@ export function worktreeIdentity(repo: Repository, allowUnborn = false, environm
     if (!stat.isFile()) throw new ConcordError('UnsafePath', `Unsupported worktree input: ${path}`);
     return { path, mode: stat.mode & 0o777, digest: digest(readFileSync(target)) };
   }) });
+}
+
+export function linkWorktreeDependencies(sourceRoot: string, targetRoot: string): void {
+  const mainNodeModules = join(sourceRoot, 'node_modules');
+  const targetNodeModules = join(targetRoot, 'node_modules');
+  if (existsSync(mainNodeModules) && !existsSync(targetNodeModules)) {
+    try { symlinkSync(mainNodeModules, targetNodeModules, 'junction'); } catch {}
+  }
 }

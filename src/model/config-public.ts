@@ -3,9 +3,10 @@
  * Keep this structural declaration independent from Effect so a consumer does
  * not need Concord's own compiler lib settings merely to type-check its config.
  */
-export type Runner =
-  | { readonly kind: 'node-test'; readonly sourceFiles: readonly string[]; readonly prepare?: readonly (readonly [string, ...string[]])[]; readonly timeoutMs: number }
-  | { readonly kind: 'command'; readonly argv: readonly [string, ...string[]]; readonly sourceFiles: readonly string[]; readonly prepare?: readonly (readonly [string, ...string[]])[]; readonly timeoutMs: number };
+export interface Runner {
+  readonly argv: readonly [string, ...string[]];
+  readonly timeoutMs?: number;
+}
 
 export type FeedbackConnection =
   | { readonly id: string; readonly provider: 'github'; readonly credentialEnv: string; readonly owner: string; readonly repo: string; readonly repositoryId?: string }

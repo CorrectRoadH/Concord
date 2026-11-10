@@ -144,7 +144,7 @@ export function traceGapsValue(repo: Repository, trace: Awaited<ReturnType<typeo
       if (document.metadata.kind !== 'feature' && document.metadata.kind !== 'use-case') return [];
       const counts = ownerCounts.get(document.path) ?? { code: 0, test: 0 };
       const missing = gap(counts);
-      return missing.length === 0 ? [] : [{ path: document.path, kind: document.metadata.kind, title: document.metadata.title, missing, relationships: counts }];
+      return missing.length === 0 ? [] : [{ path: document.path, title: document.metadata.title, missing, relationships: counts }];
     });
     const cliPages = trace.documents.flatMap(document => {
       if (document.metadata.kind !== 'feature') return [];

@@ -7,7 +7,7 @@ import type { CodeDeclaration } from "./code-declaration.ts";
 import type { Evidence } from "./evidence-values.ts";
 import type { GitDiff, GitStatus } from "./git-values.ts";
 import type { AnnotatedCase, DocumentKind, DocumentMeta, DocumentRecord, Finding, ProjectConfig, Runner } from "./shared.ts";
-import { MEMORY_RELATION_KINDS, ProjectSchema } from "./shared.ts";
+import { MEMORY_RELATION_KINDS, ProjectSchema, RunnerSchema } from "./shared.ts";
 import type { TraceEdge } from "./trace-edge.ts";
 import type { FeedbackAvailability, FeedbackItem, FeedbackTriage, RemoteFeedback } from "./feedback-schema.ts";
 import { WritingPolicySchema } from "./writing-schema.ts";
@@ -141,19 +141,7 @@ export type { GitDiff, GitStatus };
 
 const Text = Schema.String.check(Schema.isMinLength(1));
 const Strings = Schema.Array(Text);
-const RunnerInputSchema = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal('node-test'),
-    sourceFiles: Strings,
-    timeoutMs: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3_600_000 })),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal('command'),
-    argv: Schema.NonEmptyArray(Text),
-    sourceFiles: Strings,
-    timeoutMs: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3_600_000 })),
-  }),
-]);
+const RunnerInputSchema = RunnerSchema;
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 export const ProjectInputSchema = ProjectSchema;

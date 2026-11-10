@@ -17,9 +17,10 @@ export function runnerArguments(runner: Runner, selected: AnnotatedCase): readon
   if (selected.status !== 'active' || selected.skipped) throw new ConcordError('CaseNotRunnable', 'Only active, runnable markers can execute');
   const named = selected.named === true;
   const pattern = named ? `^${selected.name.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&')}$` : '.*';
-  if (runner.kind === 'node-test') return ['node', '--test', '--test-reporter=tap', ...(named ? ['--test-name-pattern', pattern] : []), selected.file];
+  if (runner.kind === 'node-test' && runner.argv === undefined) return ['node', '--test', '--test-reporter=tap', ...(named ? ['--test-name-pattern', pattern] : []), selected.file];
   const replacements: Record<string, string> = { '{file}': selected.file, '{name}': selected.name, '{pattern}': pattern };
-  return runner.argv.map(part => {
+  const argv = runner.argv ?? ['node', '--test', '{file}'];
+  return argv.map(part => {
     if (/\{[^}]*\}/u.test(part) && !(part in replacements)) throw new ConcordError('InvalidRunner', 'Runner placeholders must occupy an entire argument and be file, name, or pattern');
     return replacements[part] ?? part;
   });
@@ -69,10 +70,12 @@ export const executeCommand = (cwd: string, runner: Runner, selected: AnnotatedC
 
 export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, _documents: readonly DocumentRecord[]): Effect.Effect<CommandEvidence, ConcordError, OwnedProcess> => withRunner(repo, release => Effect.gen(function* () {
   const runner = requireRunner(repo);
-  const before = objectDigest({ config: repo.configSnapshot.source, test: repo.read(selected.file), sources: runner.sourceFiles.map(path => repo.read(path)), contract: repo.read(selected.contract.split('#')[0]!) });
+  const sources = (runner.sourceFiles ?? []).map(path => repo.read(path));
+  const before = objectDigest({ config: repo.configSnapshot.source, test: repo.read(selected.file), sources, contract: repo.read(selected.contract.split('#')[0]!) });
   const result = yield* executeCommand(repo.root, runner, selected);
   return yield* Effect.try({ try: () => repo.snapshot(() => {
-    const after = objectDigest({ config: repo.read(repo.configSnapshot.path), test: repo.read(selected.file), sources: runner.sourceFiles.map(path => repo.read(path)), contract: repo.read(selected.contract.split('#')[0]!) });
+    const afterSources = (runner.sourceFiles ?? []).map(path => repo.read(path));
+    const after = objectDigest({ config: repo.read(repo.configSnapshot.path), test: repo.read(selected.file), sources: afterSources, contract: repo.read(selected.contract.split('#')[0]!) });
     release(); return before === after ? result : { ...result, commandOutcome: 'invalid' as const };
   }), catch: failure });
 }));

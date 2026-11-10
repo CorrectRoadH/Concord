@@ -249,7 +249,7 @@ export function tasteShow(repo: Repository) {
   const scan = scanTasteLinks(repo, entryIndex(taste.entries));
   const references = scan.references.map(({ path, line, entry }) => ({ path, line, entry }));
   if (scan.findings.some(finding => finding.code === 'TasteLinkInvalid')) throw new ConcordError('TasteLinkInvalid', scan.findings.map(finding => finding.message).join('; '), scan.findings);
-  return { operation: 'taste', path: TASTE_PATH, entries: taste.entries.map(({ id, title }) => ({ id, kind: id === 'general' ? 'general' : 'taste', title })), references, complete: scan.complete };
+  return { operation: 'taste', path: TASTE_PATH, entries: taste.entries.map(({ id, title }) => ({ id, title })), references, complete: scan.complete };
 }
 
 // @concord-code

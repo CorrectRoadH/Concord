@@ -72,7 +72,7 @@ test('editing a cited taste preserves its ID and immediately changes current res
   const path = 'docs/taste.md';
   const initialized = readFileSync(join(root, path), 'utf8');
   (await setMarkdown(repo, path, source, digest(initialized)));
-  const entry = tasteShow(repo).entries.find(entry => entry.kind === 'taste')!;
+  const entry = tasteShow(repo).entries.find(entry => entry.id !== 'general')!;
   (await createDocument(repo, 'feature', { id: 'cart', title: 'Cart', body: `# Cart\n\nUse [taste](../../taste.md#${entry.id}).\n` }));
   const before = repo.files('docs').sort();
   const updated = source.replace(entry.title, 'A revised project preference');

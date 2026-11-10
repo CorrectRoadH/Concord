@@ -4,5 +4,6 @@ export { gitBlob } from './verification-git.ts';
 export { gitBlobBytes } from './verification-git.ts';
 export { resolveCommit } from './verification-git.ts';
 export { worktreeIdentity } from './verification-git.ts';
+export { linkWorktreeDependencies } from './verification-git.ts';
 export { Git, OUTPUT_LIMIT, runGit, previewGit, previewGitEnvironment } from './service.ts';
 export type { GitService } from './service.ts';

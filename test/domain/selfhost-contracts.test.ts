@@ -20,10 +20,7 @@ test('current checkout configures a version-matched runner whose annotations sca
   assert.deepEqual(project.testRoots, ['test']);
   assert.deepEqual(project.sourceRoots, ['src', 'web', 'scripts']);
   assert.ok(project.runner);
-  assert.equal(project.runner.kind, 'command');
-  if (project.runner.kind !== 'command') assert.fail('self-host runner must use explicit command argv');
   assert.deepEqual(project.runner.argv, ['bun', '--no-env-file', '--config=/dev/null', '--conditions=concord-source', 'test', '--preload', 'test/support/source-runtime.ts', '--timeout', '120000', '--isolate', '--test-name-pattern', '{pattern}', '{file}']);
-  assert.equal(new Set(project.runner.sourceFiles).size, project.runner.sourceFiles.length);
 
     const repository = (await LocalRepository.open(root));
     try {
