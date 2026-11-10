@@ -60,7 +60,6 @@ docs/architecture/flow.svg:12 [bannedTerm] 单子: use 订单; docs/concepts.md#
 ```json
 {"category": "writing", "code": "bannedTerm", "path": "docs/architecture/flow.svg", "line": 12, "message": "单子: use 订单; docs/concepts.md#order"}
 {"category": "writing", "code": "LegacyWritingPolicy", "path": "docs/concord-writing.json", "message": "Legacy concord-writing.json detected; convert rules to docs/writing.md"}
-{"category": "writing", "code": "ExampleTypeError", "path": "docs/feature/cart/library.md", "line": 42, "message": "Argument of type 'string' is not assignable to parameter of type 'number'"}
 ```
 
 | finding | 什么时候出现 |
@@ -71,6 +70,5 @@ docs/architecture/flow.svg:12 [bannedTerm] 单子: use 订单; docs/concepts.md#
 | `AmbiguousConceptName` | 同一生效范围里有两个同名概念 |
 | `InvalidConceptCatalog`、`InvalidWritingPolicy` | 文件结构不符合[文件格式](format.md)，消息带各违规项的行号与原因 |
 | `LegacyWritingPolicy` | 检测到旧版 JSON 配置文件或 frontmatter 废弃词映射，需迁至 `writing.md` |
-| `ExampleTypeError` | 标记为 `check` 的代码示例未通过工程类型检查 |
 
 检查只报告，不改正文。
