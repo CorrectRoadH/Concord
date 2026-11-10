@@ -8,6 +8,7 @@
 - 终端在远程机器上时，mod 读写的是那台机器上的仓库，与本机一样能编辑、检查和自动刷新。
 - 阅读全部文档：Feature 与 Use Case、Engineering、Roadmap、品味与术语、Design、Issue 与 Memory，按[文档模型](../../document-model.md)的分组排在文档列表里，正文按 Markdown 渲染。
 - 打开一个 Use Case，看守护它的测试和实现它的代码；点开术语，看它的定义。
+- 右键点击文档节点、页面路径、关联测试或代码，复制相对路径、定位信息与讨论 Prompt，直接与 coding agent 交流。
 - 点击正文或图表，在原位置编辑 Markdown，自动保存并检查；后台更新直接重载。
 - agent 改了文件，mod 自动刷新，不打断你正在读的位置。
 
