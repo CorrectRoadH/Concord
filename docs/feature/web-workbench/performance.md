@@ -8,7 +8,7 @@
 | --- | --- |
 | `web-workbench/file-read` | 通过应用操作读取正文 |
 | `web-workbench/git-status` | 读取真实 Git 状态 |
-| `web-workbench/document-write` | 重置并执行真实文档写入 |
+| `web-workbench/document-write` | 执行真实文档写入 |
 | `web-workbench/workspace-build` | 构建当前工作区快照 |
 
 计时边界为进程内真实操作与其自身资源释放，排除 CLI 宿主启动和格式化。固定输入、消费者与缓存状态由场景源码声明；修改这些条件时重新建立参照结果，不使用整进程数字作为操作预算。

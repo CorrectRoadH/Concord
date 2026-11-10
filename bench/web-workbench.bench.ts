@@ -1,7 +1,6 @@
-import { Effect, FileSystem, Schema, type Scope } from 'effect';
-import { join } from 'node:path';
+import { Effect, Schema, type Scope } from 'effect';
 import { bench } from 'mitata';
-import { executeViewAction, getViewFile, getViewGitStatus, getWorkspaceSnapshot } from '../src/app/index.ts';
+import { executeViewAction, getViewFile, getViewGitStatus, getWorkspaceSnapshot, type GitBaselineCache } from '../src/app/index.ts';
 import { digest } from '../src/model/index.ts';
 import { documentBody, featurePath, repositoryFixture } from './fixtures/index.ts';
 import { runBenchmarks } from './run.ts';
@@ -20,23 +19,33 @@ export function registerBenchmarks(scope: Scope.Scope): void {
   });
   bench('web-workbench/git-status', async function*() {
     const fixture = await repositoryFixture(scope);
-    yield async () => fixture.runtime.runPromise(getViewGitStatus(fixture.root));
+    const cache: GitBaselineCache = {};
+    yield async () => fixture.runtime.runPromise(getViewGitStatus(fixture.root, cache));
     await fixture.close();
   });
   bench('web-workbench/document-write', async function*() {
     const fixture = await repositoryFixture(scope);
-    const changedBody = `${documentBody}\nA new current fact.\n`;
-    // Reset by rename and then publish different bytes every callback; reset/readback cost is INCLUDED.
-    yield async () => fixture.runtime.runPromise(Effect.gen(function*() {
-      const fs = yield* FileSystem.FileSystem;
-      const target = join(fixture.root, featurePath), temporary = `${target}.benchmark-tmp`;
-      yield* fs.writeFileString(temporary, documentBody);
-      yield* fs.rename(temporary, target);
-      const result = yield* executeViewAction(fixture.root, { action: 'document.set', path: featurePath, body: changedBody, expectedDigest: digest(documentBody) });
-      const receipt = yield* Schema.decodeUnknownEffect(Mutation, { onExcessProperty: 'ignore' })(result);
-      if (!receipt.changedPaths.includes(featurePath) || (yield* fs.readFileString(target)) !== changedBody) throw new Error('Document write did not publish its changed body');
-      return receipt;
-    }));
+    const bodies = [documentBody, `${documentBody}\nA new current fact.\n`] as const;
+    const digests = [digest(bodies[0]), digest(bodies[1])] as const;
+    let step = 0;
+    // Alternates between two valid states via CAS expectedDigest without disk rename/readback overhead.
+    yield async () => {
+      const current = (step % 2) as 0 | 1;
+      const next = ((step + 1) % 2) as 0 | 1;
+      step++;
+      const result = await fixture.runtime.runPromise(
+        executeViewAction(fixture.root, {
+          action: 'document.set',
+          path: featurePath,
+          body: bodies[next],
+          expectedDigest: digests[current],
+        }).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Mutation, { onExcessProperty: 'ignore' })),
+        ),
+      );
+      if (!result.changedPaths.includes(featurePath)) throw new Error('Document write did not publish');
+      return result;
+    };
     await fixture.close();
   });
   bench('web-workbench/workspace-build', async function*() {

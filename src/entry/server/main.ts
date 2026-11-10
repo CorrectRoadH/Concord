@@ -27,7 +27,7 @@ import { OwnedProcess, OwnedProcessLive, ProcessEventsLive, makeProcessGroupCpuR
 import { existsSync } from 'node:fs';
 import { channel } from 'node:diagnostics_channel';
 import { join } from 'node:path';
-import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.ts';
+import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection, type GitBaselineCache, closeGitBaselineCache } from '../../app/index.ts';
 import { CacheSnapshotUnavailable, ConcordError, failure, objectDigest } from '../../model/index.ts';
 import { Computation, ComputationReply, ComputeRpcs } from './computation.ts';
 import { makeComputationProtocol } from './computation-protocol.ts';
@@ -166,6 +166,7 @@ const asServerError = (cause: unknown) => {
   return new WorkspaceServerError({ code: error.code, message: error.message, ...(details._tag === 'Success' ? { details: details.value } : {}) });
 };
 export const computationLayer = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
+const serverBaselineCache: GitBaselineCache = {};
 const compute = Effect.fn('workspace.compute')(function*(root: string, operation: Computation) {
   switch (operation.kind) {
     case 'cache-rebuild': return yield* computeCacheRebuild(root);
@@ -178,7 +179,7 @@ const compute = Effect.fn('workspace.compute')(function*(root: string, operation
     }
     case 'read': return yield* getViewFile(root, operation.path);
     case 'read-bytes': return yield* getWorkspaceRead(root, operation.path);
-    case 'git-status': return yield* getViewGitStatus(root);
+    case 'git-status': return yield* getViewGitStatus(root, serverBaselineCache);
     case 'git-diff': return yield* getGitDiff(root, operation.path, operation.area);
     case 'p5-compile': return yield* compileP5(root, operation.input);
   }
@@ -396,6 +397,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     };
     const jobs = new ServerJobs((caseId, signal) => runOperation({ kind: 'job', caseId }, signal), () => { notify(); Effect.runFork(service.request); });
     yield* Effect.addFinalizer(() => Effect.tryPromise(() => jobs.close()).pipe(Effect.orDie));
+    yield* Effect.addFinalizer(() => Effect.sync(() => closeGitBaselineCache(serverBaselineCache)));
     const run = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(operation, { signal });
     const runAdmitted = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(admission.withSlot(operation).pipe(Effect.mapError(workspaceServerFailure)), { signal });
     const readProjection = service.state.touch.pipe(Effect.andThen(service.current), Effect.flatMap(value => {

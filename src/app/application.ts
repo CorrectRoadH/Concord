@@ -239,8 +239,7 @@ export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(roo
   const environment = yield* RuntimeEnvironment;
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput, environment));
   const config = yield* directConfig(root);
-  const testRoots = config.project === null ? [] : yield* withRepository(root,
-    repo => Effect.succeed(repo.config.testRoots), { access: 'read' });
+  const testRoots = config.project?.testRoots ?? [];
   return yield* getGitStatus(root, true, baselineCache, testRoots);
 });
 // @concord-end
