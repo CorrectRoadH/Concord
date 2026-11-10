@@ -18,7 +18,7 @@ export default {
       "--conditions=concord-source",
       "test",
       "--preload",
-      "test/support/source-runtime.ts",
+      "./test/support/source-runtime.ts",
       "--timeout",
       "120000",
       "--isolate",
