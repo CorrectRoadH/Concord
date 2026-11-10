@@ -72,9 +72,11 @@ test('steps C19 second CLI blocks interrupted work and recovers prepared and com
     assert.equal(Schema.decodeUnknownSync(error)(cli(root, ['use-case', 'format', path], 1)).error, 'RecoveryRequired');
     if (phase === 'unknown') {
       write(root, 'test/flow.ts', '// External edit\n');
-      assert.equal(Schema.decodeUnknownSync(error)(cli(root, ['recover'], 1)).error, 'RecoveryConflict');
+      const result = Schema.decodeUnknownSync(Schema.Struct({ status: Schema.String, warnings: Schema.Array(Schema.String) }))(cli(root, ['recover']));
+      assert.equal(result.status, 'discarded');
+      assert.deepEqual(result.warnings, ['test/flow.ts']);
       assert.equal(readFileSync(join(root, 'test/flow.ts'), 'utf8'), '// External edit\n');
-      assert.ok(existsSync(journal));
+      assert.equal(existsSync(journal), false);
     } else {
       const result = Schema.decodeUnknownSync(Schema.Struct({ status: Schema.String }))(cli(root, ['recover']));
       assert.equal(result.status, phase === 'prepared' ? 'rolled-back' : 'committed');

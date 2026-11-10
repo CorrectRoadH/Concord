@@ -34,7 +34,7 @@ async function naiveGaps(repo: LocalRepository) {
           return owner.path === document.path || (owner.metadata.kind === 'use-case' && owner.metadata.feature === document.path);
         });
         const gaps = missing(relationships);
-        return gaps.length ? [{ path: document.path, kind: document.metadata.kind, title: document.metadata.title, missing: gaps, relationships }] : [];
+        return gaps.length ? [{ path: document.path, title: document.metadata.title, missing: gaps, relationships }] : [];
       }),
       cliPages: trace.documents.flatMap(document => {
         if (document.metadata.kind !== 'feature') return [];
@@ -156,7 +156,7 @@ test('trace gaps distinguishes aggregate contract relations from direct document
 
     const result = (await traceGaps(repo, 'off'));
     assert.deepEqual(result.contracts, [{
-      path: 'docs/feature/orders/use-case/create-order.md', kind: 'use-case', title: 'Create order',
+      path: 'docs/feature/orders/use-case/create-order.md', title: 'Create order',
       missing: ['code', 'test'], relationships: { code: 0, test: 0 },
     }]);
     assert.deepEqual(result.cliPages, [{

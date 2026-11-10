@@ -145,8 +145,12 @@ test('source recovery freezes the exact configuration and preserves external edi
     (await throwsCode('RecoveryConflict', async () => (await repo!.recover())));
     writeFileSync(join(root, configPath), config);
     writeFileSync(join(root, 'src', 'main.ts'), 'external\n');
-    (await throwsCode('RecoveryConflict', async () => (await repo!.recover())));
-    assert.equal(existsSync(join(root, '.git', 'concord', 'journal.json')), true);
+    const discarded = await repo!.recover();
+    assert.equal(discarded.status, 'discarded');
+    assert.deepEqual(discarded.warnings, ['src/main.ts']);
+    assert.equal(existsSync(join(root, '.git', 'concord', 'journal.json')), false);
+    assert.equal(readFileSync(join(root, 'src', 'main.ts'), 'utf8'), 'external\n');
+    writeFileSync(join(root, '.git', 'concord', 'journal.json'), `${JSON.stringify(journal)}\n`);
     writeFileSync(join(root, 'src', 'main.ts'), after);
     assert.equal((await repo.recover()).status, 'rolled-back');
     assert.equal(readFileSync(join(root, 'src', 'main.ts'), 'utf8'), before);

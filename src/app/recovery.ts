@@ -50,13 +50,14 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
     }, catch: recoveryFailure });
   }));
   if (selected.runner.status === 'blocked') return {
-    operation: 'recover', status: 'blocked', journalStatus: selected.pending ? 'pending' : 'clean', changedPaths: [],
+    operation: 'recover', status: 'blocked', journalStatus: selected.pending ? 'pending' : 'clean', changedPaths: [], warnings: [],
+    testSlot: { status: 'blocked' },
     coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner: selected.runner },
   };
   const completion = yield* Effect.gen(function*() {
     if (selected.trace) {
       const receipt = yield* (recovery.recoverTrace(selected.root, { reclaimPublication: false }) as Effect.Effect<unknown, unknown, RuntimeEnvironment>).pipe(Effect.mapError(recoveryFailure));
-      return { operation: 'recover', status: 'trace-recovered', receipt };
+      return { operation: 'recover', status: 'trace-recovered', journalStatus: 'trace-recovered', changedPaths: [], warnings: [], receipt };
     }
     return yield* Effect.scoped(Effect.acquireUseRelease(
       openWriteRepository(selected.root, { recover: true, reclaimPublication: false }),
@@ -70,6 +71,12 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
     if ((yield* pendingJournals(selected.root)).length > 0) return yield* Effect.fail(new ConcordError('RecoveryRequired', 'A publication journal remains after recovery; preserve it and retry recovery'));
     return yield* Effect.try({ try: () => inspectRunner(selected.root, runtime.env), catch: recoveryFailure });
   }));
-  return { ...completion, status: runner.status === 'blocked' ? 'blocked' : completion.status, journalStatus: completion.status,
-    coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner } };
+  return {
+    ...completion,
+    status: runner.status === 'blocked' ? 'blocked' : completion.status,
+    journalStatus: completion.journalStatus ?? completion.status,
+    warnings: completion.warnings ?? [],
+    testSlot: { status: runner.status ?? 'absent' },
+    coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner },
+  };
 });

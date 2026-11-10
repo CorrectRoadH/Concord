@@ -1,46 +1,46 @@
 {
   "format": "concord.native-release/v1",
   "repository": "CorrectRoadH/hawdb",
-  "version": "0.28.0",
-  "tag": "hawdb-0.28.0",
-  "producerCommit": "3115cb14cce3f9cfea4fbbd8a172b6fa87c593b8",
-  "engineVersion": "0.28.0",
-  "revision": "d47dd9b2b6a51c57a8a621367f5ff6d5d958b3e6",
+  "version": "0.29.0",
+  "tag": "hawdb-0.29.0",
+  "producerCommit": "8ee654c83a1fac95413dd36a070fec484c739bfc",
+  "engineVersion": "0.29.0",
+  "revision": "ffab379f79e9b77e961fd84d696ec1ac78b90d3c",
   "abi": "concord-hawdb-1",
-  "sourceDigest": "01b9e4e47ad409671ee0d602f9cb7e10869715070795e9349b813c66ba02edf0",
-  "cargoLockDigest": "e345439c7b067e8a598ec7f1d722b4d91ac7072f33bc51d2ad752e104edf565c",
+  "sourceDigest": "5415d5a006032f43d91316a8e3cab56f0275e8bed1454d38b3d3a42ba6ee8fa9",
+  "cargoLockDigest": "a01e761350518019247c4772bf90ebd56f92c15b3bc6eedb99ea91e1696a3b9d",
   "assets": [
     {
       "target": "linux-x64-glibc",
       "testHooks": false,
       "name": "hawdb-linux-x64-glibc.tar.gz",
-      "archiveSha256": "c2c1647bf80e03b5f5c5a8d13e09329fd9f0396ca664fdae483c60f3760dd051",
-      "binarySha256": "ee1feff3801e93bebc13e28303f598426e59c979cb39b78acfdbf9d1cccf5a1a",
-      "noticesSha256": "f80fc7494bd7b4a77727122bfc5349af9c1a77b49dbea1641faa6c1eb69e3898"
+      "archiveSha256": "51e53d7921bdf6fadfcd61cf9849ad36e494f5a8e0ada14344fc4cf3e8489e62",
+      "binarySha256": "6cf41e9db0321363613860006e66855d4a3526a390bacbe810c6c886d7642e09",
+      "noticesSha256": "4e9377f643c3607709bb1b19bffff82b219d443682432ffdd5775f180ded0ab9"
     },
     {
       "target": "linux-x64-glibc",
       "testHooks": true,
       "name": "hawdb-linux-x64-glibc-test-hooks.tar.gz",
-      "archiveSha256": "d7eb290c3e0ae8482e5a1502d55293858562aad0da633f929b38851ffa60970c",
-      "binarySha256": "47de00656fdfeb067a5e2d52e44fb73082b4cbe422b6b5f0bb6e3f38479ec630",
-      "noticesSha256": "f80fc7494bd7b4a77727122bfc5349af9c1a77b49dbea1641faa6c1eb69e3898"
+      "archiveSha256": "bb53302991ed6af0e622907638822d81b44db9c52198ea963afbf60143e04a44",
+      "binarySha256": "5972b5fd01e036ae34c57b58cdb01d2fbd1242545001211ad9dd99479003159f",
+      "noticesSha256": "4e9377f643c3607709bb1b19bffff82b219d443682432ffdd5775f180ded0ab9"
     },
     {
       "target": "darwin-arm64",
       "testHooks": false,
       "name": "hawdb-darwin-arm64.tar.gz",
-      "archiveSha256": "ab31c6a9f87e62ac6d5d522ce5d8473024a856f263ad4b1ffd20025f47ec578b",
-      "binarySha256": "a72a77135cab107ab6e354c51cb487475350a8c2881c4e3a9756c8ef7c568482",
-      "noticesSha256": "f80fc7494bd7b4a77727122bfc5349af9c1a77b49dbea1641faa6c1eb69e3898"
+      "archiveSha256": "da81f7c94ebb735427f6559522c7781a1a19e376d797edda51f58be0081e3fe8",
+      "binarySha256": "5498216806a11d08bc5fb132baf889b94d2fa2b087a2bc9a72d49cad7a33328c",
+      "noticesSha256": "4e9377f643c3607709bb1b19bffff82b219d443682432ffdd5775f180ded0ab9"
     },
     {
       "target": "darwin-arm64",
       "testHooks": true,
       "name": "hawdb-darwin-arm64-test-hooks.tar.gz",
-      "archiveSha256": "651a23e1ceb38fd14eb4d5dbe4ff93856ce27953ef490bfd1645ba74e6f17fd6",
-      "binarySha256": "61ed718656a0ba6c17dee8f5a9195db49f318d8aea09ac6033faeed0b2ac0c9b",
-      "noticesSha256": "f80fc7494bd7b4a77727122bfc5349af9c1a77b49dbea1641faa6c1eb69e3898"
+      "archiveSha256": "f3c5df390cb27685b7783f5512a05cd13e087355fe272778d0c9199b3a458ad5",
+      "binarySha256": "f93dc890381b0f4e574ebd32d5bd04da65256b7811ff6fff4171e5a739e1b595",
+      "noticesSha256": "4e9377f643c3607709bb1b19bffff82b219d443682432ffdd5775f180ded0ab9"
     }
   ]
 }

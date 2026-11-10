@@ -1155,7 +1155,7 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#完整路径
-  async recover(): Promise<{ operation: string; status: string; changedPaths: readonly string[] }> {
+  async recover(): Promise<{ operation: string; status: string; changedPaths: readonly string[]; journalStatus: string; warnings: readonly string[] }> {
     return this.snapshot(async () => {
       try { return await this.recoverUnderLease(); }
       finally { this.observing = true; }
@@ -1163,14 +1163,25 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#写入保护
-  private async recoverUnderLease(): Promise<{ operation: string; status: string; changedPaths: readonly string[] }> {
+  private async recoverUnderLease(): Promise<{ operation: string; status: string; changedPaths: readonly string[]; journalStatus: string; warnings: readonly string[] }> {
     this.clearPathObservations();
     const path = join(this.privateDir, 'journal.json');
-    if (!present(path)) return { operation: 'recover', status: 'clean', changedPaths: [] };
+    if (!present(path)) return { operation: 'recover', status: 'clean', changedPaths: [], journalStatus: 'clean', warnings: [] };
     const journal = currentJournal(path);
     await this.preflight(journal, true);
     this.validateObservations();
     this.observing = false;
+    const warnings: string[] = [];
+    for (const change of journal.changes) {
+      const current = this.moveImage(change);
+      if (current !== change.before && current !== change.after) {
+        warnings.push(change.path);
+      }
+    }
+    if (warnings.length > 0) {
+      rmSync(path); syncDirectory(this.privateDir);
+      return { operation: 'recover', status: 'discarded', journalStatus: 'discarded', warnings, changedPaths: [] };
+    }
     if (journal.phase === 'prepared') {
       invalidateActiveRun(this.root, this.executionEnvironment);
       for (const change of [...journal.changes].reverse()) {
@@ -1179,7 +1190,6 @@ export class LocalRepository implements Repository {
           if (digest(current) !== journal.scope.configDigest) throw new ConcordError('RecoveryConflict', 'Project configuration changed during source recovery');
         }
         const current = this.moveImage(change);
-        if (current !== change.before && current !== change.after) continue;
         if (current !== change.before) this.apply(change.path, change.before, change.mode, change.encoding);
       }
       for (const dir of [...journal.directories].sort((a,b) => b.length - a.length)) {
@@ -1189,7 +1199,8 @@ export class LocalRepository implements Repository {
     }
     if (journal.phase === 'committed') this.pruneMovedRoadmap(journal);
     rmSync(path); syncDirectory(this.privateDir);
-    return { operation: 'recover', status: journal.phase === 'prepared' ? 'rolled-back' : 'committed', changedPaths: journal.changes.map(c => c.path) };
+    const status = journal.phase === 'prepared' ? 'rolled-back' : 'committed';
+    return { operation: 'recover', status, journalStatus: status, warnings: [], changedPaths: journal.changes.map(c => c.path) };
   }
 }
 

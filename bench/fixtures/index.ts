@@ -37,6 +37,21 @@ const git = Effect.fn('bench.fixture.git')(function*(root: string, args: readonl
 }, Effect.scoped);
 
 let templatePromise: Promise<string> | undefined;
+let templateDir: string | undefined;
+
+process.on('exit', () => {
+  if (templateDir) {
+    try { rmSync(templateDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+export function cleanupTemplate(): void {
+  if (templateDir) {
+    try { rmSync(templateDir, { recursive: true, force: true }); } catch {}
+    templateDir = undefined;
+    templatePromise = undefined;
+  }
+}
 
 /** Builds a template repository once; subsequent fixtures clone it cheaply. */
 async function buildTemplate(): Promise<string> {
@@ -45,6 +60,7 @@ async function buildTemplate(): Promise<string> {
     const fs = yield* FileSystem.FileSystem;
     return yield* fs.makeTempDirectory({ prefix: 'concord-bench-template-' });
   }));
+  templateDir = tempDir;
 
   const appRuntime = ManagedRuntime.make(applicationLayer(tempDir));
   try {
@@ -92,14 +108,6 @@ async function buildTemplate(): Promise<string> {
   }
   return tempDir;
 }
-
-process.on('exit', () => {
-  if (templatePromise) {
-    templatePromise.then(dir => {
-      try { rmSync(dir, { recursive: true, force: true }); } catch {}
-    }).catch(() => {});
-  }
-});
 
 /** A child scope is attached before acquisition; outer failure also releases a suspended generator. */
 export async function repositoryFixture(parent: Scope.Scope) {

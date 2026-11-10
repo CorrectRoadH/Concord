@@ -102,7 +102,9 @@ test('packed recover rolls back prepared Issue deletion, preserves committed del
   writeFileSync(join(root, path), before);
   writeFileSync(journalPath, `${JSON.stringify({ ...common, phase: 'prepared' })}\n`);
   writeFileSync(join(root, path), 'unknown edit\n');
-  assert.equal((await recover(root, 1)).error, 'RecoveryConflict');
+  const discarded = await runApplication(recoverLocalState(root));
+  assert.equal(discarded.status, 'discarded');
+  assert.deepEqual(discarded.warnings, [path]);
   assert.equal(readFileSync(join(root, path), 'utf8'), 'unknown edit\n');
-  assert.equal(existsSync(journalPath), true);
+  assert.equal(existsSync(journalPath), false);
 })));

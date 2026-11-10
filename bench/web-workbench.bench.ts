@@ -1,6 +1,6 @@
 import { Effect, Schema, type Scope } from 'effect';
 import { bench } from 'mitata';
-import { executeViewAction, getViewFile, getViewGitStatus, getWorkspaceSnapshot, type GitBaselineCache } from '../src/app/index.ts';
+import { closeGitBaselineCache, executeViewAction, getViewFile, getViewGitStatus, getWorkspaceSnapshot, type GitBaselineCache } from '../src/app/index.ts';
 import { digest } from '../src/model/index.ts';
 import { documentBody, featurePath, repositoryFixture } from './fixtures/index.ts';
 import { runBenchmarks } from './run.ts';
@@ -20,8 +20,12 @@ export function registerBenchmarks(scope: Scope.Scope): void {
   bench('web-workbench/git-status', async function*() {
     const fixture = await repositoryFixture(scope);
     const cache: GitBaselineCache = {};
-    yield async () => fixture.runtime.runPromise(getViewGitStatus(fixture.root, cache));
-    await fixture.close();
+    try {
+      yield async () => fixture.runtime.runPromise(getViewGitStatus(fixture.root, cache));
+    } finally {
+      closeGitBaselineCache(cache);
+      await fixture.close();
+    }
   });
   bench('web-workbench/document-write', async function*() {
     const fixture = await repositoryFixture(scope);

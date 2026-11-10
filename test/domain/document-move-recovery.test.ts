@@ -49,11 +49,22 @@ test('recovery refuses a forged move image, new scan member or external edit and
     else if (scenario === 'new test member') write(root, 'test/new.ts', `// @use-case ${source}#run\n`);
     else write(root, 'src/one.ts', '// External edit\n');
     repo.close();
-    await assert.rejects(async () => {
+    if (scenario === 'external edit') {
       const recovery = await LocalRepository.open(root, { recover: true, optimistic: true, persistentCache: 'off' });
-      try { await recovery.recover(); } finally { recovery.close(); }
-    }, { code: 'RecoveryConflict' });
-    assert.equal(existsSync(journalPath), true);
+      try {
+        const result = await recovery.recover();
+        assert.equal(result.status, 'discarded');
+        assert.deepEqual(result.warnings, ['src/one.ts']);
+      } finally { recovery.close(); }
+      assert.equal(existsSync(journalPath), false);
+      assert.equal(readFileSync(join(root, 'src/one.ts'), 'utf8'), '// External edit\n');
+    } else {
+      await assert.rejects(async () => {
+        const recovery = await LocalRepository.open(root, { recover: true, optimistic: true, persistentCache: 'off' });
+        try { await recovery.recover(); } finally { recovery.close(); }
+      }, { code: 'RecoveryConflict' });
+      assert.equal(existsSync(journalPath), true);
+    }
   }));
 });
 

@@ -59,8 +59,13 @@ test('interrupted multi-file publication rolls back, and recovery preserves exte
   const publishingRepo=(await LocalRepository.open(root));repo=publishingRepo;chmodSync(join(root,'docs/design/blocked'),0o555);
   (await assert.rejects(async ()=>(await publishingRepo.publish('failure',[{path:'memory/a.md',before:'before',after:'after'},{path:'docs/design/blocked/b.md',before:'before-b',after:'after-b'}])),{code:'RecoveryRequired'}));publishingRepo.close();chmodSync(join(root,'docs/design/blocked'),0o755);
   assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'after');(await assert.rejects(async ()=>(await LocalRepository.open(root)),{code:'RecoveryRequired'}));
-  writeFileSync(join(root,'memory/a.md'),'external');(await assert.rejects(async ()=>(await LocalRepository.open(root,{recover:true})),{code:'RecoveryConflict'}));assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'external');
-  writeFileSync(join(root,'memory/a.md'),'after');const recoveryRepo=(await LocalRepository.open(root,{recover:true}));repo=recoveryRepo;assert.equal((await recoveryRepo.recover()).status,'rolled-back');assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'before');assert.equal(readFileSync(join(root,'docs/design/blocked/b.md'),'utf8'),'before-b');recoveryRepo.close();
+  writeFileSync(join(root,'memory/a.md'),'external');
+  const discardedRepo=(await LocalRepository.open(root,{recover:true}));const discarded=(await discardedRepo.recover());discardedRepo.close();
+  assert.equal(discarded.status,'discarded');assert.deepEqual(discarded.warnings,['memory/a.md']);assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'external');
+  writeFileSync(join(root,'memory/a.md'),'after');const recoveryJournalPath=join(root,'.git','concord','journal.json');
+  const confSource=readFileSync(join(root,'concord.config.ts'),'utf8');
+  writeFileSync(recoveryJournalPath,JSON.stringify({format:'concord.journal',root,privateDir:join(root,'.git','concord'),operation:'failure',phase:'prepared',directories:[],scope:{kind:'documents',configPath:'concord.config.ts',configSource:confSource,configDigest:digest(confSource)},changes:[{path:'memory/a.md',before:'before',after:'after',beforeDigest:digest('before'),afterDigest:digest('after'),mode:420}]})+'\n');
+  const recoveryRepo=(await LocalRepository.open(root,{recover:true}));repo=recoveryRepo;assert.equal((await recoveryRepo.recover()).status,'rolled-back');assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'before');recoveryRepo.close();
  } finally {repo?.close();chmodSync(join(root,'docs/design/blocked'),0o755);rmSync(root,{recursive:true,force:true});}
 })));
 
@@ -81,7 +86,9 @@ test('unified journal recovers interrupted init, preflights every target, and pr
    {path:'memory/a.md',before:'before-a',after:'after-a',beforeDigest:digest('before-a'),afterDigest:digest('after-a'),mode:420},
    {path:'memory/b.md',before:'before-b',after:'after-b',beforeDigest:digest('before-b'),afterDigest:digest('after-b'),mode:420},
   ]};
-  writeFileSync(join(root,'memory/a.md'),'after-a');writeFileSync(join(root,'memory/b.md'),'external');writeFileSync(journalPath,JSON.stringify(batch)+'\n');(await assert.rejects(async ()=>(await LocalRepository.open(root,{recover:true})),{code:'RecoveryConflict'}));assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'after-a');assert.equal(existsSync(journalPath),true);
-  rmSync(journalPath);writeFileSync(journalPath,'{"format":"concord.journal/v2"}\n');(await assert.rejects(async ()=>(await LocalRepository.open(root,{recover:true})),{code:'InvalidData'}));assert.equal(existsSync(journalPath),true);
+  writeFileSync(join(root,'memory/a.md'),'after-a');writeFileSync(join(root,'memory/b.md'),'external');writeFileSync(journalPath,JSON.stringify(batch)+'\n');
+  const externalRepo=(await LocalRepository.open(root,{recover:true}));const externalResult=(await externalRepo.recover());externalRepo.close();
+  assert.equal(externalResult.status,'discarded');assert.deepEqual(externalResult.warnings,['memory/b.md']);assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'after-a');assert.equal(existsSync(journalPath),false);
+  writeFileSync(journalPath,'{"format":"concord.journal/v2"}\n');(await assert.rejects(async ()=>(await LocalRepository.open(root,{recover:true})),{code:'InvalidData'}));assert.equal(existsSync(journalPath),true);
  } finally {repo?.close();rmSync(root,{recursive:true,force:true});}
 });
