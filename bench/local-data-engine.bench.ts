@@ -1,6 +1,7 @@
 import { Effect, type Scope } from 'effect';
 import { bench } from 'mitata';
-import { cacheStatus, scanQueryProcess } from '../src/app/index.ts';
+import { scanQueryProcess } from '../src/app/index.ts';
+import { cacheStatus } from '../src/domain/tests/index.ts';
 import { Workspace } from '../src/base/workspace/index.ts';
 import { failure } from '../src/model/index.ts';
 import { repositoryFixture } from './fixtures/index.ts';

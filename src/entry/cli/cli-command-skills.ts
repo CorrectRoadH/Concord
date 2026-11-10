@@ -2,7 +2,8 @@
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
 import { Effect, Option } from 'effect';
 import { Command } from 'effect/cli';
-import { installWorkflowSkills, openWriteRepository } from '../../app/index.ts';
+import { installWorkflowSkills } from '../../app/index.ts';
+import { openWriteRepository } from '../../base/workspace/index.ts';
 import { emit, root } from './cli-base.ts';
 
 export const skills = Command.make('skills').pipe(

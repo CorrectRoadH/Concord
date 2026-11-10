@@ -3,7 +3,7 @@ import type { ApplicationRuntime } from '../../app/index.ts';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
-import { builtAssetRoot, sourceInstallation, sourceWebServer, sourceP5Runtime } from "../../app/index.ts";
+import { builtAssetRoot, sourceInstallation, sourceWebServer, sourceP5Runtime } from "../../base/installation/index.ts";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { Schema } from "effect";

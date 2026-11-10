@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { listTemplates, templateBody } from "../../app/index.ts";
+import { listTemplates, templateBody } from "../../domain/documents/index.ts";
 import { root, optional, body, emit, sync } from "./cli-base.ts";
 
 const templates = Command.make('template').pipe(Command.withDescription('Inspect built-in writing templates without a project.'), Command.withSubcommands([

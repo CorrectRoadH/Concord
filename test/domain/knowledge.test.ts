@@ -1,4 +1,5 @@
-import { knowledgeSearchRecords, knowledgeIndex, removeIssue, setMarkdown, recoverLocalState, linkIssue, type CreateDocumentInput } from '../../src/app/index.ts';
+import { knowledgeSearchRecords, knowledgeIndex, removeIssue, setMarkdown, recoverLocalState, type CreateDocumentInput } from '../../src/app/index.ts';
+import { linkIssue } from '../../src/domain/issues/index.ts';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

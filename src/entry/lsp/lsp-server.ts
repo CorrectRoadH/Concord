@@ -1,17 +1,15 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
 import { applicationRuntime, type ApplicationRuntime } from '../../app/index.ts';
-import { createReadRepository } from "../../app/index.ts";
+import { LocalRepository, discoverRoot, readRepositoryFileSync } from "../../base/workspace/index.ts";
 import { lstatSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { type Cause, Effect, Fiber, Queue, Schema, Stdio, Stream } from "effect";
-import { discoverRoot, readRepositoryFileSync } from "../../app/index.ts";
-import { uriPath } from "../../app/index.ts";
+import { uriPath, makeOwnedProcessService } from "../../base/process/index.ts";
 import { randomUUID } from "node:crypto";
 import { ConcordError, decode, digest, failure } from "../../model/index.ts";
 import * as P from '../../model/editor/index.ts';
 import { runEditorJob } from "../../app/index.ts";
-import { makeOwnedProcessService } from "../../app/index.ts";
 
 interface Task {
   readonly id?: P.RpcId;
@@ -22,7 +20,7 @@ interface Task {
 
 /** Final verification deliberately opens a fresh config authorization context. */
 async function verify(root: string, result: P.Computed, runtime: ApplicationRuntime): Promise<void> {
-  const repo = await createReadRepository(root, { access: 'read', optimistic: true, persistentCache: 'off', runtime });
+  const repo = await LocalRepository.open(root, { access: 'read', optimistic: true, persistentCache: 'off', runtime });
   try {
     repo.snapshot(() => {
       if (repo.configSnapshot.digest !== result.config) throw new ConcordError('ContentModified', 'Configuration changed');
@@ -52,7 +50,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
   yield* Effect.addFinalizer(() => Queue.end(stdout).pipe(Effect.andThen(Queue.end(stderr)), Effect.andThen(Fiber.join(output)), Effect.andThen(Fiber.join(errors)), Effect.andThen(Effect.suspend(() => outputFailure === undefined ? Effect.void : Effect.die(failure(outputFailure))))));
   const root = yield* Effect.try({ try: () => discoverRoot(rootInput, false, runtime), catch: failure });
   // Validate the initial project without retaining a repository handle while waiting for stdin.
-  yield* Effect.tryPromise({ try: async () => { const repo = await createReadRepository(root, { access: 'read', persistentCache: 'off', runtime }); repo.close(); }, catch: failure }).pipe(Effect.uninterruptible);
+  yield* Effect.tryPromise({ try: async () => { const repo = await LocalRepository.open(root, { access: 'read', persistentCache: 'off', runtime }); repo.close(); }, catch: failure }).pipe(Effect.uninterruptible);
   yield* Effect.callback<void, ConcordError>(resume => {
     let inputFiber: Fiber.Fiber<void> | undefined;
     const frames = new P.EditorFrames();
@@ -94,7 +92,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
     const log = (cause: unknown) => { const error = failure(cause); Queue.offerUnsafe(stderr, Buffer.from(`${error.code}: ${error.message.slice(0, 2000)}\n`)); };
     const clear = (document: P.Overlay) => send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri: document.uri, version: document.version, diagnostics: [] } });
     const resolveUri = async (uri: string) => {
-      const repo = await createReadRepository(root, { access: 'read', persistentCache: 'off', runtime });
+      const repo = await LocalRepository.open(root, { access: 'read', persistentCache: 'off', runtime });
       try {
         const path = uriPath(repo, uri);
         if (path.split('/').some(part => part === '.git' || part === 'node_modules')) throw new ConcordError('UnsafeEditorUri', 'Private and dependency paths are excluded');

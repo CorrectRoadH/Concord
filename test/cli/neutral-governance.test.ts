@@ -1,7 +1,7 @@
 import { ErrorOutput, Effect, assert, call, consumer, join, readFileSync, rmSync, test, write } from '../support/cli-fixture.ts';
 import { gitCommit } from '../support/fix-consumer.ts';
 import { createDocument } from '../support/operations.ts';
-import { buildTrace } from '../../src/app/index.ts';
+import { buildTrace } from '../../src/domain/trace/index.ts';
 import { LocalRepository } from '../support/repository.ts';
 
 async function configlessConsumer(name: string): Promise<string> {

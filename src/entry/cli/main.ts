@@ -5,7 +5,7 @@
 import type * as ServerTypes from '../server/index.ts';
 import type * as AppTypes from '../../app/index.ts';
 import type * as ProcessTypes from '../../base/process/index.ts';
-import { Installation } from '../../base/installation/index.ts';
+import { Installation, builtAssetRoot } from '../../base/installation/index.ts';
 import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./launchers.ts";
 import { Publication } from "../../base/publication/index.ts";
 import type { Queries } from "../../app/index.ts";
@@ -14,12 +14,12 @@ import { Cause, Clock, ConfigProvider, Console, Context, Effect, Fiber, Layer, O
 import type { Command } from "effect/cli";
 import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.ts";
 import { humanOutput } from "./presentation.ts";
-import { OwnedProcess, OwnedProcessLive, ProcessEventsLive } from "../../base/process/index.ts";
+import { OwnedProcess, OwnedProcessLive, ProcessEventsLive, makeOwnedProcessService } from "../../base/process/index.ts";
 import { Git } from '../../base/git/index.ts';
 import { Workspace } from '../../base/workspace/index.ts';
 import { Sources } from '../../base/sources/index.ts';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.ts';
-import { awaitCacheMaintenance } from '../../app/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter, awaitCacheMaintenance } from '../../base/cache/index.ts';
+import { mergeLocalFeedbackObservation } from '../../domain/feedback/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
 import { CliInvocation, writeStderr } from './invocation.ts';
@@ -95,8 +95,6 @@ const queryWithFirstProjection = Effect.fn('queryWithFirstProjection')(function*
 const loadServerMain = () => Effect.tryPromise(() => import('../server/main.ts'));
 const loadApp = () => Effect.tryPromise(() => import('../../app/index.ts'));
 const executeQuery: typeof AppTypes.executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
-const mergeLocalFeedbackObservation: typeof AppTypes.mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
-const builtAssetRoot = (name: 'web') => loadApp().pipe(Effect.flatMap(app => Effect.try({ try: () => app.builtAssetRoot(name), catch: failure })), Effect.mapError(failure));
 const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string, scope?: string, countReuse = true) {
   const platform = yield* ServerRuntime;
   const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
@@ -197,7 +195,7 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
   }));
   if (current) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'A service already owns this project; command mode cannot attach to it'));
   const scope = { root, privateDir, key: crypto.randomUUID() };
-  const owner = (yield* loadApp()).makeOwnedProcessService({ graceMs: 5000, environment: yield* RuntimeEnvironment });
+  const owner = makeOwnedProcessService({ graceMs: 5000, environment: yield* RuntimeEnvironment });
   const installed = yield* Installation;
   yield* Effect.addFinalizer(() => owner.cleanupResults.pipe(Effect.flatMap(results => results.some(result => !OwnedProcess.confirmed(result))
     ? Effect.die(new ConcordError('CleanupFailed', 'Command service process group cleanup is unconfirmed')) : Effect.void)));
@@ -320,7 +318,7 @@ const stopWorkspaceServer = (root: string, identifiedPrivateDir?: string) => Eff
 
 const HttpLease = Schema.Struct({ host: Schema.String, port: Schema.Int, address: Schema.String, lease: Schema.String, token: Schema.String });
 function makeWorkspaceView() { return Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => Effect.Effect<void, unknown, Stdio.Stdio>) {
-  yield* builtAssetRoot('web');
+  builtAssetRoot('web');
   return yield* Effect.scoped(Effect.gen(function*() {
     const connection = yield* connectOrStartWorkspace(options.root, options.inProcess === true);
     const deadline = (yield* Clock.currentTimeMillis) + 60_000;
@@ -425,7 +423,7 @@ const launchers = Layer.mergeAll(
   Layer.effect(ViewLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | Layer.Success<typeof cliPlatformLayer> | OwnedProcess | RuntimeEnvironment | Stdio.Stdio | Terminal.Terminal>();
     return ViewLauncher.of({ serve: (options, ready) => Effect.gen(function*() {
-      yield* builtAssetRoot('web');
+      builtAssetRoot('web');
       const http = yield* Effect.tryPromise(() => import('../http/index.ts'));
       return yield* serveWorkspaceView(options, info => ready({ ...info, ...http.viewAddresses(info.host, info.port) }));
     }).pipe(Effect.mapError(failure), Effect.provideContext(context)) });

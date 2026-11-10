@@ -1,7 +1,5 @@
 // @concord-file
 // @concord-implements docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
-import { checkWriting } from "../../app/index.ts";
-
 import { Effect, Option } from "effect";
 import { Command } from "effect/cli";
 import { root, optional, sync } from "./cli-base.ts";

@@ -3,7 +3,7 @@
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { listFeedback, syncFeedback } from "../../app/index.ts";
+import { syncFeedback } from "../../domain/feedback/index.ts";
 import { FeedbackConnectionSchema } from "../../model/index.ts";
 import { setConfig, showConfig } from "../../app/index.ts";
 import { documentShow } from "../../app/index.ts";

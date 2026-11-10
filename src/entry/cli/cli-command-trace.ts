@@ -3,7 +3,6 @@
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 // @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md#list-gaps
 import { Argument, Command } from "effect/cli";
-import { buildTrace } from "../../app/index.ts";
 import { traceGaps, traceShow } from "../../app/index.ts";
 import { sync, cached } from "./cli-base.ts";
 import { withReadRepo, withQuery } from "./cli-repository.ts";

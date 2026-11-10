@@ -3,14 +3,10 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#原生测试-adapter
 import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { collectNativeTests, readNativeObservations } from "../../app/index.ts";
-import { runCase } from "../../app/index.ts";
-import { verifyTest } from "../../app/index.ts";
-import { buildTrace, requireValidTrace, selectCase } from "../../app/index.ts";
+import { collectNativeTests, runCase, verifyTest } from "../../domain/tests/index.ts";
+import { buildTrace, requireValidTrace, selectCase } from "../../domain/trace/index.ts";
+import { annotationSnippet } from "../../domain/onboarding/index.ts";
 import { ConcordError } from "../../model/index.ts";
-import { annotationSnippet } from "../../app/index.ts";
-import { analysisView } from "../../app/index.ts";
-import { scanCode } from "../../app/index.ts";
 import { text, many, id, sync, cached } from "./cli-base.ts";
 import { withRepo, withReadRepo, withQuery } from "./cli-repository.ts";
 import { setExitCode } from './invocation.ts';

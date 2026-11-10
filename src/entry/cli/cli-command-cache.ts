@@ -5,9 +5,8 @@ import { Command } from "effect/cli";
 import { Effect } from 'effect';
 import { ServerLauncher } from './launchers.ts';
 import { rebuildCache } from '../../app/index.ts';
-import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../../app/index.ts";
+import { cacheStatus, clearCache, previewCacheClear } from "../../domain/tests/index.ts";
 import { ConcordError } from "../../model/index.ts";
-import { scanCode } from "../../app/index.ts";
 import { sync, root, viewRoot, emit } from "./cli-base.ts";
 import { withRepo, withReadRepo } from "./cli-repository.ts";
 

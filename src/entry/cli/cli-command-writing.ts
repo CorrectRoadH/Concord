@@ -1,8 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/manage-writing.md
-import { checkWriting } from "../../app/index.ts";
-import { showWriting, writingIndex } from "../../app/index.ts";
-import { readWritingPolicy } from "../../app/index.ts";
+import { checkWriting } from "../../domain/writing/index.ts";
 import { Effect, Option } from "effect";
 import { Command } from "effect/cli";
 import { text, optional, body, sync, expected } from "./cli-base.ts";

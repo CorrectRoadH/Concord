@@ -2,7 +2,6 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#创建与编辑文档
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { loadDocuments, readDocumentReference, findDocument } from "../../app/index.ts";
 import { adoptRoadmap, moveDocument } from "../../app/index.ts";
 import { createDocument } from "../../app/index.ts";
 import { documentShow } from "../../app/index.ts";

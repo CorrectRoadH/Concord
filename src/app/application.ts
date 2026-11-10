@@ -397,3 +397,8 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
 });
 // @concord-end
+
+export const applicationRuntime = Effect.gen(function*() { return yield* RuntimeEnvironment; });
+export type ApplicationRuntime = RuntimeEnvironmentSnapshot;
+export const locateProjectRoot = (input?: string) => Effect.flatMap(Workspace, workspace => workspace.locate(input, true)).pipe(Effect.map(location => location.root));
+export const withSourceSnapshot = <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>) => Effect.flatMap(Sources, sources => sources.snapshot(repo, operation));

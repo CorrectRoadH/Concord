@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Clock, Effect } from 'effect';
-import type { ProcessGroupCpu } from '../../app/index.ts';
+import type { ProcessGroupCpu } from '../../base/process/index.ts';
 import { ConcordError } from '../../model/index.ts';
 
 const watchProgress = Effect.fn('Computation.watchProgress')(function*(cpu: Effect.Effect<ProcessGroupCpu, unknown>, responses: () => number) {

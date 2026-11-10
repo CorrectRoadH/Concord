@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
-import { collectNativeTests, readNativeObservations } from '../../src/app/index.ts';
+import { collectNativeTests, readNativeObservations } from '../../src/domain/tests/index.ts';
 import { OwnedProcess, makeOwnedProcessService, type OwnedProcessResult } from '../../src/base/process/index.ts';
 import { RequestSchema, digest, protocolDecode, protocolJson } from '../../src/model/index.ts';
 import { createConsumer } from '../support/consumer.ts';

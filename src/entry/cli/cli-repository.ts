@@ -2,11 +2,12 @@
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 // @concord-implements docs/engineering/testing/architecture.md#进程内-cli
-import { waitForPublication, withSourceSnapshot } from "../../app/index.ts";
+import { waitForPublication } from "../../base/publication/index.ts";
+import { withSourceSnapshot } from "../../app/index.ts";
 import { cachedQuery, type Query } from "../../app/index.ts";
 import { Effect, Option, Result } from "effect";
 import { ConcordError } from '../../model/index.ts';
-import { type LocalRepository, openWriteRepository, openReadRepository } from "../../app/index.ts";
+import { type LocalRepository, openWriteRepository, openReadRepository } from "../../base/workspace/index.ts";
 
 import { root, emit, sync } from "./cli-base.ts";
 import { setExitCode } from './invocation.ts';

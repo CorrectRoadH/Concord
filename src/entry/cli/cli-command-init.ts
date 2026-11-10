@@ -3,7 +3,7 @@
 // @concord-implements docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md#完整路径
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#init
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
-import { openWriteRepository } from "../../app/index.ts";
+import { openWriteRepository } from "../../base/workspace/index.ts";
 import { Effect, Option, Stdio } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 

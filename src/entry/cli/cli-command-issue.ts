@@ -4,10 +4,8 @@
 
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { closeIssue, linkIssue, unlinkIssue } from "../../app/index.ts";
-import { closeFixedIssue } from "../../app/index.ts";
-
-import { knowledgeSearchRecords } from "../../app/index.ts";
+import { closeIssue, linkIssue, unlinkIssue } from "../../domain/issues/index.ts";
+import { closeFixedIssue } from "../../domain/tests/index.ts";
 
 import { ConcordError, MEMORY_RELATION_KINDS, decode } from "../../model/index.ts";
 import { root, text, optional, many, id, sync } from "./cli-base.ts";

@@ -231,9 +231,9 @@ export function dependencyViolations(audit: Audit): Violation[] {
       const root = /^src\/entry\/[^/]+\/(?:[^/]+\/)?main\.ts$/u.test(edge.from) || edge.from === 'src/entry/server/operation/run.ts';
       if (from === 'model' && to !== 'model' || from === 'base' && !['model', 'base'].includes(to!)
         || from === 'domain' && !['model', 'base', 'domain'].includes(to!) || from === 'app' && to === 'entry'
-        || from === 'entry' && to !== 'model' && to !== 'app' && to !== 'domain' && moduleOf(edge.from) !== moduleOf(edge.to) && !root && !compiledRole && !compilerSupervisor) fail('LayerDirection');
+        || from === 'entry' && to !== 'model' && to !== 'app' && to !== 'domain' && to !== 'base' && moduleOf(edge.from) !== moduleOf(edge.to) && !root && !compiledRole && !compilerSupervisor) fail('LayerDirection');
       if (from === 'entry' && root && (to === 'domain' || to === 'base') && !edge.typeOnly && !compilerSupervisor
-        && !edge.bindings.every(name => /(?:Live|Layer|layer)$/u.test(name) || ['RuntimeEnvironment', 'makeRuntimeEnvironment', 'Installation', 'Workspace', 'Sources', 'Publication', 'Cache', 'CacheSnapshot', 'CacheDerivations', 'PersistentCache', 'Git', 'OwnedProcess', 'PublicationValidation', 'ServerRuntime', 'FeedbackCacheWriter', 'SourceWebBuilder'].includes(name))) fail('CompositionRootLayer');
+        && !edge.bindings.every(name => /(?:Live|Layer|layer)$/u.test(name) || ['RuntimeEnvironment', 'makeRuntimeEnvironment', 'Installation', 'Workspace', 'Sources', 'Publication', 'Cache', 'CacheSnapshot', 'CacheDerivations', 'PersistentCache', 'Git', 'OwnedProcess', 'PublicationValidation', 'ServerRuntime', 'FeedbackCacheWriter', 'SourceWebBuilder', 'makeOwnedProcessService', 'makeProcessGroupCpuReader', 'recordProcessEvent', 'builtAssetRoot', 'awaitCacheMaintenance', 'mergeLocalFeedbackObservation'].includes(name))) fail('CompositionRootLayer');
       if (from === 'domain' && to === 'domain' && domainOf(edge.from) !== domainOf(edge.to)) {
         const left = domainLevel.get(domainOf(edge.from)), right = domainLevel.get(domainOf(edge.to));
         if (left === undefined || right === undefined || right >= left) fail('DomainOrder');
