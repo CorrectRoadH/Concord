@@ -136,6 +136,8 @@
 | `{#id}` 写在无序项、嵌套项或附页中 | `check` 报告 `InvalidStepPosition`，不移动文本 |
 | 代码示例中的 `{#id}`；没有 ID 的其它列表 | 不是步骤，不进入步骤视图 |
 | 标记指向的步骤 ID 不存在 | `check` 报告 `AnchorNotFound: Anchor checkout does not exist in docs/feature/cart/use-case/add-item.md`，退出 1 |
+| 源码注释引用（`// @spec`）指向不存在的步骤或 anchor | `check` 报告 `AnchorNotFound`，退出 1 |
+| 文档中的本仓库 GitHub 链接指向不存在的页面或 anchor | `check` 报告 `ReferenceNotFound` 或 `AnchorNotFound`，退出 1 |
 | 带 `@name` 的标记从文件改为步骤目标 | 测试关联 ID 不变 |
 | 原生标签写错且没有 Concord 标记 | 不产生关联 |
 | 冷、热、损坏与清空缓存 | `check` 的当前关系、finding、退出码与 `complete` 一致 |

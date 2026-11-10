@@ -6,6 +6,7 @@ import { inlineLinks, markdownLinks, relativeMarkdownLink, relativeMarkdownLinkT
 import { checkWriting } from "../domain/writing/index.ts";
 import { canonicalPath } from "../model/index.ts";
 import { inspectWorkflowSkills } from './workflow-skills.ts';
+import { checkExplicitReferences } from './reference-check.ts';
 
 // @concord-code
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的合并检查
@@ -13,6 +14,7 @@ import { inspectWorkflowSkills } from './workflow-skills.ts';
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#update
 export async function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
   const trace = (await buildTrace(repo, cache));
+  const explicitReferences = await checkExplicitReferences(repo);
   const unreadablePaths = new Set<string>();
   const conceptLinks: { code: string; path: string; line: number; message: string; category: 'relation' }[] = [];
   let conceptLinksComplete = true;
@@ -50,12 +52,13 @@ export async function checkProject(repo: Repository, cache: 'use' | 'off' | 'reb
     writingComplete = false;
     writingFindings = [{ category: 'writing', code: error.code, path: 'docs', message: error.message }];
   }
-  const complete = trace.complete && conceptLinksComplete && writingComplete;
+  relationFindings.push(...explicitReferences.findings.map(finding => ({ ...finding, category: 'relation' as const })));
+  const complete = trace.complete && conceptLinksComplete && writingComplete && explicitReferences.complete;
   const findings = [...relationFindings, ...conceptLinks, ...writingFindings];
   return {
     operation: 'check', ok: complete && findings.length === 0, complete, findings,
     checks: {
-      relations: { ok: trace.complete && relationFindings.length === 0 && conceptLinksComplete && conceptLinks.length === 0, complete: trace.complete && conceptLinksComplete },
+      relations: { ok: trace.complete && relationFindings.length === 0 && conceptLinksComplete && conceptLinks.length === 0 && explicitReferences.complete, complete: trace.complete && conceptLinksComplete && explicitReferences.complete },
       writing: { ok: writingComplete && writingFindings.length === 0, complete: writingComplete },
     },
     advisories: [...trace.advisories, ...inspectWorkflowSkills(repo).advisories], documents: trace.documents.length,

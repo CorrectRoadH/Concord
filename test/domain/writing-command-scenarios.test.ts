@@ -10,7 +10,7 @@ import { createConsumer } from '../support/consumer.ts';
 import { query } from '../support/application-fixture.ts';
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
-test('writing checks consumer policy, readable prose and safe input boundaries while excluding SVG', async () => {
+test('writing checks consumer policy, readable prose and safe input boundaries including SVG text', async () => {
  const root = (await createConsumer());
  try {
  const reportSchema = Schema.Struct({ ok: Schema.Boolean, files: Schema.Int, findings: Schema.Array(Schema.Struct({ file: Schema.String, line: Schema.Int, rule: Schema.String, message: Schema.String })) });
@@ -32,12 +32,13 @@ test('writing checks consumer policy, readable prose and safe input boundaries w
  writeFileSync(join(root, 'guide/view.mdx'), ['<Panel', ' title="bad"', '>', 'clear', '</Panel>', '{/* GENERATED:BEGIN fields */}', 'bad', '{/* GENERATED:END fields */}'].join('\n'));
  writeFileSync(join(root, 'guide/figure.svg'), '<svg><style>.label { fill: black; }</style><text class="label">新<tspan>词</tspan></text><desc>bad</desc></svg>');
  const first = (await query(root, { name: 'docs.check', input: {} }, reportSchema, 1));
- assert.equal(first.files, 2);
+ assert.equal(first.files, 3);
  assert(first.findings.filter(hit => hit.rule === 'bannedTerm').length >= 4);
+ assert(first.findings.some(hit => hit.file === 'guide/figure.svg' && hit.rule === 'bannedTerm'));
  assert.equal(first.findings.filter(hit => hit.rule === 'sentenceLength').length, 1);
  assert.equal(first.findings.filter(hit => hit.rule === 'paragraphLength').length, 1);
  assert(first.findings.some(hit => hit.file === 'guide/page.md' && hit.line === 22));
- assert(!first.findings.some(hit => hit.rule === 'unusedConcept' || hit.rule === 'svgTerm' || hit.rule === 'svgStyle'));
+ assert(!first.findings.some(hit => hit.rule === 'unusedConcept'));
  writeFileSync(join(root, 'guide/page.md'), '新词 good 旧词典.\n');
  writeFileSync(join(root, 'guide/figure.svg'), '<svg><style>.label { fill: black; }</style><text class="label">新<tspan>词</tspan></text></svg>');
  assert.equal((await query(root, { name: 'docs.check', input: {} }, reportSchema)).ok, true);
@@ -49,7 +50,7 @@ test('writing checks consumer policy, readable prose and safe input boundaries w
  writeFileSync(join(root, 'guide/figure.svg'), '<svg><text class="label">幽灵</text></svg>');
  const missing = (await query(root, { name: 'docs.check', input: {} }, reportSchema, 1));
  assert(missing.findings.some(hit => hit.rule === 'unusedConcept'));
- assert(!missing.findings.some(hit => hit.file.endsWith('.svg')));
+ assert(!missing.findings.some(hit => hit.file.endsWith('.svg') && hit.rule === 'unusedConcept'));
  writeFileSync(join(root, 'docs/writing.md'), renderWritingPolicy({ ...policy, roots: ['missing'] }));
  await assert.rejects(runApplication(executeQuery(root, { name: 'docs.check', input: {} }, 'off')), { code: 'WritingInputNotFound' });
  writeFileSync(join(root, 'docs/writing.md'), renderWritingPolicy(policy));

@@ -66,5 +66,14 @@ test('scopes inherit declared lengths, accumulate bans and exclude rule files fr
     write('docs/writing.md', renderWritingPolicy({ roots: ['docs/page.md'], sentenceLength: 3, paragraphLength: 3, bannedTerms: [{ term: 'bad', use: 'good', why: 'clear' }] }));
     write('docs/page.md', '# A very long heading\n\n| Heading |\n| --- |\n| a very long table cell |\n\nColumn | Another\n--- | ---\na very long cell | ok\n\n`bad bad bad`\n\n<!-- bad -->\n\n```\nbad\n```\n\n[ok](bad)\n');
     assert.deepEqual((await check()).findings, [], 'code, comments and destinations are ignored; headings and tables have no length check');
+    write('docs/cart/deep/writing.md', '# 写作规则\n\n不限制句长与段长。\n\n## 不用的词\n\n不继承上级不用的词。\n\n| 词 | 改成 | 为什么 | 只在 | 例外 |\n| --- | --- | --- | --- | --- |\n| localonly | good | reason | | |\n');
+    write('docs/cart/deep/page.md', 'bad badger bad.\n\n' + 'c'.repeat(500) + '。\n');
+    const exemptReport = (await check());
+    const exemptFindings = exemptReport.findings.filter(item => item.file === 'docs/cart/deep/page.md');
+    assert(!exemptFindings.some(item => item.rule === 'sentenceLength' || item.rule === 'paragraphLength'), 'length limits are disabled');
+    assert(!exemptFindings.some(item => item.rule === 'bannedTerm' && item.message.includes('bad: use good')), 'inherited bans are dropped');
+    write('docs/concord-writing.json', '{"format": "concord.writing/v3"}');
+    const legacyReport = (await check());
+    assert(legacyReport.findings.some(item => item.rule === 'LegacyWritingPolicy' && item.file === 'docs/concord-writing.json'));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

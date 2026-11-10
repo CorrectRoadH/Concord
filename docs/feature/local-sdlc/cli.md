@@ -263,7 +263,7 @@ cases: 1
 codeDeclarations: 1
 ```
 
-测试标记指向不存在的文件时，`check` 退出 1，`--json` 输出：
+测试标记、源码 Spec 引用或本仓库 GitHub 链接指向不存在的文件时，`check` 退出 1，`--json` 输出：
 
 ```json
 {

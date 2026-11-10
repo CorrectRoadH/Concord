@@ -6,7 +6,7 @@
 
 文档的分组、位置、[身份](../../document-model.md#身份)与[页面种类](../../document-model.md#页面种类)由[文档模型](../../document-model.md)定义：canonical 仓库相对路径是唯一身份，同类别内可用[短选择器](concepts.md#short-selector)（歧义时具名拒绝，例如两个 Feature 都有 `use-case/create.md` 时 `show create` 要求写出路径），名称取自 Markdown 语法树中正文唯一的一级标题（代码块中的标题不计）。创建时间与修订历史由 Git 提供（[只写当前声明](../../document-model.md#只写当前声明)）。
 
-普通正文链接只是导航。只有 Issue 与 Memory 使用 frontmatter，路径值一律是仓库相对路径，字段只在非空时出现（[一件事只写一次，其余推导](../../taste.md#t-3)）。
+普通正文链接只是导航。指向本仓库的 GitHub 绝对链接（`https://github.com/<owner>/<repo>/blob/...`）自动按工作区相对路径校验目标与锚点。只有 Issue 与 Memory 使用 frontmatter，路径值一律是仓库相对路径，字段只在非空时出现（[一件事只写一次，其余推导](../../taste.md#t-3)）。
 
 ### Issue
 
@@ -77,5 +77,5 @@ relations:
 
    测试标记的类别按目标类别匹配：`@feature docs/engineering/<t>/README.md` 指向 Engineering 文档包，`@use-case docs/engineering/<t>/use-case/<u>.md` 指向它的 Use Case。
 4. 代码侧选择完整且受支持的语义范围。整个文件服务同一职责且没有更精确的适用目标时，使用文件级声明。不为追求更窄而拆分实现、复制测试或机械改名步骤。缺少逐步骤关联不说明缺少执行或覆盖。
-5. JS/TS 仅用注释范围排除字符串和模板中的伪标记；其它文本文件接受以 `//`、`#` 或 `--` 开头的标记行。
+5. JS/TS 仅用注释范围排除字符串和模板中的伪标记；其它文本文件接受以 `//`、`#` 或 `--` 开头的标记行。源码中以 `// @spec <path>#<anchor>` 等显式前缀引用的 Spec 或 Memory 路径，由 `check` 校验目标文件与锚点是否存在；未找到时报告 `ReferenceNotFound` 或 `AnchorNotFound`。
 6. 执行由接入项目的 runner 命令或显式配置的 adapter 负责。adapter 可以仅在显式收集或执行前，把源码标记绑定到观察到的原生用例集合，或使用源码标记中的显式原生选择参数。原生选择不参与关联身份，不产生关联，不使静态检查依赖观察。只有能力和当前输入足以证明精确选择时，才声明选中了原生用例；否则执行范围按文件明确展示，要求原生精确选择的操作具名失败。缺少逐用例选择能力不使源码关联失效。

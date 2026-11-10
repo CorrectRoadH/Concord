@@ -65,22 +65,23 @@ test('project selection composes ancestor rules while explicit managed selection
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('writing snapshots exclude SVG and CSS content and membership', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('writing checks include SVG text nodes while excluding CSS', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = (await fixture());
   try {
     write(root, 'apps/docs-site/zh/page.md', '外部词说明。\n');
     write(root, 'apps/docs-site/zh/figure.svg', '<svg><text class="label">外部词</text></svg>');
     write(root, 'docs/feature/a/page.md', '甲词说明。\n');
-    write(root, 'docs/feature/a/figure.svg', '<svg><text class="label">乙词</text></svg>');
+    write(root, 'docs/feature/a/figure.svg', '<svg><text class="label">单子</text></svg>');
     write(root, 'docs/feature/b/page.md', '乙词说明。\n');
-    (await withRepo(root, async repo => (await writeWritingFile(repo, { ...policy(), roots: ['apps/docs-site/zh', 'docs/feature/a', 'docs/feature/b'] }, null))));
+    (await withRepo(root, async repo => (await writeWritingFile(repo, { ...policy(), bannedTerms: [{ term: '单子', use: '订单', why: 'fixture' }], roots: ['apps/docs-site/zh', 'docs/feature/a', 'docs/feature/b'] }, null))));
     (await withRepo(root, async repo => (await writeConceptFile(repo, catalog([]), null, false, 'docs/feature/a/concepts.md'))));
     (await withRepo(root, async repo => (await writeConceptFile(repo, catalog([]), null, false, 'docs/feature/b/concepts.md'))));
     const report = (await withRepo(root, checkWriting));
-    assert.equal(report.files, 5);
-    assert.equal(report.findings.length, 0);
-    write(root, 'docs/feature/a/figure.svg', '<svg>changed</svg>');
-    write(root, 'docs/feature/a/another.svg', '<svg/>');
+    assert.equal(report.files, 7);
+    const svgFinding = report.findings.find(f => f.file === 'docs/feature/a/figure.svg');
+    assert.ok(svgFinding);
+    assert.equal(svgFinding.rule, 'bannedTerm');
+    assert.equal(svgFinding.line, 1);
     write(root, 'docs/feature/a/style.css', 'changed');
     assert.equal((await withRepo(root, checkWriting)).inputDigest, report.inputDigest);
   } finally { rmSync(root, { recursive: true, force: true }); }

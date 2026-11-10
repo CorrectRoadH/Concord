@@ -42,5 +42,7 @@
 | 正文链接 `concepts.md#ordr` | `check` 报告 `AnchorNotFound`，带路径与行号 |
 | 全局与 `billing` 都定义了“账期” | `AmbiguousConceptName`，列出两处来源 |
 | 二级标题缺少 `{#id}` | `InvalidConceptCatalog`，带行号 |
+| 子目录声明“不继承上级不用的词” | 该目录及其子目录不检查祖先目录的违例词 |
+| 子目录声明“不限制句长与段长” | 该目录及其子目录不报告 `sentenceLength` 与 `paragraphLength` |
 
 文件格式见 [concepts.md](../format.md#conceptsmd)。

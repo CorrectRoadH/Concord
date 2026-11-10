@@ -99,7 +99,7 @@ function lineBounds(text: string, pos: number, end: number): { readonly ownLine:
 }
 
 /** Only comments reported by TypeScript's comment ranges can own a declaration. */
-function actualLineComments(source: ts.SourceFile): readonly LineComment[] {
+function actualLineComments(source: ts.SourceFile, spec = false): readonly LineComment[] {
   const ranges = new Map<number, ts.CommentRange>();
   const tokenSpans: { readonly start: number; readonly end: number }[] = [];
   const collect = (items: readonly ts.CommentRange[] | undefined): void => {
@@ -119,12 +119,23 @@ function actualLineComments(source: ts.SourceFile): readonly LineComment[] {
   const comments: LineComment[] = [];
   for (const range of [...ranges.values()].sort((left, right) => left.pos - right.pos)) {
     if (tokenSpans.some(span => range.pos >= span.start && range.pos < span.end)) continue;
-    const match = /^\/\/\s*@concord-([^\s]+)(?:\s+(.+?))?\s*$/u.exec(source.text.slice(range.pos, range.end));
+    const text = source.text.slice(range.pos, range.end);
+    const match = (spec ? /^\/\/\s*@(spec)(?:\s+(.+?))?\s*$/u : /^\/\/\s*@concord-([^\s]+)(?:\s+(.+?))?\s*$/u).exec(text);
     if (match === null) continue;
     const bounds = lineBounds(source.text, range.pos, range.end);
     comments.push({ pos: range.pos, end: bounds.end, line: lineAt(source, range.pos), family: match[1]!, ...(match[2] === undefined ? {} : { argument: match[2].trim() }), ownLine: bounds.ownLine });
   }
   return comments;
+}
+
+export async function specReferenceTokens(path: string, text: string): Promise<readonly { readonly line: number; readonly reference: string }[]> {
+  if (!SOURCE_EXTENSION.test(path)) return text.split(/\r?\n/u).flatMap((line, index) => {
+    const match = /^\s*(?:\/\/|#|--)\s*@spec\s+(\S+)\s*$/u.exec(line);
+    return match === null ? [] : [{ line: index + 1, reference: match[1]! }];
+  });
+  return withTypeScriptSource(path, text, source => actualLineComments(source, true)
+    .filter(comment => comment.argument !== undefined)
+    .map(comment => ({ line: comment.line, reference: comment.argument! })));
 }
 
 /** Exact lexical parameters, shared by step maintenance and declaration discovery. */

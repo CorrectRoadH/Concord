@@ -56,6 +56,12 @@ test('Markdown catalog structure is strict, preserves definition Markdown, and r
   for (const metadata of ['format: concord.concepts/v1', 'version: 1', 'unknown: true', 'imports: [docs/concepts.md#term, docs/concepts.md#term]', 'deprecated: {missing: [Old]}', 'deprecated: {term: [term]}', 'deprecated: {term: []}', 'deprecated: {term: [Old, old]}', 'imports: [docs/../concepts.md#term]', 'imports: [docs/_template/concepts.md#term]', 'imports: [docs/concepts.json#term]']) {
     assert.throws(() => readConceptCatalog(`---\n${metadata}\n---\n\n${term('term', 'Term')}`, undefined, parserRuntime), { code: 'InvalidConceptCatalog' });
   }
+  const multiErrorSource = '# Terms\n\n## First {#first}\n\nDefinition 1.\n\n旧写法：`first`\n\n## Second {#second}\n\nDefinition 2.\n\n旧写法：`Old`、`old`\n';
+  assert.throws(() => readConceptCatalog(multiErrorSource, undefined, parserRuntime), error => {
+    return error instanceof Error && 'code' in error && error.code === 'InvalidConceptCatalog'
+      && error.message.includes('line 7:')
+      && error.message.includes('line 13:');
+  });
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md

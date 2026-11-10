@@ -46,20 +46,31 @@ Feature、Engineering 与 Roadmap 文档包内的每个 Markdown 页面必须属
 concord docs check [<路径>...]
 ```
 
-只检查写作与术语；`concord check` 把它和关系检查合在一起，见[合并检查](#合并检查)。省略 `<路径>` 时检查 `docs/writing.md` 声明的全部检查范围；传入一个或多个仓库相对文件或目录路径（例如 `concord docs check docs/feature/cart`）时，按各文件所在目录生效的 `concepts.md` 与 `writing.md` 只检查所选范围内的 Markdown 正文（局部选择时不报告范围外的 `unusedConcept`），供编辑单篇文档或单个 Feature 时快速验证。交付前的门禁仍运行无参数的 `concord check`。
+只检查写作与术语；`concord check` 把它和关系检查合在一起，见[合并检查](#合并检查)。省略 `<路径>` 时检查 `docs/writing.md` 声明的全部检查范围；传入一个或多个仓库相对文件或目录路径（例如 `concord docs check docs/feature/cart`）时，按各文件所在目录生效的 `concepts.md` 与 `writing.md` 检查所选范围内的 Markdown 正文与 SVG 图像文本（局部选择时不报告范围外的 `unusedConcept`），供编辑单篇文档、图表或单个 Feature 时快速验证。交付前的门禁仍运行无参数的 `concord check`。
 
 finding 带文件、行号、规则与建议写法：
 
 ```text
 docs/feature/cart/README.md:27 [bannedTerm] 单子: use 订单; docs/concepts.md#order
+docs/architecture/flow.svg:12 [bannedTerm] 单子: use 订单; docs/concepts.md#order
+```
+
+`--json` 输出形如：
+
+```json
+{"category": "writing", "code": "bannedTerm", "path": "docs/architecture/flow.svg", "line": 12, "message": "单子: use 订单; docs/concepts.md#order"}
+{"category": "writing", "code": "LegacyWritingPolicy", "path": "docs/concord-writing.json", "message": "Legacy concord-writing.json detected; convert rules to docs/writing.md"}
+{"category": "writing", "code": "ExampleTypeError", "path": "docs/feature/cart/library.md", "line": 42, "message": "Argument of type 'string' is not assignable to parameter of type 'number'"}
 ```
 
 | finding | 什么时候出现 |
 | --- | --- |
-| `bannedTerm` | 正文用了“不用的词”或概念的旧写法 |
+| `bannedTerm` | 正文或 SVG 文本用了“不用的词”或概念的旧写法 |
 | `sentenceLength`、`paragraphLength` | 句子或段落超过上限 |
 | `unusedConcept` | 概念在生效范围里没有被用到 |
 | `AmbiguousConceptName` | 同一生效范围里有两个同名概念 |
-| `InvalidConceptCatalog`、`InvalidWritingPolicy` | 文件结构不符合[文件格式](format.md)，消息带行号与原因 |
+| `InvalidConceptCatalog`、`InvalidWritingPolicy` | 文件结构不符合[文件格式](format.md)，消息带各违规项的行号与原因 |
+| `LegacyWritingPolicy` | 检测到旧版 JSON 配置文件或 frontmatter 废弃词映射，需迁至 `writing.md` |
+| `ExampleTypeError` | 标记为 `check` 的代码示例未通过工程类型检查 |
 
 检查只报告，不改正文。

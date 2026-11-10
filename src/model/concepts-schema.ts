@@ -27,6 +27,7 @@ export function parseConceptCatalog(source: string, parse: (source: string) => R
   if (firstConcept && title.position!.start.offset! > firstConcept.position!.start.offset!) invalid(firstConcept.position!.start.line, 'H1 must precede all concepts');
   const plain = (node: Nodes): string => node.type === 'text' || node.type === 'inlineCode' ? node.value : 'children' in node ? node.children.map(plain).join('') : node.type === 'image' ? node.alt ?? '' : '';
   const concepts: ConceptDefinition[] = [], ids = new Set<string>(), terms = new Set<string>();
+  const deprecatedItems: { concept: ConceptDefinition; item: { term: string; line: number } }[] = [];
   for (let index = 0; index < nodes.length; index++) {
     const node = nodes[index]!;
     if (node.type !== 'heading' || node.depth !== 2) continue;
@@ -41,7 +42,7 @@ export function parseConceptCatalog(source: string, parse: (source: string) => R
     const definition = nodes[index + 1];
     if (definition?.type !== 'paragraph') invalid(definition?.position?.start.line ?? line, `First block after ${id} must be a definition paragraph`);
     ids.add(id!); terms.add(conceptSpellingKey(term!));
-    const deprecated: string[] = [];
+    const deprecated: { term: string; line: number }[] = [];
     let oldNames = false;
     for (const following of nodes.slice(index + 2)) {
       if (following.type === 'heading' && following.depth <= 2) break;
@@ -51,19 +52,37 @@ export function parseConceptCatalog(source: string, parse: (source: string) => R
       const children = following.children;
       if (children[0]?.type !== 'text' || children[0].value.trim() !== '旧写法：') invalid(following.position!.start.line, 'Deprecated spellings must use inline code');
       for (const child of children.slice(1)) {
-        if (child.type === 'inlineCode' && child.value.trim().length > 0) deprecated.push(child.value);
+        if (child.type === 'inlineCode' && child.value.trim().length > 0) deprecated.push({ term: child.value, line: child.position?.start.line ?? following.position!.start.line });
         else if (child.type !== 'text' || !/^[\s、,，。]*$/u.test(child.value)) invalid(child.position?.start.line ?? following.position!.start.line, 'Separate inline-code spellings with commas or 、');
       }
       if (!deprecated.length) invalid(following.position!.start.line, 'Deprecated-spelling paragraph requires a spelling');
     }
-    concepts.push({ id: id!, term: term!, definition: source.slice(definition!.position!.start.offset, definition!.position!.end.offset), deprecated });
+    const def = { id: id!, term: term!, definition: source.slice(definition!.position!.start.offset, definition!.position!.end.offset), deprecated: deprecated.map(item => item.term) };
+    concepts.push(def);
+    for (const item of deprecated) deprecatedItems.push({ concept: def, item });
     onConcept?.(id!, line);
   }
-  const oldNames = new Set<string>();
-  for (const concept of concepts) for (const name of concept.deprecated) {
+  const oldNames = new Map<string, { term: string; line: number }>();
+  const catalogErrors: { line: number; message: string }[] = [];
+  for (const { concept, item } of deprecatedItems) {
+    const name = item.term;
+    const line = item.line;
     const key = conceptSpellingKey(name);
-    if (name.trim() !== name || terms.has(key) || oldNames.has(key)) invalid(1, `Duplicate, padded or active deprecated name: ${name}`);
-    oldNames.add(key);
+    if (name.trim() !== name) {
+      catalogErrors.push({ line, message: `Padded deprecated name: ${name}` });
+    } else if (key === conceptSpellingKey(concept.term)) {
+      catalogErrors.push({ line, message: `Redundant deprecated spelling (matches concept term ${concept.term} case-insensitively): ${name}` });
+    } else if (terms.has(key)) {
+      catalogErrors.push({ line, message: `Active deprecated name matches existing concept term: ${name}` });
+    } else if (oldNames.has(key)) {
+      catalogErrors.push({ line, message: `Duplicate deprecated name: ${name}` });
+    } else {
+      oldNames.set(key, item);
+    }
+  }
+  if (catalogErrors.length > 0) {
+    const message = catalogErrors.map(e => `line ${e.line}: ${e.message}`).join('; ');
+    throw new Error(message);
   }
   return { title: plain(title), concepts };
 }

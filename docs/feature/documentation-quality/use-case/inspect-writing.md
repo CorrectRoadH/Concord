@@ -45,6 +45,9 @@
 | 句子超过上限 | `sentenceLength`，带行号与字符数 |
 | 定义了概念却没用到 | `unusedConcept`，指向 `concepts.md` 里的定义 |
 | `writing.md` 或 `concepts.md` 格式不对 | `InvalidWritingPolicy` 或 `InvalidConceptCatalog`，带行号与原因 |
+| 仓库仍有旧版 JSON 写作规则 | `LegacyWritingPolicy`，提示迁移为 `writing.md` |
+| SVG 图表文本包含不用的词 | `bannedTerm`，带 SVG 路径、行号与建议写法 |
+| 标记为 `check` 的代码示例类型错误 | `ExampleTypeError`，带行号与类型诊断 |
 | 检查期间文件被改动 | 自动重新检查，最多三次，每次间隔 50 毫秒；仍在变化时返回 `SourceChanged`，`complete` 为 false |
 
 匹配规则与生效范围见[文件格式](../format.md)。

@@ -89,8 +89,33 @@ function inherited<T extends 'sentenceLength' | 'paragraphLength'>(owners: reado
 }
 const sourceLine = (text: string, offset: number): number => text.slice(0, offset).split('\n').length - 1;
 const contextLine = (text: string, offset: number): string => text.split('\n')[sourceLine(text, offset)]?.trim().slice(0, 240) ?? '';
+function svgProse(file: string, source: string): Prose[] {
+  const result: Prose[] = [];
+  const cleaned = source.replace(/<(?:style|script)\b[^>]*>[\s\S]*?<\/(?:style|script)>/giu, match => ' '.repeat(match.length));
+  const regex = /<(?:text|tspan|title|desc)\b[^>]*>([^<]+)<\/(?:text|tspan|title|desc)>/giu;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(cleaned)) !== null) {
+    const rawContent = match[1]!;
+    const decoded = rawContent
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+    const line = sourceLine(source, match.index) + 1;
+    if (decoded.trim()) {
+      result.push({ line, text: decoded, readable: decoded, sentences: [decoded], paragraph: false });
+    }
+  }
+  return result;
+}
 function bansFor(file: string, owners: readonly PolicyOwner[], concepts: ReturnType<typeof effectiveConcepts>): Ban[] {
-  const bans: Ban[] = owners.flatMap(owner => owner.policy.bannedTerms.map((ban: BannedTerm, index) => ({ ...ban, source: { path: owner.path, entry: index + 1 }, ownerScope: owner.scope })));
+  let lastIndependent = -1;
+  for (let i = owners.length - 1; i >= 0; i--) {
+    if (owners[i]!.policy.inheritBans === false) { lastIndependent = i; break; }
+  }
+  const effectiveOwners = lastIndependent >= 0 ? owners.slice(lastIndependent) : owners;
+  const bans: Ban[] = effectiveOwners.flatMap(owner => owner.policy.bannedTerms.map((ban: BannedTerm, index) => ({ ...ban, source: { path: owner.path, entry: index + 1 }, ownerScope: owner.scope })));
   for (const item of concepts) for (const term of item.concept.deprecated) bans.push({ term, use: item.concept.term, why: item.reference, source: { path: item.path, ref: item.reference }, ownerScope: item.scope, conceptRef: item.reference });
   return bans.filter(ban => (!ban.roots || ban.roots.some(root => under(file, root))));
 }
@@ -162,7 +187,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const selectedRoots = [...new Set(selection)].sort();
     const files = new Set<string>();
     for (const root of selectedRoots) {
-      const members = (root === 'docs' ? docsMembers : repo.files(root)).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
+      const members = (root === 'docs' ? docsMembers : repo.files(root)).filter(path => /\.(?:md|mdx|svg)$/iu.test(path)).sort();
       memberships.set(root, members);
       if (!members.length && root !== 'docs') throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
       members.forEach(file => files.add(file));
@@ -170,26 +195,42 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const documents = new Map<string, string>();
     for (const file of [...files].sort()) {
       const source = read(file);
-      if (!policySources.has(file) && /\.mdx?$/iu.test(file)) documents.set(file, source);
+      if (!policySources.has(file) && /\.(?:mdx?|svg)$/iu.test(file)) documents.set(file, source);
     }
     const inputDigest = snapshotDigest([...inputs, ['@writing-parser-version', WRITING_PARSER_VERSION], ['@writing-policy-membership', JSON.stringify(policyPaths)], ['@concept-catalog-membership', JSON.stringify(catalogPaths)]], [...memberships]);
     const cacheDigest = objectDigest({ inputDigest, selectedPath: selectedPath ?? null });
     const cached = persistentCache ? readWritingFindings(repo, cacheDigest) : undefined;
     const findings: WritingFinding[] = cached ?? [];
     if (cached === undefined) {
+      for (const legacyPath of repo.files('docs').filter(path => path === 'docs/concord-writing.json' || path.endsWith('/concord-writing.json'))) {
+        findings.push({ file: legacyPath, line: 1, rule: 'LegacyWritingPolicy', message: 'Legacy concord-writing.json detected; convert rules to docs/writing.md', context: legacyPath });
+      }
+      for (const [catalogPath, catSource] of sourceCatalogs) {
+        if (/^(?:\uFEFF)?---\r?\n[\s\S]*?\bdeprecated\s*:/u.test(catSource)) {
+          findings.push({ file: catalogPath, line: 1, rule: 'LegacyWritingPolicy', message: 'Legacy frontmatter deprecated map detected; convert to ## concept and 旧写法： paragraphs', context: catalogPath });
+        }
+      }
       // The cache key binds every catalog byte and the parser revision. Reparse
       // changed or uncached sources; exact validated hits need no Markdown parser.
       const catalogs = analyzeCatalogs(sourceCatalogs, repositoryRuntime(repo));
       if (catalogs.diagnostics.length) throw new ConcordError(catalogs.diagnostics[0]!.code, catalogs.diagnostics.map(item => item.message).join('; '), catalogs.diagnostics);
       const used = new Set<string>(), eligible = new Set<string>();
       for (const [file, authored] of documents) {
-        const source = withoutStepMarkers(file, authored, repositoryRuntime(repo));
-        const parsed = prose(file, source);
         const owners = applicablePolicy(file, activePolicies);
         const concepts = effectiveConcepts(file, catalogs.catalogs);
         const bans = bansFor(file, owners, concepts);
         const active = activeSpellingsFor(concepts);
         for (const item of concepts) eligible.add(item.reference);
+        if (file.endsWith('.svg')) {
+          const blocks = svgProse(file, authored);
+          for (const block of blocks) {
+            checkTerms(file, block.line, block.text, bans, active, findings);
+            for (const item of concepts) if (!used.has(item.reference) && spellingPositions(block.readable, item.concept.term).length > 0) used.add(item.reference);
+          }
+          continue;
+        }
+        const source = withoutStepMarkers(file, authored, repositoryRuntime(repo));
+        const parsed = prose(file, source);
         for (const block of parsed.blocks) {
           checkTerms(file, block.line, block.text, bans, active, findings);
           for (const item of concepts) if (!used.has(item.reference) && !sourceCatalogs.has(file) && spellingPositions(block.readable, item.concept.term).length > 0) used.add(item.reference);
@@ -213,7 +254,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     for (const [path, before] of inputs) if (repo.read(path) !== (path === 'concord.config.ts' && before === '' ? undefined : before)) throw new ConcordError('SourceChanged', `${path} changed during writing checks`);
     const currentDocsMembers = repo.files('docs');
     for (const [root, before] of memberships) {
-      const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
+      const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx|svg)$/iu.test(path)).sort();
       if (JSON.stringify(after) !== JSON.stringify(before)) throw new ConcordError('SourceChanged', `${root} membership changed during writing checks`);
     }
     if (JSON.stringify(discovered('policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered('catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('SourceChanged', 'Writing owner membership changed during checks');

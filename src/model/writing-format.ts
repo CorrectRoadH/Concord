@@ -24,13 +24,18 @@ export function parseWritingPolicy(source: string, path = 'docs/writing.md'): Wr
   const nodes = fromMarkdown(source).children;
   const titles = nodes.filter(node => node.type === 'heading' && node.depth === 1);
   if (titles.length !== 1 || nodes[0] !== titles[0]) invalid(1, 'Writing rules require one initial H1');
-  const policy: { roots?: string[]; sentenceLength?: number; paragraphLength?: number; bannedTerms: BannedTerm[] } = { bannedTerms: [] };
+  const policy: { roots?: string[]; sentenceLength?: number | null; paragraphLength?: number | null; inheritBans?: boolean; bannedTerms: BannedTerm[] } = { bannedTerms: [] };
   const first = nodes[1];
   if (first?.type === 'paragraph') {
     const text = plain(first);
-    const sentence = /句子不超过\s*([0-9]+)\s*个字符/u.exec(text), paragraph = /段落不超过\s*([0-9]+)\s*个字符/u.exec(text);
-    if (text.includes('句子不超过') && !sentence || text.includes('段落不超过') && !paragraph) invalid(first.position!.start.line, 'Length limits must be positive integer character counts');
-    if (sentence) policy.sentenceLength = Number(sentence[1]); if (paragraph) policy.paragraphLength = Number(paragraph[1]);
+    if (/不限制句长[与和]段长/u.test(text)) {
+      policy.sentenceLength = null;
+      policy.paragraphLength = null;
+    } else {
+      const sentence = /句子不超过\s*([0-9]+)\s*个字符/u.exec(text), paragraph = /段落不超过\s*([0-9]+)\s*个字符/u.exec(text);
+      if (text.includes('句子不超过') && !sentence || text.includes('段落不超过') && !paragraph) invalid(first.position!.start.line, 'Length limits must be positive integer character counts');
+      if (sentence) policy.sentenceLength = Number(sentence[1]); if (paragraph) policy.paragraphLength = Number(paragraph[1]);
+    }
   }
   const headings = nodes.filter(node => node.type === 'heading' && node.depth === 2);
   const sections = new Set<string>();
@@ -50,8 +55,13 @@ export function parseWritingPolicy(source: string, path = 'docs/writing.md'): Wr
       });
       if (!roots.length) invalid(line, 'Checking roots cannot be empty'); policy.roots = roots;
     } else {
-      if (lines.length < 2 || JSON.stringify(cells(lines[0]!.text)) !== JSON.stringify(['词', '改成', '为什么', '只在', '例外']) || cells(lines[1]!.text, false).length !== 5 || !cells(lines[1]!.text, false).every(cell => /^:?-{3,}:?$/u.test(cell))) invalid(line, 'Banned terms require the five-column table 词、改成、为什么、只在、例外');
-      for (const row of lines.slice(2)) {
+      let tableLines = lines;
+      if (lines.length > 0 && lines[0]!.text.trim().includes('不继承上级不用的词')) {
+        policy.inheritBans = false;
+        tableLines = lines.slice(1);
+      }
+      if (tableLines.length < 2 || JSON.stringify(cells(tableLines[0]!.text)) !== JSON.stringify(['词', '改成', '为什么', '只在', '例外']) || cells(tableLines[1]!.text, false).length !== 5 || !cells(tableLines[1]!.text, false).every(cell => /^:?-{3,}:?$/u.test(cell))) invalid(line, 'Banned terms require the five-column table 词、改成、为什么、只在、例外');
+      for (const row of tableLines.slice(2)) {
         const values = cells(row.text);
         if (values.length !== 5 || values.slice(0, 3).some(value => !value.trim())) invalid(row.line, 'Each banned term needs five cells and nonempty term, replacement and reason');
         const [term, use, why, roots, allowIn] = values;
@@ -73,6 +83,8 @@ export function parseWritingPolicy(source: string, path = 'docs/writing.md'): Wr
 }
 export function renderWritingPolicy(policy: WritingPolicy): string {
   const cell = (value: string) => value.replaceAll('\\', '\\\\').replace(/[`*_\[\]<>]/gu, char => `\\${char}`).replaceAll('|', '\\|').replace(/[\r\n]+/gu, ' ');
-  const limits = [policy.sentenceLength === undefined ? '' : `句子不超过 ${policy.sentenceLength} 个字符`, policy.paragraphLength === undefined ? '' : `段落不超过 ${policy.paragraphLength} 个字符`].filter(Boolean).join('，');
-  return `# 写作规则\n\n${limits ? `${limits}。\n\n` : ''}## 不用的词\n\n| 词 | 改成 | 为什么 | 只在 | 例外 |\n| --- | --- | --- | --- | --- |\n${policy.bannedTerms.map(ban => `| ${[ban.term, ban.use, ban.why, (ban.roots ?? []).join('、'), (ban.allowIn ?? []).join('、')].map(cell).join(' | ')} |\n`).join('')}${policy.roots ? `\n## 检查范围\n\n${policy.roots.map(root => `- ${root}\n`).join('')}` : ''}`;
+  let limits = [policy.sentenceLength == null ? '' : `句子不超过 ${policy.sentenceLength} 个字符`, policy.paragraphLength == null ? '' : `段落不超过 ${policy.paragraphLength} 个字符`].filter(Boolean).join('，');
+  if (policy.sentenceLength === null && policy.paragraphLength === null) limits = '不限制句长与段长';
+  const inherit = policy.inheritBans === false ? '不继承上级不用的词。\n\n' : '';
+  return `# 写作规则\n\n${limits ? `${limits}。\n\n` : ''}## 不用的词\n\n${inherit}| 词 | 改成 | 为什么 | 只在 | 例外 |\n| --- | --- | --- | --- | --- |\n${policy.bannedTerms.map(ban => `| ${[ban.term, ban.use, ban.why, (ban.roots ?? []).join('、'), (ban.allowIn ?? []).join('、')].map(cell).join(' | ')} |\n`).join('')}${policy.roots ? `\n## 检查范围\n\n${policy.roots.map(root => `- ${root}\n`).join('')}` : ''}`;
 }
