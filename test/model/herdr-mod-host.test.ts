@@ -954,6 +954,24 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { b.commandGate?.resolve(); await b.close(); }
       assert.ok(b.tasks.every(task => task.is_done()));
     });
+    // @use-case docs/feature/local-data-engine/use-case/recover-workspace-service.md#resume
+    // @issue docs/issues/workspace-stop-idle-worker.md
+    await t.test('service cleanup errors replace a previously uninitialized page and recover automatically', async () => {
+      const b = await start(boundary => {
+        boundary.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'ProjectNotInitialized', message: 'Not initialized' }) };
+      }, () => host.output.find('initialize') !== undefined);
+      try {
+        b.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'CleanupFailed', message: 'Workspace cleanup blocked at cache (PID 123)', details: { phase: 'cache', pid: 123 } }) };
+        b.fire(2000);
+        await b.until(() => b.output.text().includes('Workspace cleanup blocked'));
+        assert.equal(b.output.find('initialize'), undefined, 'a failed read cannot certify that initialization is missing');
+        assert.doesNotMatch(b.output.text(), /这个仓库还没有初始化 Concord/u);
+        b.commandError = undefined;
+        b.fire(2000);
+        await b.until(() => b.output.find(`page-${page}`) !== undefined);
+        assert.doesNotMatch(b.output.text(), /Workspace cleanup blocked/u);
+      } finally { await b.close(); }
+    });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('layout sidebar follows selected tabs and machines after an earlier CLI error', async () => {
       for (const machine of [null, 'vps']) {

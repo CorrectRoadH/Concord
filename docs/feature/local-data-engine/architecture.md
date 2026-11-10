@@ -123,7 +123,7 @@ CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选�
 4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`。然后打开持久库、读取最近一份已接受的结果并启动计算进程与刷新计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务，并在状态中报告原因。
 5. 启动者等待自己拉起或竞争中胜出的服务完成握手，最多 10 秒；连接已在运行的服务时握手最多 1 秒。`opening` 已可握手，项目查询等待服务就绪。
 
-运行记录无法解码或其文件身份失效时，客户端通过服务锁判断是否仍有持有者。只有实际取得并释放服务锁，才把该记录视为没有服务；新服务仍须重新取锁，并在锁内发布自己的记录。锁被占用时保留记录并报告原错误，权限、I/O 或锁身份错误也不能作为无服务的依据。`server stop` 对这种已无持有者的残留记录成功返回，不启动服务。
+运行记录无法解码或其文件身份失效时，客户端通过服务锁判断是否仍有持有者。只有实际取得并释放服务锁，才把该记录视为没有服务；新服务仍须重新取锁，并在锁内发布自己的记录。服务是否存在以服务锁与持锁进程存活状态为准，握手失败不能等同于服务不存在；记录处于 stopping 或锁被存活进程占用时，启动者等待退出或报告 CleanupFailed，不得拉起新实例引发争锁。锁被占用时保留记录并报告原错误，权限、I/O 或锁身份错误也不能作为无服务的依据。`server stop` 对这种已无持有者的残留记录成功返回，不启动服务。
 
 服务锁由原生绑定提供。原生产物缺失或无法加载时，同样报告 `ServerLockUnavailable`（原因 native），服务不启动；客户端报告 `WorkspaceServerUnavailable`，不在本进程执行查询。
 
@@ -158,10 +158,14 @@ clear、维护与 shutdown 串行执行。
 
 1. 停止受理新工作，向全部订阅者与 SSE 连接发送 `stopping` 事件，并关闭长期订阅。
 2. 在 3 秒内完成或明确失败在途请求。3 秒是请求与交接的等待上限，不授权跳过清理确认。
-3. 经 `OwnedProcessService` 收拢正在运行的外部测试 runner 子进程，确认进程组清理。
+3. 经 `OwnedProcessService` 收拢计算进程、增量刷新进程与外部测试 runner 子进程，确认进程组清理。子进程未在期限内响应时升级为强制终止。
 4. 关闭解析线程池、HTTP 与持久句柄，按 token 删除记录与 socket，最后释放服务锁。
 
-进程组清理无法确认时按 CleanupFailed 处理。
+进程组清理无法确认或清理挂起时按 CleanupFailed 处理，并报告未完成的清理阶段。
+
+运行记录的 `cleanup` 保存当前关闭阶段 `phase` 与正在等待的 `pid`；阶段为 `requests`、`operations`、`foreground-computation`、`background-computation`、`rpc`、`http`、`cache` 或 `resources`。计算子进程先经 owner 的有界 TERM/KILL 清理，再关闭 RPC 作用域；并发关闭等待同一次清理完成。持久句柄仍等待真实 `closeAsync()` 完成，不用超时伪装锁释放。
+
+客户端确认退出最多等待 10 秒。超时的 `CleanupFailed.details` 包含 `phase`、`pid`、`servicePid`、`token` 与记录的 `state`；尚未进入关闭流程的失联持锁实例报告 `handshake`，记录尚未发布时报告 `service-lock`，锁已释放但进程尚未退出时报告 `process-exit`。阶段是观察到的阻断位置，不推断为底层根因。`server status` 只有确认原生服务锁释放且记录中的 PID 已退出才返回 `absent`，活跃实例握手失败返回具名错误。
 
 ### 刷新与推送
 

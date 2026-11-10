@@ -2,6 +2,8 @@
 relations:
   - role: spec
     target: docs/feature/local-data-engine/architecture.md#退出
+  - role: spec
+    target: docs/feature/local-data-engine/use-case/recover-workspace-service.md
 ---
 # 工作区服务停止后仍保留资源
 

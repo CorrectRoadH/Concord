@@ -91,6 +91,7 @@ state: absent
 - [使用、查看与清理缓存](use-case/use-unified-cache.md)
 - [检索 Memory 与 Issue 时总是得到当前内容](use-case/query-current-projections.md)
 - [读取后台刷新的诊断结果](use-case/query-asynchronous-projections.md)
+- [工作区服务异常后恢复使用](use-case/recover-workspace-service.md)
 
 命令的输出字段与错误见 [CLI](cli.md)。
 
