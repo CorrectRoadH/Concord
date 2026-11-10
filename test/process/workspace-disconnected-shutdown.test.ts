@@ -6,7 +6,6 @@ import test from 'node:test';
 import { command, fixture, record, recordPath, stop } from '../support/workspace-server-fixture.ts';
 
 // @use-case docs/feature/local-data-engine/use-case/recover-workspace-service.md#replace
-// @issue docs/issues/workspace-stop-idle-worker.md
 test('timed-out disconnected clients cannot retain the service during shutdown', { skip: process.platform === 'win32', timeout: 40_000 }, async () => {
   const root = await fixture();
   let instance: ReturnType<typeof record> | undefined;

@@ -955,7 +955,6 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       assert.ok(b.tasks.every(task => task.is_done()));
     });
     // @use-case docs/feature/local-data-engine/use-case/recover-workspace-service.md#resume
-    // @issue docs/issues/workspace-stop-idle-worker.md
     await t.test('service cleanup errors replace a previously uninitialized page and recover automatically', async () => {
       const b = await start(boundary => {
         boundary.commandError = { code: 1, stdout: '', stderr: JSON.stringify({ error: 'ProjectNotInitialized', message: 'Not initialized' }) };

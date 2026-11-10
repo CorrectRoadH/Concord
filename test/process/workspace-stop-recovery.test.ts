@@ -52,7 +52,6 @@ test('shutdown releases a service whose active computation cannot acknowledge in
 });
 
 // @use-case docs/feature/local-data-engine/use-case/recover-workspace-service.md#blocked
-// @issue docs/issues/workspace-stop-idle-worker.md
 test('an unresponsive live lock owner is not absent and prevents competing startup', { skip: process.platform === 'win32', timeout: 40_000 }, async () => {
   const root = await fixture();
   let instance: ReturnType<typeof record> | undefined;
