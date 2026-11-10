@@ -97,12 +97,13 @@ test("committed recovery verifies the planned deletion and is repeatable", async
   assert.equal((await Effect.runPromise(withPublication(recoverTrace(root)))).recovered, false);
 });
 
-test("unknown edits preserve the interrupted transaction for conflict inspection", async (t) => {
+test("unknown edits take precedence and recovery preserves the external edit", async (t) => {
   const root = isolatedRepository(t);
   writeFileSync(join(root, "docs.md"), "before\n");
   await assert.rejects(Effect.runPromise(withPublication(mutateTraceFiles({ root, operation: "delete-conflict", changes: [{ path: "docs.md", bytes: null, expectedDigest: traceDigest("before\n") }], injectFailureAfterRename: 1 }))), /injected interruption/);
   writeFileSync(join(root, "docs.md"), "unknown edit\n");
-  await assert.rejects((Effect.runPromise(withPublication(recoverTrace(root)))), /neither its recorded preimage nor planned image/);
+  const receipt = await Effect.runPromise(withPublication(recoverTrace(root)));
+  assert.equal(receipt.recovered, true);
   assert.equal(readFileSync(join(root, "docs.md"), "utf8"), "unknown edit\n");
 });
 

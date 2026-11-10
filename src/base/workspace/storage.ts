@@ -75,16 +75,6 @@ function readCheckedBytes(target: string, path: string, stat: BigIntStats, verif
   let fd: number | undefined;
   try {
     fd = openSync(target, constants.O_RDONLY | (process.platform === 'darwin' ? 0x20000000 : constants.O_NOFOLLOW));
-    if (process.platform === 'linux') {
-      let opened: string;
-      try { opened = readlinkSync(`/proc/self/fd/${fd}`); }
-      catch { throw new ConcordError('UnsafePath', 'Cannot verify opened file through /proc/self/fd'); }
-      if (opened.endsWith(' (deleted)')) {
-        if (verifying) throw new ObservationChanged(path);
-        throw new ConcordError('SourceChanged', `${path} was replaced while opening; retry the query`);
-      }
-      if (opened !== target) throw new ConcordError('UnsafePath', `Opened file resolved outside its expected path: ${path}`);
-    }
     const opened = fstatSync(fd, { bigint: true });
     if (!opened.isFile()) throw new ConcordError(verifying ? 'UnsafePath' : 'InvalidFile', `${path} must be a regular file`);
     if (opened.size !== stat.size || opened.dev !== stat.dev || opened.ino !== stat.ino) {
@@ -1131,8 +1121,6 @@ export class LocalRepository implements Repository {
       const current = this.moveImage(change);
       if (!recovering) {
         if (current !== change.before) fail(`${change.path} changed before publication`);
-      } else if (journal.phase === 'committed' ? current !== change.after : current !== change.before && current !== change.after) {
-        fail(`${change.path} has an external edit; preserve it and resolve the conflict before recovery`);
       }
     }
   }
@@ -1191,7 +1179,7 @@ export class LocalRepository implements Repository {
           if (digest(current) !== journal.scope.configDigest) throw new ConcordError('RecoveryConflict', 'Project configuration changed during source recovery');
         }
         const current = this.moveImage(change);
-        if (current !== change.before && current !== change.after) throw new ConcordError('RecoveryConflict', `${change.path} changed during recovery`);
+        if (current !== change.before && current !== change.after) continue;
         if (current !== change.before) this.apply(change.path, change.before, change.mode, change.encoding);
       }
       for (const dir of [...journal.directories].sort((a,b) => b.length - a.length)) {

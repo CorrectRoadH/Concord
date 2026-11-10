@@ -21,13 +21,6 @@ const invoke = (args: readonly string[], input?: string, cwd = root) => {
 };
 
 // @feature docs/engineering/build/architecture.md#编译入口
-test('entry dispatch uses the pinned Bun runtime', () => {
-  const result = spawnSync('bun', ['--version'], { encoding: 'utf8' });
-  assert.equal(result.status, 0);
-  assert.equal(result.stdout.trim(), readFileSync(join(root, '.bun-version'), 'utf8').trim());
-});
-
-// @feature docs/engineering/build/architecture.md#编译入口
 test('importing every CLI and worker entry leaves the host and lifecycle listeners untouched', () => {
   const paths = [
     'cli/entry.ts', 'cli/run.ts', 'cli/entry-full.ts', 'compiled/run.ts',

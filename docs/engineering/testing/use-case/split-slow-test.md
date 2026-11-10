@@ -27,20 +27,14 @@
 
    逐个测试看它在验证什么。CLI 或进程层里枚举领域情形的测试，改写到 `test/domain/`，用进程内入口观察同一结果；原层只保留一个代表行，验证参数、退出码或跨进程的映射。准备步骤用子进程逐条执行 CLI 时，改用 `createDocument`、`linkIssue` 这类进程内入口，例子见[写行为测试](write-behavior-test.md#write)。
 
-4. 仍超出时按主题拆文件。 {#split}
+4. 仍超出时按正交职责拆分并合并冷启动。 {#split}
 
-   把文件中的测试分到 `<主题>.test.ts`、`<主题>-2.test.ts`、`<主题>-3.test.ts`，各文件由 runner 并发执行。几个文件共用的准备移到 `test/support/<主题>-fixture.ts`，例如 `test/process/editor-lsp.test.ts` 到 `editor-lsp-5.test.ts` 共用 `test/support/editor-fixture.ts`：
-
-   ```ts
-   import { test, run, source, testText, reference, file } from '../support/editor-fixture.ts';
-   ```
-
-   每个测试连同它的标记一起移动，不改标记目标；带 `@name` 的测试保持 `@name`，关联 ID 不变。
+   禁止仅为规避 60 秒上限而机械添加序号拆分文件（例如 `<主题>-2.test.ts`），这种拆分会成倍增加进程冷启动开销与 worker 争抢。拆分必须按正交的用户目标或职责进行；同一文件内需要服务的用例复用[共享服务](../architecture.md#共享服务)，减少重复启动与退出耗时。每个测试连同标记一起移动，不改标记目标。
 
 5. 运行拆分后的文件，核对耗时。 {#run}
 
    ```sh
-   bun run test test/process/editor-lsp.test.ts test/process/editor-lsp-2.test.ts
+   bun run test test/process/editor-lsp.test.ts test/process/editor-lsp-versions.test.ts
    ```
 
    在本次官方 timings 中，每个文件都不超过 60 秒，用例总数与拆分前相同。交付前运行 `bun run test --changed`；改动了 `test/support/` 时显式运行全套（[扩展 Fixture](extend-fixtures.md#run)）。

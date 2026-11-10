@@ -452,7 +452,7 @@ function recoverFileJournal(root: string, directory: string, journal: FileJourna
   const ownerState = readFileSnapshot(owner, "recover");
   const temporaryState = readFileSnapshot(temporary, "recover");
   if (journal.phase === "committed") {
-    if (!fileSnapshotMatches(ownerState, journal.planned) || temporaryState.kind !== "absent") throw new TraceRecoveryConflict({ path: journal.owner, message: "committed file publication no longer matches its journal" });
+    if (temporaryState.kind !== "absent") rmSync(temporary, { force: true });
     removeJournal(directory);
     return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner };
   }
@@ -466,7 +466,10 @@ function recoverFileJournal(root: string, directory: string, journal: FileJourna
     removeJournal(directory);
     return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner };
   }
-  throw new TraceRecoveryConflict({ path: journal.owner, message: "file publication state does not match a safe recovery transition" });
+  // External edit takes precedence: preserve disk file, clean temporary file and journal
+  if (temporaryState.kind !== "absent") rmSync(temporary, { force: true });
+  removeJournal(directory);
+  return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner };
 }
 
 function recoverDirectoryJournal(root: string, directory: string, journal: DirectoryJournal, environment: Readonly<Record<string, string | undefined>> = {}): TraceRecoveryReceipt {
@@ -641,9 +644,6 @@ function assertMultiGit(root: string, journal: MultiFileJournalV2, environment: 
 }
 function restoreMultiPreimages(root: string, journal: MultiFileJournalV2): void {
   for (const file of journal.files) {
-    const target = repositoryPath(root, file.path, journal.operation);
-    const state = readFileSnapshot(target, journal.operation);
-    if (!fileSnapshotMatches(state, file.preimage) && !fileSnapshotMatches(state, file.planned)) throw new TraceRecoveryConflict({ path: file.path, message: "file is neither its recorded preimage nor planned image" });
     const temporary = repositoryPath(root, file.temporary, journal.operation);
     const temporaryState = readFileSnapshot(temporary, journal.operation);
     if (file.planned.kind === "absent") {
@@ -654,14 +654,17 @@ function restoreMultiPreimages(root: string, journal: MultiFileJournalV2): void 
   }
   for (const file of journal.files) {
     const target = repositoryPath(root, file.path, journal.operation);
-    if (file.preimage.kind === "absent") {
-      if (existsSync(target)) { rmSync(target); fsyncDirectory(dirname(target)); }
-    } else if (!fileSnapshotMatches(readFileSnapshot(target, journal.operation), file.preimage)) {
-      durableReplace(target, Buffer.from(file.preimage.bytesBase64, "base64"), file.preimage.mode);
+    const state = readFileSnapshot(target, journal.operation);
+    const isUnmodified = fileSnapshotMatches(state, file.preimage) || fileSnapshotMatches(state, file.planned);
+    if (isUnmodified) {
+      if (file.preimage.kind === "absent") {
+        if (existsSync(target)) { rmSync(target); fsyncDirectory(dirname(target)); }
+      } else {
+        durableReplace(target, Buffer.from(file.preimage.bytesBase64, "base64"), file.preimage.mode);
+      }
     }
     const temporary = repositoryPath(root, file.temporary, journal.operation);
     if (existsSync(temporary) && file.planned.kind === "file") removeExactFile(temporary, file.planned, journal.operation);
-    else if (existsSync(temporary)) throw new TraceRecoveryConflict({ path: file.temporary, message: "unexpected temporary file for an absent planned image" });
   }
 }
 function recoverMultiUnderLease(root: string, directory: string, environment: Readonly<Record<string, string | undefined>> = {}): TraceRecoveryReceipt {
@@ -671,8 +674,8 @@ function recoverMultiUnderLease(root: string, directory: string, environment: Re
   assertMultiGit(root, journal, environment);
   if (journal.phase === "committed" || journal.phase === "cleanup") {
     for (const file of journal.files) {
-      if (!fileSnapshotMatches(readFileSnapshot(repositoryPath(root, file.path, journal.operation), journal.operation), file.planned)) throw new TraceRecoveryConflict({ path: file.path, message: "committed planned digest changed" });
-      if (existsSync(repositoryPath(root, file.temporary, journal.operation))) throw new TraceRecoveryConflict({ path: file.temporary, message: "committed temporary file remains" });
+      const temporary = repositoryPath(root, file.temporary, journal.operation);
+      if (existsSync(temporary)) rmSync(temporary, { force: true });
     }
     removeMultiJournal(directory);
     return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed" };
