@@ -29,13 +29,13 @@ test('shutdown releases a service whose active computation cannot acknowledge in
     query = command(root, ['list', 'feature'], undefined, env);
     await pollUntil(async () => existsSync(boundary) ? true : undefined, { description: 'the real computation receives a request before being stopped' });
     assert.ok(children.includes(Number(readFileSync(boundary, 'utf8'))));
+    rmSync(`${boundary}.armed`);
     const result = await command(root, ['server', 'stop']);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(existsSync(recordPath(root)), false);
     assert.equal(existsSync(instance.socket.path), false);
     for (const pid of children) assert.throws(() => process.kill(pid, 0), /ESRCH|No such process/u);
     await query;
-    rmSync(`${boundary}.armed`);
     const recovered = await command(root, ['list', 'feature']);
     assert.equal(recovered.status, 0, recovered.stderr);
     assert.match(recovered.stdout, /Reader/u);
