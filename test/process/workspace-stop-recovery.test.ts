@@ -1,4 +1,4 @@
-// Cross-process acceptance: real locks, computation pipes and service replacement.
+// 跨进程保证：服务与 IPC——真实持锁进程不可被误判为 absent，暂停的计算子进程在关闭后释放并可重新启动服务。
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

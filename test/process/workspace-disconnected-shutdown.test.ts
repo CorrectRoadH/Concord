@@ -1,4 +1,4 @@
-// Real clients time out while the process is paused, leaving queued socket data.
+// 跨进程保证：服务与 IPC——进程暂停期间超时断开的真实客户端不能阻止服务释放子进程、socket 与锁。
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
