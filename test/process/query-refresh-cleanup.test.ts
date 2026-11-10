@@ -19,8 +19,16 @@ test('refresh ownership observes real source and JavaScript arguments and exclud
       const worker = yield* (yield* ChildProcessSpawner.ChildProcessSpawner).spawn(ChildProcess.make(process.execPath, [file, selectedRoot, '["trace","gaps"]', '1', '120000'], { cwd: directory, env: { CONCORD_REFRESH_PID_FILE: pidFile }, extendEnv: true, stdin: 'ignore', stdout: 'ignore', stderr: 'inherit', killSignal: 'SIGKILL' }));
       yield* worker.exitCode;
     })).pipe(Effect.forkChild);
-    yield* Effect.gen(function*() { while (!(yield* fs.exists(pidFile))) yield* Effect.sleep('10 millis'); }).pipe(Effect.timeout('5 seconds'));
-    pids.push(Number(yield* fs.readFileString(pidFile)));
+    const pid = yield* Effect.gen(function*() {
+      for (;;) {
+        if (yield* fs.exists(pidFile)) {
+          const value = Number(yield* fs.readFileString(pidFile));
+          if (Number.isSafeInteger(value) && value > 0) return value;
+        }
+        yield* Effect.sleep('10 millis');
+      }
+    }).pipe(Effect.timeout('5 seconds'));
+    pids.push(pid);
     return child;
   });
   for (const name of ['query-refresh-worker.ts', 'query-refresh-worker.js', 'query-scan-worker.ts']) yield* fs.writeFileString(join(directory, name), "require('node:fs').writeFileSync(process.env.CONCORD_REFRESH_PID_FILE, String(process.pid)); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);");

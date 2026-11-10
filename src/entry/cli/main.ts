@@ -341,15 +341,10 @@ const stopWorkspaceServer = (root: string, identifiedPrivateDir?: string) => Eff
       if (!connection) return owner;
       yield* connection.client.shutdown({ token: connection.hello.token });
       return { token: connection.hello.token, pid: record.pid };
-    }).pipe(Effect.catch(() => Effect.gen(function*() {
-      // Shutdown can close the transport between record discovery and hello.
-      // Confirm the actual lock release or wait for the same stopping instance;
-      // an active owner with a broken transport must still report its error.
-      if (yield* runtime.released(privateDir)) return owner;
-      const current = yield* readWorkspaceRecord(runtime, privateDir, false);
-      if (!current || (current.token === record.token && current.state === 'stopping')) return owner;
-      return yield* Effect.fail(yield* workspaceCleanupFailure(runtime, privateDir, record));
-    })));
+    // Transport loss can race the running -> stopping transition. Always use
+    // the bounded ownership wait below; a momentary running record is not proof
+    // that shutdown failed, and an unresponsive owner still fails at its deadline.
+    }).pipe(Effect.catch(() => Effect.succeed(owner)));
   }));
   // Release the shutdown transport before waiting for the service's resources.
   if (owner !== undefined) yield* waitForWorkspaceStop(runtime, privateDir, owner);

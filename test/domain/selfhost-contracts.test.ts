@@ -20,7 +20,7 @@ test('current checkout configures a version-matched runner whose annotations sca
   assert.deepEqual(project.testRoots, ['test']);
   assert.deepEqual(project.sourceRoots, ['src', 'web', 'scripts']);
   assert.ok(project.runner);
-  assert.deepEqual(project.runner.argv, ['bun', '--no-env-file', '--config=/dev/null', '--conditions=concord-source', 'test', '--preload', 'test/support/source-runtime.ts', '--timeout', '120000', '--isolate', '--test-name-pattern', '{pattern}', '{file}']);
+  assert.deepEqual(project.runner.argv, ['bun', '--no-env-file', '--config=/dev/null', '--conditions=concord-source', 'test', '--preload', './test/support/source-runtime.ts', '--timeout', '120000', '--isolate', '--test-name-pattern', '{pattern}', '{file}']);
 
     const repository = (await LocalRepository.open(root));
     try {

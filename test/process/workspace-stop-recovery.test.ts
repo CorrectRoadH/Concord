@@ -41,6 +41,7 @@ test('shutdown releases a service whose active computation cannot acknowledge in
     assert.match(recovered.stdout, /Reader/u);
     assert.notEqual(record(root).token, instance.token);
   } finally {
+    rmSync(`${boundary}.armed`, { force: true });
     if (instance && existsSync(recordPath(root)) && record(root).token === instance.token) {
       for (const pid of children) kill(pid, 'SIGKILL');
       kill(instance.pid, 'SIGKILL');
