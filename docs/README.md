@@ -14,7 +14,7 @@
 - [统一的本地缓存与检索引擎](feature/local-data-engine/README.md)
 - [本地 SDLC 闭环](feature/local-sdlc/README.md)
 - [统一项目治理与中立测试接入](feature/neutral-project-governance/README.md)
-- [用短发布租约协调本地写入](feature/portable-coordination/README.md)
+- [协调本地写入与恢复](feature/portable-coordination/README.md)
 - [渐进式项目初始化与品味治理](feature/project-onboarding/README.md)
 - [写下项目的品味](feature/taste/README.md)
 - [面向人的项目工作台](feature/web-workbench/README.md)

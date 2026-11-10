@@ -1,20 +1,20 @@
-# 用短发布租约协调本地写入
+# 协调本地写入与恢复
 
-多个 agent 和命令同时在一个 worktree 里读写文档时，维护者希望它们互不覆盖、中断后能恢复。协调还不能依赖 flock、diskutil、plutil 或 stat 这类外部程序，打包后的 CLI 在 Linux 与 macOS 上都要能直接运行。
+多个 agent 和命令同时在一个项目目录里读写文档时，维护者希望它们互不覆盖、中断后自动恢复，也不因为有人直接用编辑器改了文件而锁死仓库。协调不依赖 flock、diskutil、plutil 或 stat 这类外部程序，打包后的 CLI 在 Linux 与 macOS 上都能直接运行。
 
-Concord 只用 Node 文件 API 协调本地 Markdown 的发布。HawDB 只是可丢弃的解析缓存，不拥有发布[租约](../../concepts.md#lease)、源文件的 journal 或[恢复](../../concepts.md#recovery)。
+所有写入都经由[工作区服务](../../concepts.md#workspace-server)：它在内存中排队提交，用[前像](../../concepts.md#preimage)摘要拒绝过期的计划，用单一 `journal.json` 恢复中断。HawDB 只是可丢弃的缓存，不拥有 journal 或[恢复](../../concepts.md#recovery)。
 
 ## 你可以做什么
 
 - 在没有 flock、diskutil、plutil 或 stat 子进程的机器上运行 Concord。
-- 读取和准备互不相关的修改，不需要在整个命令期间持有[发布租约](concepts.md#publication-lease)。
-- 只在一致快照和发布提交这两段串行，同一时刻只有一个活跃的 journal。
-- 写入中断后按完整前像恢复；计划依赖的文件变了，计划被拒绝。
-- 长时间运行的测试不占用文档发布。
+- 读取与准备修改不等待任何写入；只有提交阶段进入[写互斥](../../concepts.md#write-exclusion)。
+- 计划依赖的文件变了，写入被拒绝，不覆盖别人的修改。
+- 写入中断后，服务下次启动时自动完成或回滚；文件已被外部编辑时以磁盘内容为准。
+- 长时间运行的测试不阻塞文档写入。
 
 ## 上手
 
-一个写入持有发布租约时，另一个写入立即报告占用，读取照常：
+两个写入同时提交时，后到者排队等待；它读过的文件被先到者改了，就被拒绝：
 
 ```sh
 concord new memory busy-note
@@ -22,21 +22,11 @@ concord new memory busy-note
 
 ```text
 ok: false
-error: OperationFailed
-message: exclusive publication lease is busy (pid=4182 host=my-host mode=exclusive); retry after the operation finishes. For an interrupted operation run concord recover; do not delete the lease directory.
+error: SourceChanged
+message: memory/README.md changed after the plan was prepared; rerun the command.
 ```
 
-```sh
-concord list memory
-```
-
-```text
-list
-documents: 
-  memory/lease-notes.md — lease-notes
-```
-
-持有者异常退出后，运行恢复：
+服务进程被杀后，下一次命令自动启动服务并恢复。也可以显式确认：
 
 ```sh
 concord recover
@@ -44,32 +34,31 @@ concord recover
 
 ```text
 Recovery: clean
-Journal: clean
-Publication tokens reclaimed: 1
-Runner: absent
+Journal: completed
+Test slot: absent
 ```
 
-完整过程见[不依赖外部锁程序协调本地写入](use-case/coordinate-local-publications.md)。
+完整过程见[协调本地写入与恢复](use-case/coordinate-local-publications.md)。
 
 ## 怎样工作
 
-读取不持有发布租约：它记下读过的文件与目录，返回前再核对一遍，期间有发布就拒绝当前结果。
+读取访问工作区服务的当前工作区图，不进入写互斥。
 
-普通写入先乐观地准备计划，只在提交时取得短期独占租约，核对全部依赖与前像后写 journal 再发布。
+写入先基于读到的内容准备计划，提交时进入写互斥，核对计划依赖的文件摘要，写 journal，再逐个原子替换。
 
-恢复在独占保护下检查 journal 与 runner 状态，不碰未知元数据与外部编辑。访问模式、读者准入与恢复结果见[架构](architecture.md)。
+恢复按目标文件当前内容决定完成、回滚或放弃 journal，从不阻断后续读写。访问模式与恢复规则见[架构](architecture.md)。
 
 ## 用户路径
 
-- [不依赖外部锁程序协调本地写入](use-case/coordinate-local-publications.md)
+- [协调本地写入与恢复](use-case/coordinate-local-publications.md)
 
 ## 范围
 
-支持同一主机、同一 PID 命名空间内的 Linux 与 macOS 本地 worktree，Git 仍是仓库身份的前提。网络与多主机协调不在保证范围内，不认证任何存储设备。支持的平台由[跨平台标签发版](../cross-platform-release/README.md)拥有。
+支持同一主机上的 Linux 与 macOS 本地项目目录，Git 仍是仓库身份的前提。网络文件系统与多主机共享同一项目目录不在保证范围内。支持的平台由[跨平台标签发版](../cross-platform-release/README.md)拥有。
 
-只支持当前协调协议：不迁移旧的锁格式，不协调混用的可执行版本。
+只支持当前协调协议：无法解码的 journal 按陈旧记录清理并告警，不迁移旧格式。
 
-文档与证据源文件是各自的事实，不能当作缓存删除 journal 或证据。死亡持有者的回收规则见[架构](architecture.md#data-flow)。
+文档与证据源文件是各自的事实，不能当作缓存删除。
 
 ## 验收方式
 
@@ -77,5 +66,6 @@ Runner: absent
 
 ## 依据的品味
 
+- [文件是界面，命令只是助手](../../taste.md#t-6)
 - [一件事只写一次，其余推导](../../taste.md#t-3)
 - [只声称证明过的](../../taste.md#t-5)

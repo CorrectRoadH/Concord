@@ -25,7 +25,7 @@
    …
    ```
 
-   还没有投影时，CLI 请求后台刷新并等待这次刷新结束，再读取它发布的投影，按第 2 步的格式输出，退出码与已有投影时相同。查询进程本身不扫描；等待受[刷新上限](../performance.md#刷新上限)约束。人读模式在等待期间向 stderr 打印 `Building diagnostic snapshot…`，`--json` 的 stdout 只有最终结果。中断命令不取消刷新，刷新进程继续完成，不持有文档发布租约。
+   还没有投影时，CLI 请求后台刷新并等待这次刷新结束，再读取它发布的投影，按第 2 步的格式输出，退出码与已有投影时相同。查询进程本身不扫描；等待受[刷新上限](../performance.md#刷新上限)约束。人读模式在等待期间向 stderr 打印 `Building diagnostic snapshot…`，`--json` 的 stdout 只有最终结果。中断命令不取消刷新，刷新继续完成，不进入写互斥。
 
    等待结束仍没有可读投影时（刷新失败或超时），命令返回 `QueryPending` 并退出 1：
 
@@ -157,7 +157,7 @@
 | 恢复待处理、配置无效、路径安全失败，或扫描无法形成结构 | 不发布投影 |
 | 缓存严格解码失败 | 报告 `QueryCacheInvalid`，查询进程不执行全量扫描 |
 | 数据库被占用 | 报告暂不可用，查询进程不执行全量扫描 |
-| 前台缓存读取暂不可用 | 最多重试 500ms，每次重新核验完整路径与 Schema；仍不可读则具名报告。等待不取得发布租约，也不扫描来源 |
+| 前台缓存读取暂不可用 | 最多重试 500ms，每次重新核验完整路径与 Schema；仍不可读则具名报告。等待不进入写互斥，也不扫描来源 |
 | 投影建成后 owner 正文摘要未变 | `trace show` 与 `review` 读取当前正文（单文件上限 32MiB）；排除 `projection` 与 `cache` 后，输出与同源 `--fresh --dry-run` 逐字节相同 |
 | 投影建成后 owner 正文摘要变化 | 省略该正文，路径列入 `projection.bodyChanged` |
 | 读取 owner 正文失败 | 路径列入 `projection.bodyUnavailable`，附错误码 |
@@ -178,7 +178,7 @@
 - 上一条的代码文件情形 `unknown` 为 `["code"]`，人读输出带不完整提示。
 - 已有一致投影时下一次刷新被编辑：继续服务原投影，`lastAttempt` 记录时间、不完整与变化路径，不写 `lastError`。
 - 扫描超过刷新上限：`lastError.code` 为 `QueryRefreshTimedOut` 并含 `elapsedMs` 与 `limitMs`；无投影时 `QueryPending` 的 `details.refresh` 给出同一错误。测试以短上限参数直接调用内部刷新入口，不新增用户可触发的环境变量。
-- 扫描以具名错误失败（例如 `InvalidConfig`）或存在非漂移 finding：保留原错误码，非漂移 finding 记为 `TraceInvalid`；`RecoveryRequired` 不发布投影。
+- 扫描以具名错误失败（例如 `InvalidConfig`）或存在非漂移 finding：保留原错误码，非漂移 finding 记为 `TraceInvalid`。
 - 扫描期间改写 `concord.config.ts`：候选丢弃，不发布、不记为失败，按新身份重新刷新。
 - 同一 worktree 的工作区投影与 trace gaps 投影在同一编辑下构建：`consistent`、`complete`、`changedPaths`、`unknownRelations`、`lastAttempt` 与替换结果一致，`builtAt` 不参与比较。
 - 投影建成后修改 owner 正文：持久 payload 不含 owner 正文与远端正文字节；摘要未变时输出与同源 `--fresh --dry-run` 相同，摘要变化时出现在 `bodyChanged`。

@@ -149,7 +149,7 @@ Git-private 状态在创建工作区时通过 `git rev-parse --git-path concord`
 
 服务启动或执行恢复时，若发现未完成的 journal：目标文件仍等于前像或计划摘要时自动完成或回滚；若外部编辑器已修改目标文件，则以当前工作区文件为准清理陈旧 journal 并输出告警，不锁死仓库。
 
-### 测试任务槽位 {#runner-租约}
+### 测试任务槽位 {#test-slot}
 
 CLI 与 Web 的测试共用工作区服务管理的单槽测试任务，长时间执行不阻塞文档读写。
 
@@ -223,8 +223,8 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 1. 每个操作按目标与不变量声明所需输入。局部读取与精确引用验证不以无关 owner、代码或测试全部有效为前提；目标身份、来源、归属与路径安全仍须严格校验。
 2. 全局诊断保留可读取记录和全部已发现错误。完整性随投影与关系输出传播，不完整输入不能授权依赖完整图的裁决。
-3. 只读来源访问使用[来源快照](feature/portable-coordination/concepts.md#source-snapshot)，返回前核对观察到的文件摘要、目录集合与未完成的 journal。普通写入规划不持锁，提交使用短期独占协调与前像核验。dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
-4. 恢复区分 journal 结果、实际回收 token 与 runner 状态，返回成功前核验恢复后的协调状态，不用无 journal 推断仓库整体可写。
+3. 只读来源访问使用[来源快照](feature/portable-coordination/concepts.md#source-snapshot)。普通写入规划不持锁，提交进入[写互斥](concepts.md#write-exclusion)并核对前像。dry-run 表达变更预览，与访问权限分别建模。测试任务清理状态未知只阻断新的测试任务，不阻断发布。
+4. 恢复报告 journal 结果与测试任务状态；外部编辑优先于未完成的 journal，恢复从不让仓库进入不可写状态。
 
 ## 凭据
 

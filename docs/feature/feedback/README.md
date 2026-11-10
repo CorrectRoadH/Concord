@@ -28,7 +28,6 @@ feedback:
     metadata:
       …
       title: 大仓库里检查变慢
-      kind: issue
       relations: none
     …
   provider: local

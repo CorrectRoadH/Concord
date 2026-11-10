@@ -41,7 +41,7 @@ API 适配器只访问固定 HTTPS API，重定向拒绝，外部 URL 只用于�
 
 将来新增 provider 可实现同一读取与规范化 Spec；webhook 和 OAuth 回调需要另行定义权限、重试和资源归属。远端 Issue 写入不属于 Feedback 读取，见[远端 Issue 写入](../neutral-project-governance/use-case/mutate-remote-issue.md)。
 
-`concord issue` 助手与 Web 保存使用单文件发布 journal（`concord recover` 恢复）；同步与导入把远端绑定与新增 Issue 在一次发布中写入。两条路径争用同一 `publication.lease`，不会并发发布。
+`concord issue` 助手与 Web 保存使用单文件发布 journal（`concord recover` 恢复）；同步与导入把远端绑定与新增 Issue 在一次发布中写入。两条路径经由同一个写互斥，不会并发发布。
 
 ## 来源并列与能力边界
 
@@ -67,7 +67,7 @@ Web 关闭 Issue 与 `issue close` 相同：仍有链接指向它时拒绝，否
 
 `feedback-schema.ts` 拥有浏览器与服务端共享的连接、来源与远端观察 Schema。`feedback-providers.ts` 负责 GitHub / Linear 协议、身份解析、范围校验和有界分页。`feedback.ts` 负责本地观察与幂等导入，`feedback-cache.ts` 负责可重建远端投影。
 
-适配器的 `fetchFeedback(connection, options)` 返回 Effect，结果包含绑定后的连接、规范化条目及读取时间。可注入 transport 以模拟 HTTP 边界；该接口不会赋予 provider 修改项目文档的权限，也不持有[发布租约](../portable-coordination/concepts.md#publication-lease)。
+适配器的 `fetchFeedback(connection, options)` 返回 Effect，结果包含绑定后的连接、规范化条目及读取时间。可注入 transport 以模拟 HTTP 边界；该接口不会赋予 provider 修改项目文档的权限，也不进入[写互斥](../../concepts.md#write-exclusion)。
 
 连接 Schema 区分 API 与 GitHub gh：API 分支的 `transport` 省略或为 `api`，必须包含 `credentialEnv`；gh 分支必须显式指定 `transport: gh`，并拒绝 `credentialEnv`。transport 不进入远端对象去重键，适配器返回值不能自行修改连接的读取方式或目标范围。
 

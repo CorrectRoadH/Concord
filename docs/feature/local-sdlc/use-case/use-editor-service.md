@@ -101,7 +101,7 @@
 | 磁盘上的配置、政策变化，或文件被删除、重命名 | 受影响的结果失效或明确标为不完整 |
 | 编辑、格式化、`codeAction`、`executeCommand` 与 `willRenameFiles` 请求 | `EditorMethodNotSupported`（-32601），例如 `{"code":-32601,"message":"Read-only editor does not support textDocument/formatting","data":{"name":"EditorMethodNotSupported"}}` |
 
-服务只读，只提供文档生命周期、诊断和上述四种导航。它不开网络端口，不启动 language server、测试收集器或 runner；stdout 只包含 framed JSON-RPC，stderr 用于具名诊断。`shutdown`、`exit`、EOF 与 SIGINT 都取消任务并释放会话资源，不持发布租约等待客户端。
+服务只读，只提供文档生命周期、诊断和上述四种导航。它不开网络端口，不启动 language server、测试收集器或 runner；stdout 只包含 framed JSON-RPC，stderr 用于具名诊断。`shutdown`、`exit`、EOF 与 SIGINT 都取消任务并释放会话资源，不在写互斥中等待客户端。
 
 ## 文件与资源边界
 

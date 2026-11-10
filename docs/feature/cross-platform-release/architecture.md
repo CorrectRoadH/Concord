@@ -4,7 +4,7 @@
 
 源码标签、应用的包元数据、GitHub Release 中的归档与安装脚本由 CorrectRoadH/Concord 拥有。CorrectRoadH/homebrew-tap 拥有 Formula、Nix 表达式、recipe 标签，以及 Nix 渠道修补后的安装身份。
 
-运行时协调遵循[可移植协调架构](../portable-coordination/architecture.md)：来源读取不取得租约，提交与恢复使用同一文件租约。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时协调。
+运行时协调遵循[可移植协调架构](../portable-coordination/architecture.md)：写入经由工作区服务的写互斥，恢复使用同一 journal 协议。HawDB 是可丢弃缓存。不支持不同协议的服务同时协调同一项目目录。
 
 ## 数据流
 
@@ -100,7 +100,7 @@ Nix 只支持 `x86_64-linux`。原始发版身份与渠道安装身份分开：
 
 ### 归属
 
-Concord 拥有源码校验、归档字节与源码 Release，tap 拥有包管理器元数据与渠道同步。短运行时作用域拥有发布文件租约；runner 作用域另行拥有分离的 POSIX 进程组与持久清理状态。
+Concord 拥有源码校验、归档字节与源码 Release，tap 拥有包管理器元数据与渠道同步。工作区服务拥有写互斥与测试任务槽位；测试任务另行拥有分离的 POSIX 进程组与清理状态。
 
 ### 创建
 
@@ -126,7 +126,7 @@ CI 按[检查入口](../../engineering/testing/README.md#检查入口)分片运�
 
 ### 清理
 
-Repository 租约保留既有的收尾逻辑。所拥有的进程依次收到 TERM、有界宽限期与 KILL；观察不到进程组消失即为清理失败。CI 临时的候选归档与候选 recipe 属于 CI 机器的本地资源，每个任务结束后删除。
+工作区服务退出时收拢它拥有的进程：依次收到 TERM、有界宽限期与 KILL；观察不到进程组消失即为清理失败。CI 临时的候选归档与候选 recipe 属于 CI 机器的本地资源，每个任务结束后删除。
 
 ### 失败归属
 

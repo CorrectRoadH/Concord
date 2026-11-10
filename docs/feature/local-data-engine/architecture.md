@@ -16,7 +16,7 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 工作区服务的持久打开与关闭使用 napi-rs 官方工作线程。顶层 `openCache(path, readOnly, create)` 返回 Promise；`closeAsync()` 等待数据库与协调锁释放后完成。同步 constructor、内存实例与数据操作用于既有同步消费者，不作为异步打开的回退（[用现成的能力](../../taste.md#t-10)）。
 
-打开任务保留共享资源所有权，先完成 JS 类包装，再在 Promise 成功交接后移交给外壳。包装或交接失败时，任务销毁路径排空共享状态，数据库先于协调锁销毁。关闭入口先标记 closing，使用可观察提交结果的 `Env.spawn`；工作线程短暂取走资源后释放 mutex，再执行校验、checkpoint、引擎销毁、目录检查与租约释放。closing 期间数据方法立即以 `HawdbClosed` 拒绝，不能在 JS 主线程等待工作线程的 mutex。关闭失败也先释放资源；提交失败由仍可达的共享状态完成同步异常清理。GC 不取消已经提交的关闭任务。
+打开任务保留共享资源所有权，先完成 JS 类包装，再在 Promise 成功交接后移交给外壳。包装或交接失败时，任务销毁路径排空共享状态，数据库先于协调锁销毁。关闭入口先标记 closing，使用可观察提交结果的 `Env.spawn`；工作线程短暂取走资源后释放 mutex，再执行校验、checkpoint、引擎销毁、目录检查与协调锁释放。closing 期间数据方法立即以 `HawdbClosed` 拒绝，不能在 JS 主线程等待工作线程的 mutex。关闭失败也先释放资源；提交失败由仍可达的共享状态完成同步异常清理。GC 不取消已经提交的关闭任务。
 
 任务不暴露 AbortSignal。Effect.acquireRelease 的获取与 finalizer 登记不可中断；请求取消要等待打开结束并完成关闭，不能让 Promise 脱离作用域。owner 用一个 Semaphore 许可串行化 open/close，获取失败、中断或 Busy 时先关闭本次局部 Scope；只有成功才发布句柄。重复 close、重开和外层退出都等待真正的释放完成。TypeScript 包装层重复 closeAsync 返回同一个 Promise，不重复提交原生工作。
 
@@ -25,90 +25,45 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 ## 句柄与打开模式
 
-持久库位于 Git-private `cache.hawdb`，各类持久缓存以命名空间隔离。持久句柄只有一个所有者（[缓存与原生边界的约束](#缓存与原生边界的约束)）：
+持久库位于 Git-private `cache.hawdb`，各类持久缓存以命名空间隔离。持久句柄只有一个所有者：持有 `server/lock` 的[工作区服务](#工作区服务)内核（[缓存与原生边界的约束](#缓存与原生边界的约束)）。
 
-- 该 worktree 的[工作区服务](#工作区服务)运行时，由服务长期持有。
-- 没有服务时，由当前命令的最外层来源快照按需打开；嵌套调用只复用，快照结束时释放。
+### 协调锁
 
-持久库由工作区服务创建与批量填充。首次查询等待实例就绪，后续客户端复用同一持有者。
+持久库由数据库协调锁保证任一时刻最多一个进程打开。服务锁已经保证同一项目目录只有一个服务内核，客户端、解析线程与测试子进程都不打开持久库，因此协调锁由服务持久持有。
 
-没有服务时，只有以下操作可以创建持久库：[异步诊断投影](use-case/query-asynchronous-projections.md)的后台刷新进程、显式的 `cache rebuild`，以及保存外部观察的 `test discover`、`test run` 与 `code analyze`。其它本地操作只打开已经存在的持久库，不存在时使用本进程的内存缓存。
+- 服务进入 `opening` 后以可写方式打开或创建持久库，持有到 `stopping`；clear 与空闲回收期间短暂关闭后重开。
+- 客户端、解析线程与测试子进程都不打开持久库。
+- `--dry-run` 与 cache-off 调用不打开持久库，只使用本进程的内存实例。
 
-只读句柄需要写入时，关闭后以写模式重开，并重新竞争所有权。原生事务不跨调用逃逸。发布租约的持有者不持有持久句柄；存在独占提交时，数据库先于租约释放。
+原生事务不跨调用逃逸。
 
-### 持久库被占用时
+### 持久库不可用时
 
-持久句柄可能因协调锁被占用，或发现运行中的工作区服务而不打开。这时：
+持久库因引擎锁被直接调用 HawDB 的外部程序占用、文件损坏或原生产物不可用而打不开时，服务进入 degraded：
 
-- 可由当前来源完整重建的解析缓存（文档、配置、代码、测试标记与 Git 基线）改用本进程的内存缓存，命令照常完成，正确性仍由当前来源核验保证。缓存诊断保留 `HawdbBusy` 原因。
-- 远端反馈快照与诊断投影不是解析缓存。服务运行时经由服务读取；没有服务而库被占用时如实报告不可用，不把空内存实例当作已读取的快照，不自动联网。
-- 损坏、预算、路径安全与原生产物失败保留各自的具名失败。
-
-`cache status`、`cache clear` 与 `cache rebuild` 有服务时由服务处理，没有服务时按本进程的持有状态报告。
+- 可由当前来源完整重建的解析缓存（文档、配置、代码、测试标记与 Git 基线）改用服务进程的内存实例，命令照常完成。缓存诊断保留 `HawdbBusy`、`HawdbCorrupt` 或 `HawdbUnavailable` 原因。
+- 远端反馈快照不是解析缓存，持久库不可用时如实报告不可用，不把空内存实例当作已读取的快照，不自动联网。
+- 损坏、预算与原生产物失败保留各自的具名失败。
 
 ### 内存实例
 
 纯解析入口不依赖 Repository 或磁盘目录；命名空间区分数据，源摘要与解析器身份区分结果。内存实例没有文件锁，关闭或失效后可以重建。哪些解析使用内存实例见[缓存的使用与维护](#缓存的使用与维护)。
 
-### 只读打开
-
-配置读取、feedback 观察与 status 以 existing-only 只读方式打开。只读不写来源、不改逻辑缓存行，也不初始化表、显式 checkpoint、修复 WAL 或远端刷新。
-
-已有完整库允许分支 runtime 挂载、内部派生文件重建和创建同级协调锁。缺目录、格式标记、根 manifest、结构性 `owner.hawdb.lock` 或表时不初始化。
-
-已有 `branch.head` 的目录必须已有 `owner.hawdb.lock`；分支 `runtime/` 及其锁是可重建的派生文件。existing-only 打开缺失库时不创建锁或目录；可写创建可以建立已验证的数据库目录与协调锁。
-
 ### 关闭持久缓存
 
-Repository 的只读属性 `persistentCache: 'use' | 'off'` 独立于来源访问权限，dry-run 强制为 `off`。中央 `withPersistentCache` 对关闭的读取提供 absent database，对误入的写入返回 `HawdbUnavailable`。
+Repository 的只读属性 `persistentCache: 'use' | 'off'` 独立于来源访问权限，dry-run 强制为 `off`。中央 `withPersistentCache` 对关闭的读取提供 absent database，对误入的写入返回 `HawdbUnavailable`。配置解析在关闭时不传缓存目录，进程内解析缓存仍可用。
 
-`cacheStatus` 在打开数据库前检查该设置。配置解析在关闭时不传缓存目录，进程内解析缓存仍可用。`checkCurrentProject`、`compileWorkspace`、LocalRepository 内全部配置 `snapshot` 调用和 query-scan worker 都遵守仓库设置与单次变更的 dry-run。
-
-严格恢复保持启用，不启用 repair mode。有效的已提交 WAL 可由公开只读 API 读取，不授权逻辑写入。
-
-## 协调锁
-
-`cache.hawdb.concord.lock` 由已验证的数据库路径派生，位于同一真实父目录，协调完整句柄生命周期；它不是缓存或来源 owner。
-
-- 锁必须是单链接普通文件，以 `O_NOFOLLOW` 不截断打开，用非阻塞 `File::try_lock` 竞争。
-- 路径与描述符须指向同一 device/inode。数据库根目录身份保存并复核；根目录或协调锁被替换时拒绝操作。
-- 占用、权限、I/O 与异常路径分别具名失败。
-
-持久句柄在检查引擎目录和调用引擎前取得协调锁，持有到 schema 准入、事务、checkpoint、引擎销毁及关闭后目录检查全部结束；关闭失败也释放锁。
-
-互斥覆盖遵守本协议的 Concord 进程（含 metadata-only 与延迟准入阶段），原生引擎锁阻止清理已持有根或分支的 HawDB 句柄。它不保证直接调用 HawDB 的程序并发创建分支，也不抵抗恶意路径替换。
-
-该适配是对所选引擎提交的锁协议的显式依赖：不从 HawDBError 字符串推断，不绕过公开数据 API。
+严格恢复保持启用，不启用 repair mode。
 
 ## 清理
 
-有工作区服务时，`cache clear` 发送给服务，按以下顺序执行：
+`cache clear` 发送给工作区服务，按以下顺序执行：
 
-1. 服务进入 draining，等待已受理的请求完成，关闭持久句柄。
-2. 异步取得独占发布租约，最多等待 3 秒；超时则重新打开并返回 `RepositoryBusy`。
-3. 执行下述清理，释放租约后重新打开，并从头刷新。
+1. 服务进入 draining，在[写互斥](../../concepts.md#write-exclusion)下等待已受理的请求完成，关闭持久句柄。
+2. 删除 `cache.hawdb` 目录内的缓存文件，保留目录本身。
+3. 重新打开持久库，从内存工作区图批量写回解析缓存。
 
-服务全程持有服务锁，其它 Concord 进程不会在此期间打开持久库。没有服务时，清理在本进程执行。
-
-### 取锁
-
-clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.lock`，并按路径排序锁住树内全部以 `.lock` 结尾的普通文件，包括分支与 catalog 锁。描述符持有到清理结束。
-
-任一锁占用、权限、I/O、路径异常或未知错误都拒绝删除。打开失败不代表可删除，损坏的 manifest 不影响独立取锁。只有显式 clear 可以为已验证目录补建根锁，不补建嵌套引擎锁。
-
-### 删除
-
-取锁后重新检查完整目录、锁集合与 inode，由 TypeScript 在守卫下生成删除清单。删除分三阶段：非锁文件、嵌套锁、空的嵌套目录。
-
-- 每次删除前复核根目录、协调锁与根锁的身份，阶段边界复核剩余集合。
-- selector、catalog 与 branch head 先于任何嵌套锁删除。因此延迟准入即使重建锁，也因 head 缺失而拒绝挂载。
-- 已关闭的守卫不授权后续删除。
-
-原生检查与 TypeScript 预检都不跟随 symlink，按 device/inode 汇总普通文件。每组观察到的 link count 必须一致，且等于根内不同路径数；`.lock` 文件必须单链接。
-
-预检记录文件与目录身份、成员集合及每组剩余链接数；unlink 前要求路径身份不变，且 link count 等于剩余数。外部别名、计数或身份变化、新增或替换成员、symlink 与特殊文件均拒绝。
-
-删除不是原子操作。部分失败返回具名失败并保留现场；后续显式 clear 重新取得守卫与清单后继续，不自动调用数据库恢复。
+服务全程持有服务锁，没有其它 Concord 进程会打开持久库，因此清理不再逐个取得引擎内部锁或核对硬链接计数。删除不跟随 symlink；目录中出现 symlink 或特殊文件时拒绝清理并报告 `CleanupFailed`。删除中途失败时服务进入 degraded，下一次 clear 从头删除；缓存可丢弃，部分删除不影响来源与 journal。
 
 ## 工作区服务
 
@@ -127,7 +82,7 @@ Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git
 | socket | `<runtime>/concord-<uid>/<privateDir 的 sha256 前 32 位>.sock`，0600 | 只由服务锁持有者在锁内创建；删除前核对其 inode 与运行记录一致 |
 | HTTP 监听 | `(host, port)`，每次开启返回绑定实例 token 的监听引用 | 按引用与活跃连接计数，见 [Web 工作台架构](../web-workbench/architecture.md#服务托管) |
 
-- 读写互斥、缓存清理与测试单槽任务在服务进程内通过内存信号量与读写锁协调，不再派生独立的计算子进程、刷新计算子进程或预热操作子进程。
+- [写互斥](../../concepts.md#write-exclusion)、缓存清理与测试单槽任务在服务进程内通过内存信号量与读写互斥协调，不再派生独立的计算子进程、刷新计算子进程或预热操作子进程。
 - 单次计算请求的预算是 600 秒，超出时这次请求以 `ComputeRequestTimedOut` 失败，附已用时间与上限。
 - 后台增量刷新不阻塞前台只读查询；缓存清除等维护操作等待在途读写与刷新完成（[名字说出区别](../../taste.md#t-13)）。
 - 服务锁与数据库[协调锁](#协调锁)是两把锁。
@@ -473,7 +428,7 @@ type QueryCacheEnvelope = {
 | 5 | 退出码非 0、被信号终止、启动错误或被取消 | 写 error，附 stderr 前 4096 字符 | `QueryRefreshFailed` |
 | 6 | 进程组清理未确认 | 写 error，不发布 | `QueryRefreshCleanupUnconfirmed` |
 | 7 | 由漂移引起的无结构异常 | 改写 lastAttempt，不写 error | — |
-| 8 | 其它 `ok: false` | 写 error，保留扫描的码与消息 | 例如 `TraceInvalid`、`RecoveryRequired`、`InvalidConfig`、`UnsafePath` |
+| 8 | 其它 `ok: false` | 写 error，保留扫描的码与消息 | 例如 `TraceInvalid`、`InvalidConfig`、`UnsafePath` |
 | 9 | `ok: true` | 按替换规则发布 | — |
 
 `OwnedProcessService` 自身无法完成执行且身份键未变时写 `QueryRefreshFailed`。发布阶段的 HawDB 占用按三秒重试，仍失败时进程退出，不写记录。

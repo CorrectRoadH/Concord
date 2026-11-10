@@ -22,14 +22,14 @@ concord --json taste
   "operation": "taste",
   "path": "docs/taste.md",
   "entries": [
-    {"id": "t-1", "kind": "taste", "title": "读得懂胜过写得全"}
+    {"id": "t-1", "title": "读得懂胜过写得全"}
   ],
   "references": [{"path": "docs/feature/cart/README.md", "line": 12, "entry": "t-1"}],
   "complete": true
 }
 ```
 
-`entries` 按正文顺序列出，总则的 `kind` 为 `general`。`references` 每次出现一项，按 `path` 与 `line` 排序。任何纳入范围的文件无法读取时 `complete` 为 false。`concord taste` 只读，不写文件。
+`entries` 按正文顺序列出，包含各条目与总则（总则 `id` 为 `general`）。`references` 每次出现一项，按 `path` 与 `line` 排序。任何纳入范围的文件无法读取时 `complete` 为 false。`concord taste` 只读，不写文件。
 
 ## 错误与 finding
 

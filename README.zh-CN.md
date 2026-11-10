@@ -121,7 +121,7 @@ Concord 让审阅从 Spec 开始。Spec 是仓库中的 Markdown，代码与测�
 | `AGENTS.md` 中的 Concord 区块 | 告诉 agent 先读 Concord 的指引、交付前运行检查 | agent 每次进入仓库时读 |
 | `concord.config.ts` | 可选配置：源码根、测试根、测试 runner、p5 扩展库 | 默认约定不适用时才需要 |
 | 源码与测试中的标记 | 测试顶部的 `// @use-case <path>`，实现旁的 `// @concord-implements <path>` | 由 `check` 和 `trace` 读取，生成反向关系 |
-| Git 私有目录下的 `concord/` | 每个 worktree 独立的缓存、写入恢复记录与租约 | 不需要读；缓存可以用 `concord cache clear` 删除，结论不变；恢复记录由 `concord recover` 处理，不要手工删除 |
+| Git 私有目录下的 `concord/` | 每个 worktree 独立的缓存与写入恢复记录 | 不需要读；缓存可以用 `concord cache clear` 删除，结论不变；恢复记录由 `concord recover` 处理，不要手工删除 |
 
 ## 可以做什么
 

@@ -74,7 +74,7 @@ README 告诉第一次读的人能做什么、怎么开始；字段、错误码�
 
 唯一维护某项事实的文件或目录。其它页面链接 owner，不复制它的内容；反向关系从 owner 推导。
 
-owner 只指文件或目录。持有租约或刷新的进程是[持有者](#holder)；组织或作用域对仓库的关系写“归属”或“拥有”。
+owner 只指文件或目录。持有服务锁的进程是[持有者](#holder)；组织或作用域对仓库的关系写“归属”或“拥有”。
 
 ## 文档包 {#package}
 
@@ -100,7 +100,7 @@ Git 的一个工作目录，包括其中的文件与 index：主 worktree，或 
 
 ## 工作区服务 {#workspace-server}
 
-为一个项目目录提供增量工作区图、持久缓存、查询、写入协调与 Web 连接的唯一本地服务内核。同一项目目录最多一个实例。
+为一个项目目录提供增量工作区图、持久缓存、查询、写入协调与 Web 连接的唯一本地服务内核。同一项目目录最多一个实例，由 `server/lock` 保证；命令在本进程内运行内核时同样先取得这把锁。
 
 旧写法：`项目后台`
 
@@ -178,15 +178,17 @@ advisory 是不使检查失败的提示，不算 finding。原生诊断与缓存
 
 保存时文件的当前摘要与[编辑前像](#preimage)不同。保存不覆盖文件，保留草稿并显示差异。
 
-## 租约 {#lease}
+## 写互斥 {#write-exclusion}
 
-进程对 worktree 中一项协调资源的短期独占占用，由持有者文件记下[持有者](#holder)。同一 worktree 中每种租约同时只有一个持有者。
+[工作区服务](#workspace-server)在提交写入时持有的进程内独占：同一项目目录同一时刻只有一个写入在核对[前像](#preimage)、写 journal 并替换文件。读取与准备计划不进入写互斥。
 
-文档写入在提交期间持有[发布租约](feature/portable-coordination/concepts.md#publication-lease)，持有者异常退出后由[恢复](#recovery)回收；执行修复核验等测试命令时持有 runner 租约，清理结果由 [runner 状态](feature/portable-coordination/concepts.md#runner-state)报告。
+写互斥只存在于内存，不在磁盘留下持有记录；进程退出即释放，中断的写入由[恢复](#recovery)处理。修复核验等测试命令占用的是[测试任务槽位](feature/portable-coordination/concepts.md#test-slot)。
+
+旧写法：`租约`、`发布租约`、`写锁`
 
 ## 持有者 {#holder}
 
-当前持有租约的进程，由持有者文件中的 token、PID 与主机标识。刷新等其它独占占用的持有进程也叫持有者。
+当前持有 `server/lock` 的工作区服务进程，由运行记录中的 token 与 PID 标识。
 
 ## journal {#journal}
 
@@ -200,7 +202,7 @@ advisory 是不使检查失败的提示，不算 finding。原生诊断与缓存
 
 ## 发布 {#publication}
 
-把已经写好的文档改动、投影、缓存或构建产物整体换成可见状态，例如在[租约](#lease)下按 journal 逐文件原子 rename。中途失败时旧状态不变。
+把已经写好的文档改动、投影、缓存或构建产物整体换成可见状态，例如在[写互斥](#write-exclusion)下按 journal 逐文件原子 rename。中途失败时旧状态不变。
 
 发布只指本地状态的整体替换，例如文件发布、发布投影与 Web 产物的原子发布；软件的版本交付是[发版](#release)。
 

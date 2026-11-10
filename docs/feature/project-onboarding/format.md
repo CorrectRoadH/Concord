@@ -39,6 +39,6 @@ export default {
 | 错误 | 触发条件 |
 | --- | --- |
 | `InvalidConfigSyntax` | 重复键、spread、computed key、调用、其它运行时表达式或额外语句 |
-| `InvalidData` | 配置或未完成事务不符合当前 Schema，包括未列出的字段 |
+| `InvalidData` | 配置不符合当前 Schema，包括未列出的字段 |
 
-拒绝不改变配置、journal、锁、事务目标与临时文件的内容、存在性或权限；无法解码的 journal 阻断写入。
+拒绝不改变配置文件内容；陈旧或无法解码的 journal 由工作区服务或恢复命令自动清理并输出警告，不阻断仓库读写。

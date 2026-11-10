@@ -13,7 +13,6 @@
 | 错误 | HTTP |
 | --- | --- |
 | `WorkspaceProjectionPending` | 202 |
-| `RecoveryRequired` | 503 |
 | `WorkspaceProjectionUnavailable` | 503 |
 | `CleanupFailed` | 409；只在 HTTP 出现：尚无结果且 View 无法确认刷新进程清理 |
 

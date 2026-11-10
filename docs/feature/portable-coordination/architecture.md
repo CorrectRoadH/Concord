@@ -22,9 +22,11 @@ dry-run 决定计划是否发布，与 access 无关；它执行与真实写入�
 
 ## 数据流 {#data-flow}
 
-工作区服务持有唯一的 `server/lock`，进程内的读写互斥与单槽测试任务通过内存信号量调度；无服务单次模式使用 Git-private 目录下的单文件锁协调。
+工作区服务持有唯一的 `server/lock`，[写互斥](../../concepts.md#write-exclusion)与[测试任务槽位](concepts.md#test-slot)都是服务内存中的信号量。命令在本进程内运行内核时同样先取得 `server/lock`，因此磁盘上没有第二种协调锁，也没有需要回收的持有记录。
 
-服务启动或运行 `concord recover` 时，在写互斥下检查是否存在上次异常退出遗留的 `journal.json`：
+写入在服务内排队进入写互斥，最多等待 3 秒，超时返回 `RepositoryBusy`。进入后核对计划依赖的全部文件摘要，任一变化即以 `SourceChanged` 拒绝。
+
+服务取得 `server/lock` 后、开始应答请求前，以及运行 `concord recover` 时，在写互斥下检查是否存在上次异常退出遗留的 `journal.json`：
 
 - 若目标文件当前内容仍等于写入前摘要或计划摘要，自动回滚到写入前内容或补完计划写入，并删除 `journal.json`。
 - 若目标文件已被外部编辑器或 agent 修改（既不等于写入前摘要也不等于计划摘要），或 `journal.json` 属于无法解码的陈旧格式，则遵循“工作区文件是最终事实来源”（[文件是界面，命令只是助手](../../taste.md#t-6)），保留磁盘上的当前文件、清理陈旧 `journal.json` 并输出告警，绝不锁死仓库。
@@ -38,7 +40,7 @@ dry-run 决定计划是否发布，与 access 无关；它执行与真实写入�
 
 ## 错误 {#errors}
 
-相互竞争的写入若修改了同一目标文件，后者因期望摘要不匹配而拒绝。恢复结果报告 `operation`、`journalStatus`、`changedPaths` 与测试任务状态（`absent`、`running` 或 `blocked`）。外部测试子进程组清理无法确认时报告 `blocked`。
+相互竞争的写入若依赖了被先到者改变的文件，后者以 `SourceChanged` 拒绝。恢复结果报告 `operation`、`status`、`journalStatus`（`clean`、`completed`、`rolledBack` 或 `discarded`）、`changedPaths`、`warnings` 与[测试任务状态](concepts.md#test-slot-status)。外部测试子进程组清理无法确认时报告 `blocked`。
 
 ## 身份与复用 {#identity-and-reuse}
 
@@ -48,7 +50,7 @@ dry-run 决定计划是否发布，与 access 无关；它执行与真实写入�
 
 关系写入、目录创建、Feedback 导入与普通文档写入统一使用同一套发布与 `journal.json` 恢复协议，由工作区服务或 `concord recover` 统一处理。
 
-### 协调目录与租约
+### 协调目录
 
 协调状态位于 `git rev-parse --git-path concord`（在创建工作区时解析一次并缓存），每个 worktree 独立。目录中包含：
 

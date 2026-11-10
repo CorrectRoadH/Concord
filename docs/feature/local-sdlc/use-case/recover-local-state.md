@@ -2,18 +2,20 @@
 
 ## 用户目标
 
-在多人或多个 Agent 并行编辑的仓库里，维护者要确认 Concord 的写入不会越出 worktree，不会覆盖别人的改动，中断后也不会留下半套文件。
+在多人或多个 Agent 并行编辑的仓库里，维护者要确认 Concord 的写入不会越出项目目录，不会覆盖别人的改动，中断后也不会留下半套文件或锁死仓库。
 
 ## 起始状态
 
 - 项目已经初始化。
-- 某次 Concord 写入可能被中断，例如进程被杀或机器断电。
+- 某次 Concord 写入可能被中断，例如服务进程被杀或机器断电。
 
 ## 完整路径
 
-1. 运行任意读写命令。如果上一次写入没有完成，命令会拒绝执行并要求恢复。 {#detect}
+1. 运行任意命令。 {#detect}
 
-2. 恢复。 {#recover}
+   命令连接或启动工作区服务。新服务在应答任何请求前先处理上一次遗留的 `journal.json`，所以命令看到的总是已恢复的文件，不会被要求先手动恢复。
+
+2. 需要确认时显式恢复。 {#recover}
 
    ```sh
    concord --json recover
@@ -22,35 +24,35 @@
    没有未完成写入时：
 
    ```json
-   {"operation":"recover","status":"clean","changedPaths":[],"journalStatus":"clean","coordination":{"publication":{"reclaimedTokens":[]},"runner":{"status":"absent"}}}
+   {"operation":"recover","status":"clean","changedPaths":[],"journalStatus":"clean","warnings":[],"testSlot":{"status":"absent"}}
    ```
 
-   有未完成写入时，`changedPaths` 列出被完成或回退的文件，`journalStatus` 报告处理结果，`coordination.publication.reclaimedTokens` 列出回收的发布 token，`coordination.runner.status` 报告测试进程的清理状态。
+   有未完成写入时，`changedPaths` 列出被完成或回退的文件，`journalStatus` 报告 `completed`、`rolledBack` 或 `discarded`，`testSlot.status` 报告测试任务槽位的清理状态。
 
-3. 恢复被拒绝时，查看冲突文件，人工决定保留哪一份内容，再重新运行 `recover`。 {#resolve-conflict}
+3. `journalStatus` 为 `discarded` 时，查看 `warnings` 列出的文件。 {#resolve-conflict}
+
+   这些文件在中断后被外部编辑过，Concord 保留了磁盘上的内容。确认内容符合预期后照常继续；需要时重新运行原来的写入命令。
 
 ## 结果
 
-恢复只在每个文件都处于两种已知状态之一时执行：仍是写入前的内容，或已是计划写入的内容。它把整组文件一起完成或一起回退，关系与历史随之恢复。
+恢复把整组文件一起完成或一起回退：每个文件都已是计划内容时完成，否则回到写入前的内容。
 
 | 情况 | 结果 |
 | --- | --- |
-| 文件既不是写入前的内容也不是计划内容 | 拒绝恢复，保留外部编辑 |
-| 测试进程的清理状态未知 | 保留恢复记录，返回 blocked，CLI 退出 1。Web 与 action 返回同一个阻塞结果，只读查询仍可进行 |
-| 另一个写入者正持有项目 | 最终核验返回 Busy，不报告恢复完成 |
-| 回退的是 `init` | 最终核验不要求配置文件仍然存在 |
-
-没有恢复记录不代表测试进程已经清理，所以 `runner.status` 单独报告。
+| 文件既不是写入前的内容也不是计划内容 | 保留磁盘内容，删除 journal，`journalStatus` 为 `discarded`，`warnings` 列出路径 |
+| 测试任务槽位清理状态未知 | `testSlot.status` 为 `blocked`，CLI 退出 1；Web 与 action 返回同一结果，文档读写照常 |
+| 另一个写入正在提交 | 在写互斥后排队，最多等待 3 秒，超时返回 `RepositoryBusy` |
+| 回退的是 `init` | 不要求配置文件仍然存在 |
 
 ## 写入保护
 
 人和 agent 同时编辑同一个仓库时，Concord 的写入不能破坏别人的工作。
 
-- 每次写入都校验目标路径、前像与完整变更集。路径穿越、绝对路径、symlink 逃逸和并发写入都被拒绝。
-- 中断时保留可解释的恢复现场，不覆盖未知编辑。
-- `--dry-run` 执行同样的规划与校验，不写文档、恢复记录或缓存。
+- 每次写入都校验目标路径与计划依赖文件的摘要。路径穿越、绝对路径与 symlink 逃逸被拒绝；依赖已变的计划以 `SourceChanged` 拒绝。
+- 外部编辑永远优先于 Concord 未完成的写入。
+- `--dry-run` 执行同样的规划与校验，不写文档、journal 或缓存。
 
 ## Spec 来源
 
-- 恢复记录、发布与所有权：[协调架构](../../portable-coordination/architecture.md)
+- journal、写互斥与恢复规则：[协调架构](../../portable-coordination/architecture.md)
 - 写入管线：[架构](../architecture.md#写入管线)

@@ -147,8 +147,8 @@
 | `new-id` 与同文件的 anchor 或步骤冲突 | `DuplicateAnchor`，零写入 |
 | Issue 或 Memory 仍引用旧步骤 | `ManagedReferenceBlocked`，零写入 |
 | 规划后修改任一输入 | 零写入 |
-| 在首个文件发布后中断 | `RecoveryRequired`；另一个 CLI 运行 `recover` 回滚 |
-| 在 committed journal 持久化后中断 | `RecoveryRequired`；另一个 CLI 运行 `recover` 保留改写结果 |
+| 在首个文件发布后中断 | 下一个命令启动的服务先回滚，再执行该命令 |
+| 在 committed journal 持久化后中断 | 下一个命令启动的服务先完成改写，再执行该命令 |
 
 验收以构建打包后的 CLI 在隔离 Git 消费者中进行，步骤导航与依赖观察分别验收：使用已知正误声明的直接调用与子进程样本，逐个公开观察结果和缺口，不设未知结果比例目标。
 

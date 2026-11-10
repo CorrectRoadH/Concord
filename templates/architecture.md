@@ -16,6 +16,12 @@ Use Mermaid for relationships and flows. When motion or adjustable parameters ex
 
 List the properties every implementation must preserve.
 
+When state or ownership changes matter, name legal transitions, forbidden states, and atomic actions. Link observable guarantees to their behavior pages.
+
+Use formal verification when the risk and hard-to-reach cases justify it. State the property, assumptions, exploration bounds, and omissions; eventual completion also needs scheduling and fairness assumptions. For high-risk guarantees, name faults the verification must detect.
+
+A model pass does not prove implementation correctness: implementation work must check model-to-code correspondence and real behavior separately. Keep executable verification and its relations in their own sources, not a second feature map or sync history here.
+
 ## Resource Lifecycle
 
 When the feature holds resources or state, describe how each owner acquires and validates them. Then describe how it runs, reuses and revalidates them. Describe cleanup after normal and interrupted runs. State what invalidates reuse and the observable result of cleanup failure.

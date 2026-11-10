@@ -29,7 +29,7 @@
 
 | 字段 | 含义 |
 | --- | --- |
-| `status` | `ready`、`refresh-failed`（最近刷新失败，展示上一份结果）或 `blocked`（最近刷新因 RecoveryRequired 阻断） |
+| `status` | `ready` 或 `refresh-failed`（最近刷新失败，展示上一份结果） |
 | `current` | 恒为 `false`；结果不表示当前来源有效，不授权写入、check、fixed、恢复或证据裁决 |
 | `builtAt`、`builtFrom`、`builtUntil` | 构建区间 |
 | `complete` | 扫描完整、无 finding |
@@ -42,7 +42,6 @@
 | 错误 | 条件 |
 | --- | --- |
 | `WorkspaceProjectionPending` | 当前身份尚无可读结果 |
-| `RecoveryRequired` | 尚无结果且最近刷新被中断发布阻断 |
 | `WorkspaceProjectionUnavailable` | 原生模块缺失、缓存损坏或无法安全读取、记录超过 8 MiB、身份无法计算；`details.reason` 给出原因码，如 `HawdbBusy`、`WorkspaceProjectionOutputLimit` |
 
 这些错误退出 1。HTTP 入口的状态码映射见[工作区 HTTP 接口](api.md#工作区投影)。

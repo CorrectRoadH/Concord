@@ -23,7 +23,7 @@
      "operation": "trace-gaps",
      "semantics": "missing-explicit-relationships-not-coverage",
      "limitations": ["Only documented CLI pages are discoverable; undocumented commands require a product-owned inventory."],
-     "contracts": [{"path": "docs/feature/cart/use-case/add-item.md", "kind": "use-case", "title": "加入商品", "missing": ["code"], "relationships": {"code": 0, "test": 1}}],
+     "contracts": [{"path": "docs/feature/cart/use-case/add-item.md", "title": "加入商品", "missing": ["code"], "relationships": {"code": 0, "test": 1}}],
      "cliPages": [{"path": "docs/feature/cart/cli.md", "feature": "docs/feature/cart/README.md", "title": "购物车", "missing": ["code", "test"], "relationships": {"code": 0, "test": 0}}],
      "unmarkedLists": []
    }

@@ -1,13 +1,13 @@
-# 不依赖外部锁程序协调本地写入
+# 协调本地写入与恢复
 
 ## 用户目标
 
-维护者或 agent 在没有外部锁程序与磁盘检查程序的机器上读取并准备本地修改，提交经过完整校验的修改；被打断时能说清楚怎样恢复。
+维护者或 agent 在没有外部锁程序与磁盘检查程序的机器上读取并提交本地修改，不覆盖别人同时做的修改；进程被打断或文件被外部编辑后，仓库仍然可以继续读写。
 
 ## 起始状态
 
 - 项目已初始化；`PATH` 中没有 flock、diskutil、plutil 与 stat。
-- 同一 worktree 里还有另一个命令或 agent 在写文档。
+- 同一项目目录里还有另一个命令或 agent 在写文档。
 
 ## 完整路径
 
@@ -20,10 +20,10 @@
    ```text
    list
    documents: 
-     memory/lease-notes.md — lease-notes
+     memory/coordination-notes.md — coordination-notes
    ```
 
-   读取不持有发布租约，另一个写入持有它时照常返回。读取记下前像、缺失路径、目录成员与发布修订号，返回当前结果前再核对。历史诊断查询遵守[异步投影](../../local-data-engine/use-case/query-asynchronous-projections.md)。
+   读取访问工作区服务的当前工作区图，不进入[写互斥](../../../concepts.md#write-exclusion)，另一个写入正在提交时照常返回。返回的结果对应一个[发布修订号](../concepts.md#publication-revision)；历史诊断查询遵守[异步投影](../../local-data-engine/use-case/query-asynchronous-projections.md)。
 
 2. 提交写入时遇到另一个写入。 {#contention}
 
@@ -33,13 +33,13 @@
 
    ```text
    ok: false
-   error: OperationFailed
-   message: exclusive publication lease is busy (pid=4182 host=my-host mode=exclusive); retry after the operation finishes. For an interrupted operation run concord recover; do not delete the lease directory.
+   error: SourceChanged
+   message: memory/README.md changed after the plan was prepared; rerun the command.
    ```
 
-   普通写入先在没有独占租约的情况下准备计划，只在提交时取得发布租约，核对全部依赖与前像后才写 journal。同步提交遇到占用立即报告；显式快照与恢复最多异步等待三秒。超时报告 PID、主机与模式，不撤销对方的所有权，也不重放修改。等对方完成后重试。
+   写入先基于读到的内容准备计划，提交时在服务内排队进入写互斥。轮到它时，计划依赖的文件摘要全部未变就写 journal 并发布；任一依赖已被先到者或外部编辑改变，就以 `SourceChanged` 拒绝，不写任何文件。重新运行命令即基于新内容重新规划。排队超过 3 秒返回 `RepositoryBusy`，不撤销正在提交的写入。
 
-3. 另一个写入的进程异常退出后继续写。 {#dead-owner}
+3. 服务进程在写入途中被杀后继续工作。 {#server-killed}
 
    ```sh
    concord new memory after-crash
@@ -52,9 +52,9 @@
    Next: edit the pages, then run concord check.
    ```
 
-   观察到的每个持有者都属于本 worktree 与本主机、并确认 ESRCH 时，普通写入准入回收这些 token 并重试一次。它不恢复 journal，也不回收 runner 所有权；之后到达的新持有者不会被回收。
+   下一次命令自动启动新的工作区服务。新服务取得 `server/lock` 后、开始应答请求前，先按[恢复规则](../architecture.md#恢复规则)处理遗留的 `journal.json`，因此这条命令看到的是已恢复的文件。写互斥只在内存中，进程退出即释放，不需要回收持有记录。
 
-4. 发布被打断，或想确认协调状态时，运行恢复。 {#recover}
+4. 想确认协调状态时，运行恢复。 {#recover}
 
    ```sh
    concord recover
@@ -62,48 +62,35 @@
 
    ```text
    Recovery: clean
-   Journal: clean
-   Publication tokens reclaimed: 1
-   Runner: absent
+   Journal: completed
+   Test slot: absent
    ```
 
-   再运行一次 `concord recover --json`，已没有可回收的 token：
+   再运行一次 `concord recover --json`，已没有遗留 journal：
 
    ```json
-   {"operation":"recover","status":"clean","changedPaths":[],"journalStatus":"clean","coordination":{"publication":{"reclaimedTokens":[]},"runner":{"status":"absent"}}}
+   {"operation":"recover","status":"clean","changedPaths":[],"journalStatus":"clean","warnings":[],"testSlot":{"status":"absent"}}
    ```
 
-   恢复在独占保护下核对 journal 与 runner 状态，发布完整计划或回到前像，并只释放观察到的那个 token。显式恢复保留回收记录，不自动回收新到达的持有者。未知元数据与外部编辑保持原样。
+   `recover` 经由工作区服务在写互斥下执行与服务启动时相同的恢复。目标文件已被外部编辑时，`journalStatus` 为 `discarded`，`warnings` 列出保留了外部内容的路径。
 
 ## 结果
 
 | 情形 | 结果 |
 | --- | --- |
 | 打包后的 CLI，`PATH` 中没有 flock、diskutil、plutil 或 stat | 正常工作 |
-| 打开两个仓库 | 都不在整个命令期间持有发布租约 |
-| 两个提交竞争 | 互斥，后到者报告占用 |
-| 读取与写入并发 | 读者不阻塞写者；读到一半有发布时拒绝当前结果 |
-| 两次读取观察之间有完整发布，包括 A→B→A 的编辑 | 发布修订号变化，当前结果被拒绝 |
-| 只有活着或已死亡的发布 token | 不阻塞普通读取 |
-| 有未完成的 journal | 普通读取返回 `RecoveryRequired` |
-| 授权依赖、缺失文件或扫描的目录变化，写入目标没变 | 计划失效 |
-| 不同 worktree，包括 linked worktree | 不共享所有权 |
-| 已死亡持有者的恢复与新到达的写者并发 | 不删除新持有者 |
-| 持有者被 SIGKILL 且没有 journal | `recover` 回收它的精确 token 并在 `reclaimedTokens` 报告；之后 Memory 的 list 与 annotate 成功 |
-| 活着或身份未知的持有者 | 永不回收 |
-| 发布期间进程被杀 | 留下可恢复的 journal；`recover` 保留未知的外部编辑 |
-| 内容既不匹配前像也不匹配计划摘要 | 保留现场，交给人判断 |
-| 存在多个 journal | 具名冲突，先于 runner 结果报告；保留现场 |
-| 第一次独占检查就发现 runner blocked | 不开始 journal 恢复；有 journal 时 `journalStatus` 为 pending，没有时为 clean；`changedPaths` 为空 |
-| 处理 journal 后最终独占检查遇到占用 | 返回占用，之前的 journal 结果不算完成的恢复 |
-| 处理 journal 后 runner 变为 blocked | `journalStatus` 保留已产生的结果，`status` 为 blocked |
-| runner 被隔离（quarantined） | Memory 读取可用、写入失败；`recover` 报告 runner blocked，不删除 runner 现场 |
-| runner 为 blocked | 带具名原因，CLI 失败；Web 与 action 返回同样的状态字段 |
-| `recover` 的输出 | `operation`、journal 结果、`changedPaths` 与 `coordination`；`coordination.publication.reclaimedTokens` 列出回收的 token，`coordination.runner.status` 为 absent、running 或 blocked |
-| `recover` 与 runner 文件 | 不删除 `runner.lease`、运行状态、证据或未知文件 |
+| 两个写入同时提交，目标与依赖互不相关 | 依次发布，都成功 |
+| 两个写入同时提交，后到者的依赖被先到者改变 | 后到者返回 `SourceChanged`，不写文件 |
+| 排队等待写互斥超过 3 秒 | 返回 `RepositoryBusy`，正在提交的写入不受影响 |
+| 读取与写入并发 | 读取不等待写入；返回的结果对应一个完整的发布修订号 |
+| 不同项目目录，包括 linked worktree | 各自的服务与写互斥，互不影响 |
+| 服务在发布途中被 `SIGKILL` | 下一次启动的服务先恢复再应答；目标全部是计划内容时完成，否则回滚到前像 |
+| 遗留 journal 的目标文件已被外部编辑 | 保留磁盘内容，删除 journal，`journalStatus` 为 `discarded` 并在 `warnings` 报告路径；后续读写照常 |
+| `journal.json` 无法解码 | 按陈旧记录删除并在 `warnings` 报告，不阻断读写 |
+| `recover` 的输出 | `operation`、`status`、`journalStatus`（`clean`、`completed`、`rolledBack` 或 `discarded`）、`changedPaths`、`warnings` 与 `testSlot.status` |
+| 测试任务槽位清理不确定 | `testSlot.status` 为 `blocked` 并带具名原因；新的测试任务被拒绝，文档读写照常 |
 | 测试执行期间发布无关文档 | 不被阻塞；输入变化或清理不确定时不能产生通过的证据 |
-| 认领或释放失败、持有者元数据未知、PID 是否存在不确定 | 失败并保留现场 |
-| 删除缓存 | 只影响可丢弃的缓存状态 |
+| 删除缓存 | 只影响可丢弃的缓存状态，不删除 journal |
 | 不安全路径 | 按[路径安全](../../local-sdlc/architecture.md#路径安全)拒绝 |
 
-访问模式、读者准入、恢复结果的字段与数据流见[架构](../architecture.md)。
+访问模式、恢复规则与数据流见[架构](../architecture.md)。

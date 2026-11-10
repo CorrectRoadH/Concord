@@ -249,15 +249,15 @@ Repository 负责安全读取、配置身份、依赖观察和发布，文档模
 
 | 操作 | 内容依赖 | 协调 | 失败范围 |
 | --- | --- | --- | --- |
-| list memory、list issue、memory search、issue search | 相应来源内全部候选 owner | 乐观来源快照 | 范围内坏记录、来源缺失、配置或事务障碍 |
-| show 的 canonical path | 指定 owner | 乐观来源快照 | 目标或其必要依赖 |
-| show 的短选择器 | 相应类别的全部候选及唯一匹配 owner | 乐观来源快照 | 集合不完整或歧义 |
-| new | 目标路径与同类短选择器集合 | 独占 publication | 身份冲突、必要依赖或写入资源障碍 |
-| memory link；issue link、unlink、close | 指定 owner、当前摘要与关系目标 | 独占 publication | 目标或关系目标缺陷、写入资源障碍 |
-| code/test marker | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源快照 | 指定依赖缺陷，不加载全局 Trace |
-| trace、review | 展示的关系图 | 乐观来源快照 | 输出 findings；需要完整图的结论拒绝不完整输入 |
-| check | 全仓库事实与关联 | 乐观来源快照 | 各 owner 解析错误累计为 findings，`ok: false` |
-| issue close、roadmap start | 核验与保证关系完整所需的集合 | 独占 publication；fixed 另持 runner 租约 | 保留严格身份、修复核验和逆向关系要求 |
+| list memory、list issue、memory search、issue search | 相应来源内全部候选 owner | 来源快照 | 范围内坏记录、来源缺失、配置或事务障碍 |
+| show 的 canonical path | 指定 owner | 来源快照 | 目标或其必要依赖 |
+| show 的短选择器 | 相应类别的全部候选及唯一匹配 owner | 来源快照 | 集合不完整或歧义 |
+| new | 目标路径与同类短选择器集合 | 写互斥 | 身份冲突、必要依赖或写入资源障碍 |
+| memory link；issue link、unlink、close | 指定 owner、当前摘要与关系目标 | 写互斥 | 目标或关系目标缺陷、写入资源障碍 |
+| code/test marker | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 来源快照 | 指定依赖缺陷，不加载全局 Trace |
+| trace、review | 展示的关系图 | 来源快照 | 输出 findings；需要完整图的结论拒绝不完整输入 |
+| check | 全仓库事实与关联 | 来源快照 | 各 owner 解析错误累计为 findings，`ok: false` |
+| issue close、roadmap start | 核验与保证关系完整所需的集合 | 写互斥；fixed 另占测试任务槽位 | 保留严格身份、修复核验和逆向关系要求 |
 
 集合查询先按类别的固定目录限定路径，再解码。
 
@@ -279,13 +279,13 @@ Repository 负责安全读取、配置身份、依赖观察和发布，文档模
 
 关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断。有效记录不能单独证明集合完整。requireValidTrace 同时检查 complete 和 findings。部分图不能把 Issue 关闭为 fixed、采用 Roadmap 或批准关系迁移。
 
-未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有发布租约，返回前重新核对读过的文件摘要与目录集合，遇到未完成的 journal 时停止。
+局部解析读取工作区服务的当前工作区图，不进入写互斥。服务在应答请求前已完成 journal 恢复，读取不会遇到未完成的写入。
 
-读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见[操作依赖与发布协调](../../architecture.md#操作依赖与发布协调)。
+读写 access 与 dryRun 的分离、写互斥和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见[操作依赖与发布协调](../../architecture.md#操作依赖与发布协调)。
 
 ## 私有状态
 
-Git-private 目录由 `git rev-parse --git-path concord` 定位，其中的 HawDB 缓存、journal、runner 租约与修复核验的临时 worktree 属于当前 worktree。普通单 worktree 仓库通常落在 `.git/concord`，linked worktree 则使用自己的 Git-private 路径。
+Git-private 目录由 `git rev-parse --git-path concord` 定位，其中的服务锁、HawDB 缓存、journal 与修复核验的临时 worktree 属于当前 worktree。普通单 worktree 仓库通常落在 `.git/concord`，linked worktree 则使用自己的 Git-private 路径。
 
 缓存可清除重建；journal 只用于安全恢复，不取代 Markdown 或测试源码。私有目录中的其它文件不被读取，也不被删除。
 
