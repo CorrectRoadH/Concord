@@ -16,6 +16,7 @@ const kill = (pid: number, signal: NodeJS.Signals) => { try { process.kill(pid, 
 // @use-case docs/feature/local-data-engine/use-case/recover-workspace-service.md#replace
 test('shutdown releases a service whose active computation cannot acknowledge interruption', { skip: process.platform === 'win32', timeout: 40_000 }, async () => {
   const root = await fixture(), boundary = join(root, 'computation-paused');
+    console.error("workspace recovery: fixture");
   const env = { ...process.env, CONCORD_TEST_COMPUTATION_PAUSED: boundary,
     BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ''} --preload=${fileURLToPath(new URL('../fixtures/computation-pause-preload.ts', import.meta.url))}`.trim() };
   let instance: ReturnType<typeof record> | undefined;
@@ -24,29 +25,36 @@ test('shutdown releases a service whose active computation cannot acknowledge in
   try {
     assert.equal((await command(root, ['list', 'feature'], undefined, env)).status, 0);
     instance = record(root);
+    console.error("workspace recovery: started");
     children = childrenOf(instance.pid);
     writeFileSync(`${boundary}.armed`, 'armed');
+    console.error("workspace recovery: armed");
     query = command(root, ['list', 'feature'], undefined, env);
     await pollUntil(async () => existsSync(boundary) ? true : undefined, { description: 'the real computation receives a request before being stopped' });
     assert.ok(children.includes(Number(readFileSync(boundary, 'utf8'))));
+    console.error("workspace recovery: paused");
     rmSync(`${boundary}.armed`);
     const result = await command(root, ['server', 'stop']);
+    console.error("workspace recovery: stopped");
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(existsSync(recordPath(root)), false);
     assert.equal(existsSync(instance.socket.path), false);
     for (const pid of children) assert.throws(() => process.kill(pid, 0), /ESRCH|No such process/u);
     await query;
+    console.error("workspace recovery: query done");
     const recovered = await command(root, ['list', 'feature']);
     assert.equal(recovered.status, 0, recovered.stderr);
     assert.match(recovered.stdout, /Reader/u);
     assert.notEqual(record(root).token, instance.token);
   } finally {
+    console.error("workspace recovery: finally");
     rmSync(`${boundary}.armed`, { force: true });
     if (instance && existsSync(recordPath(root)) && record(root).token === instance.token) {
       for (const pid of children) kill(pid, 'SIGKILL');
       kill(instance.pid, 'SIGKILL');
     }
     await query;
+    console.error("workspace recovery: query done");
     await stop(root);
     rmSync(root, { recursive: true, force: true });
   }
