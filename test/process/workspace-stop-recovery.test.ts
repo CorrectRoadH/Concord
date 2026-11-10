@@ -72,7 +72,14 @@ test('an unresponsive live lock owner is not absent and prevents competing start
     assert.equal(record(root).token, instance.token);
   } finally {
     if (instance) kill(instance.pid, 'SIGCONT');
-    await stop(root);
-    rmSync(root, { recursive: true, force: true });
+    try { await stop(root); }
+    finally {
+      if (instance && existsSync(recordPath(root)) && record(root).token === instance.token) {
+        for (const pid of childrenOf(instance.pid)) kill(pid, 'SIGKILL');
+        kill(instance.pid, 'SIGKILL');
+        assert.equal((await command(root, ['server', 'stop'])).status, 0);
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
