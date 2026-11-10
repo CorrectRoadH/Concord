@@ -1,7 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import type { Scope } from 'effect';
-import { Effect } from 'effect';
+import { Deferred, Effect, Option } from 'effect';
+import { NodeSocket } from '@effect/platform-node';
 import { RpcServer } from 'effect/rpc';
 import { Socket, SocketServer } from 'effect/socket';
 import { makeRequestAdmission, type RequestAdmission } from './request-admission.ts';
@@ -13,11 +14,23 @@ export const makeAdmittedProtocol = Effect.fn('makeAdmittedProtocol')(function*(
   let connections = 0, nextId = 0, sending = 0;
   const sockets: SocketServer.SocketServer['Service'] = { ...server, run: handler => server.run(socket => Effect.scoped(Effect.gen(function*() {
     const writer = yield* socket.writer;
+    const peerClosed = yield* Deferred.make<void>();
+    const net = yield* Effect.serviceOption(NodeSocket.NetSocket);
+    // Accepted sockets never reconnect. The generic writer waits for another
+    // reader after disconnect; letting a late RPC reply do that deadlocks its
+    // uninterruptible response finalizer and therefore the entire server scope.
+    if (Option.isSome(net)) yield* Effect.acquireRelease(Effect.sync(() => {
+      const closed = () => { Deferred.doneUnsafe(peerClosed, Effect.void); };
+      net.value.once('close', closed);
+      if (net.value.destroyed) closed();
+      return closed;
+    }), closed => Effect.sync(() => { net.value.off('close', closed); }));
+    yield* Effect.addFinalizer(() => Deferred.succeed(peerClosed, undefined).pipe(Effect.asVoid));
     const write: Socket.Writer['write'] = chunk => Effect.suspend(() => {
       const size = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk instanceof Socket.CloseEvent ? 0 : chunk.byteLength;
       if (sending + size > 64 * 1024 * 1024) return busy;
       sending += size;
-      return writer.write(chunk).pipe(Effect.ensuring(Effect.sync(() => { sending -= size; })));
+      return (Deferred.isDoneUnsafe(peerClosed) ? Effect.void : writer.write(chunk).pipe(Effect.raceFirst(Deferred.await(peerClosed)))).pipe(Effect.ensuring(Effect.sync(() => { sending -= size; })));
     });
     const busy = writer.write(new Socket.CloseEvent(1013, 'WorkspaceServerBusy')).pipe(Effect.ignore);
     if (connections >= 64) { yield* busy; return; }

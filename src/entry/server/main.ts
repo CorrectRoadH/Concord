@@ -74,7 +74,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     if (results.some(result => !OwnedProcess.confirmed(result))) { unconfirmed = true; return ensureClean; }
     workers.delete(worker); return Effect.void;
   }));
-  const stopWorker = (worker: Worker) => worker.owner.requestStop('SIGTERM').pipe(Effect.andThen(Deferred.await(worker.result).pipe(Effect.ignore)), Effect.andThen(inspect(worker)));
+  const stopWorker = (worker: Worker) => worker.owner.requestStop('SIGTERM').pipe(Effect.andThen(worker.owner.stop('SIGTERM')), Effect.andThen(Deferred.await(worker.result).pipe(Effect.ignore)), Effect.andThen(inspect(worker)));
   const start: Effect.Effect<Worker, ConcordError> = Effect.gen(function*() {
     yield* ensureClean;
     const worker: Worker = { owner: makeOwnedProcessService({ environment: execution }), ready: yield* Deferred.make<void, ConcordError>(), input: yield* Deferred.make<{ write: (bytes: string | Uint8Array) => void; end: () => void }>(), result: yield* Deferred.make<ProcessTypes.OwnedProcessResult, ConcordError>(), header: '', used: false };
@@ -219,20 +219,26 @@ export const runComputeMain = (root: string | undefined): void => {
   NodeRuntime.runMain(program.pipe(Effect.provide(startupEnvironment())));
 };
 
-export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown> = () => Effect.void, role: 'foreground' | 'background' = 'foreground') {
+export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown> = () => Effect.void, role: 'foreground' | 'background' = 'foreground', closing: (pid?: number) => Effect.Effect<void, unknown> = () => Effect.void) {
   const installation = yield* Installation;
   const execution = yield* RuntimeEnvironment;
   const mutex = yield* Semaphore.make(1);
+  const closePermit = yield* Semaphore.make(1);
   const readCpu = yield* makeProcessGroupCpuReader();
   let active: { progress: { groupId: number; responses: number }; scope: Scope.Closeable; client: RpcClient.RpcClient<RpcGroupTypes.Rpcs<typeof ComputeRpcs>, RpcClientErrorTypes.RpcClientError>; owner: ReturnType<typeof makeOwnedProcessService>; snapshot?: { readonly text: string; readonly id: string } } | undefined;
   let starting: { scope: Scope.Closeable; owner: ReturnType<typeof makeOwnedProcessService> } | undefined;
-  const close = Effect.gen(function*() {
-    const worker = active ?? starting; active = undefined; starting = undefined;
+  const close = closePermit.withPermit(Effect.uninterruptible(Effect.gen(function*() {
+    const worker = active ?? starting;
     if (!worker) return;
+    yield* closing(active?.progress.groupId || undefined);
+    // Retire the OS process before awaiting RPC finalizers: a stalled peer must
+    // not prevent TERM/KILL escalation or keep the persistent owner alive.
+    yield* worker.owner.stop('SIGTERM');
     yield* Scope.close(worker.scope, Exit.void);
     const cleanup = yield* worker.owner.cleanupResults;
     if (cleanup.some(result => !OwnedProcess.confirmed(result))) return yield* Effect.fail(new ConcordError('CleanupFailed', 'Computation process group cleanup is unconfirmed'));
-  });
+    active = undefined; starting = undefined;
+  })));
   const start = Effect.gen(function*() {
     const scope = yield* Scope.make();
     const owner = makeOwnedProcessService({ environment: execution });
@@ -318,6 +324,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const platform = yield* ServerRuntime;
     const installation = platform.installation();
     const runtime = yield* platform.acquire(root, privateDir);
+    let shuttingDown = false;
+    // Losing the record path must not prevent releasing the owned resources.
+    const cleaning = (phase: Parameters<typeof runtime.cleaning>[0], pid?: number) => Effect.suspend(() => shuttingDown ? runtime.cleaning(phase, pid).pipe(Effect.ignore) : Effect.void);
     const admission = makeRequestAdmission();
     const socketServer = yield* NodeSocketServer.make({ path: runtime.socketPath });
     yield* runtime.publish('opening');
@@ -339,9 +348,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       return Context.get(stateContext, WorkspaceState).transition('degraded', { code: error.code, message: error.message });
     }));
     const operations = yield* makeOperationOwner(root, cacheSnapshot, acceptDerived);
-    const computation = yield* makeComputationOwner(root, acceptDerived);
+    const computation = yield* makeComputationOwner(root, acceptDerived, 'foreground', pid => cleaning('foreground-computation', pid));
     const cachePermit = yield* Semaphore.make(1);
-    const backgroundComputation = yield* makeComputationOwner(root, batches => cachePermit.withPermit(acceptDerived(batches)), 'background');
+    const backgroundComputation = yield* makeComputationOwner(root, batches => cachePermit.withPermit(acceptDerived(batches)), 'background', pid => cleaning('background-computation', pid));
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
       health: cache.verify,
@@ -353,7 +362,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       compute: operation => (operation.kind === 'scan' ? cachePermit.withPermit(cacheSnapshot) : cacheSnapshot).pipe(Effect.flatMap(snapshot => (operation.kind === 'scan' ? backgroundComputation : computation).run(operation, snapshot))),
       open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open), Effect.andThen(computation.open), Effect.andThen(backgroundComputation.open)),
       close: SubscriptionRef.get(Context.get(stateContext, WorkspaceState).value).pipe(Effect.flatMap(value => value.state === 'stopping'
-        ? operations.close : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(backgroundComputation.close), Effect.andThen(cache.close)),
+        ? cleaning('operations').pipe(Effect.andThen(operations.close)) : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(backgroundComputation.close), Effect.andThen(cleaning('cache')), Effect.andThen(cache.close), Effect.andThen(cleaning('resources'))),
       clear: clearWorkspaceCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))), Effect.provideService(RuntimeEnvironment, execution)),
       foregroundPending: admission.pending,
       cachePermit,
@@ -427,6 +436,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       };
       return startHostedViewServer({ root, host, port }, ports, execution, writeLog);
     }, catch: failure }));
+    yield* Effect.addFinalizer(() => cleaning('http').pipe(Effect.orDie));
     yield* Effect.forkScoped(Effect.repeat(hosted.tick.pipe(Effect.ignore), importServiceHeartbeat));
     const subscribers = new Set<number>();
     watch = yield* sources.watch(root, () => { Effect.runFork(service.invalidate); }, error => { Effect.runFork(service.state.transition('running', { code: error.code, message: error.message })); });
@@ -496,9 +506,21 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const serialization = yield* Layer.build(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT }));
     const protocol = yield* makeAdmittedProtocol(socketServer, service.connect, id => { feedback.disconnect(id); derivations.disconnect(id); subscribers.delete(id); Effect.runFork(hosted.disconnect(id)); }, admission).pipe(Effect.provideContext(serialization));
     yield* Effect.forkScoped(RpcServer.make(WorkspaceRpcs, { concurrency: 256 }).pipe(Effect.provide(handlers), Effect.provideService(RpcServer.Protocol, protocol)));
+    yield* Effect.addFinalizer(() => cleaning('rpc').pipe(Effect.orDie));
+    // Also runs on SIGTERM: owned peers must be reaped before RPC scope cleanup
+    // can wait on requests whose computation transport is no longer responsive.
+    yield* Effect.addFinalizer(() => Effect.gen(function*() {
+      shuttingDown = true;
+      yield* cleaning('operations');
+      yield* operations.close;
+      yield* computation.close;
+      yield* backgroundComputation.close;
+    }).pipe(Effect.orDie));
     yield* ready;
     yield* Deferred.succeed(protocolReady, undefined);
     yield* service.stopped;
+    shuttingDown = true;
+    yield* cleaning('requests');
     yield* operations.pause;
     yield* Effect.all([service.drain, operations.drain, FiberSet.awaitEmpty(httpSubscriptions.fibers)], { concurrency: 'unbounded' }).pipe(Effect.timeout('3 seconds'), Effect.ignore);
     yield* operations.close;
