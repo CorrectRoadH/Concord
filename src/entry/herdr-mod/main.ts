@@ -1,4 +1,5 @@
 // @concord-file
+// @concord-implements docs/feature/herdr-mod/use-case/read-spec.md#copy-path-and-discuss
 // @concord-implements docs/feature/herdr-mod/README.md
 // @concord-implements docs/feature/herdr-mod/use-case/read-spec.md#open-feature
 // @concord-implements docs/feature/herdr-mod/use-case/edit-and-check.md
@@ -6,17 +7,18 @@
 // @concord-implements docs/feature/herdr-mod/use-case/use-on-remote-machine.md
 // @concord-implements docs/feature/herdr-mod/ui.md
 import { Effect, Scheduler } from 'effect';
-import { View, div, type AsyncContext, type Context, type Element, type Task } from 'gpui-kit';
+import { View, div, type AsyncContext, type Context, type FocusHandle, type Element, type Task } from 'gpui-kit';
 import { h_flex, v_flex, TextView, Editor, EditorState, Textarea, TextareaState, VirtualListScrollHandle } from 'gpui-base';
 import { exec, focused, panes, spaces, run, closeOverlay, home, props as hostProps, theme, settings } from 'herdr';
 import { ModSession, ModFailure, ModDisconnected, failure, markdownTarget } from './session.ts';
 import { pageSource, type PageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
 import { RenderAssets, type RenderLease } from './render-assets.ts';
 import { codeMarkdown, livePreviewElements } from './rendered-page.ts';
-import { clickableRow, color, heading, icon, mono, row, text, type IconName } from './ui.ts';
+import { contextMenuCard, clickableRow, color, heading, icon, mono, row, text, type IconName } from './ui.ts';
 
 const runEffect = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect, { scheduler: new Scheduler.MixedScheduler('sync') });
 const installCommand = 'curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh';
+type MenuItem = { label: string; text: string };
 type Target = { cwd: string; machine: string | null };
 const documentGroups = ['Feature', 'Engineering', 'Roadmap', '项目规则', 'Design', 'Issue', 'Memory', '其它文档'] as const;
 type DocumentGroup = typeof documentGroups[number];
@@ -67,6 +69,8 @@ export default class ConcordMod extends View {
   private foreground = true;
   private refreshing = false;
   private refreshQueued = false;
+  private contextMenu: { target: string; x: number; y: number; items: readonly MenuItem[] } | undefined;
+  private menuFocus: FocusHandle | undefined;
   private copied = '';
   private rechecking = false;
   private copiedReset: Task | undefined;
@@ -85,6 +89,7 @@ export default class ConcordMod extends View {
   private expanded = new Set<string>();
   private collapsedGroups = new Set<string>(documentGroups.filter(name => name !== 'Feature' && name !== 'Engineering'));
   private panelWidth = 480;
+  private panelHeight = 600;
   private treeHidden = false;
   private busy = new Map<string, string>();
 
@@ -174,6 +179,7 @@ export default class ConcordMod extends View {
     if (tab !== undefined && pane) this.terminals.set(tab, pane.pane);
     const space = spaces().find(item => item.tabs.some(item => item.id === tab));
     if (!pane?.cwd || !space) {
+      this.contextMenu = undefined;
       this.directory = 'no-terminal'; this.target = undefined;
       this.switchingTarget = false; this.clearDetails();
       this.pauseWatch();
@@ -186,6 +192,7 @@ export default class ConcordMod extends View {
       if (resumed && this.cli === 'ready' && this.directory === 'repository' && !this.disconnected) this.refresh(cx);
       return;
     }
+    this.contextMenu = undefined;
     this.target = target; this.observedTarget = key;
     this.switchingTarget = !this.resolvedTargets.has(key) || this.session.draft !== undefined || Boolean(this.saving);
     this.clearDetails();
@@ -350,6 +357,7 @@ export default class ConcordMod extends View {
   }
 
   private open(path: string, cx: Context): void {
+    this.contextMenu = undefined;
     if (!this.pendingPage && path === this.session.selected && !this.session.error) { this.expandPath(path); cx.notify(); return; }
     const session = this.session, navigation = this.pageNavigation = {};
     const current = () => !session.closed && session === this.session && navigation === this.pageNavigation;
@@ -629,6 +637,42 @@ export default class ConcordMod extends View {
       : `在${where}安装 Concord 命令行工具：运行\n${installCommand}\n然后用 concord --version 确认能运行。`;
   }
 
+  private menu(element: Element, target: string, items: readonly MenuItem[]): Element {
+    return element.on_mouse_down('right', (_event, cx) => {
+      this.menuFocus ??= cx.focus_handle();
+      this.menuFocus.focus();
+      this.contextMenu = { target, x: 0, y: 0, items };
+      // Bubble to the frame to position in its coordinates, independent of the pressed row.
+    });
+  }
+
+  private documentMenu(element: Element, path: string, title: string): Element {
+    const absolute = `${this.session.root.replace(/\/$/u, '')}/${path}`;
+    return this.menu(element, path, [
+      { label: '复制相对路径', text: path },
+      { label: '复制绝对路径', text: this.session.machine ? `${this.session.machine}:${absolute}` : absolute },
+      { label: '复制 Markdown 链接', text: `[${title}](${path})` },
+      { label: '复制讨论 Prompt', text: `请基于 ${path} 的 Spec 要求进行实现与核验。` },
+      ...(path === this.session.selected && !this.pendingPage ? [{ label: '复制文档内容', text: this.session.draft ?? this.session.source }] : []),
+    ]);
+  }
+
+  private dismissMenu(cx: Context): void { this.contextMenu = undefined; cx.notify(); }
+
+  private menuElement(): Element[] {
+    const menu = this.contextMenu;
+    if (!menu || !this.menuFocus) return [];
+    return [contextMenuCard(menu.x, menu.y).track_focus(this.menuFocus)
+      .on_mouse_down_out((_event, cx) => this.dismissMenu(cx))
+      .on_key_down((event, cx) => { if (event.key === 'escape') { cx.stop_propagation(); this.dismissMenu(cx); } })
+      .children(menu.items.map((item, index) => clickableRow(`context-menu-item-${index}`).child(text(item.label)).on_click((_event, cx) => {
+        cx.stop_propagation(); cx.write_to_clipboard(item.text);
+        this.contextMenu = undefined; this.copied = 'context-menu'; this.copiedReset?.cancel();
+        this.copiedReset = cx.timer.after(1500, next => { this.copied = ''; next.notify(); });
+        cx.notify();
+      })))];
+  }
+
   private copyButton(id: string, request: string, primary = true): Element {
     return this.button(id, this.copied === id ? '已复制' : '复制给 agent', cx => {
       cx.write_to_clipboard(request);
@@ -646,10 +690,17 @@ export default class ConcordMod extends View {
   }
 
   private frame(toolbar: Element, children: Element[]): Element {
-    return v_flex().id('concord-mod').size_full().min_w(0).min_h(0).rounded(10).overflow_hidden()
+    return v_flex().id('concord-mod').relative().size_full().min_w(0).min_h(0).rounded(10).overflow_hidden()
       .bg(color('background')).border_1().border_color(color('border')).text_color(color('foreground')).text_size(13)
-      .on_size_change((size, cx) => { if (size.width !== this.panelWidth) { this.panelWidth = size.width; cx.notify(); } })
-      .children([toolbar, ...children]);
+      .on_size_change((size, cx) => { if (size.width !== this.panelWidth || size.height !== this.panelHeight) { this.panelWidth = size.width; this.panelHeight = size.height; cx.notify(); } })
+      .on_mouse_down('right', (event, cx) => {
+        if (!this.contextMenu) return;
+        cx.stop_propagation();
+        this.contextMenu.x = Math.max(0, Math.min(event.local_position?.x ?? 0, this.panelWidth - 200));
+        this.contextMenu.y = Math.max(0, Math.min(event.local_position?.y ?? 0, this.panelHeight - this.contextMenu.items.length * 28 - 8));
+        cx.notify();
+      })
+      .children([toolbar, ...children, ...this.menuElement()]);
   }
 
   private statusPage(toolbar: Element, title: string, description: string, extra: Element[] = []): Element {
@@ -718,7 +769,7 @@ export default class ConcordMod extends View {
             if (page) { if (directory) this.expanded.add(node.path); this.open(page.path, cx); }
             else { if (open) this.expanded.delete(node.path); else this.expanded.add(node.path); cx.notify(); }
           });
-          return element.child(label);
+          return this.documentMenu(element.child(label), page?.path ?? node.path, title);
         } });
         if (directory && open) visit(node.children, depth + 1);
       }
@@ -746,7 +797,7 @@ export default class ConcordMod extends View {
       const children = prefix ? this.pageTree(pages, prefix) : pages.map(page => ({ key: page.path, render: () => {
         const element = clickableRow(`page-${page.path}`).children([icon('file-text').text_color(color('muted')), text(page.name === page.path ? page.path.split('/').at(-1)!.replace(/\.md$/u, '') : page.name).min_w(0).flex_1().truncate()]);
         if (page.path === (this.pendingPage ?? session.selected)) element.bg(color('selected'));
-        return element.on_click((_event, cx) => this.open(page.path, cx));
+        return this.documentMenu(element.on_click((_event, cx) => this.open(page.path, cx)), page.path, page.name);
       } }));
       return [header, ...children];
     });
@@ -782,11 +833,16 @@ export default class ConcordMod extends View {
         const anchor = ref.split('#')[1];
         const step = anchor ? [...session.source.matchAll(/^.*\{#([^}]+)\}.*$/gmu)].find(match => match[1] === anchor)?.[0].replace(/^\s*(?:#+|\d+\.)\s*/u, '').replace(/\s*\{#[^}]+\}.*$/u, '') ?? anchor : '整页关联';
         sections.push(heading(step));
-        for (const [index, item] of group.entries()) sections.push(clickableRow(`${glyph}-${ref}-${index}`).h(48).items_start().py(6).children([
+        for (const [index, item] of group.entries()) sections.push(this.menu(clickableRow(`${glyph}-${ref}-${index}`).h(48).items_start().py(6).children([
           icon(glyph), v_flex().min_w(0).flex_1().gap(2).children([
             text(item.name).min_w(0).truncate(), mono(`${item.file}:${item.line}`).min_w(0).text_color(color('dim')).truncate(),
           ]),
-        ]).on_click((_event, cx) => this.location(item.file, item.line, cx)));
+        ]).on_click((_event, cx) => this.location(item.file, item.line, cx)), `${item.file}:${item.line}`, [
+          { label: '复制位置', text: `${item.file}:${item.line}` },
+          { label: '复制相对路径', text: item.file },
+          { label: glyph === 'code' ? '复制符号名称' : '复制用例名称', text: item.name },
+          { label: '复制核验 Prompt', text: glyph === 'code' ? `请核验 ${item.file}:${item.line} 的实现是否符合对应步骤的契约。` : `请核验 ${item.file}:${item.line} 是否满足对应步骤的契约。` },
+        ]));
       }
     }
     return [v_flex().id('concord-relationships').border_t(1).border_color(color('border')).py(12).gap(6).children(sections)];
@@ -800,13 +856,14 @@ export default class ConcordMod extends View {
       v_flex().id('concord-page-loading').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text(session.checking ? '正在检查上一页…' : session.saving || session.draft !== undefined ? '正在保存上一页…' : '正在读取文档…').text_color(color('dim'))),
     ]);
     if (!session.selected) return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text('选一页开始阅读').text_color(color('dim')));
-    const toolbar = h_flex().id('page-toolbar').flex_none().min_w(0).h(42).px(12).gap(6).items_center().border_b(1).border_color(color('border')).children([
+    const toolbar = this.documentMenu(h_flex().id('page-toolbar').flex_none().min_w(0).h(42).px(12).gap(6).items_center().border_b(1).border_color(color('border')).children([
       text(session.selected).text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate(),
       text(session.checking ? '已保存，正在检查…' : session.saving ? '正在保存…' : session.draft !== undefined ? session.error ? '保存失败' : '等待保存…' : session.checkFailed ? '已保存，检查失败' : session.check?.ok ? '已保存' : '').text_size(11).text_color(color('dim')),
-    ]);
+      ...(this.copied === 'context-menu' ? [text('已复制').id('context-menu-copied').text_size(11).text_color(color('dim'))] : []),
+    ]), session.selected, session.documents.find(item => item.path === session.selected)?.title ?? session.pages.find(item => item.path === session.selected)?.name ?? session.selected);
     const banners: Element[] = [];
     if (!session.checking && session.check && !session.check.ok) banners.push(this.banner('concord-check', `${session.check.findings.length} 个问题`, session.check.findings.map((finding, index) =>
-      clickableRow(`finding-${index}`).children([mono(`${finding.path}:${finding.line ?? 1}`), text(finding.message).min_w(0).truncate()]).on_click((_event, cx) => this.location(finding.path, finding.line ?? 1, cx))), session.check.ok ? 'done' : 'blocked'));
+      this.menu(clickableRow(`finding-${index}`).children([mono(`${finding.path}:${finding.line ?? 1}`), text(finding.message).min_w(0).truncate()]).on_click((_event, cx) => this.location(finding.path, finding.line ?? 1, cx)), `${finding.path}:${finding.line ?? 1}`, [{ label: '复制问题', text: `${finding.path}:${finding.line ?? 1} ${finding.message}` }])), session.check.ok ? 'done' : 'blocked'));
     if (session.deleted) banners.push(this.banner('concord-deleted', '这页已被删除', []));
     const body: Element[] = [];
     if (this.conceptText) body.push(v_flex().id('concord-concept-card').p(12).gap(6).rounded(7).bg(color('raised')).children([
@@ -841,6 +898,7 @@ export default class ConcordMod extends View {
     const toolbar = h_flex().id('concord-toolbar').h(42).flex_none().min_w(0).px(14).gap(8).items_center().border_b(1).border_color(color('border')).children([
       ...(available && session.initialized ? [clickableRow('toggle-documents').w(28).child(icon(this.treeHidden ? 'panel-left-open' : 'panel-left-close')).on_click((_event, current) => { this.treeHidden = !this.treeHidden; current.notify(); })] : []),
       text('Concord').font_semibold(), text(location).id('concord-repository').text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate(),
+      ...(!session.selected && this.copied === 'context-menu' ? [text('已复制').id('context-menu-copied').text_size(11).text_color(color('dim'))] : []),
     ]);
     if (this.directory === 'no-terminal') return this.statusPage(toolbar, '先在这个 tab 里打开一个终端', '终端报告目录后，Concord 会自动跟随');
     if (this.switchingTarget) return this.statusPage(toolbar, session.checking ? '正在检查原仓库的修改…' : session.draft !== undefined || session.saving ? '正在保存原仓库的修改…' : '正在切换仓库…', location);
@@ -880,6 +938,7 @@ export default class ConcordMod extends View {
   async close(cx: AsyncContext): Promise<void> {
     this.updateDraft(); this.releaseEditor(); this.autoSave?.cancel(); this.autoSave = undefined;
     this.closed = true; this.targetToken = {};
+    this.contextMenu = undefined; this.menuFocus?.release(); this.menuFocus = undefined; this.copiedReset?.cancel();
     this.navigation?.cancel(); this.directoryWatch?.cancel(); this.retry?.cancel();
     this.renderToken = {};
     this.pauseWatch();

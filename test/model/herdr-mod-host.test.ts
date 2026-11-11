@@ -6,10 +6,10 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import test from 'node:test';
 import { digest } from '../../src/model/index.ts';
 import type { RenderedPage } from '../../src/model/herdr-mod/index.ts';
-import type { AsyncContext, Context, Task } from 'gpui-kit';
+import type { AsyncContext, Context, Task, MouseButtonEvent, FocusHandle } from 'gpui-kit';
 
 /** Public projection payload emitted by the simulated CLI boundary. */
-function modProjection(root: string, files: ReadonlyMap<string, string>, documents: readonly { path: string; kind: string; title: string }[], pages: readonly { path: string; name: string }[] = [], relationships: { tests: readonly { file: string; line: number; name: string; contract: string }[]; codeDeclarations: readonly { file: string; line: number; symbol?: string; contracts: readonly string[] }[] } = { tests: [], codeDeclarations: [] }, concepts: readonly { path: string; concept: { id: string; term: string } }[] = []) {
+function modProjection(root: string, files: ReadonlyMap<string, string>, documents: readonly { path: string; kind: string; title: string }[], pages: readonly { path: string; name: string }[] = [], relationships: { tests: readonly { file: string; line: number; name: string; contract: string }[]; codeDeclarations: readonly { file: string; line: number; symbol?: string; contracts: readonly string[] }[] } = { tests: [], codeDeclarations: [] }, concepts: readonly { path: string; concept: { id: string; term: string } }[] = [], findings: readonly { path: string; line?: number; message: string }[] = []) {
   const sources = [...files].filter(([path]) => path.startsWith(`${root}/`)).map(([path, body]) => ({ path: path.slice(root.length + 1), digest: digest(body) }));
   const catalogs = [...new Set(concepts.map(item => item.path))].map(path => ({ path, concepts: concepts.filter(item => item.path === path).map(item => ({ id: item.concept.id, term: item.concept.term, deprecated: [] })) }));
   const snapshot = {
@@ -18,7 +18,7 @@ function modProjection(root: string, files: ReadonlyMap<string, string>, documen
     feedback: [], pages: [...new Map([...sources.filter(source => source.path.endsWith('.md')).map(source => ({ ...source, derivedTitle: /^#\s+(.+)$/mu.exec(files.get(`${root}/${source.path}`) ?? '')?.[1] })), ...pages.map(page => ({ path: page.path, digest: 'page', derivedTitle: /^#\s+(.+)$/mu.exec(files.get(`${root}/${page.path}`) ?? '')?.[1] ?? page.name }))].map(page => [page.path, page])).values()],
     cases: relationships.tests.map((item, index) => ({ ...item, id: `neref_${String(index).padStart(32, '0')}`, contractKind: 'feature', issues: [], status: 'active', framework: 'marker', skipped: false })),
     codes: relationships.codeDeclarations.map((item, index) => ({ ...item, id: `code-${index}`, endLine: item.line, scope: 'file' })),
-    edges: [], findings: [], sources, evidenceIds: [], templates: [], cache: { status: 'ready' }, diagnostics: { error: '', message: '' },
+    edges: [], findings, sources, evidenceIds: [], templates: [], cache: { status: 'ready' }, diagnostics: { error: '', message: '' },
   };
   const at = '2026-11-08T00:00:00.000Z';
   return { snapshot, projection: { sourceDigest: digest(JSON.stringify(snapshot)), builtAt: at, builtFrom: at, builtUntil: at, complete: true, changedPaths: [], unknownRelations: false, status: 'ready', current: false, refreshOwner: 'active' } };
@@ -27,6 +27,11 @@ function modProjection(root: string, files: ReadonlyMap<string, string>, documen
 // Only the GPUI/Herdr host boundary is simulated. The source View and Effect
 // session run unchanged, including scheduling and public command decoding.
 class Element {
+  mouseDown = new Map<string, (event: MouseButtonEvent, cx: Context) => void>();
+  mouseDownOut: ((event: MouseButtonEvent, cx: Context) => void) | undefined;
+  keyDown: ((event: { key: string; keystroke: string }, cx: Context) => void) | undefined;
+  focusHandle: FocusHandle | undefined;
+  offset = { x: 0, y: 0 };
   key = '';
   nodes: (Element | string)[] = [];
   click: ((event: unknown, cx: Context) => void) | undefined;
@@ -45,6 +50,12 @@ class Element {
     this.nodes.push(child); return this;
   }
   children(children: readonly (Element | string)[]) { children.forEach(child => this.child(child)); return this; }
+  absolute() { return this; } relative() { return this; } shadow_md() { return this; } inset_0() { return this; }
+  left(value: number) { this.offset.x = value; return this; } top(value: number) { this.offset.y = value; return this; }
+  track_focus(handle: FocusHandle) { this.focusHandle = handle; return this; }
+  on_key_down(body: (event: { key: string; keystroke: string }, cx: Context) => void) { this.keyDown = body; return this; }
+  on_mouse_down(button: string, body: (event: MouseButtonEvent, cx: Context) => void) { this.mouseDown.set(button, body); return this; }
+  on_mouse_down_out(body: (event: MouseButtonEvent, cx: Context) => void) { this.mouseDownOut = body; return this; }
   size_full() { return this; } flex_1() { return this; } min_w(_v: number) { return this; } min_h(_v: number) { return this; }
   max_w(_v: number) { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
   max_w_full() { return this; }
@@ -84,6 +95,7 @@ class State {
   on(event: string, body: (event: unknown, cx: Context) => void) { this.listeners.set(event, body); return true; }
   set_auto_grow(_min: number, _max: number) {}
   focus() { assert.equal(this.released, false); }
+  is_focused() { return !this.released; }
   input(value: string, cx: Context) { this.set_value(value); this.listeners.get('change')?.({}, cx); }
   blur(cx: Context) { this.listeners.get('blur')?.({}, cx); }
   release() { assert.equal(this.released, false, 'retained state released once'); this.released = true; return true; }
@@ -116,6 +128,7 @@ class Boundary {
   conceptCatalogs: { path: string; catalog: { title: string } }[] = [];
   concepts: { reference: string; path: string; concept: { id: string; term: string; definition: string } }[] = [];
   relationships: { tests: { file: string; line: number; name: string; contract: string }[]; codeDeclarations: { file: string; line: number; symbol: string; contracts: string[] }[] } = { tests: [], codeDeclarations: [] };
+  findings: { path: string; line?: number; message: string }[] = [];
   colors: Record<string, string> = {};
   resourceFiles = new Map<string, Uint8Array>();
   imagePaths: string[] = [];
@@ -147,6 +160,7 @@ class Boundary {
   }
   context(owner?: HostTask): AsyncContext {
     return {
+      focus_handle: () => this.state(),
       stop_propagation() {},
       open_url: url => { this.urls.push(url); },
       write_to_clipboard: value => { this.clipboard = value; },
@@ -195,6 +209,19 @@ class Boundary {
     this.draw();
   }
   click(key: string) { const element = this.output.find(key); assert.ok(element?.click, key); element.click(undefined, this.context()); }
+  rightClick(key: string, local = { x: 110, y: 160 }) {
+    const root = this.output, element = root.find(key);
+    assert.ok(element, key); assert.ok(element.mouseDown.has('right'), key);
+    const cx = this.context();
+    root.find('concord-context-menu')?.mouseDownOut?.({ position: { x: 410, y: 260 } }, cx);
+    element.mouseDown.get('right')!({ position: { x: 410, y: 260 }, local_position: { x: 8, y: 10 } }, cx);
+    root.mouseDown.get('right')!({ position: { x: 410, y: 260 }, local_position: local }, cx);
+  }
+  chooseMenu(label: string) {
+    const menu = this.output.find('concord-context-menu'); assert.ok(menu);
+    const item = menu.nodes.find(node => node instanceof Element && node.text() === label);
+    assert.ok(item instanceof Element, label); this.click(item.key);
+  }
   state(value = '') { const state = new State(value); this.states.push(state); return state; }
   async exec(command: string, args: string[], options?: { cwd?: string; on?: string | null }) {
     this.requests.push({ command, args, options });
@@ -238,7 +265,7 @@ class Boundary {
     if (operation[0] === 'workspace' && operation[1] === 'projection') {
       const root = options?.cwd ?? '/repo';
       if (!this.files.has(`${root}/docs/taste.md`)) return { code: 1, stdout: '', stderr: JSON.stringify({ error: 'ProjectNotInitialized', message: 'Not initialized' }) };
-      const projection = modProjection(root, this.files, this.documents, this.packagePages, this.relationships, this.concepts);
+      const projection = modProjection(root, this.files, this.documents, this.packagePages, this.relationships, this.concepts, this.findings);
       projection.projection.sourceDigest = digest(JSON.stringify([projection.snapshot, this.rendered]));
       return { code: 0, stdout: JSON.stringify(projection), stderr: '' };
     }
@@ -324,6 +351,84 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       await host.until(ready);
       return host;
     };
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md#copy-path-and-discuss
+    await t.test('document context menus copy paths, links, prompts and current source, then dismiss', async () => {
+      const b = await start();
+      try {
+        b.rightClick(`page-${page}`);
+        assert.deepEqual(b.output.find('concord-context-menu')!.offset, { x: 110, y: 160 }, 'position uses panel coordinates rather than row or window coordinates');
+        assert.doesNotMatch(b.output.find('concord-context-menu')!.text(), /复制文档内容/u, 'unopened nodes have no source action');
+        b.chooseMenu('复制相对路径'); assert.equal(b.clipboard, page);
+        assert.equal(b.output.find('concord-context-menu'), undefined);
+        assert.ok(b.output.find('context-menu-copied')); b.fire(1500);
+        assert.equal(b.output.find('context-menu-copied'), undefined);
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        for (const target of [`page-${page}`, 'page-toolbar']) {
+          for (const [label, expected] of [
+            ['复制相对路径', page], ['复制绝对路径', `/repo/${page}`],
+            ['复制 Markdown 链接', `[Cart](${page})`], ['复制讨论 Prompt', `请基于 ${page} 的 Spec 要求进行实现与核验。`],
+            ['复制文档内容', '# Cart\n'],
+          ]) {
+            b.rightClick(target); b.chooseMenu(label!); assert.equal(b.clipboard, expected);
+            assert.equal(b.output.find('concord-context-menu'), undefined);
+          }
+        }
+        b.rightClick('page-toolbar');
+        b.output.find('concord-context-menu')!.mouseDownOut!({ position: { x: 0, y: 0 } }, b.context());
+        assert.equal(b.output.find('concord-context-menu'), undefined);
+        b.rightClick('page-toolbar', { x: 479, y: 599 });
+        assert.deepEqual(b.output.find('concord-context-menu')!.offset, { x: 280, y: 452 }, 'the full menu fits inside the panel at its bottom-right edge');
+        const menu = b.output.find('concord-context-menu')!;
+        assert.ok(menu.focusHandle?.is_focused());
+        menu.keyDown!({ key: 'escape', keystroke: 'escape' }, b.context());
+        assert.equal(b.output.find('concord-context-menu'), undefined);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md#copy-path-and-discuss
+    await t.test('test and implementation context menus copy their own locations, names and verification prompts', async () => {
+      const b = await start(boundary => {
+        boundary.relationships.tests.push({ file: 'test/cart.ts', line: 12, name: 'adds an item', contract: page });
+        boundary.relationships.codeDeclarations.push({ file: 'src/cart.ts', line: 8, symbol: 'addItem', contracts: [page] });
+      });
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`code-${page}-0`) !== undefined);
+        for (const [target, entries] of [
+          [`flask-conical-${page}-0`, [
+            ['复制位置', 'test/cart.ts:12'], ['复制相对路径', 'test/cart.ts'], ['复制用例名称', 'adds an item'],
+            ['复制核验 Prompt', '请核验 test/cart.ts:12 是否满足对应步骤的契约。'],
+          ]],
+          [`code-${page}-0`, [
+            ['复制位置', 'src/cart.ts:8'], ['复制相对路径', 'src/cart.ts'], ['复制符号名称', 'addItem'],
+            ['复制核验 Prompt', '请核验 src/cart.ts:8 的实现是否符合对应步骤的契约。'],
+          ]],
+        ] as const) {
+          for (const [label, expected] of entries) {
+            b.rightClick(target); b.chooseMenu(label); assert.equal(b.clipboard, expected);
+            assert.equal(b.output.find('concord-context-menu'), undefined);
+            assert.equal(b.output.find('concord-source-preview'), undefined, 'secondary press does not open source');
+          }
+        }
+        b.rightClick(`code-${page}-0`);
+        b.selectTab('t2', '/other');
+        await b.until(() => b.output.find('initialize') !== undefined);
+        assert.equal(b.output.find('concord-context-menu'), undefined, 'repository switches discard menu targets');
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md#copy-path-and-discuss
+    await t.test('remote document menus copy machine-qualified paths and findings copy their diagnostic', async () => {
+      const b = await start(boundary => {
+        boundary.spaceList[0]!.machine = 'vps';
+        boundary.findings.push({ path: page, line: 12, message: '单子→订单' });
+      });
+      try {
+        b.rightClick(`page-${page}`); b.chooseMenu('复制绝对路径');
+        assert.equal(b.clipboard, `vps:/repo/${page}`);
+        b.click(`page-${page}`); await b.until(() => b.output.find('finding-0') !== undefined);
+        b.rightClick('finding-0'); b.chooseMenu('复制问题');
+        assert.equal(b.clipboard, `${page}:12 单子→订单`);
+        assert.equal(b.output.find('concord-context-menu'), undefined);
+      } finally { await b.close(); }
+    });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     // @issue docs/issues/herdr-visible-directory-mismatch.md
     await t.test('cached local and remote repository switches finish outside the native render phase', async () => {

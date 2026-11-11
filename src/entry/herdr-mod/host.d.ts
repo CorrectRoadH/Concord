@@ -4,7 +4,10 @@
 declare module 'gpui-kit' {
   import type { VirtualListScrollHandle } from 'gpui-base';
   export interface Task { cancel(): void; is_done(): boolean }
+  export interface FocusHandle { focus(): void; is_focused(): boolean; release(): boolean }
+  export interface MouseButtonEvent { position: { x: number; y: number }; local_position?: { x: number; y: number } }
   export interface Context {
+    focus_handle(): FocusHandle;
     notify(): void;
     stop_propagation(): void;
     open_url(url: string): void;
@@ -37,6 +40,12 @@ declare module 'gpui-kit' {
     on_size_change(body: (size: { width: number; height: number }, cx: Context) => void): this;
     track_scroll(handle: VirtualListScrollHandle): this;
     items_stretch(): this; overflow_hidden(): this;
+    absolute(): this; relative(): this; shadow_md(): this; inset_0(): this;
+    left(value: number): this; top(value: number): this;
+    track_focus(handle: FocusHandle): this;
+    on_key_down(body: (event: { key: string; keystroke: string }, cx: Context) => void): this;
+    on_mouse_down(button: 'left' | 'right' | 'middle', body: (event: MouseButtonEvent, cx: Context) => void): this;
+    on_mouse_down_out(body: (event: MouseButtonEvent, cx: Context) => void): this;
     on_click(body: (event: unknown, cx: Context) => void): this;
   }
   export abstract class View {
