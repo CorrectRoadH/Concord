@@ -20,6 +20,7 @@ class HostElement {
   id(value: string) { this.key = value; return this; }
   child(value: HostElement | string) { this.nodes.push(value); return this; }
   children(value: readonly (HostElement | string)[]) { this.nodes.push(...value); return this; }
+  relative() { return this; }
   size_full() { return this; } flex_1() { return this; } min_w(_v: number) { return this; } min_h(_v: number) { return this; }
   max_w(_v: number) { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
   max_w_full() { return this; }
@@ -36,6 +37,7 @@ class HostElement {
   on_size_change(_body: (size: { width: number; height: number }, cx: HostContext) => void) { return this; }
   track_scroll(_handle: HostState) { return this; }
   on_click(callback: Callback) { this.click = callback; return this; }
+  on_mouse_down(_button: 'left' | 'right' | 'middle', _callback: Callback) { return this; }
   on_link_click(_callback: (url: string, cx: HostContext) => void) { return this; }
   text(): string { return this.nodes.map(node => typeof node === 'string' ? node : node.text()).join('\n'); }
   find(id: string): HostElement | undefined { return this.key === id ? this : this.nodes.flatMap(node => typeof node === 'string' ? [] : node.find(id) ?? []).at(0); }

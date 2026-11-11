@@ -7,7 +7,6 @@ import { buildHerdrModCatalog } from '../../scripts/build-herdr-mod.ts';
 import { modIconNames } from '../../src/model/herdr-mod/index.ts';
 
 // @use-case docs/engineering/build/use-case/share-herdr-mod.md
-// @issue docs/issues/herdr-catalog-recipe-drift.md
 test('standalone Herdr build produces a reproducible installable catalog without a release archive', () => Effect.runPromise(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-herdr-catalog-test-' });
