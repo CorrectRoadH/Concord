@@ -28,6 +28,7 @@ class Element {
   id(key: string) { this.key = key; return this; }
   child(node: Element | string) { this.nodes.push(node); return this; }
   children(nodes: (Element | string)[]) { this.nodes.push(...nodes); return this; }
+  relative() { return this; }
   size_full() { return this; } flex_1() { return this; } min_w(_n: number) { return this; } min_h(_n: number) { return this; } items_stretch() { return this; }
   max_w(_n: number) { return this; } max_w_full() { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
   w(_n: number) { return this; } gap(_n: number) { return this; } p(_n: number) { return this; } px(_n: number) { return this; } py(_n: number) { return this; }
@@ -40,6 +41,7 @@ class Element {
   on_size_change(_body: (size: { width: number; height: number }, cx: Context) => void) { return this; }
   track_scroll(_handle: unknown) { return this; }
   on_click(body: (event: unknown, cx: Context) => void) { this.click = body; return this; }
+  on_mouse_down(_button: 'left' | 'right' | 'middle', _body: (event: unknown, cx: Context) => void) { return this; }
   on_link_click(_body: unknown) { return this; }
   text(): string { return this.nodes.map(node => typeof node === 'string' ? node : node.text()).join('\n'); }
   find(key: string): Element | undefined { return this.key === key ? this : this.nodes.flatMap(node => typeof node === 'string' ? [] : node.find(key) ?? []).at(0); }
