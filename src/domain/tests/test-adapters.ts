@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { Clock, Effect, Schema, Stdio, Stream } from "effect";
 import { closeRepositoryCache, PersistentCache, HawdbFailure } from "../../base/cache/index.ts";
 import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
-import { hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
+import { diagnosticOutputTail, processDiagnostic, type ProcessDiagnostic, hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
 import { observation, observationSchema, type Observation } from "../../model/index.ts";
 import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.ts";
 import { ConcordError, canonical, decode, digest, failure, objectDigest, Text, type AnnotatedCase, type Repository } from "../../model/index.ts";
@@ -56,15 +56,8 @@ function safeEnvironment(env: Readonly<Record<string, string | undefined>>, name
 function status(invocationId: string, value: OwnedProcessResult): ProcessStatus {
   return { invocationId, exitCode: value.error === undefined ? value.exitCode : null, signal: value.signal, timedOut: value.timedOut, cancelled: value.cancelled, outputTruncated: value.outputLimitExceeded, cleanup: hasConfirmedOwnedGroupCleanup(value) ? 'complete' : 'unknown' };
 }
-const DIAGNOSTIC_OUTPUT_BYTES = 64 * 1024;
-function outputTail(output: string): string {
-  const bytes = Buffer.from(output);
-  let start = Math.max(0, bytes.length - DIAGNOSTIC_OUTPUT_BYTES);
-  while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start++;
-  return bytes.subarray(start).toString('utf8');
-}
 interface InvocationDiagnostic extends ProcessStatus { readonly stdout: string; readonly stderr: string; }
-interface Session { readonly runId: string; readonly directory: string; readonly deadline: number; cleanupKnown: boolean; readonly reportBudget: ReportBudget; readonly reportErrors: string[]; readonly invocations: InvocationDiagnostic[]; }
+interface Session { readonly runId: string; readonly directory: string; readonly deadline: number; cleanupKnown: boolean; readonly reportBudget: ReportBudget; readonly reportErrors: string[]; readonly invocations: InvocationDiagnostic[]; readonly processes: ProcessDiagnostic[]; }
 const sync = <A>(use: () => A | Promise<A>) => Effect.tryPromise({ try: async () => await use(), catch: failure }).pipe(Effect.uninterruptible);
 const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[], use: (session: Session) => Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication>, publish?: (value: A) => void): Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication> => Effect.gen(function* () {
   const service = yield* OwnedProcess;
@@ -74,7 +67,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
   const now = yield* Clock.currentTimeMillis;
   const owned = yield* Effect.acquireRelease(sync(() => repo.snapshot(() => {
       const run = beginRun(repo.root, environment);
-      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, reportErrors: [], invocations: [] };
+      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, reportErrors: [], invocations: [], processes: [] };
       return { run, session };
   })), owned => Effect.gen(function* () {
     const results = yield* service.cleanupResults;
@@ -92,7 +85,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
       } catch (cause) { quarantineRun(repo.root, owned.run, environment); throw cause; }
     });
   }));
-  const value = yield* use(owned.session).pipe(Effect.mapError(error => owned.session.invocations.length === 0 ? error : new ConcordError(error.code, error.message, { ...(typeof error.details === 'object' && error.details !== null ? error.details : {}), invocations: owned.session.invocations })));
+  const value = yield* use(owned.session).pipe(Effect.mapError(error => new ConcordError(error.code, error.message, { ...(typeof error.details === 'object' && error.details !== null ? error.details : {}), ...(owned.session.processes.length ? { process: owned.session.processes.at(-1) } : {}), ...(owned.session.invocations.length ? { invocations: owned.session.invocations } : {}) })));
   yield* scratch.remove.pipe(Effect.mapError(() => { owned.session.cleanupKnown = false; scratch.preserve(); return new ConcordError('CleanupUnknown', 'Could not remove adapter report directories'); }));
   const finishedAt = yield* Clock.currentTimeMillis;
   yield* sync(() => {
@@ -106,18 +99,19 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
   return value;
 }).pipe(Effect.scoped, Effect.mapError(error => ['FileChangedSinceRead', 'SourceChanged'].includes(error.code) ? new ConcordError('InputChanged', error.message) : error), Effect.catchDefect(cause => Effect.fail(failure(cause))));
 
-const callProcess = Effect.fn('testAdapter.process')(function* (repo: Repository, adapter: TestAdapter, session: Session, argv: readonly string[], options: { cwd?: string; stdin?: string; timeout?: number; envNames?: readonly string[]; invocationId?: string } = {}) {
+const callProcess = Effect.fn('testAdapter.process')(function* (repo: Repository, adapter: TestAdapter, session: Session, argv: readonly string[], options: { cwd?: string; stdin?: string; timeout?: number; envNames?: readonly string[]; invocationId?: string; op?: AdapterOp } = {}) {
   const service = yield* OwnedProcess;
   const remaining = session.deadline - (yield* Clock.currentTimeMillis);
   if (remaining <= 0) return yield* Effect.fail(new ConcordError('CollectFailed', 'Adapter run wall time budget expired'));
   const value = yield* runOwnedProcess(argv, { cwd: options.cwd ?? repo.root, env: { ...safeEnvironment(service.environment.env, options.envNames ?? adapter.envNames), ...(adapter.builtin === 'pytest' ? { PYTHONDONTWRITEBYTECODE: '1' } : {}) }, stdin: options.stdin, timeoutMs: Math.max(1, Math.min(remaining, options.timeout ?? adapter.collectTimeoutMs ?? 60_000)), outputLimitBytes: adapter.budgets?.outputBytes ?? 16 * 1024 * 1024 }).pipe(Effect.scoped, Effect.mapError(failure));
-  if (options.invocationId !== undefined) session.invocations.push({ ...status(options.invocationId, value), stdout: outputTail(value.stdout), stderr: outputTail(value.stderr) });
+  session.processes.push(processDiagnostic(value, repo.root, options.cwd ?? repo.root, options.op ? 'adapter exchange' : options.invocationId ? 'native invocation' : 'adapter version', options.op));
+  if (options.invocationId !== undefined) session.invocations.push({ ...status(options.invocationId, value), stdout: diagnosticOutputTail(value.stdout), stderr: diagnosticOutputTail(value.stderr) });
   if (!hasConfirmedOwnedGroupCleanup(value)) { session.cleanupKnown = false; return yield* Effect.fail(new ConcordError('CleanupUnknown', 'Owned adapter process group cleanup is unknown')); }
   return value;
 });
 const exchange = Effect.fn('testAdapter.exchange')(function* <A>(repo: Repository, adapter: TestAdapter, session: Session, context: AdapterContext, op: AdapterOp, payload: unknown, resultSchema: Schema.ConstraintDecoder<A, never>) {
   const request = yield* sync(() => protocolDecode(RequestSchema, { format: ADAPTER_FORMAT, op, requestId: randomUUID(), context, payload: protocolDecode(PayloadSchemas[op] as Schema.ConstraintDecoder<unknown, never>, payload) }));
-  const result = yield* callProcess(repo, adapter, session, adapter.argv!, { stdin: `${canonical(request)}\n` });
+  const result = yield* callProcess(repo, adapter, session, adapter.argv!, { stdin: `${canonical(request)}\n`, op });
   if (!hasSuccessfulOwnedProcessResult(result)) return yield* Effect.fail(new ConcordError('AdapterProtocolInvalid', 'Adapter protocol process did not terminate normally with exit 0'));
   return yield* sync(() => {
     const envelope = Schema.Struct({ format: Schema.Literal(ADAPTER_FORMAT), op: Schema.Literal(op), requestId: Text, planId: Text, inputs: Text, payload: resultSchema });
@@ -262,7 +256,7 @@ export const collectNativeTests = Effect.fn('collectNativeTests')(function* (rep
   return { operation: 'test-discover', observations: results.map(item => ({ adapterId: item.adapter.id, observation: { ...observation(item.manifest, item.before.inputs, item.manifest.completeness.gaps, true, new Date().toISOString()), complete: item.manifest.completeness.complete }, inputScope: { ...item.before, versions: item.versions } })) };
 });
 // @concord-end
-export interface NativeExecution { readonly adapter: TestAdapter; readonly inputs: string; readonly manifest: NativeManifest; readonly requested: readonly string[]; readonly report: AdapterReport; readonly statuses: readonly ProcessStatus[]; readonly plan: AdapterPlan; readonly planId: string; readonly versions: AdapterVersions; readonly inputScope: ReturnType<typeof adapterInputSnapshot>; }
+export interface NativeExecution { readonly adapter: TestAdapter; readonly inputs: string; readonly manifest: NativeManifest; readonly requested: readonly string[]; readonly report: AdapterReport; readonly statuses: readonly ProcessStatus[]; readonly plan: AdapterPlan; readonly planId: string; readonly versions: AdapterVersions; readonly inputScope: ReturnType<typeof adapterInputSnapshot>; readonly processes: readonly ProcessDiagnostic[]; }
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
@@ -299,7 +293,7 @@ export const executeNativeCase = Effect.fn('executeNativeCase')(function* (repo:
       if (report.observed.length > (adapter.budgets?.cases ?? 100_000)) report = invalidReport(['AdapterProtocolInvalid']);
     });
     yield* sync(() => repo.snapshot(() => { if (adapterInputSnapshot(repo, adapter).inputs !== collection.before.inputs) throw new ConcordError('InputChanged', 'Native execution inputs or member set changed'); }));
-    return { adapter, inputs: collection.before.inputs, manifest: collection.manifest, requested, report, statuses: captures.map(captured => captured.status), plan, planId: context.planId, versions: collection.versions, inputScope: collection.before } satisfies NativeExecution;
+    return { adapter, inputs: collection.before.inputs, manifest: collection.manifest, requested, report, statuses: captures.map(captured => captured.status), plan, planId: context.planId, versions: collection.versions, inputScope: collection.before, processes: session.processes } satisfies NativeExecution;
   }), execution => {
     if (execution) {
       if (adapterInputSnapshot(repo, adapter).inputs !== execution.inputs) throw new ConcordError('InputChanged', 'Inputs changed before native evidence publication');

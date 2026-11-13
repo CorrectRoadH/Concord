@@ -40,3 +40,6 @@ export { PROCESS_EVENT_FILE_LIMIT, ProcessEvent, ProcessRole, ProcessEventsLive,
 
 export { makeProcessGroupCpuReader } from './group-cpu.ts';
 export type { ProcessGroupCpu } from './group-cpu.ts';
+
+export { diagnosticOutputTail, processDiagnostic } from './process-diagnostic.ts';
+export type { ProcessDiagnostic } from './process-diagnostic.ts';

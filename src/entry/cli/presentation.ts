@@ -25,6 +25,22 @@ export function humanOutput(value: unknown): string {
   if (typeof value === 'string') return value;
   if (!Predicate.isObject(value)) return scalar(value);
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
+  if (value.error && Predicate.isObject(value.details) && Predicate.isObject(value.details.process)) {
+    const process = value.details.process;
+    return [
+      `ok: false`, `error: ${String(value.error)}`, `message: ${String(value.message)}`, 'process:',
+      ...(typeof process.commit === 'string' ? [`  commit: ${process.commit}`] : []),
+      `  step: ${String(process.step)}${process.op ? ` (${String(process.op)})` : ''}`,
+      `  argv: ${JSON.stringify(process.argv)}`, `  cwd: ${String(process.cwd)}`,
+      `  exit: ${scalar(process.exitCode)}`, `  signal: ${scalar(process.signal)}`,
+      `  timedOut: ${String(process.timedOut)}`, `  cancelled: ${String(process.cancelled)}`,
+      ...(typeof process.error === 'string' ? [`  error: ${process.error}`] : []),
+      ...(['stdout', 'stderr'] as const).flatMap(channel => {
+        const output = String(process[channel] ?? '');
+        return [`  ${channel} (last ${Buffer.byteLength(output)} bytes${process[`${channel}Truncated`] ? ', truncated' : ''}):`, indent(output, 4)];
+      }),
+    ].join('\n');
+  }
   // @concord-begin
   // @concord-implements docs/feature/project-onboarding/use-case/open-uninitialized-repo.md#cli
   if (value.error === 'ProjectNotInitialized' && Predicate.isObject(value.details)) return `ok: false\nerror: ProjectNotInitialized\nmessage: ${String(value.message)}\n\nInitialize: concord init\nWriting guide after init: concord --skill start`;

@@ -4,7 +4,7 @@ import { safeRunnerEnvironment } from "../../base/process/index.ts";
 import type { CommandEvidence, NativeEvidence, Evidence } from "../../model/index.ts";
 import { Effect } from "effect";
 import { ConcordError, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type Repository, type shared_Runner as Runner } from "../../model/index.ts";
-import { hasConfirmedOwnedGroupCleanup, OwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
+import { processDiagnostic, type ProcessDiagnostic, hasConfirmedOwnedGroupCleanup, OwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
 import type { Sources } from '../../base/sources/index.ts';
 import type { LocalRepository } from "../../base/workspace/index.ts";
 import type { Publication} from "../../base/publication/index.ts";
@@ -66,7 +66,7 @@ export const withRunner = <A, R>(repo: LocalRepository, run: (release: () => voi
   }, () => { cleanupUnknown = true; quarantineRun(repo.root, lease, environment); });
 })).pipe(Effect.catchDefect(cause => Effect.fail(failure(cause))));
 
-export const executeCommand = (cwd: string, runner: Runner, selected: AnnotatedCase) => Effect.flatMap(OwnedProcess, service => service.run(runnerArguments(runner, selected), { cwd, env: safeRunnerEnvironment(service.environment.env), timeoutMs: runner.timeoutMs })).pipe(Effect.scoped, Effect.map(result => ({ ...commandObservation(result, runner), operation: 'test-run' as const, scope: 'command' as const, selectedCaseId: selected.id, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk: hasConfirmedOwnedGroupCleanup(result), arguments: result.command })), Effect.mapError(failure));
+export const executeCommand = (cwd: string, runner: Runner, selected: AnnotatedCase, observe?: (process: ProcessDiagnostic) => void) => Effect.flatMap(OwnedProcess, service => service.run(runnerArguments(runner, selected), { cwd, env: safeRunnerEnvironment(service.environment.env), timeoutMs: runner.timeoutMs })).pipe(Effect.scoped, Effect.tap(result => Effect.sync(() => observe?.(processDiagnostic(result, cwd, cwd, 'runner command')))), Effect.map(result => ({ ...commandObservation(result, runner), operation: 'test-run' as const, scope: 'command' as const, selectedCaseId: selected.id, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk: hasConfirmedOwnedGroupCleanup(result), arguments: result.command })), Effect.mapError(failure));
 
 export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, _documents: readonly DocumentRecord[]): Effect.Effect<CommandEvidence, ConcordError, OwnedProcess> => withRunner(repo, release => Effect.gen(function* () {
   const runner = requireRunner(repo);
@@ -80,13 +80,14 @@ export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, _
   }), catch: failure });
 }));
 
-export const runCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[], options: { requireNative?: boolean } = {}): Effect.Effect<Evidence, ConcordError, OwnedProcess | Sources | Publication> => Effect.gen(function* () {
+export const runCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[], options: { requireNative?: boolean; observeProcess?: (process: ProcessDiagnostic) => void } = {}): Effect.Effect<Evidence, ConcordError, OwnedProcess | Sources | Publication> => Effect.gen(function* () {
   if (!adapterFor(repo, selected.file)) {
     if (options.requireNative) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'No adapter covers this source marker'));
     return yield* runCommandCase(repo, selected, documents);
   }
   const execution = yield* executeNativeCase(repo, selected, options.requireNative);
   if (!execution) return yield* runCommandCase(repo, selected, documents);
+  execution.processes.forEach(process => options.observeProcess?.(process));
   const complete = execution.report.completeness.complete && execution.report.capabilities.perItemReport && execution.report.capabilities.exactSelection;
   return { operation: 'test-run', scope: 'native', selectedCaseId: selected.id, commandOutcome: nativeVerdict(execution.requested, execution.report.observed, execution.statuses, complete, execution.plan.invocations), execution: 'unknown', exitCode: execution.statuses.every(status => status.exitCode === 0) ? 0 : execution.statuses.find(status => status.exitCode !== 0)?.exitCode ?? null, signal: execution.statuses.find(status => status.signal !== null)?.signal ?? null, timedOut: execution.statuses.some(status => status.timedOut), cancelled: execution.statuses.some(status => status.cancelled), cleanupOk: execution.statuses.every(status => status.cleanup === 'complete'), arguments: ['native-adapter', execution.adapter.id], adapterId: execution.adapter.id, requested: execution.requested, observed: execution.report.observed, inputs: execution.inputs, definitionDigest: objectDigest({ selected, inputs: execution.inputs, plan: execution.plan, versions: execution.versions }), planId: execution.planId, planDigest: objectDigest(execution.plan), manifestDigest: objectDigest(execution.manifest), statuses: execution.statuses, assignments: execution.plan.invocations.map(invocation => ({ invocationId: invocation.invocationId, requested: invocation.requested })), capabilities: execution.report.capabilities, versions: execution.versions, commandExecutionCount: execution.statuses.length, complete, gaps: [...new Set(['ExternalInputUnknown', ...execution.report.completeness.gaps])] } satisfies NativeEvidence;
 }).pipe(Effect.mapError(failure));
