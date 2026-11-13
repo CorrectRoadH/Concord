@@ -10,7 +10,6 @@ import { runApplication } from '../support/repository.ts';
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-// @issue docs/issues/verification-process-diagnostics.md
 test('verification adapter exchange failures expose bounded diagnostics and defect commit', async () => {
   const fixture = await createFixConsumer();
   try {
@@ -46,7 +45,6 @@ test('verification adapter exchange failures expose bounded diagnostics and defe
 });
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-// @issue docs/issues/verification-process-diagnostics.md
 test('verification failed fix runner retains command output and fix commit', async () => {
   const fixture = await createFixConsumer();
   try {
