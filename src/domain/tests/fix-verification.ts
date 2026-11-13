@@ -62,7 +62,7 @@ async function freezeDerived(repo: Repository, capture: ReturnType<typeof captur
   if (canonical(frozenInputs(red, tests, snapshots.redCommit, environment)) !== canonical(inputs)) unavailable('Frozen tests, runner inputs, or referenced Spec differ between the derived snapshots');
   return { ...snapshots, tests, inputs, defect: snapshots.redCommit, fix: snapshots.greenCommit, runner: inputs.runner, nativeTests: tests.filter(test => adapterFor(repo, test.file)).map(test => test.id) };
 }
-async function freeze(repo: Repository, issue: string, defectInput: string | undefined, fix: string, testId: string | undefined, environment: Readonly<Record<string, string | undefined>>) {
+async function freeze(repo: Repository, issue: string, defectInput: string | undefined, fix: string, testId: string | undefined, environment: Readonly<Record<string, string | undefined>>, deriveCombined = false) {
   const tests = (await selectedTests(repo, issue, testId));
   const inputs = frozenInputs(repo, tests, fix, environment);
   let defect: string;
@@ -82,7 +82,7 @@ async function freeze(repo: Repository, issue: string, defectInput: string | und
     if (first.size !== tests.length || commits.size !== 1) unavailable('Regression tests first appeared in different commits; provide --defect');
     defect = [...commits][0]!;
   }
-  if (defect === fix) return await freezeDerived(repo, captureVerificationSnapshot(repo.root, environment, fix), tests, environment);
+  if (deriveCombined && defect === fix) return await freezeDerived(repo, captureVerificationSnapshot(repo.root, environment, fix), tests, environment);
   const interval = firstParentPath(repo.root, defect, fix, environment);
   if (interval.length < 2) unavailable('Fix must be after the defect commit');
   for (const commit of interval) {
@@ -210,7 +210,7 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
     const targetRepo = await commitRepository(repo, fix, environment);
     const issueDigest = digest(snapshotBytes(repo, issue.path)!);
     if (issueDigest !== digest(gitBlobBytes(repo.root, head, issue.path, environment))) unavailable('Issue file differs from the captured HEAD');
-    const frozen = (await freeze(targetRepo, issue.path, defect, fix, undefined, environment));
+    const frozen = (await freeze(targetRepo, issue.path, defect, fix, undefined, environment, true));
     const testPreimages = [...new Set(frozen.tests.map(test => test.file))].map(path => ({ path, source: repo.read(path) }));
     return { issue, ...frozen, testPreimages, runnerConfig: targetRepo.config.runner, preparation: (await commitRepository(repo, head, environment)).config.runner, issueDigest };
   })));
