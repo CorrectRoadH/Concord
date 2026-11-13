@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#修复核验
-import { existsSync, lstatSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, statSync, symlinkSync } from "node:fs";
 import { makeRuntimeEnvironment } from '../environment/index.ts';
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { snapshot } from "../workspace/index.ts";
 import { git } from "../workspace/index.ts";
 import { canonicalPath } from "../../model/index.ts";
@@ -71,10 +71,27 @@ export function worktreeIdentity(repo: Repository, allowUnborn = false, environm
   }) });
 }
 
-export function linkWorktreeDependencies(sourceRoot: string, targetRoot: string): void {
-  const mainNodeModules = join(sourceRoot, 'node_modules');
-  const targetNodeModules = join(targetRoot, 'node_modules');
-  if (existsSync(mainNodeModules) && !existsSync(targetNodeModules)) {
-    try { symlinkSync(mainNodeModules, targetNodeModules, 'junction'); } catch {}
-  }
+export function linkWorktreeDependencies(sourceRoot: string, targetRoot: string, environment: Readonly<Record<string, string | undefined>> = {}): void {
+  const tracked = git(sourceRoot, ['ls-files', '-z'], environment).split('\0');
+  const visit = (directory: string) => {
+    for (const entry of readdirSync(join(sourceRoot, directory), { withFileTypes: true })) {
+      if (entry.name === '.git') continue;
+      const path = directory ? `${directory}/${entry.name}` : entry.name;
+      const dependency = entry.name === 'node_modules' || entry.name === '.venv';
+      if (dependency && statSync(join(sourceRoot, path), { throwIfNoEntry: false })?.isDirectory()) {
+        let ignored = false;
+        try { ignored = git(sourceRoot, ['check-ignore', '--', path], environment) !== ''; } catch { /* A nonignored candidate is not reusable. */ }
+        if (ignored && !tracked.some(file => file === path || file.startsWith(`${path}/`))) {
+          const target = join(targetRoot, path);
+          if (existsSync(dirname(target)) && !lstatSync(target, { throwIfNoEntry: false })) {
+            try { symlinkSync(join(sourceRoot, path), target, 'junction'); }
+            catch { throw new ConcordError('FixUnverifiable', `Cannot link installed dependency directory: ${path}`); }
+          }
+          continue;
+        }
+      }
+      if (entry.isDirectory()) visit(path);
+    }
+  };
+  visit('');
 }

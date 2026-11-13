@@ -94,7 +94,7 @@ const inWorktree = <A>(repo: LocalRepository, commit: string, cleanupUnknown: ()
     yield* scratch.remove;
   }).pipe(Effect.catch(error => Effect.sync(() => { preserve(); throw new ConcordError('FixUnverifiable', `Verification worktree cleanup is unconfirmed: ${root}`, error); })), Effect.orDie));
   yield* invoke(['worktree', 'add', '--detach', root, commit]);
-  yield* sync(() => linkWorktreeDependencies(repo.root, root));
+  yield* sync(() => linkWorktreeDependencies(repo.root, root, environment));
   return yield* run(root, preserve);
 }));
 
