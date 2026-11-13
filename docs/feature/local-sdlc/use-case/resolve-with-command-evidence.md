@@ -84,6 +84,7 @@
 | `FixUnverifiable` | 被核验提交的依赖锁文件与主 worktree 的同名文件不同，已安装的依赖不属于该提交；错误指出是哪个文件 |
 | `FixUnverifiable` | adapter 的协议往返或它规划的原生调用没有正常结束；错误带上所在提交、步骤、命令、退出结果与输出尾部 |
 | `FixVerificationFailed` | runner 在修复提交上以非零码结束 |
+| `DependenciesModified` | 某次运行之后，主 worktree 中被借用的依赖目录的指纹变了。核验立即停止，不发布结论；主 worktree 的依赖需要重新安装 |
 | `FileChangedSinceRead` | 核验期间 Issue 文件被改动 |
 | `IssueReferenced` | 仍有页面或其它 Issue 链接这个 Issue |
 

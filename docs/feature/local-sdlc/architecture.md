@@ -70,6 +70,21 @@ runner 在消费者 cwd 下执行。argv 逐参数替换 `{file}`、`{name}`、`
    不在与该提交不符的依赖上运行。锁文件指所选 `testAdapters` 声明的 `lockFiles`，以及仓库中存在的
    `pnpm-lock.yaml`、`package-lock.json`、`yarn.lock`、`bun.lock`、`bun.lockb`、`uv.lock` 与 `poetry.lock`。
 
+   借来的依赖目录属于主 worktree，核验不得改动它。链接不提供这层保护：包管理器在临时 worktree 里安装或清理时，
+   写入会顺着链接落到主 worktree。pnpm 11 就是这样：它把项目的绝对路径写在安装状态里，换了目录即认为 workspace 变了，
+   `pnpm exec` 默认先重装，重装前清空的正是主 worktree 的 `node_modules`。Concord 用三层规则挡住它：
+
+   - **不让包管理器自动安装。** 核验中由 Concord 启动的每个进程都带 `CONCORD_VERIFICATION=1`，以及让包管理器跳过运行前依赖检查的开关：
+     `pnpm_config_verify_deps_before_run=false` 与 `npm_config_verify_deps_before_run=false`。项目自己的脚本可以读
+     `CONCORD_VERIFICATION` 来跳过安装步骤。Concord 不设置 `CI`，也不关闭包管理器的确认提示。
+   - **进程没有终端。** stdin 始终不是 TTY，需要确认才能清空依赖目录的包管理器会自己中止。
+   - **运行前后各取一次指纹，变了就停。** 指纹是每个被链接目录自身、它的直接子项名单，以及其中包管理器状态文件
+     （`.modules.yaml`、`.package-lock.json`、`.yarn-state.yml`、`.pnpm-workspace-state-v1.json`、`pyvenv.cfg`，存在才计）的大小与修改时间。
+     任一次运行之后指纹不同，核验以 `DependenciesModified` 结束，不再运行剩下的步骤，也不发布任何结论。
+     错误指出被改动的目录与变化的条目，并写明主 worktree 的依赖需要重新安装；它带着与其它进程错误相同的 `details.process`。
+
+   `DependenciesModified` 表示保护已经失效、损坏已经发生，不属于 `FixUnverifiable`：后者说的是没法证明，前者说的是主 worktree 被改了。
+
    回归测试所在文件被某个 `testAdapters` 覆盖时，按 `test run --require-native` 的同一条原生选择路径运行，两端都必须是 green 或 red，任一端 invalid 时核验以 `FixUnverifiable` 结束；没有被覆盖时运行与 `test run` 相同的 runner 命令。全部命令在单槽测试任务与 OwnedProcess 下执行。
 5. 缺陷提交上同一冻结命令以非零码结束，修复提交上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果。零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
 6. 发布前重新核对 Issue 文件与回归测试文件的期望摘要，变化则拒绝。同一次发布删除 Issue 文件，并删除回归测试源码中指向它的 `@issue` 行；测试本身与其它标记保留。输出的结论包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本，供写进提交说明。
