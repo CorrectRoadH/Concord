@@ -283,7 +283,9 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
       for (const file of prepared.testPreimages) if (publisher.read(file.path) !== file.source) throw new ConcordError('FileChangedSinceRead', `${file.path} changed during verification`);
       const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
       release();
-      const receipt = (await closeIssue(publisher, prepared.issue.path, reason));
+      const verifiedSources = new Map(prepared.testPreimages.map(file => [file.path, file.source]));
+      verifiedSources.set(prepared.issue.path, publisher.read(prepared.issue.path));
+      const receipt = (await closeIssue(publisher, prepared.issue.path, reason, false, verifiedSources));
       const conclusion = `Verified fix — ${prepared.issue.path}\n${prepared.base === undefined ? `Defect: ${verification.defect} (runner exit ${red[0]?.exitCode})` : `Red: ${prepared.base} + fix tests (tree ${prepared.redTree}, runner exit ${red[0]?.exitCode})`}\nFix: ${verification.fix} (runner exit 0)\nTests: ${verification.tests.join(', ')}\nRunner: ${verification.runner}\nClosed ${prepared.issue.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
       return { ...receipt, conclusion, verification, ...(prepared.base === undefined ? {} : { base: prepared.base, redTree: prepared.redTree, greenTree: prepared.greenTree }), red, green };
     })); } finally { publisher.close(); }

@@ -266,6 +266,7 @@ export class LocalRepository implements Repository {
   private observing = true;
   private readonly optimistic: boolean;
   private readonly observedFiles = new Map<string, string | undefined>();
+  private verifiedIssueCloseFiles: ReadonlySet<string> | undefined;
   private readonly observedBytes = new Map<string, Buffer | undefined>();
   private observedRootFiles: string | undefined;
   private readonly observedDirectories = new Map<string, { path: string; scope: 'source' | undefined; observation: string; files: readonly string[] }>();
@@ -700,6 +701,15 @@ export class LocalRepository implements Repository {
     return { observation: canonical(entries), files };
   }
   private validateObservations(): void {
+    // Verified closure depends on its captured Issue and regression sources, not discovery reads.
+    // The dedicated journal still recomputes the complete allowed marker rewrite under the lease.
+    if (this.verifiedIssueCloseFiles !== undefined) {
+      const retained = this.verifiedIssueCloseFiles;
+      for (const path of this.observedFiles.keys()) if (!retained.has(path) && path !== this.configSnapshot.path) this.observedFiles.delete(path);
+      for (const path of this.observedBytes.keys()) if (!retained.has(path) && path !== this.configSnapshot.path) this.observedBytes.delete(path);
+      this.observedDirectories.clear(); this.observedRootFiles = undefined;
+      this.clearPathObservations();
+    }
     this.verifyObservations(false);
   }
   // @concord-code
@@ -800,7 +810,7 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-  async publishIssueClose(issue: string, dryRun = false): Promise<MutationReceipt> {
+  async publishIssueClose(issue: string, dryRun = false, verifiedSources?: ReadonlyMap<string, string | undefined>): Promise<MutationReceipt> {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const frozen = await this.currentSnapshot();
     const plan = await this.validation!.planIssueClose(this, { issue });
@@ -811,8 +821,14 @@ export class LocalRepository implements Repository {
       if (!stat.isFile()) throw new ConcordError('InvalidChange', 'Issue closure requires existing regular files');
       return { ...change, beforeDigest: digest(change.before), afterDigest: change.after === null ? null : digest(change.after), mode: stat.mode & 0o777 };
     });
-    return this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation: 'close-issue', phase: 'prepared', directories: [], changes,
-      scope: { kind: 'issue-close', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, issue: plan.issue, inputsDigest: plan.inputsDigest, testFiles: plan.testFiles } }, dryRun);
+    if (verifiedSources !== undefined) {
+      for (const [path, source] of verifiedSources) if (source === undefined || this.read(path) !== source) throw new ConcordError('FileChangedSinceRead', `${path} changed during verification`);
+      this.verifiedIssueCloseFiles = new Set([...verifiedSources.keys(), ...changes.map(change => change.path)]);
+    }
+    try {
+      return await this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation: 'close-issue', phase: 'prepared', directories: [], changes,
+        scope: { kind: 'issue-close', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, issue: plan.issue, inputsDigest: plan.inputsDigest, testFiles: plan.testFiles } }, dryRun);
+    } finally { this.verifiedIssueCloseFiles = undefined; }
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程

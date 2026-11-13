@@ -44,3 +44,31 @@ test('verified closure guards Issue and regression sources while unrelated track
     } finally { rmSync(fixture.root, { recursive: true, force: true }); }
   }
 });
+
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
+test('verification may observe a tracked file edit during the green runner but preserves both target preimages', async () => {
+  for (const target of ['unrelated', 'issue', 'regression'] as const) {
+    const fixture = await createFixConsumer();
+    try {
+      const issue = 'docs/issues/sku.md', regression = 'test/cart.test.ts', unrelated = 'test/unrelated.test.ts';
+      writeFileSync(join(fixture.root, unrelated), '// @feature docs/feature/cart/README.md\nexport const unrelated = true;\n');
+      const path = target === 'unrelated' ? unrelated : target === 'issue' ? issue : regression;
+      const source = readFileSync(join(fixture.root, regression), 'utf8');
+      writeFileSync(join(fixture.root, regression), source + `\nimport { appendFileSync } from 'node:fs';\nif (quantity === 2) appendFileSync(${JSON.stringify(join(fixture.root, path))}, '\\n// edited during green\\n');\n`);
+      const defect = gitCommit(fixture.root, 'concurrent external edit during verification');
+      const fix = fixture.fix();
+      const action = runApplication(executeViewAction(fixture.root, { action: 'issue.close', id: 'sku', fixed: true, defect, fix }));
+      if (target === 'unrelated') {
+        await action;
+        assert.equal(existsSync(join(fixture.root, issue)), false);
+        assert.doesNotMatch(readFileSync(join(fixture.root, regression), 'utf8'), /^\/\/ @issue/m);
+      } else {
+        await assert.rejects(action, { code: 'FileChangedSinceRead' });
+        assert.equal(existsSync(join(fixture.root, issue)), true);
+        assert.match(readFileSync(join(fixture.root, regression), 'utf8'), /^\/\/ @issue/m);
+      }
+      assert.match(readFileSync(join(fixture.root, path), 'utf8'), /edited during green/);
+      assert.equal(existsSync(join(fixture.root, '.git/concord/runner.lease')), false);
+    } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+  }
+});
