@@ -1,4 +1,5 @@
 export { commitRepository } from './verification-git.ts';
+export { assertDependencyLocks } from './verification-git.ts';
 export { firstParentPath } from './verification-git.ts';
 export { gitBlob } from './verification-git.ts';
 export { gitBlobBytes } from './verification-git.ts';

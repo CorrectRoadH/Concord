@@ -17,7 +17,7 @@ import { OwnedProcess } from "../../base/process/index.ts";
 import { runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.ts";
 import { LocalRepository, git, parseTypeScriptConfig } from "../../base/workspace/index.ts";
 import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema, type ProjectConfig, type Runner } from "../../model/index.ts";
-import { commitRepository, firstParentPath, gitBlobBytes, resolveCommit, linkWorktreeDependencies } from "../../base/git/index.ts";
+import { assertDependencyLocks, commitRepository, firstParentPath, gitBlobBytes, resolveCommit, linkWorktreeDependencies } from "../../base/git/index.ts";
 
 import { PersistentCache } from '../../base/cache/index.ts';
 import { RuntimeEnvironment } from '../../base/environment/index.ts';
@@ -72,6 +72,7 @@ async function freeze(repo: Repository, issue: string, defectInput: string | und
   if (interval.length < 2) unavailable('Fix must be after the defect commit');
   for (const commit of interval) {
     const historical = await commitRepository(repo, commit, environment);
+    if (commit === defect || commit === fix) assertDependencyLocks(historical, commit, tests.flatMap(test => adapterFor(repo, test.file)?.lockFiles ?? []), environment);
     const historicTests = (await selectedTests(historical, issue, testId));
     if (canonical(frozenInputs(historical, historicTests, commit, environment)) !== canonical(inputs)) unavailable(`Frozen tests, runner inputs, or referenced Spec changed in ${commit}`);
   }
