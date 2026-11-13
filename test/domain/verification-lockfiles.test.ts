@@ -7,7 +7,6 @@ import { createFixConsumer, gitCommit } from '../support/fix-consumer.ts';
 import { runApplication } from '../support/repository.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-// @issue docs/issues/verification-lockfiles.md
 test('verification rejects historical dependency locks that differ from installed worktree locks', async () => {
   const fixture = await createFixConsumer();
   try {
