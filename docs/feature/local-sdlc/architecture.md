@@ -51,11 +51,26 @@ runner 在消费者 cwd 下执行。argv 逐参数替换 `{file}`、`{name}`、`
 1. 回归测试由 `@issue` 标记选出，`@status retired` 的标记不能用于修复核验。修复提交默认是核验开始时的 HEAD，`--fix` 可以指定其 first-parent 历史中缺陷提交之后的提交。只要求该 Issue 文件与回归测试文件没有未提交改动。
 2. 缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
 3. 从缺陷提交到修复提交之间，回归测试文件与测试指向的 Spec 字节不变；严格解码后的 runner 命令配置不变。
-4. 在工作区服务管理的轻量临时 worktree 中分别检出缺陷提交与修复提交，直接复用当前工作区已安装的依赖环境（如链接主 worktree 的 `node_modules`），无需配置或执行单独的 `prepare` 命令，也不维护手工 `sourceFiles` 清单。
+4. 在工作区服务管理的轻量临时 worktree 中分别检出缺陷提交与修复提交，直接复用主 worktree 已安装的依赖，无需配置或执行单独的 `prepare` 命令，也不维护手工 `sourceFiles` 清单。
+
+   复用的对象是主 worktree 中全部已安装依赖目录：被 Git 忽略、名为 `node_modules` 或 `.venv`、且不位于另一个这样的目录之内的目录。
+   每个目录按相同的相对路径链接进临时 worktree；该提交的检出中不存在其父目录时跳过。只链接仓库根的那一个不够：
+   包管理器的 workspace 在每个成员包下各有一个依赖目录，缺少它们时运行器会在启动前失败或试图重新安装。
+   构建产物、缓存与其它被忽略的文件不链接，它们属于主 worktree 的当前提交，带进历史提交会让缺陷提交跑到修复后的代码。
+
+   复用只在依赖没有变化时成立。被核验提交中的依赖锁文件与主 worktree 的同名文件字节不同时，核验以 `FixUnverifiable` 结束并指出该文件，
+   不在与该提交不符的依赖上运行。锁文件指所选 `testAdapters` 声明的 `lockFiles`，以及仓库中存在的
+   `pnpm-lock.yaml`、`package-lock.json`、`yarn.lock`、`bun.lock`、`bun.lockb`、`uv.lock` 与 `poetry.lock`。
 
    回归测试所在文件被某个 `testAdapters` 覆盖时，按 `test run --require-native` 的同一条原生选择路径运行，两端都必须是 green 或 red，任一端 invalid 时核验以 `FixUnverifiable` 结束；没有被覆盖时运行与 `test run` 相同的 runner 命令。全部命令在单槽测试任务与 OwnedProcess 下执行。
 5. 缺陷提交上同一冻结命令以非零码结束，修复提交上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果。零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
 6. 发布前重新核对 Issue 文件与回归测试文件的期望摘要，变化则拒绝。同一次发布删除 Issue 文件，并删除回归测试源码中指向它的 `@issue` 行；测试本身与其它标记保留。输出的结论包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本，供写进提交说明。
+
+核验中任何一个由 Concord 启动的进程没有正常结束时，错误必须让人不重跑就能判断原因。这适用于 runner 命令、
+adapter 的协议往返与它规划的原生调用。错误的 `details.process` 给出：发生在缺陷提交还是修复提交、是哪一步
+（协议往返写明 op）、`argv`、相对仓库根的工作目录、退出码、信号、是否超时，以及 stdout 与 stderr 的有界尾部。
+文本输出在 `message` 之后逐项列出同样的内容，`--json` 原样带上 `details`。尾部按既有诊断字节上限截断并写明截断；
+环境变量的值不进入诊断。只说“进程没有以 0 退出”而不带这些内容，不是一条合格的错误。
 
 `test verify --defect <D> --fix <F> <test-id>...` 在 D 与 F 上重放，核对结论的主张：回归测试在 D 上失败、在 F 上通过。之后的提交改动测试、runner 输入或 Spec 不使这个结论失效，之后的回归由完整测试发现。提交、依赖或运行环境不可获得时报告无法重放。
 

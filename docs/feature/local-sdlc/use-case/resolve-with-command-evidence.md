@@ -81,6 +81,8 @@
 | `FixUnverifiable` | Issue 文件有未提交的改动；缺少回归测试；回归测试不在同一提交中首次出现且未给出 `--defect`；`--defect` 不是 HEAD 的 first-parent 祖先，或 `--fix` 不是 HEAD 的 first-parent 祖先、不在缺陷提交之后；缺陷提交不存在，包括 shallow clone |
 | `FixUnverifiable` | 缺陷提交与修复提交之间回归测试、runner 配置或测试指向的 Spec 字节有变化 |
 | `FixUnverifiable` | runner 在缺陷提交上以零结束，例如同一提交同时加入测试与修复；任一次运行超时或清理无法确认 |
+| `FixUnverifiable` | 被核验提交的依赖锁文件与主 worktree 的同名文件不同，已安装的依赖不属于该提交；错误指出是哪个文件 |
+| `FixUnverifiable` | adapter 的协议往返或它规划的原生调用没有正常结束；错误带上所在提交、步骤、命令、退出结果与输出尾部 |
 | `FixVerificationFailed` | runner 在修复提交上以非零码结束 |
 | `FileChangedSinceRead` | 核验期间 Issue 文件被改动 |
 | `IssueReferenced` | 仍有页面或其它 Issue 链接这个 Issue |
@@ -91,6 +93,22 @@
 ok: false
 error: FixUnverifiable
 message: Regression tests and the fix were added in the same commit; commit the failing regression test first, then the fix
+```
+
+进程没有正常结束时，错误说明它发生在哪个提交的哪一步，并带上命令的退出结果与输出尾部：
+
+```text
+ok: false
+error: FixUnverifiable
+message: Adapter protocol process did not terminate normally with exit 0
+process:
+  commit: defect 3f2a91c
+  step: adapter exchange (collect)
+  argv: pnpm exec tsx packages/e2e-runner/src/concord-adapter.ts
+  cwd: .
+  exit: 1
+  stderr (last 412 bytes):
+    ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command "tsx" not found
 ```
 
 问题再次出现时，新建一个 Issue。
