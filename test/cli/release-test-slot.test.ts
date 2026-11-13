@@ -83,3 +83,19 @@ test('RepositoryBusy text identifies the occupying slot and release command', as
   assert.equal(text.exitCode, 1); assert.match(text.stdout, new RegExp(run.lease.owner.token));
   assert.match(text.stdout, /ownerAlive: false/);
 });
+
+// @use-case docs/feature/local-sdlc/use-case/recover-local-state.md#release-test-slot
+test('release preserves the slot and scratch when registered directory identity has changed', async t => {
+  const root = await fixture(t);
+  const owned = ownerFixture(root, deadPid());
+  const scratch = mkdtempSync(join(tmpdir(), 'concord-verify-'));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const stat = lstatSync(scratch);
+  writeFileSync(join(scratch, 'keep'), 'external data');
+  writeFileSync(owned.state, JSON.stringify({ ...JSON.parse(readFileSync(owned.state, 'utf8')), worktrees: [{ path: join(scratch, 'worktree'), dev: stat.dev, ino: stat.ino + 1 }] }));
+  const result = await invoke(root, ['recover', '--release-test-slot', owned.run.lease.owner.token]);
+  assert.equal(result.exitCode, 1);
+  assert.equal(JSON.parse(result.stderr).error, 'CleanupFailed');
+  assert.ok(existsSync(owned.file)); assert.ok(existsSync(owned.state));
+  assert.equal(readFileSync(join(scratch, 'keep'), 'utf8'), 'external data');
+});
