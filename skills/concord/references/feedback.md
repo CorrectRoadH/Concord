@@ -27,22 +27,21 @@ source: {...}                    # 导入时写入的远端来源
 
 ## 修复缺陷
 
-修复按线性路径进行：
+小修复当场写回归测试与修复，一起暂存并运行 `concord test verify --staged`，核验通过后一次提交，把输出结论写入提交说明。它不要求 Issue；只有工作要留到以后或交给别人时才建 Issue。提交后用 `concord test verify --fix <commit>` 重放。
 
-1. 在 Issue 中写观察、期望行为与复现；调查与根因写进 Memory，用 `relations` 关联。
-2. 写一个在当前代码上失败的回归测试，标记 `@issue docs/issues/<id>.md` 与它验证的 Spec，单独提交。
-3. 只修改产品文件，提交修复。测试文件、runner 配置、`runner.sourceFiles` 与测试指向的 Spec 在两次提交之间保持不变。
-4. worktree 没有未提交的改动时运行 `concord issue close <id> --fixed`。
+已有 Issue 时，测试带 `@issue docs/issues/<id>.md` 与对应 Spec 标记。可以把测试与修复一起提交，也可以按两个提交的线性路径先提交失败回归、再提交修复。两个提交之间测试文件、runner 配置、`runner.sourceFiles` 与测试指向的 Spec 保持不变。
 
 ```sh
+concord test verify --staged --json
+concord test verify --fix <commit> --json
 concord issue close expired-token-accepted --fixed --json
-concord issue close expired-token-accepted --fixed --defect <commit> --json
-concord test verify expired-token-accepted --json
+concord issue close expired-token-accepted --fixed --defect <commit> --fix <commit> --json
+concord test verify --defect <commit> --fix <commit> <derived-reference> --json
 ```
 
-缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交，所有回归测试必须在同一提交中首次出现，否则用 `--defect` 指定 HEAD 的 first-parent 祖先。命令在临时 worktree 中运行缺陷提交、在当前 worktree 运行 HEAD：前者以非零码结束、后者以零结束才写入 `verification`，内容是两个提交、回归测试、runner 配置摘要与 Concord 版本。
+`issue close --fixed` 只要求 Issue 文件与回归测试文件没有未提交改动。缺陷提交默认是修复提交的 first-parent 历史中最早出现全部回归标记的提交；首次出现分散时用 `--defect` 指定。测试与修复分在两个提交时，两端在轻量临时 worktree 中执行。它们在同一提交时，红快照由第一个父提交加上该提交在 `testRoots` 之下的改动推导，绿快照是修复提交本身。
 
-同一提交同时加入测试与修复、缺少测试或提交（包括 shallow clone）、区间含 merge 提交、超时，都返回 `FixUnverifiable`；command runner 不区分断言失败与构建失败。`test verify` 在两个提交上重放已记录的结论，提交、依赖或运行环境不可获得时报告无法重放，不改变结论。
+红快照上的冻结命令非零、绿快照上零才核验成立，之后删除 Issue 与回归测试里对应的 `@issue` 行，输出结论供写入提交说明，不在 Issue 中存储结果。缺少测试或提交、锁文件不匹配、区间含 merge、超时或清理未知时拒绝；进程失败带提交、步骤、命令和输出尾部。command runner 不区分断言失败与构建失败；没有 `@name` 时，推导核验的保证落在整个文件，结果标为 `scope: "file"`，按名称或原生用例运行时标为 `scope: "case"`。`test verify` 重放只报告结果，不写文件。
 
 远端 Closed / Done 不证明本地修复；fixed 始终经过这条核验。
 

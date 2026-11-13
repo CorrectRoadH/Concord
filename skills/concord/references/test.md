@@ -53,13 +53,16 @@ concord test show <derived-reference> --json
 ```sh
 concord test run <derived-reference-or-spec-ref> --json
 concord test run docs/feature/login/use-case/expired-token.md#reject-token --json
-concord test verify <issue> --json
+concord test verify --staged --json
+concord test verify --fix <commit> --json
+concord test verify --defect <commit> --fix <commit> <derived-reference> --json
 ```
 
 未配置 adapter 或无法精确绑定时，执行范围是整个作者声明的 command，不是底层 runner 的逐 case 原生结果。超时、信号、启动失败、已知零执行、全 skip/todo 或输出限制不是通过；通用 runner 的 unknown execution 也不能表述为 native case passed。
 
-修复缺陷时先提交失败的回归测试，再提交只改产品文件的修复，然后运行 `issue close <id> --fixed`：它在两个提交上运行回归测试并把核验结论写进 Issue。`test verify <issue>` 按记录重放。完整流程与拒绝条件见 `concord --skill feedback`。
+小修复把回归测试和修复一起暂存，运行 `concord test verify --staged`，通过后一次提交并把结论写进提交说明。红快照是 HEAD 加上暂存区中 `testRoots` 下的改动，绿快照是全部暂存内容；未暂存改动不参与，命令不修改工作目录、暂存区或引用。提交后用 `concord test verify --fix <commit>` 重放。Issue 只在工作要留到以后或交给别人时才建；已有 Issue 的缺陷修复用 `issue close <id> --fixed` 核验后删除 Issue 与对应 `@issue` 标记。测试与修复可以在同一提交，也可以先单独提交失败回归，再提交修复；两个提交路径用 `test verify --defect <commit> --fix <commit> <derived-reference>` 重放。完整流程与拒绝条件见 `concord --skill feedback`。
 
+暂存区核验把每个标记块视为一个用例，正文是块结束到同文件下一标记块之前的原文，最后一条到 EOF；按原文逐字符比较，空白与注释也算变化。标记在 HEAD 不存在则为新增；第一个块之前的内容不选中任何用例。没有 `@name` 的 command runner 按文件运行，`Tests` 仍列被选中的用例，红绿结果用 `scope: "file"` 表示文件退出结果；带 `@name` 或由原生 adapter 精确运行时为 `scope: "case"`。同一文件内多个未命名用例共用一次文件运行。
 
 ## 原生 adapter
 
