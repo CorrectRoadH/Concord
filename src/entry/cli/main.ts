@@ -167,7 +167,7 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
   const inherited = (yield* RuntimeEnvironment).env.CONCORD_SERVER_SCOPE;
   if (inherited !== undefined) return yield* connectInheritedWorkspace(root, privateDir, installation, inherited);
   for (;;) {
-    yield* prepareWorkspaceRecord(root, privateDir, installation, retry);
+    yield* prepareWorkspaceRecord(root, privateDir);
     if (!retry) {
       const current = yield* existingWorkspace(root, installation, privateDir).pipe(Effect.catch(cause => {
         const error = workspaceServerFailure(cause);
@@ -201,7 +201,7 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
   }
 });
 
-const prepareWorkspaceRecord = Effect.fn('cli.prepareWorkspaceRecord')(function*(root: string, privateDir: string, installation: string, retry = false) {
+const prepareWorkspaceRecord = Effect.fn('cli.prepareWorkspaceRecord')(function*(root: string, privateDir: string) {
   const runtime = yield* ServerRuntime, client = yield* loadClient();
   const record = yield* readWorkspaceRecord(runtime, privateDir, false);
   if (!record) return 'absent' as const;
@@ -209,10 +209,7 @@ const prepareWorkspaceRecord = Effect.fn('cli.prepareWorkspaceRecord')(function*
     yield* waitForWorkspaceStop(runtime, privateDir, record);
     return 'stopped' as const;
   }
-  if (!retry && record.protocol === client.PROTOCOL) {
-    const sourceDigest = record.installation === installation ? yield* Effect.try({ try: runtime.sourceDigest, catch: failure }) : undefined;
-    if (sourceDigest === undefined || record.sourceDigest === sourceDigest) return 'compatible' as const;
-  }
+  if (record.protocol === client.PROTOCOL) return 'compatible' as const;
   yield* stopWorkspaceServer(root, privateDir);
   return 'stopped' as const;
 });
@@ -266,7 +263,7 @@ const existingCompatibleWorkspace = Effect.fn('existingCompatibleWorkspace')(fun
   if (inherited !== undefined) {
     connection = yield* connectInheritedWorkspace(root, privateDir, installation, inherited);
   } else {
-    const state = yield* prepareWorkspaceRecord(root, privateDir, installation);
+    const state = yield* prepareWorkspaceRecord(root, privateDir);
     if (state === 'absent') return undefined;
     connection = state === 'stopped' ? yield* connectOrStartWorkspace(root, false, privateDir, installation, true) : yield* existingWorkspace(root, installation, privateDir).pipe(Effect.catch(cause => Effect.gen(function*() {
       if (yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure))) return undefined;
