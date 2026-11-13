@@ -18,7 +18,8 @@ export function firstParentPath(root: string, defect: string, fix: string, envir
   const index = history.indexOf(defect);
   if (index < 0) throw new ConcordError('FixUnverifiable', 'Defect must be a first-parent ancestor of the fix');
   const path = history.slice(0, index + 1).reverse();
-  if (path.some(commit => git(root, ['rev-list', '--parents', '-n', '1', commit], environment).split(' ').length > 2)) throw new ConcordError('FixUnverifiable', 'The verification interval contains a merge commit');
+  const merge = path.find(commit => git(root, ['rev-list', '--parents', '-n', '1', commit], environment).split(' ').length > 2);
+  if (merge) throw new ConcordError('FixUnverifiable', `The verification interval contains merge commit ${merge}; use --defect and --fix to select a linear interval`);
   return path;
 }
 
