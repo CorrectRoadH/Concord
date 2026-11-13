@@ -7,7 +7,6 @@ import { gitCommand, gitCommit } from '../support/fix-consumer.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-// @issue docs/issues/verification-merge-diagnostic.md
 test('verification merge rejection names the merge commit and interval options', () => {
   const root = mkdtempSync(join(tmpdir(), 'verification-merge-'));
   try {
