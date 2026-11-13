@@ -87,7 +87,8 @@ export function worktreeIdentity(repo: Repository, allowUnborn = false, environm
   }) });
 }
 
-export function linkWorktreeDependencies(sourceRoot: string, targetRoot: string, environment: Readonly<Record<string, string | undefined>> = {}): void {
+export function linkWorktreeDependencies(sourceRoot: string, targetRoot: string, environment: Readonly<Record<string, string | undefined>> = {}): readonly string[] {
+  const linked: string[] = [];
   const tracked = git(sourceRoot, ['ls-files', '-z'], environment).split('\0');
   const visit = (directory: string) => {
     for (const entry of readdirSync(join(sourceRoot, directory), { withFileTypes: true })) {
@@ -100,7 +101,7 @@ export function linkWorktreeDependencies(sourceRoot: string, targetRoot: string,
         if (ignored && !tracked.some(file => file === path || file.startsWith(`${path}/`))) {
           const target = join(targetRoot, path);
           if (existsSync(dirname(target)) && !lstatSync(target, { throwIfNoEntry: false })) {
-            try { symlinkSync(join(sourceRoot, path), target, 'junction'); }
+            try { symlinkSync(join(sourceRoot, path), target, 'junction'); linked.push(join(sourceRoot, path)); }
             catch { throw new ConcordError('FixUnverifiable', `Cannot link installed dependency directory: ${path}`); }
           }
           continue;
@@ -110,4 +111,5 @@ export function linkWorktreeDependencies(sourceRoot: string, targetRoot: string,
     }
   };
   visit('');
+  return linked;
 }

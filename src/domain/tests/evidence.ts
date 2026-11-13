@@ -4,7 +4,7 @@ import { safeRunnerEnvironment } from "../../base/process/index.ts";
 import type { CommandEvidence, NativeEvidence, Evidence } from "../../model/index.ts";
 import { Effect } from "effect";
 import { ConcordError, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type Repository, type shared_Runner as Runner } from "../../model/index.ts";
-import { processDiagnostic, type ProcessDiagnostic, hasConfirmedOwnedGroupCleanup, OwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
+import { processDiagnostic, runTestProcess, type ProcessDiagnostic, hasConfirmedOwnedGroupCleanup, OwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
 import type { Sources } from '../../base/sources/index.ts';
 import type { LocalRepository } from "../../base/workspace/index.ts";
 import type { Publication} from "../../base/publication/index.ts";
@@ -75,7 +75,7 @@ export const withRunner = <A, R>(repo: LocalRepository | string, run: (release: 
   }, () => { cleanupUnknown = true; quarantineRun(root, lease, environment); });
 })).pipe(Effect.catchDefect(cause => Effect.fail(failure(cause))));
 
-export const executeCommand = (cwd: string, runner: Runner, selected: AnnotatedCase, observe?: (process: ProcessDiagnostic) => void) => Effect.flatMap(OwnedProcess, service => service.run(runnerArguments(runner, selected), { cwd, env: safeRunnerEnvironment(service.environment.env), timeoutMs: runner.timeoutMs })).pipe(Effect.scoped, Effect.tap(result => Effect.sync(() => observe?.(processDiagnostic(result, cwd, cwd, 'runner command')))), Effect.map(result => ({ ...commandObservation(result, runner), operation: 'test-run' as const, scope: 'command' as const, selectedCaseId: selected.id, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk: hasConfirmedOwnedGroupCleanup(result), arguments: result.command })), Effect.mapError(failure));
+export const executeCommand = (cwd: string, runner: Runner, selected: AnnotatedCase, observe?: (process: ProcessDiagnostic) => void) => Effect.flatMap(OwnedProcess, service => runTestProcess(runnerArguments(runner, selected), { cwd, env: safeRunnerEnvironment(service.environment.env), timeoutMs: runner.timeoutMs }, cwd, 'runner command')).pipe(Effect.scoped, Effect.tap(result => Effect.sync(() => observe?.(processDiagnostic(result, cwd, cwd, 'runner command')))), Effect.map(result => ({ ...commandObservation(result, runner), operation: 'test-run' as const, scope: 'command' as const, selectedCaseId: selected.id, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk: hasConfirmedOwnedGroupCleanup(result), arguments: result.command })), Effect.mapError(failure));
 
 export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, _documents: readonly DocumentRecord[]): Effect.Effect<CommandEvidence, ConcordError, OwnedProcess> => withRunner(repo, release => Effect.gen(function* () {
   const runner = requireRunner(repo);

@@ -11,13 +11,13 @@ import { scanAnnotations, testDeclarationBodies } from "./annotations.ts";
 import { readDocumentSelector } from "../documents/index.ts";
 import { closeIssue } from "../issues/index.ts";
 import { executeCommand, requireRunner, runCase, withRunner } from "./evidence.ts";
-import { processDiagnostic, type ProcessDiagnostic, safeRunnerEnvironment } from "../../base/process/index.ts";
+import { processDiagnostic, runTestProcess, VerificationProcessGuard, type ProcessDiagnostic, safeRunnerEnvironment } from "../../base/process/index.ts";
 import type { Evidence } from "../../model/index.ts";
 import { OwnedProcess } from "../../base/process/index.ts";
 import { runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.ts";
 import { LocalRepository, discoverRoot, git, parseTypeScriptConfig } from "../../base/workspace/index.ts";
 import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema, type ProjectConfig, type Runner } from "../../model/index.ts";
-import { captureVerificationSnapshot, deriveVerificationRed, assertDependencyLocks, commitRepository, firstParentPath, gitBlobBytes, resolveCommit, linkWorktreeDependencies } from "../../base/git/index.ts";
+import { captureVerificationSnapshot, deriveVerificationRed, dependencyProcessGuard, assertDependencyLocks, commitRepository, firstParentPath, gitBlobBytes, resolveCommit, linkWorktreeDependencies } from "../../base/git/index.ts";
 
 import { PersistentCache } from '../../base/cache/index.ts';
 import { RuntimeEnvironment } from '../../base/environment/index.ts';
@@ -133,8 +133,8 @@ const inWorktree = <A>(repo: Pick<Repository, 'root'>, commit: string, role: 'de
     yield* sync(() => registerRunnerWorktree(repo.root, root, true, environment));
   }));
   yield* invoke(['worktree', 'add', '--detach', root, commit]);
-  yield* sync(() => linkWorktreeDependencies(repo.root, root, environment));
-  return yield* run(root, preserve).pipe(Effect.mapError(error => {
+  const dependencies = yield* sync(() => linkWorktreeDependencies(repo.root, root, environment));
+  return yield* run(root, preserve).pipe(Effect.provideService(VerificationProcessGuard, dependencyProcessGuard(dependencies)), Effect.mapError(error => {
     if (typeof error.details !== 'object' || error.details === null || !('process' in error.details)) return error;
     const details = error.details as { process: ProcessDiagnostic };
     return new ConcordError(error.code, error.message, { ...details, process: { ...details.process, commit: `${role} ${commit}` } });
@@ -156,7 +156,7 @@ const prepareCheckout = Effect.fn('fixVerification.prepare')(function*(root: str
   if (runner === undefined || runner.prepare === undefined || runner.prepare.length === 0) return;
   const environment = (yield* OwnedProcess).environment.env;
   for (const [index, argv] of runner.prepare.entries()) {
-    const result = yield* runOwnedProcess(argv, { cwd: root, env: safeRunnerEnvironment(environment), timeoutMs: runner.timeoutMs }).pipe(Effect.scoped, Effect.mapError(error => new ConcordError('FixUnverifiable', `Runner preparation failed: ${error.message}`)));
+    const result = yield* runTestProcess(argv, { cwd: root, env: safeRunnerEnvironment(environment), timeoutMs: runner.timeoutMs }, root, `runner preparation ${index + 1}`).pipe(Effect.scoped, Effect.mapError(error => error.code === 'DependenciesModified' ? error : new ConcordError('FixUnverifiable', `Runner preparation failed: ${error.message}`, error.details)));
     const cleanupOk = hasConfirmedOwnedGroupCleanup(result);
     if (!cleanupOk) yield* sync(cleanupUnknown);
     if (!cleanupOk || result.exitCode !== 0 || result.timedOut || result.cancelled || result.signal !== null || result.error !== undefined || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('FixUnverifiable', `Runner preparation command ${index + 1} did not complete successfully`, { process: processDiagnostic(result, root, root, `runner preparation ${index + 1}`) }));
@@ -176,7 +176,7 @@ const executeFrozenCase = Effect.fn('fixVerification.executeFrozenCase')(functio
   const publication = yield* Publication;
   const checkout = yield* Effect.acquireRelease(sync(() => LocalRepository.open(root, { persistentCache: 'use', runtime }, publication.validation)), repo => Effect.sync(() => repo.close()));
   yield* Effect.flatMap(PersistentCache, cache => cache.attach(checkout)).pipe(Effect.provide(PersistentCache.layer), Effect.provide(RuntimeEnvironment.layer(runtime)), Effect.mapError(failure));
-  return yield* runCase(checkout, test, [], { requireNative: true, observeProcess: observe }).pipe(Effect.mapError(error => new ConcordError('FixUnverifiable', error.message, error.details)));
+  return yield* runCase(checkout, test, [], { requireNative: true, observeProcess: observe }).pipe(Effect.mapError(error => error.code === 'DependenciesModified' ? error : new ConcordError('FixUnverifiable', error.message, error.details)));
 }, Effect.scoped);
 
 interface FrozenExecution {

@@ -42,4 +42,5 @@ export { makeProcessGroupCpuReader } from './group-cpu.ts';
 export type { ProcessGroupCpu } from './group-cpu.ts';
 
 export { diagnosticOutputTail, processDiagnostic } from './process-diagnostic.ts';
+export { runTestProcess, VerificationProcessGuard } from './verification-process.ts';
 export type { ProcessDiagnostic } from './process-diagnostic.ts';
