@@ -32,7 +32,7 @@ export function recoveryFailure(cause: unknown): ConcordError {
 
 /** Reclaim once, then select and recheck journals under each short lease.
  * Engines must not silently reclaim an owner that arrived after dispatch. */
-export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?: string) {
+export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?: string, releaseTestSlot?: string) {
   const runtime = yield* RuntimeEnvironment;
   const publication = yield* Publication;
   const initial = yield* Effect.try({ try: () => {
@@ -46,12 +46,13 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
     const pending = yield* pendingJournals(initial.root);
     return yield* Effect.try({ try: () => {
       if (pending.length > 1) throw new ConcordError('RecoveryConflict', 'Multiple publication journals exist; preserve the conflicting recovery state');
+      if (releaseTestSlot !== undefined) recovery.releaseRunner(initial.root, releaseTestSlot, runtime.env);
       return { ...initial, trace: pending.length === 1 && pending[0] !== join(initial.privateDir, 'journal.json'), pending: pending.length > 0, runner: inspectRunner(initial.root, runtime.env) };
     }, catch: recoveryFailure });
   }));
   if (selected.runner.status === 'blocked') return {
     operation: 'recover', status: 'blocked', journalStatus: selected.pending ? 'pending' : 'clean', changedPaths: [], warnings: [],
-    testSlot: { status: 'blocked' },
+    testSlot: selected.runner,
     coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner: selected.runner },
   };
   const completion = yield* Effect.gen(function*() {
@@ -76,7 +77,7 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
     status: runner.status === 'blocked' ? 'blocked' : completion.status,
     journalStatus: completion.journalStatus ?? completion.status,
     warnings: completion.warnings ?? [],
-    testSlot: { status: runner.status ?? 'absent' },
+    testSlot: releaseTestSlot !== undefined && runner.status === 'absent' ? { status: 'released', token: releaseTestSlot } : runner,
     coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner },
   };
 });

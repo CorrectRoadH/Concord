@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/architecture.md#修复核验
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 import { Sources, snapshotBytes } from '../../base/sources/index.ts';
-import { genericPrivateDirectorySync, Publication } from '../../base/publication/index.ts';
+import { genericPrivateDirectorySync, registerRunnerWorktree, Publication } from '../../base/publication/index.ts';
 import { Installation } from "../../base/installation/index.ts";
 import { dirname, join } from "node:path";
 
@@ -123,7 +123,15 @@ const inWorktree = <A>(repo: Pick<Repository, 'root'>, commit: string, role: 'de
     const registered = yield* sync(() => git(repo.root, ['worktree', 'list', '--porcelain'], environment).split('\n').includes(`worktree ${root}`));
     if (registered) yield* invoke(['worktree', 'remove', '--force', root]);
     yield* scratch.remove;
+    yield* Effect.scoped(Effect.gen(function* () {
+      yield* publication.lease(repo.root, 'test-worktree-release');
+      yield* sync(() => registerRunnerWorktree(repo.root, root, false, environment));
+    }));
   }).pipe(Effect.catch(error => Effect.sync(() => { preserve(); throw new ConcordError('FixUnverifiable', `Verification worktree cleanup is unconfirmed: ${root}`, error); })), Effect.orDie));
+  yield* Effect.scoped(Effect.gen(function* () {
+    yield* publication.lease(repo.root, 'test-worktree-register');
+    yield* sync(() => registerRunnerWorktree(repo.root, root, true, environment));
+  }));
   yield* invoke(['worktree', 'add', '--detach', root, commit]);
   yield* sync(() => linkWorktreeDependencies(repo.root, root, environment));
   return yield* run(root, preserve).pipe(Effect.mapError(error => {

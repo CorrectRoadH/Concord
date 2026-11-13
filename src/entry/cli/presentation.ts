@@ -103,6 +103,8 @@ export function humanOutput(value: unknown): string {
     return [`Recovery: ${String(value.status)}`, `Journal: ${String(value.journalStatus ?? value.status)}`,
       `Publication tokens reclaimed: ${Array.isArray(publication.reclaimedTokens) ? publication.reclaimedTokens.length : 0}`,
       `Runner: ${String(runner.status ?? 'unknown')}`, ...(typeof runner.message === 'string' ? [runner.message] : []),
+      ...(['token', 'host', 'pid', 'ownerAlive', 'startedAt', 'release'] as const).flatMap(key => key in runner ? [`  ${key}: ${String(runner[key])}`] : []),
+      ...(Predicate.isObject(value.testSlot) && value.testSlot.status === 'released' ? [`Test slot: released (${String(value.testSlot.token)})`] : []),
       ...(Array.isArray(value.changedPaths) ? value.changedPaths.map(path => `  ${String(path)}`) : [])].join('\n');
   }
   if ((value.operation === 'memory-search' || value.operation === 'issue-search') && typeof value.query === 'string') {
