@@ -6,7 +6,7 @@ import { verifyChanges, verifyTest, scanAnnotations } from '../../src/domain/tes
 import { ConcordError } from '../../src/model/index.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 import { stagedVerificationFixture } from '../support/staged-verification.ts';
-import { createFixConsumer } from '../support/fix-consumer.ts';
+import { createFixConsumer, gitCommand } from '../support/fix-consumer.ts';
 
 async function verify(root: string) {
   return await runApplication(verifyChanges(root));
@@ -33,7 +33,12 @@ test('derived verification refuses an empty selection, red success, green failur
       if (scenario === 'preamble') { writeFileSync(join(fixture.root, 'test/cart.test.ts'), `// ordinary preamble\n${fixture.source}`); fixture.stage(); }
       if (scenario === 'red-passed') fixture.editTest(source => source.replace('equal(quantity, 2)', 'equal(quantity, 1) /* exact body change */'));
       if (scenario === 'green-failed') { writeFileSync(join(fixture.root, 'src/cart.ts'), 'export const quantity = 3;\n'); fixture.stage(); }
-      if (scenario === 'lock-changed') { writeFileSync(join(fixture.root, 'bun.lock'), 'changed dependencies\n'); fixture.stage(); }
+      if (scenario === 'lock-changed') {
+        writeFileSync(join(fixture.root, 'bun.lock'), 'baseline dependencies\n');
+        gitCommand(fixture.root, 'add', 'bun.lock');
+        gitCommand(fixture.root, 'commit', '-qm', 'baseline dependency lock', '--only', 'bun.lock');
+        writeFileSync(join(fixture.root, 'bun.lock'), 'changed dependencies\n'); fixture.stage();
+      }
       const index = readFileSync(join(fixture.root, '.git/index'));
       await assert.rejects(verify(fixture.root), error => {
         assert.ok(error instanceof ConcordError);

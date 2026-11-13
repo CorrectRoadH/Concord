@@ -54,17 +54,16 @@ export function gitBlobBytes(root: string, commit: string, path: string, environ
 export const gitBlob = (root: string, commit: string, path: string, environment: Readonly<Record<string, string | undefined>> = {}): string => gitBlobBytes(root, commit, path, environment).toString('utf8');
 export function assertDependencyLocks(repo: Repository, commit: string, declared: readonly string[], environment: Readonly<Record<string, string | undefined>>): void {
   const standard = new Set(['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock', 'bun.lockb', 'uv.lock', 'poetry.lock']);
-  const current = git(repo.root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], environment).split('\0').filter(Boolean);
-  const paths = new Set([...declared, ...[...git(repo.root, ['ls-tree', '-r', '--name-only', '-z', commit], environment).split('\0'), ...current, ...standard].filter(path => standard.has(path.split('/').at(-1)!))]);
+  const paths = new Set([...declared, ...git(repo.root, ['ls-tree', '-r', '--name-only', '-z', commit], environment).split('\0').filter(path => standard.has(path.split('/').at(-1)!))]);
   for (const path of paths) {
     canonicalPath(path);
     const historical = repo.readBytes?.(path);
+    if (historical === undefined) continue;
     const target = join(repo.root, path);
     const stat = lstatSync(target, { throwIfNoEntry: false });
     if (stat && (!stat.isFile() || stat.isSymbolicLink())) throw new ConcordError('FixUnverifiable', `Dependency lock is not a regular file: ${path}`);
     const installed = stat ? readFileSync(target) : undefined;
-    if (historical === undefined && installed === undefined) continue;
-    if (historical === undefined || installed === undefined || !Buffer.from(historical).equals(installed)) throw new ConcordError('FixUnverifiable', `Dependency lock differs from the main worktree in ${commit}: ${path}; install dependencies for the verified commit before retrying`);
+    if (installed === undefined || !Buffer.from(historical).equals(installed)) throw new ConcordError('FixUnverifiable', `Dependency lock differs from the main worktree in ${commit}: ${path}; install dependencies for the verified commit before retrying`);
   }
 }
 export function worktreeIdentity(repo: Repository, allowUnborn = false, environment: Readonly<Record<string, string | undefined>> = {}): string {
