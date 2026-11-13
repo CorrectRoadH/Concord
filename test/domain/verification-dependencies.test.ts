@@ -21,7 +21,7 @@ test('verification links all ignored dependency directories with historical pare
     writeFileSync(join(source, 'tracked/node_modules/file'), 'tracked');
     gitCommand(source, 'add', '-f', 'tracked/node_modules/file');
     mkdirSync(join(target, 'tracked'), { recursive: true });
-    linkWorktreeDependencies(source, target);
+    linkWorktreeDependencies(source, target, process.env);
     for (const path of included) assert.equal(readlinkSync(join(target, path)), join(source, path));
     for (const path of ['new-package', 'build', '.cache', 'tracked/node_modules']) assert.equal(existsSync(join(target, path)), false, path);
   } finally { rmSync(root, { recursive: true, force: true }); }
