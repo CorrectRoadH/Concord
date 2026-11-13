@@ -34,3 +34,18 @@ test('staged verification derives independent trees without changing index bytes
     assert.equal(replay.base, base); assert.equal(replay.redTree, snapshots.redTree);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// @use-case docs/feature/local-sdlc/use-case/verify-fix-in-one-commit.md#verify-staged
+test('staged snapshots reject empty changes and changes entirely inside testRoots', () => {
+  const root = mkdtempSync(join(tmpdir(), 'verification-staged-empty-'));
+  try {
+    gitCommand(root, 'init', '-q'); mkdirSync(join(root, 'test'));
+    writeFileSync(join(root, 'source.ts'), 'base'); gitCommit(root, 'base');
+    assert.throws(() => verificationGit.captureVerificationSnapshot(root, process.env), { code: 'FixUnverifiable' });
+    writeFileSync(join(root, 'test/new.ts'), 'test only'); gitCommand(root, 'add', '.');
+    const before = readFileSync(join(root, '.git/index'));
+    const capture = verificationGit.captureVerificationSnapshot(root, process.env);
+    assert.throws(() => verificationGit.deriveVerificationRed(root, capture, ['test'], process.env), { code: 'FixUnverifiable' });
+    assert.deepEqual(readFileSync(join(root, '.git/index')), before);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

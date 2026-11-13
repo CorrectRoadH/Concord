@@ -17,7 +17,7 @@ import { OwnedProcess } from "../../base/process/index.ts";
 import { runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.ts";
 import { LocalRepository, git, parseTypeScriptConfig } from "../../base/workspace/index.ts";
 import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema, type ProjectConfig, type Runner } from "../../model/index.ts";
-import { assertDependencyLocks, commitRepository, firstParentPath, gitBlobBytes, resolveCommit, linkWorktreeDependencies } from "../../base/git/index.ts";
+import { captureVerificationSnapshot, deriveVerificationRed, assertDependencyLocks, commitRepository, firstParentPath, gitBlobBytes, resolveCommit, linkWorktreeDependencies } from "../../base/git/index.ts";
 
 import { PersistentCache } from '../../base/cache/index.ts';
 import { RuntimeEnvironment } from '../../base/environment/index.ts';
@@ -48,6 +48,20 @@ function frozenInputs(repo: Repository, tests: readonly AnnotatedCase[], commit:
     return { path, digest: digest(commit === undefined ? snapshotBytes(repo, path)! : gitBlobBytes(repo.root, commit, path, environment)) };
   }) };
 }
+async function freezeDerived(repo: Repository, capture: ReturnType<typeof captureVerificationSnapshot>, tests: readonly AnnotatedCase[], environment: Readonly<Record<string, string | undefined>>) {
+  const snapshots = deriveVerificationRed(repo.root, capture, repo.config.testRoots, environment);
+  const inputs = frozenInputs(repo, tests, snapshots.greenCommit, environment);
+  const red = await commitRepository(repo, snapshots.redCommit, environment);
+  const declaredLocks = tests.flatMap(test => adapterFor(repo, test.file)?.lockFiles ?? []);
+  const base = await commitRepository(repo, snapshots.base, environment);
+  assertDependencyLocks(base, snapshots.base, declaredLocks, environment);
+  assertDependencyLocks(repo, snapshots.greenCommit, declaredLocks, environment);
+  assertDependencyLocks(red, snapshots.redCommit, declaredLocks, environment);
+  const scan = await scanAnnotations(red, { cache: 'off', sourceMode: 'overlay' });
+  if (scan.findings.length || !tests.every(test => scan.cases.some(item => item.id === test.id && item.status === 'active' && !item.skipped))) unavailable('Selected tests are unavailable in the derived red snapshot');
+  if (canonical(frozenInputs(red, tests, snapshots.redCommit, environment)) !== canonical(inputs)) unavailable('Frozen tests, runner inputs, or referenced Spec differ between the derived snapshots');
+  return { ...snapshots, tests, inputs, defect: snapshots.redCommit, fix: snapshots.greenCommit, runner: inputs.runner, nativeTests: tests.filter(test => adapterFor(repo, test.file)).map(test => test.id) };
+}
 async function freeze(repo: Repository, issue: string, defectInput: string | undefined, fix: string, testId: string | undefined, environment: Readonly<Record<string, string | undefined>>) {
   const tests = (await selectedTests(repo, issue, testId));
   const inputs = frozenInputs(repo, tests, fix, environment);
@@ -68,6 +82,7 @@ async function freeze(repo: Repository, issue: string, defectInput: string | und
     if (first.size !== tests.length || commits.size !== 1) unavailable('Regression tests first appeared in different commits; provide --defect');
     defect = [...commits][0]!;
   }
+  if (defect === fix) return await freezeDerived(repo, captureVerificationSnapshot(repo.root, environment, fix), tests, environment);
   const interval = firstParentPath(repo.root, defect, fix, environment);
   if (interval.length < 2) unavailable('Fix must be after the defect commit');
   for (const commit of interval) {
@@ -76,7 +91,7 @@ async function freeze(repo: Repository, issue: string, defectInput: string | und
     const historicTests = (await selectedTests(historical, issue, testId));
     if (canonical(frozenInputs(historical, historicTests, commit, environment)) !== canonical(inputs)) unavailable(`Frozen tests, runner inputs, or referenced Spec changed in ${commit}`);
   }
-  return { tests, inputs, defect, fix, runner: inputs.runner, nativeTests: tests.filter(test => adapterFor(repo, test.file)).map(test => test.id) };
+  return { base: undefined, redTree: undefined, greenTree: undefined, tests, inputs, defect, fix, runner: inputs.runner, nativeTests: tests.filter(test => adapterFor(repo, test.file)).map(test => test.id) };
 }
 const inWorktree = <A>(repo: LocalRepository, commit: string, role: 'defect' | 'fix', cleanupUnknown: () => void, run: (root: string, preserve: () => void) => Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation>): Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation> => Effect.scoped(Effect.gen(function* () {
   const environment = (yield* OwnedProcess).environment.env;
@@ -125,10 +140,10 @@ const prepareCheckout = Effect.fn('fixVerification.prepare')(function*(root: str
   }
 });
 
-function assertOutcome(result: Evidence, red: boolean, process: ProcessDiagnostic | undefined): void {
+function assertOutcome(result: Evidence, red: boolean, process: ProcessDiagnostic | undefined, derived: boolean): void {
   const details = process === undefined ? undefined : { process };
   if (result.timedOut || !result.cleanupOk || result.cancelled || result.signal !== null || result.commandOutcome === 'invalid' || result.exitCode === null || result.execution === 'none' || result.execution === 'skipped') { throw new ConcordError('FixUnverifiable', 'Runner execution timed out, was cancelled, skipped, empty, or cleanup is unconfirmed', details); }
-  if (red && result.exitCode === 0) unavailable('Regression tests and the fix were added in the same commit; commit the failing regression test first, then the fix');
+  if (red && result.exitCode === 0) throw new ConcordError('FixUnverifiable', derived ? 'Selected test passed on the red snapshot; ensure it guards the fix and its test helpers are inside testRoots' : 'Regression tests and the fix were added in the same commit; commit the failing regression test first, then the fix', details);
   if (!red && result.exitCode !== 0) throw new ConcordError('FixVerificationFailed', 'Runner failed on the accepted fix snapshot', details);
 }
 
@@ -141,6 +156,33 @@ const executeFrozenCase = Effect.fn('fixVerification.executeFrozenCase')(functio
   return yield* runCase(checkout, test, [], { requireNative: true, observeProcess: observe }).pipe(Effect.mapError(error => new ConcordError('FixUnverifiable', error.message, error.details)));
 }, Effect.scoped);
 
+interface FrozenExecution {
+  readonly base: string | undefined;
+  readonly inputs: ReturnType<typeof frozenInputs>;
+  readonly tests: readonly AnnotatedCase[];
+  readonly runnerConfig: Runner | undefined;
+  readonly preparation: Runner | undefined;
+  readonly nativeTests: readonly string[];
+  readonly defect: string;
+  readonly fix: string;
+}
+const runFrozenSnapshots = Effect.fn('fixVerification.runSnapshots')(function*(repo: LocalRepository, prepared: FrozenExecution, cleanupUnknown: () => void) {
+  const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
+    yield* prepareCheckout(root, prepared.preparation, preserve);
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
+    const results = yield* Effect.forEach(prepared.tests, test => {
+      let diagnostic: ProcessDiagnostic | undefined;
+      return executeFrozenCase(root, prepared.runnerConfig, test, prepared.nativeTests.includes(test.id), process => { if (diagnostic === undefined || process.exitCode !== 0 || process.signal || process.timedOut) diagnostic = process; }).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red, diagnostic, prepared.base !== undefined); })));
+    });
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
+    return results;
+  });
+  const red = yield* inWorktree(repo, prepared.defect, 'defect', cleanupUnknown, (root, preserve) => run(root, true, preserve));
+  const green = yield* inWorktree(repo, prepared.fix, 'fix', cleanupUnknown, (root, preserve) => run(root, false, preserve));
+  return { red, green };
+});
+
 /** Reproduce one frozen runner command from the commits supplied by the caller. */
 export const verifyTest = (repo: LocalRepository, testId: string, defectInput: string, fixInput: string) => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
   const runtime = (yield* OwnedProcess).environment;
@@ -150,19 +192,7 @@ export const verifyTest = (repo: LocalRepository, testId: string, defectInput: s
     const target = await commitRepository(repo, fix, environment);
     return { ...(await freeze(target, '', defectInput, fix, testId, environment)), runnerConfig: target.config.runner, preparation: (await commitRepository(repo, resolveCommit(repo.root, 'HEAD', 'FixUnverifiable', environment), environment)).config.runner };
   })));
-  const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
-    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    yield* prepareCheckout(root, prepared.preparation, preserve);
-    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    const results = yield* Effect.forEach(prepared.tests, test => {
-      let diagnostic: ProcessDiagnostic | undefined;
-      return executeFrozenCase(root, prepared.runnerConfig, test, prepared.nativeTests.includes(test.id), process => { if (diagnostic === undefined || process.exitCode !== 0 || process.signal || process.timedOut) diagnostic = process; }).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red, diagnostic); })));
-    });
-    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    return results;
-  });
-  const red = yield* inWorktree(repo, prepared.defect, 'defect', cleanupUnknown, (root, preserve) => run(root, true, preserve));
-  const green = yield* inWorktree(repo, prepared.fix, 'fix', cleanupUnknown, (root, preserve) => run(root, false, preserve));
+  const { red, green } = yield* runFrozenSnapshots(repo, prepared, cleanupUnknown);
   yield* sync(release);
   return { operation: 'test-verify', defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id), runner: prepared.runner, verified: 'replayed' as const, red, green };
 })).pipe(Effect.mapError(verificationFailure));
@@ -184,19 +214,7 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
     const testPreimages = [...new Set(frozen.tests.map(test => test.file))].map(path => ({ path, source: repo.read(path) }));
     return { issue, ...frozen, testPreimages, runnerConfig: targetRepo.config.runner, preparation: (await commitRepository(repo, head, environment)).config.runner, issueDigest };
   })));
-  const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
-    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    yield* prepareCheckout(root, prepared.preparation, preserve);
-    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    const results = yield* Effect.forEach(prepared.tests, test => {
-      let diagnostic: ProcessDiagnostic | undefined;
-      return executeFrozenCase(root, prepared.runnerConfig, test, prepared.nativeTests.includes(test.id), process => { if (diagnostic === undefined || process.exitCode !== 0 || process.signal || process.timedOut) diagnostic = process; }).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red, diagnostic); })));
-    });
-    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    return results;
-  });
-  const red = yield* inWorktree(repo, prepared.defect, 'defect', cleanupUnknown, (root, preserve) => run(root, true, preserve));
-  const green = yield* inWorktree(repo, prepared.fix, 'fix', cleanupUnknown, (root, preserve) => run(root, false, preserve));
+  const { red, green } = yield* runFrozenSnapshots(repo, prepared, cleanupUnknown);
   const installation = yield* Installation;
   const concord = yield* installation.version;
   const publication = yield* Publication;
@@ -210,8 +228,8 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
       const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
       release();
       const receipt = (await closeIssue(publisher, prepared.issue.path, reason));
-      const conclusion = `Verified fix — ${prepared.issue.path}\nDefect: ${verification.defect} (runner exit ${red[0]?.exitCode})\nFix: ${verification.fix} (runner exit 0)\nTests: ${verification.tests.join(', ')}\nRunner: ${verification.runner}\nClosed ${prepared.issue.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
-      return { ...receipt, conclusion, verification, red, green };
+      const conclusion = `Verified fix — ${prepared.issue.path}\n${prepared.base === undefined ? `Defect: ${verification.defect} (runner exit ${red[0]?.exitCode})` : `Red: ${prepared.base} + fix tests (tree ${prepared.redTree}, runner exit ${red[0]?.exitCode})`}\nFix: ${verification.fix} (runner exit 0)\nTests: ${verification.tests.join(', ')}\nRunner: ${verification.runner}\nClosed ${prepared.issue.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
+      return { ...receipt, conclusion, verification, ...(prepared.base === undefined ? {} : { base: prepared.base, redTree: prepared.redTree, greenTree: prepared.greenTree }), red, green };
     })); } finally { publisher.close(); }
   });
 })).pipe(Effect.mapError(verificationFailure));
