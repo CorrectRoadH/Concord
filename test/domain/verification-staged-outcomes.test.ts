@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { verifyChanges, verifyTest, scanAnnotations } from '../../src/domain/tests/index.ts';
@@ -9,8 +9,7 @@ import { stagedVerificationFixture } from '../support/staged-verification.ts';
 import { createFixConsumer } from '../support/fix-consumer.ts';
 
 async function verify(root: string) {
-  const repo = await LocalRepository.open(root);
-  try { return await runApplication(verifyChanges(repo)); } finally { repo.close(); }
+  return await runApplication(verifyChanges(root));
 }
 
 // @use-case docs/feature/local-sdlc/use-case/verify-fix-in-one-commit.md#verify-staged
@@ -27,9 +26,10 @@ test('unnamed changed markers share one file run while Tests retains both select
 
 // @use-case docs/feature/local-sdlc/use-case/verify-fix-in-one-commit.md#verify-staged
 test('derived verification refuses an empty selection, red success, green failure and changed dependency locks', async () => {
-  for (const scenario of ['preamble', 'red-passed', 'green-failed', 'lock-changed'] as const) {
-    const fixture = await stagedVerificationFixture();
+  for (const scenario of ['preamble', 'red-passed', 'green-failed', 'lock-changed', 'timeout'] as const) {
+    const fixture = await stagedVerificationFixture(scenario === 'timeout' ? 500 : undefined);
     try {
+      if (scenario === 'timeout') fixture.editTest(source => source + '\nsetInterval(() => {}, 1000);\n');
       if (scenario === 'preamble') { writeFileSync(join(fixture.root, 'test/cart.test.ts'), `// ordinary preamble\n${fixture.source}`); fixture.stage(); }
       if (scenario === 'red-passed') fixture.editTest(source => source.replace('equal(quantity, 2)', 'equal(quantity, 1) /* exact body change */'));
       if (scenario === 'green-failed') { writeFileSync(join(fixture.root, 'src/cart.ts'), 'export const quantity = 3;\n'); fixture.stage(); }
@@ -41,6 +41,10 @@ test('derived verification refuses an empty selection, red success, green failur
         if (scenario === 'preamble') assert.match(error.message, /No new or changed/);
         if (scenario === 'red-passed') assert.match(error.message, /passed on the red snapshot/);
         if (scenario === 'lock-changed') assert.match(error.message, /bun.lock/);
+        if (scenario === 'timeout') {
+          const details = error.details as { process: { timedOut: boolean; commit: string } };
+          assert.equal(details.process.timedOut, true); assert.match(details.process.commit, /^defect /);
+        }
         if (scenario === 'green-failed') {
           const details = error.details as { process: { commit: string; stderr: string; stdout: string } };
           assert.match(details.process.commit, /^fix /); assert.match(details.process.stdout + details.process.stderr, /3 !== 2|actual: 3/);
@@ -48,6 +52,7 @@ test('derived verification refuses an empty selection, red success, green failur
         return true;
       });
       assert.deepEqual(readFileSync(join(fixture.root, '.git/index')), index);
+      assert.equal(existsSync(join(fixture.root, '.git/concord/runner.lease')), false);
     } finally { rmSync(fixture.root, { recursive: true, force: true }); }
   }
 });

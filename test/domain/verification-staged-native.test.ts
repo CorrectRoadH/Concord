@@ -26,12 +26,12 @@ test('derived native verification keeps exact case scope and rejects provider in
       writeFileSync(join(fixture.root, 'mode.txt'), mode); gitCommand(fixture.root, 'add', '.');
       repo = await LocalRepository.open(fixture.root);
       if (mode === 'green') {
-        const result = await runApplication(verifyChanges(repo));
+        const result = await runApplication(verifyChanges(fixture.root));
         assert.equal(result.tests.length, 1);
         assert.equal(result.red[0]!.scope, 'case'); assert.equal(result.green[0]!.scope, 'case');
         assert.equal(result.red[0]!.commandOutcome, 'red'); assert.equal(result.green[0]!.commandOutcome, 'green');
       } else {
-        await assert.rejects(runApplication(verifyChanges(repo)), error => {
+        await assert.rejects(runApplication(verifyChanges(fixture.root)), error => {
           assert.ok(error instanceof ConcordError); assert.equal(error.code, 'FixUnverifiable');
           const details = error.details as { process: { commit: string; op: string; stderr: string } };
           assert.match(details.process.commit, /^fix /); assert.equal(details.process.op, 'report-parse');
