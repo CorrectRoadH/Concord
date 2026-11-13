@@ -33,6 +33,24 @@
 
    这些文件在中断后被外部编辑过，Concord 保留了磁盘上的内容。确认内容符合预期后照常继续；需要时重新运行原来的写入命令。
 
+4. 测试任务槽位被已经不存在的进程占着时，确认后释放。 {#release-test-slot}
+
+   `test verify`、`issue close --fixed` 等运行测试的命令同一时刻只允许一个，占用者被强杀后槽位不会自己释放：
+   Concord 无法证明它启动的测试子进程也已经结束。此后这些命令返回 `RepositoryBusy`，`recover` 报告：
+
+   ```json
+   {"operation":"recover","status":"blocked","testSlot":{"status":"blocked","token":"33c6d404-5f1f-4178-9e20-62489a63c4fc","host":"studio","pid":2976895,"ownerAlive":false,"startedAt":"2026-11-13T10:35:02Z","release":"concord recover --release-test-slot 33c6d404-5f1f-4178-9e20-62489a63c4fc"}}
+   ```
+
+   `RepositoryBusy` 的错误文本带同样的 token、pid、`ownerAlive` 与 `release` 命令，不需要再运行一次 `recover` 才知道怎么办。
+   确认没有遗留的测试进程后执行给出的命令：
+
+   ```sh
+   concord recover --release-test-slot 33c6d404-5f1f-4178-9e20-62489a63c4fc
+   ```
+
+   Concord 删除该槽位的占用与运行状态，回收它登记的临时 worktree，输出 `testSlot.status: "released"`。给出 token 就是用户对“子进程已清理”的确认。
+
 ## 结果
 
 恢复把整组文件一起完成或一起回退：每个文件都已是计划内容时完成，否则回到写入前的内容。
@@ -41,6 +59,8 @@
 | --- | --- |
 | 文件既不是写入前的内容也不是计划内容 | 保留磁盘内容，删除 journal，`journalStatus` 为 `discarded`，`warnings` 列出路径 |
 | 测试任务槽位清理状态未知 | `testSlot.status` 为 `blocked`，CLI 退出 1；Web 与 action 返回同一结果，文档读写照常 |
+| `--release-test-slot` 的占用者进程仍然存活 | `TestSlotActive`，不释放；等它结束或先终止它 |
+| `--release-test-slot` 的 token 与当前占用不符，或占用登记在另一台主机上 | `TestSlotMismatch`，不释放；错误给出当前占用的 token 与主机 |
 | 另一个写入正在提交 | 在写互斥后排队，最多等待 3 秒，超时返回 `RepositoryBusy` |
 | 回退的是 `init` | 不要求配置文件仍然存在 |
 

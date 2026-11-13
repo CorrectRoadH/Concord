@@ -58,7 +58,7 @@
 
    核验通过后，命令在同一次写入中删除 Issue 文件，并删掉回归测试里的 `@issue` 行（测试与它的 `@use-case` 标记保留），输出的结论写进提交说明。之后重放只按测试 ID 与两个提交进行，不依赖 `@issue`。
 
-   修复提交默认是核验开始时的 HEAD；`--fix <commit>` 指定更早的修复提交，它必须是 HEAD 的 first-parent 祖先、并在缺陷提交之后。缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；所有回归测试必须在同一提交中首次出现，否则用 `--defect <commit>` 指定，该提交必须是 HEAD 的 first-parent 祖先。runner 在缺陷提交上以非零码结束、在修复提交上以零结束时，核验成立。
+   修复提交默认是核验开始时的 HEAD；`--fix <commit>` 指定更早的修复提交，它必须是 HEAD 的 first-parent 祖先、并在缺陷提交之后。缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交，它与修复提交是同一个提交时按单提交推导红快照；所有回归测试必须在同一提交中首次出现，否则用 `--defect <commit>` 指定，该提交必须是 HEAD 的 first-parent 祖先。runner 在缺陷提交上以非零码结束、在修复提交上以零结束时，核验成立。
 
    两次运行在复用当前依赖环境的轻量临时 worktree 中执行，与当前 worktree 的未提交改动隔离：只有该 Issue 文件与回归测试文件必须没有未提交的改动。
 
@@ -80,14 +80,14 @@
 | --- | --- |
 | `FixUnverifiable` | Issue 文件有未提交的改动；缺少回归测试；回归测试不在同一提交中首次出现且未给出 `--defect`；`--defect` 不是 HEAD 的 first-parent 祖先，或 `--fix` 不是 HEAD 的 first-parent 祖先、不在缺陷提交之后；缺陷提交不存在，包括 shallow clone |
 | `FixUnverifiable` | 缺陷提交与修复提交之间回归测试、runner 配置或测试指向的 Spec 字节有变化 |
-| `FixUnverifiable` | runner 在缺陷提交上以零结束，例如同一提交同时加入测试与修复；任一次运行超时或清理无法确认 |
+| `FixUnverifiable` | runner 在红快照上以零结束，回归测试没有守住这次修复；任一次运行超时或清理无法确认 |
 | `FixUnverifiable` | 被核验提交的依赖锁文件与主 worktree 的同名文件不同，已安装的依赖不属于该提交；错误指出是哪个文件 |
 | `FixUnverifiable` | adapter 的协议往返或它规划的原生调用没有正常结束；错误带上所在提交、步骤、命令、退出结果与输出尾部 |
 | `FixVerificationFailed` | runner 在修复提交上以非零码结束 |
 | `FileChangedSinceRead` | 核验期间 Issue 文件被改动 |
 | `IssueReferenced` | 仍有页面或其它 Issue 链接这个 Issue |
 
-同一提交加入测试与修复时无法核验，错误提示先单独提交失败的回归测试。
+回归测试与修复位于同一个提交时照常核验：红快照取该提交的第一个父提交加上它在 `testRoots` 之下的改动，规则见[一次提交核验小修复](verify-fix-in-one-commit.md)。
 
 ```text
 ok: false
