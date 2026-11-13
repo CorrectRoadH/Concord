@@ -199,6 +199,7 @@ export default function (p: P5) {
 修复缺陷与积累知识：
 
 - [核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)
+- [一次提交核验小修复](use-case/verify-fix-in-one-commit.md)
 - [检索与维护工程知识](use-case/recall-and-maintain-memory.md)
 
 保护项目目录：
