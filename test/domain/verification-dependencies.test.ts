@@ -7,7 +7,6 @@ import { gitCommand } from '../support/fix-consumer.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-// @issue docs/issues/verification-dependencies.md
 test('verification links all ignored dependency directories with historical parents only', () => {
   const root = mkdtempSync(join(tmpdir(), 'verification-dependencies-'));
   const source = join(root, 'source'), target = join(root, 'target');
