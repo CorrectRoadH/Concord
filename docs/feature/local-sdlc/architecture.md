@@ -69,6 +69,8 @@ runner 在消费者 cwd 下执行。argv 逐参数替换 `{file}`、`{name}`、`
    复用只在依赖没有变化时成立。被核验提交中的依赖锁文件与主 worktree 的同名文件字节不同时，核验以 `FixUnverifiable` 结束并指出该文件，
    不在与该提交不符的依赖上运行。锁文件指所选 `testAdapters` 声明的 `lockFiles`，以及仓库中存在的
    `pnpm-lock.yaml`、`package-lock.json`、`yarn.lock`、`bun.lock`、`bun.lockb`、`uv.lock` 与 `poetry.lock`。
+   比对以被核验的提交为准：它里面有的每个锁文件，主 worktree 必须有字节相同的同名文件。主 worktree 里有、
+   该提交里没有的锁文件不参与比对——那是之后才加入的子项目，它的目录在这个提交里不存在，依赖也不会被链接进去。
 
    借来的依赖目录属于主 worktree，核验不得改动它。链接不提供这层保护：包管理器在临时 worktree 里安装或清理时，
    写入会顺着链接落到主 worktree。pnpm 11 就是这样：它把项目的绝对路径写在安装状态里，换了目录即认为 workspace 变了，
