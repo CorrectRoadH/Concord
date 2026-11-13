@@ -40,30 +40,39 @@ export function commandObservation(result: OwnedProcessResult, runner: Runner): 
 }
 
 /** One runner owner spans all child scopes; unknown cleanup preserves quarantine. */
-export const withRunner = <A, R>(repo: LocalRepository, run: (release: () => void, cleanupUnknown: () => void) => Effect.Effect<A, ConcordError, OwnedProcess | R>): Effect.Effect<A, ConcordError, OwnedProcess | R> => Effect.scoped(Effect.gen(function* () {
+export const withRunner = <A, R>(repo: LocalRepository | string, run: (release: () => void, cleanupUnknown: () => void) => Effect.Effect<A, ConcordError, OwnedProcess | R>): Effect.Effect<A, ConcordError, OwnedProcess | R> => Effect.scoped(Effect.gen(function* () {
   const process = yield* OwnedProcess;
   const environment = process.environment.env;
+  const root = typeof repo === 'string' ? repo : repo.root;
+  const snapshot = <A>(read: () => A): A => {
+    if (typeof repo !== 'string') return repo.snapshot(read);
+    const lock = acquireTraceLeaseSync(root, 'exclusive', 'test-verification', true, false, environment)!;
+    try { return read(); } finally { releaseTraceLeaseSync(lock, 'test-verification'); }
+  };
   let released = false;
   let cleanupUnknown = false;
   const lease = yield* Effect.acquireRelease(
-    Effect.try({ try: () => repo.snapshot(() => beginRun(repo.root, environment)), catch: failure }),
+    Effect.try({ try: () => snapshot(() => beginRun(root, environment)), catch: failure }),
     lease => Effect.gen(function* () {
       if (released) return;
       const idle = (yield* process.activeCount) === 0;
       const results = yield* process.cleanupResults;
       yield* Effect.sync(() => {
-        const lock = acquireTraceLeaseSync(repo.root, 'exclusive', 'test-finalize', true, false, environment)!;
-        try { const clean = !cleanupUnknown && idle && results.every(hasConfirmedOwnedGroupCleanup); finalizeRun(repo.root, lease, clean, environment); if (clean) finishRun(repo.root, lease, environment); else quarantineRun(repo.root, lease, environment); }
-        catch (cause) { quarantineRun(repo.root, lease, environment); throw cause; }
+        const lock = acquireTraceLeaseSync(root, 'exclusive', 'test-finalize', true, false, environment)!;
+        try { const clean = !cleanupUnknown && idle && results.every(hasConfirmedOwnedGroupCleanup); finalizeRun(root, lease, clean, environment); if (clean) finishRun(root, lease, environment); else quarantineRun(root, lease, environment); }
+        catch (cause) { quarantineRun(root, lease, environment); throw cause; }
         finally { releaseTraceLeaseSync(lock, 'test-finalize'); }
       });
     }),
   );
   return yield* run(() => {
-    if (finalizeRun(repo.root, lease, true, environment)) throw new ConcordError('FileChangedSinceRead', 'Publication invalidated the running verification');
-    if (cleanupUnknown) throw new ConcordError('FixUnverifiable', 'Runner worktree cleanup is unconfirmed');
-    finishRun(repo.root, lease, environment); released = true;
-  }, () => { cleanupUnknown = true; quarantineRun(repo.root, lease, environment); });
+    const finish = () => {
+      if (finalizeRun(root, lease, true, environment)) throw new ConcordError('FileChangedSinceRead', 'Publication invalidated the running verification');
+      if (cleanupUnknown) throw new ConcordError('FixUnverifiable', 'Runner worktree cleanup is unconfirmed');
+      finishRun(root, lease, environment); released = true;
+    };
+    return typeof repo === 'string' ? snapshot(finish) : finish();
+  }, () => { cleanupUnknown = true; quarantineRun(root, lease, environment); });
 })).pipe(Effect.catchDefect(cause => Effect.fail(failure(cause))));
 
 export const executeCommand = (cwd: string, runner: Runner, selected: AnnotatedCase, observe?: (process: ProcessDiagnostic) => void) => Effect.flatMap(OwnedProcess, service => service.run(runnerArguments(runner, selected), { cwd, env: safeRunnerEnvironment(service.environment.env), timeoutMs: runner.timeoutMs })).pipe(Effect.scoped, Effect.tap(result => Effect.sync(() => observe?.(processDiagnostic(result, cwd, cwd, 'runner command')))), Effect.map(result => ({ ...commandObservation(result, runner), operation: 'test-run' as const, scope: 'command' as const, selectedCaseId: selected.id, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk: hasConfirmedOwnedGroupCleanup(result), arguments: result.command })), Effect.mapError(failure));

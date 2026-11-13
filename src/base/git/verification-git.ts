@@ -24,7 +24,7 @@ export function firstParentPath(root: string, defect: string, fix: string, envir
 }
 
 /** Historical sources are object reads, never a checkout or a cache authority. */
-export async function commitRepository(repo: Repository, commit: string, environment: Readonly<Record<string, string | undefined>> = {}): Promise<Repository> {
+export async function commitRepository(repo: Pick<Repository, 'root' | 'privateDir'>, commit: string, environment: Readonly<Record<string, string | undefined>> = {}): Promise<Repository> {
   environment = Object.freeze({ ...environment });
   const entries = git(repo.root, ['ls-tree', '-r', '-z', commit], environment).split('\0').filter(Boolean).map(entry => {
     const tab = entry.indexOf('\t'); return { mode: entry.slice(0, 6), path: entry.slice(tab + 1) };

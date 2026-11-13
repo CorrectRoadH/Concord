@@ -2,12 +2,12 @@
 // @concord-implements docs/feature/local-sdlc/architecture.md#修复核验
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 import { Sources, snapshotBytes } from '../../base/sources/index.ts';
-import { Publication } from '../../base/publication/index.ts';
+import { genericPrivateDirectorySync, Publication } from '../../base/publication/index.ts';
 import { Installation } from "../../base/installation/index.ts";
 import { dirname, join } from "node:path";
 
 import { Effect } from "effect";
-import { scanAnnotations } from "./annotations.ts";
+import { scanAnnotations, testDeclarationBodies } from "./annotations.ts";
 import { readDocumentSelector } from "../documents/index.ts";
 import { closeIssue } from "../issues/index.ts";
 import { executeCommand, requireRunner, runCase, withRunner } from "./evidence.ts";
@@ -15,7 +15,7 @@ import { processDiagnostic, type ProcessDiagnostic, safeRunnerEnvironment } from
 import type { Evidence } from "../../model/index.ts";
 import { OwnedProcess } from "../../base/process/index.ts";
 import { runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.ts";
-import { LocalRepository, git, parseTypeScriptConfig } from "../../base/workspace/index.ts";
+import { LocalRepository, discoverRoot, git, parseTypeScriptConfig } from "../../base/workspace/index.ts";
 import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema, type ProjectConfig, type Runner } from "../../model/index.ts";
 import { captureVerificationSnapshot, deriveVerificationRed, assertDependencyLocks, commitRepository, firstParentPath, gitBlobBytes, resolveCommit, linkWorktreeDependencies } from "../../base/git/index.ts";
 
@@ -47,6 +47,21 @@ function frozenInputs(repo: Repository, tests: readonly AnnotatedCase[], commit:
     const source = repo.read(path); if (source === undefined) unavailable(`Frozen runner input is unavailable: ${path}`);
     return { path, digest: digest(commit === undefined ? snapshotBytes(repo, path)! : gitBlobBytes(repo.root, commit, path, environment)) };
   }) };
+}
+async function changedTests(repo: Repository, base: Repository): Promise<readonly AnnotatedCase[]> {
+  const scan = await scanAnnotations(repo, { cache: 'off', sourceMode: 'overlay' });
+  if (scan.findings.length) unavailable('Test markers cannot be decoded');
+  const selected: AnnotatedCase[] = [];
+  for (const file of new Set(scan.cases.map(test => test.file))) {
+    const current = await testDeclarationBodies(file, repo.read(file)!);
+    const previous = await testDeclarationBodies(file, base.read(file) ?? '');
+    if (previous.findings.length) unavailable(`Base test markers cannot be decoded: ${file}`);
+    for (const test of current.cases) {
+      if (test.status === 'active' && !test.skipped && (!previous.bodies.has(test.id) || current.bodies.get(test.id) !== previous.bodies.get(test.id))) selected.push(test);
+    }
+  }
+  if (!selected.length) unavailable('No new or changed test cases in the staged changes');
+  return selected.sort((left, right) => left.id.localeCompare(right.id));
 }
 async function freezeDerived(repo: Repository, capture: ReturnType<typeof captureVerificationSnapshot>, tests: readonly AnnotatedCase[], environment: Readonly<Record<string, string | undefined>>) {
   const snapshots = deriveVerificationRed(repo.root, capture, repo.config.testRoots, environment);
@@ -93,7 +108,7 @@ async function freeze(repo: Repository, issue: string, defectInput: string | und
   }
   return { base: undefined, redTree: undefined, greenTree: undefined, tests, inputs, defect, fix, runner: inputs.runner, nativeTests: tests.filter(test => adapterFor(repo, test.file)).map(test => test.id) };
 }
-const inWorktree = <A>(repo: LocalRepository, commit: string, role: 'defect' | 'fix', cleanupUnknown: () => void, run: (root: string, preserve: () => void) => Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation>): Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation> => Effect.scoped(Effect.gen(function* () {
+const inWorktree = <A>(repo: Pick<Repository, 'root'>, commit: string, role: 'defect' | 'fix', cleanupUnknown: () => void, run: (root: string, preserve: () => void) => Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation>): Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation> => Effect.scoped(Effect.gen(function* () {
   const environment = (yield* OwnedProcess).environment.env;
   const invoke = (args: readonly string[]) => runOwnedProcess(['git', '-C', repo.root, '-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo.root, env: safeRunnerEnvironment(environment), timeoutMs: 10000 }).pipe(Effect.scoped, Effect.mapError(failure), Effect.flatMap(result => sync(() => {
     if (!hasConfirmedOwnedGroupCleanup(result)) preserve();
@@ -166,14 +181,20 @@ interface FrozenExecution {
   readonly defect: string;
   readonly fix: string;
 }
-const runFrozenSnapshots = Effect.fn('fixVerification.runSnapshots')(function*(repo: LocalRepository, prepared: FrozenExecution, cleanupUnknown: () => void) {
+const runFrozenSnapshots = Effect.fn('fixVerification.runSnapshots')(function*(repo: Pick<Repository, 'root'>, prepared: FrozenExecution, cleanupUnknown: () => void) {
   const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     yield* prepareCheckout(root, prepared.preparation, preserve);
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    const results = yield* Effect.forEach(prepared.tests, test => {
+    const files = new Set<string>();
+    const units = prepared.tests.filter(test => {
+      if (prepared.base === undefined || prepared.nativeTests.includes(test.id) || test.named) return true;
+      if (files.has(test.file)) return false;
+      files.add(test.file); return true;
+    });
+    const results = yield* Effect.forEach(units, test => {
       let diagnostic: ProcessDiagnostic | undefined;
-      return executeFrozenCase(root, prepared.runnerConfig, test, prepared.nativeTests.includes(test.id), process => { if (diagnostic === undefined || process.exitCode !== 0 || process.signal || process.timedOut) diagnostic = process; }).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red, diagnostic, prepared.base !== undefined); })));
+      return executeFrozenCase(root, prepared.runnerConfig, test, prepared.nativeTests.includes(test.id), process => { if (diagnostic === undefined || process.exitCode !== 0 || process.signal || process.timedOut) diagnostic = process; }).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red, diagnostic, prepared.base !== undefined); })), Effect.map(result => prepared.base === undefined ? result : { ...result, scope: prepared.nativeTests.includes(test.id) || test.named ? 'case' as const : 'file' as const }));
     });
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     return results;
@@ -182,6 +203,33 @@ const runFrozenSnapshots = Effect.fn('fixVerification.runSnapshots')(function*(r
   const green = yield* inWorktree(repo, prepared.fix, 'fix', cleanupUnknown, (root, preserve) => run(root, false, preserve));
   return { red, green };
 });
+
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/verify-fix-in-one-commit.md
+export const verifyChanges = Effect.fn('fixVerification.verifyChanges')(function*(root: string, revision?: string) {
+  const runtime = (yield* OwnedProcess).environment;
+  const environment = runtime.env;
+  const repo = yield* sync(() => {
+    const selected = discoverRoot(root, false, runtime);
+    if (git(selected, ['rev-parse', '--show-toplevel'], environment) !== selected) unavailable('Verification root must be the Git worktree root');
+    return { root: selected, privateDir: genericPrivateDirectorySync(selected, environment) };
+  });
+  return yield* withRunner(repo.root, (release, cleanupUnknown) => Effect.gen(function* () {
+    const prepared = yield* sync(async () => {
+      const capture = captureVerificationSnapshot(repo.root, environment, revision);
+      const target = await commitRepository(repo, capture.greenCommit, environment);
+      const base = await commitRepository(repo, capture.base, environment);
+      const tests = await changedTests(target, base);
+      return { ...await freezeDerived(target, capture, tests, environment), runnerConfig: target.config.runner, preparation: target.config.runner };
+    });
+    const { red, green } = yield* runFrozenSnapshots(repo, prepared, cleanupUnknown);
+    yield* sync(release);
+    const tests = prepared.tests.map(test => test.id);
+    const conclusion = `Verified fix — ${revision === undefined ? `staged changes on ${prepared.base}` : `commit ${prepared.fix}`}\nRed: ${prepared.base} + ${revision === undefined ? 'staged' : 'fix'} tests (tree ${prepared.redTree}, runner exit ${red[0]?.exitCode})\nGreen: ${revision === undefined ? 'staged tree' : 'tree'} ${prepared.greenTree} (runner exit 0)\nTests: ${tests.join(', ')}\nRunner: ${prepared.runner}\n\nPut the lines above in your commit message.`;
+    return { operation: 'test-verify', base: prepared.base, redTree: prepared.redTree, greenTree: prepared.greenTree, tests, runner: prepared.runner, red, green, conclusion };
+  }));
+}, Effect.mapError(verificationFailure));
+// @concord-end
 
 /** Reproduce one frozen runner command from the commits supplied by the caller. */
 export const verifyTest = (repo: LocalRepository, testId: string, defectInput: string, fixInput: string) => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {

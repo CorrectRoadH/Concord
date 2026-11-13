@@ -29,3 +29,6 @@ export { executeNativeCase } from './test-adapters.ts';
 export type { NativeExecution } from './test-adapters.ts';
 export { readNativeObservations } from './test-adapters.ts';
 export { issueMarkerLines } from './annotations.ts';
+
+export { testDeclarationBodies } from './annotations.ts';
+export { verifyChanges } from './fix-verification.ts';

@@ -93,11 +93,17 @@ export async function issueMarkerLines(path: string, text: string, issue: string
   return lines;
 }
 
-async function parseSource(input: Source): Promise<Parsed> {
+export async function testDeclarationBodies(path: string, text: string) {
+  const bodies = new Map<string, string>();
+  return { ...await parseSource({ path, text, digest: digest(text) }, bodies), bodies };
+}
+
+async function parseSource(input: Source, bodies?: Map<string, string>): Promise<Parsed> {
   if (!hasTestMarker(input.text)) return { cases: [], findings: [] };
   const comments = await realCommentLines(input.path, input.text);
   const lines = input.text.split(/\r?\n/u);
   const findings: Finding[] = [], cases: AnnotatedCase[] = [];
+  const blocks: { id: string; start: number; end: number }[] = [];
   const ordinals = new Map<string, number>();
   let index = 0;
   while (index < lines.length) {
@@ -130,7 +136,15 @@ async function parseSource(input: Source): Promise<Parsed> {
         issues: parsed.issues, status: parsed.status, framework: 'marker', skipped: false, named: parsed.name !== undefined, ...(parsed.native === undefined ? {} : { native: parsed.native }),
         markerEndLine: valueLines.filter((_, index) => /^@(feature|use-case|issue|status|name|native)(?:\s|$)/u.test(values[index] ?? '')).at(-1),
       }, `${input.path}:${parsed.contractLine}`));
+      blocks.push({ id, start: markerLine, end: valueLines.at(-1)! });
     } catch (cause) { finding(findings, 'InvalidAnnotation', input.path, cause instanceof Error ? cause.message : String(cause), parsed.contractLine); }
+  }
+  if (bodies !== undefined) {
+    const offsets = [0, ...[...input.text.matchAll(/\n/gu)].map(match => match.index + 1)];
+    for (const [index, block] of blocks.entries()) {
+      const next = blocks[index + 1];
+      bodies.set(block.id, input.text.slice(offsets[block.end] ?? input.text.length, next === undefined ? input.text.length : offsets[next.start - 1]));
+    }
   }
   return { cases, findings };
 }
