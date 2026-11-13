@@ -6,7 +6,7 @@ import { Schema } from 'effect';
 import { createFixConsumer, gitCommand, gitCommit } from '../support/fix-consumer.ts';
 import { runCli } from '../support/cli.ts';
 
-const Result = Schema.Struct({ operation: Schema.Literal('test-verify'), base: Schema.String, redTree: Schema.String, greenTree: Schema.String, tests: Schema.Array(Schema.String), conclusion: Schema.String });
+const Result = Schema.Struct({ operation: Schema.Literal('test-verify'), base: Schema.String, redTree: Schema.String, greenTree: Schema.String, tests: Schema.Array(Schema.String), red: Schema.Array(Schema.Struct({ scope: Schema.Literals(['file', 'case']) })), green: Schema.Array(Schema.Struct({ scope: Schema.Literals(['file', 'case']) })), conclusion: Schema.String });
 async function invoke(root: string, args: readonly string[]) {
   return await runCli({ cwd: root, env: process.env, argv: ['--root', root, '--server=command', '--json', ...args] });
 }
@@ -31,6 +31,7 @@ test('staged CLI verifies only changed cases and replays the committed trees wit
     assert.equal(result.exitCode, 0, result.stderr);
     const value = Schema.decodeUnknownSync(Schema.fromJsonString(Result), { onExcessProperty: 'ignore' })(result.stdout);
     assert.equal(value.base, fixture.base); assert.equal(value.tests.length, 1);
+    assert.equal(value.red[0]!.scope, 'case'); assert.equal(value.green[0]!.scope, 'case');
     assert.match(value.conclusion, /Verified fix/);
     assert.deepEqual(readFileSync(join(fixture.root, '.git/index')), index);
     assert.equal(gitCommand(fixture.root, 'rev-parse', 'HEAD'), fixture.base);
@@ -57,5 +58,16 @@ test('fixed Issue closure derives the red snapshot when regression and fix share
     assert.equal(result.exitCode, 0, result.stderr);
     assert.equal(existsSync(join(fixture.root, 'docs/issues/sku.md')), false);
     assert.doesNotMatch(readFileSync(path, 'utf8'), /@issue/);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-sdlc/use-case/verify-fix-in-one-commit.md#verify-staged
+test('staged verification ignores invalid unstaged configuration', async () => {
+  const fixture = await stagedFixture();
+  try {
+    writeFileSync(join(fixture.root, 'concord.config.ts'), 'not valid configuration');
+    const result = await invoke(fixture.root, ['test', 'verify', '--staged']);
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.equal(readFileSync(join(fixture.root, 'concord.config.ts'), 'utf8'), 'not valid configuration');
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
