@@ -64,7 +64,7 @@
 
 6. 公开 tap 自动同步 Homebrew 与 Nix 渠道。 {#channels}
 
-   tap 发现这次发版，核验版本、标签、资产与哈希，用同一归档生成 Formula 与 Linux Nix 候选。候选通过 Homebrew 与 Nix 安装运行检查后，tap 提交、打 recipe 标签并创建渠道完成记录。macOS 的 Homebrew 检查同样核对全部 Mach-O 的 `codesign --verify`、与归档相同的原始摘要和没有 `com.apple.quarantine`。确认渠道已完成：
+   tap 发现这次发版，核验版本、标签、资产与哈希，用同一归档生成 Formula 与 Linux Nix recipe，提交、打 recipe 标签并创建渠道完成记录。渠道同步直接使用已发布归档，不运行包管理器的安装测试。确认渠道已完成：
 
    ```sh
    gh release view v0.9.0 --repo CorrectRoadH/homebrew-tap

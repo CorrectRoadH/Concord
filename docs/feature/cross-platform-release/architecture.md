@@ -10,7 +10,7 @@
 
 标签工作流从校验后的标签派生版本。原生任务在各自目标系统上下载并校验固定的官方 HawDB 动态库归档；各目标宿主按同一 commit 构建 Bun 可执行文件并组装候选归档，核验版本、原生产物身份与摘要。两个目标构建与同一标签 commit 的完整检查通过后创建源码 Release。
 
-tap 定期或经通知发现新的公开发版，核验标签、归档与资产身份，生成 Formula 与 Nix 候选。候选分别完成安装和运行检查后才提交并打 recipe 标签，创建同版本渠道完成记录。日常发现、验证与更新不依赖 LLM。
+tap 定期或经通知发现新的公开发版，核验标签、归档与资产身份，生成 Formula 与 Nix recipe，提交并打 recipe 标签，创建同版本渠道完成记录。日常发现、验证与更新不依赖 LLM。
 
 ## 不变量
 
@@ -65,9 +65,9 @@ Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`li
 
 Formula 按平台引用对应归档与 SHA-256：macOS 用 `darwin-arm64`，Linux 用 `linux-x64`。没有 `depends_on` 的 node、pnpm、bun 或 ripgrep，也不编译原生引擎。安装把归档内容放入 `libexec`，在 `bin` 链接 `libexec/bin/concord`。
 
-Linux 上 Formula 同样保留原生字节：Bun 编译的可执行文件被改写 ELF 头或 RPATH 后会崩溃，Homebrew 的 ELF 重定位不能作用于归档文件。安装时压缩归档内全部 ELF（`bin/concord`、HawDB 动态库、`runtime/rg` 与 `runtime/lib/` 中的库），post-install 解压还原；tap 的检查逐文件比对还原后的摘要与归档相同。
+Linux 上 Formula 同样保留原生字节：Bun 编译的可执行文件被改写 ELF 头或 RPATH 后会崩溃，Homebrew 的 ELF 重定位不能作用于归档文件。安装时压缩归档内全部 ELF（`bin/concord`、HawDB 动态库、`runtime/rg` 与 `runtime/lib/` 中的库），post-install 解压还原。
 
-macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`。安装时压缩包内全部 Mach-O 文件（HawDB 动态库、`bin/concord` 与 `runtime/rg`），待 Homebrew 链接处理结束后在 post-install 解压还原原始字节，不重签、不改写。tap 的 Homebrew 检查逐文件比对还原后的摘要与归档相同，对全部 Mach-O 运行 `codesign --verify`，并确认没有 `com.apple.quarantine`。
+macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`。安装时压缩包内全部 Mach-O 文件（HawDB 动态库、`bin/concord` 与 `runtime/rg`），待 Homebrew 链接处理结束后在 post-install 解压还原原始字节，不重签、不改写。
 
 ### Nix
 
@@ -77,7 +77,7 @@ Nix 只支持 `x86_64-linux`。原始发版身份与渠道安装身份分开：
 2. recipe 构建阶段用 `autoPatchelfHook` 修补 HawDB 动态库、`runtime/rg` 与 `runtime/lib/` 中的库，运行库取自 flake.lock 固定的 nixpkgs，至少包含 glibc、GCC 运行库与 libatomic。有库无法解析时构建失败。`bin/concord` 只依赖 glibc，不交给 `autoPatchelfHook`，只把解释器设为 nixpkgs glibc 的动态加载器，不加 RPATH；添加 RPATH 会破坏 Bun 可执行文件。修补只改 ELF 的解释器与运行库路径，不改应用逻辑与依赖；修补后必须实跑编译程序以验证内嵌载荷仍可加载。
 3. 修补后只更新安装收据 `artifact.json` 的 `binarySha256` 为修补后字节的 SHA-256；`format`、`target` 与 `upstreamManifestSha256` 保持原值，官方 `manifest.json` 原样保留作为来源证据。修补后的安装目录与这个收据构成 Nix 渠道的安装身份。
 
-运行时的摘要检查不放宽：Nix 安装的动态库与其它渠道一样，必须与所在安装的收据一致。tap 的 Nix 检查经过 HawDB 身份校验与一次缓存写入后读取，不只运行 `--help`。
+运行时的摘要检查不放宽：Nix 安装的动态库与其它渠道一样，必须与所在安装的收据一致。
 
 ### 安装脚本
 
@@ -92,7 +92,7 @@ Nix 只支持 `x86_64-linux`。原始发版身份与渠道安装身份分开：
 
 ### tap 同步
 
-同步入口用受版本管理的 Formula/Nix 模板生成候选，模板与当前发行 recipe 分开。生成前核验标签、资产 SHA-256 与归档内的版本。完整安装与运行由依赖候选的 Homebrew 与 Nix CI job 验证；最终更新 job 同时依赖两者成功，元数据核验不能替代安装成功。
+同步入口用受版本管理的 Formula/Nix 模板生成 recipe，模板与当前发行 recipe 分开。生成前核验标签、资产 SHA-256、归档内的版本与源码提交。生成成功后直接更新渠道；tap 不运行 Homebrew、Nix 安装测试或单独的渠道验证工作流。
 
 渠道准备不改写当前可安装版本。新资产存在后同步候选，沿用 base SHA 与已有标签比较，原子更新 recipe 与 recipe 标签。失败保留当前 recipe 和不可变资产，不覆盖既有发版。
 
@@ -118,11 +118,11 @@ CI 按[检查入口](../../engineering/testing/README.md#检查入口)分片运�
 
 ### 复用
 
-重试任务可以复用成功的不可变产物；commit、版本或资产摘要变化时不能复用。已有源码资产仅在摘要相同时复用，不覆盖不同字节。tap 版本与摘要一致时不下载归档、不运行平台任务；中断的渠道完成记录可由后续发现修复。
+重试任务可以复用成功的不可变产物；commit、版本或资产摘要变化时不能复用。已有源码资产仅在摘要相同时复用，不覆盖不同字节。tap 版本与摘要一致时不下载归档；中断的渠道完成记录可由后续发现修复。
 
 原生库按固定发行版本缓存；命中后仍校验字节与身份，不编译。HawDB 的编译与发布只由官方项目拥有。
 
-失败任务最多自动重试一次，复用同一运行中已成功的任务与产物。后续定时发现可以重新尝试未完成的元数据同步；安装失败保留当前 recipe。
+失败任务最多自动重试一次，复用同一运行中已成功的任务与产物。后续定时发现可以重新尝试未完成的元数据同步；同步失败保留当前 recipe。
 
 ### 清理
 

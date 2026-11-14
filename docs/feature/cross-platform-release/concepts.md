@@ -18,7 +18,7 @@ Concord 发版支持的操作系统与架构组合，例如 `linux-x64` 与 `dar
 
 ## 渠道完成记录 {#channel-record}
 
-tap 在 Formula 与 Nix 候选通过安装运行检查后创建的同版本 Release，表示该版本的渠道同步完成。
+tap 在 Formula 与 Nix recipe 完成同步后创建的同版本 Release，表示该版本的渠道同步完成。
 
 旧写法：`渠道回执`、`完成回执`
 

@@ -10,7 +10,7 @@ Concord 以自带运行时的 CLI 发版：每个目标平台一个归档，里�
 
 Concord 仓库拥有源码、版本与源码标签。标签工作流为每个目标平台构建一个不可变候选归档，核验版本与摘要，再在每个目标的真实系统上解压同一份候选归档并运行；这些验证与同一标签 commit 的完整检查都通过后才创建 GitHub Release。Concord 只以 CLI 交付；配置、adapter 协议与 PR 预览产物的 JSON Schema 由同一版本的 `concord schema` 输出，见[机器可读 Schema](../local-sdlc/cli.md#机器可读-schema)。
 
-公开的 Homebrew tap 发现该发版，核验身份，用同一归档生成 Formula 与仅限 Linux 的 Nix 候选，安装运行检查通过后记录自己的 recipe 标签。两个标签共享版本号，指向不同的 commit。
+公开的 Homebrew tap 发现该发版，核验身份，用同一归档生成 Formula 与仅限 Linux 的 Nix recipe，提交后记录自己的 recipe 标签。两个标签共享版本号，指向不同的 commit。
 
 ## 上手示例
 
