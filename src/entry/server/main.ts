@@ -496,7 +496,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       shutdown: request => authorizeScope(request.scope).pipe(Effect.andThen(request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : Effect.forkIn(Effect.sleep('10 millis').pipe(Effect.andThen(service.stop)), serverScope).pipe(Effect.asVoid))),
       subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(workspaceEvents(event).pipe(Stream.takeUntil(value => value.state === 'stopping')), output.json)))),
       workspace: request => result(request, readProjection),
-      refresh: request => result(request, service.request.pipe(Effect.as({ status: 'requested' }))),
+      refresh: request => result(request, service.request.pipe(Effect.as({ status: 'requested' })), true),
       query: request => result(request, Effect.gen(function*() {
         if (Buffer.byteLength(JSON.stringify(request.environment)) > 256 * 1024) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Query environment exceeds 256 KiB'));
         const input = yield* Schema.decodeUnknownEffect(importedQueryRequest, { onExcessProperty: 'error' })({ name: request.name, input: request.input });
@@ -506,7 +506,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       read: request => Stream.unwrap(authorize(request).pipe(Effect.andThen(service.execute({ kind: 'read-bytes', path: request.path })), Effect.map(value => output.bytes(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT)), Effect.mapError(asServerError))),
       'git-status': request => result(request, service.execute({ kind: 'git-status' })),
       'git-diff': request => result(request, service.execute({ kind: 'git-diff', path: request.path, area: request.area })),
-      http: (request, options) => result(request, commandScope ? Effect.fail(new ConcordError('WorkspaceServerScoped', 'Command services cannot open HTTP listeners')) : request.action === 'open' ? hosted.open(request.host, request.port, subscribers.has(options.client.id), options.client.id) : request.lease ? hosted.close(request.lease) : Effect.fail(new ConcordError('InvalidInput', 'HTTP close requires a lease'))),
+      http: (request, options) => result(request, commandScope ? Effect.fail(new ConcordError('WorkspaceServerScoped', 'Command services cannot open HTTP listeners')) : request.action === 'open' ? hosted.open(request.host, request.port, subscribers.has(options.client.id), options.client.id) : request.lease ? hosted.close(request.lease) : Effect.fail(new ConcordError('InvalidInput', 'HTTP close requires a lease')), true),
       'cache-clear': request => result(request, service.clear, true),
       'cache-status': request => result(request, service.maintain(cache.status).pipe(Effect.map(status => ({ ...status, owner: 'service', pid: process.pid, installation }))), true),
       'cache-rebuild': request => result(request, rebuildOwnedCache),

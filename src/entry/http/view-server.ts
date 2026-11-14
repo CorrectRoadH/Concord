@@ -117,6 +117,7 @@ const success = (response: ServerResponse, value: unknown, status = 200): void =
 function statusFor(error: ConcordError, workspace: boolean): number {
   if (error.code === 'WorkspaceProjectionPending') return 202;
   if (error.code === 'WorkspaceProjectionUnavailable') return 503;
+  if (error.code.startsWith('Hawdb') || error.code.startsWith('WorkspaceCompute')) return 503;
   if (workspace && error.code === 'RecoveryRequired') return 503;
   if (error.code === 'ForbiddenAuthority') return 403;
   if (error.code === 'BodyTooLarge') return 413;

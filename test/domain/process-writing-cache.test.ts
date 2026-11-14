@@ -50,7 +50,7 @@ test('writing cache validates current sources, members, policies and payload int
     record.findings = [];
     database.put('query_cache', [{ key: row.key, payload: JSON.stringify(record) }]);
   } finally { database.close(); }
-  assert.deepEqual((await scan()), cold, 'a valid-shaped but altered payload must be reparsed');
+  await assert.rejects(scan(), { code: 'InvalidData' });
   writeFileSync(join(root, 'docs/corpus.md'), 'One.\n');
   assert.ok(!(await scan()).findings.some(f => f.file === 'docs/corpus.md'));
   writeFileSync(join(root, 'docs/new.md'), 'A newly added paragraph.\n');

@@ -41,7 +41,7 @@ export class WorkspaceState extends Context.Service<WorkspaceState, {
         transition: (state, error) => SubscriptionRef.update(value, prior => transitions[prior.state].includes(state) ? { ...prior, state, error } : prior),
         accept: workspace => SubscriptionRef.update(value, prior => ({ ...prior, sourceDigest: workspace.projection.sourceDigest, lastAttempt: workspace.projection.lastAttempt, workspace })),
         attempt: lastAttempt => SubscriptionRef.update(value, prior => ({ ...prior, lastAttempt })),
-        reset: SubscriptionRef.update(value, prior => ({ ...prior, workspace: undefined, sourceDigest: null, lastAttempt: undefined, error: undefined })),
+        reset: SubscriptionRef.update(value, prior => ({ ...prior, workspace: undefined, sourceDigest: null, lastAttempt: undefined })),
         touch: Clock.currentTimeMillis.pipe(Effect.tap(now => Effect.sync(() => { lastRequest = now; })), Effect.asVoid),
         expired: Clock.currentTimeMillis.pipe(Effect.map(now => now - lastRequest >= 600_000)),
       };

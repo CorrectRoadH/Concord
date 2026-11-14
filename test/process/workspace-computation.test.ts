@@ -154,7 +154,7 @@ test('a named read failure keeps the computation process available for the next 
 });
 
 // @feature docs/feature/local-data-engine/architecture.md#刷新与推送
-test('a crashed background worker retains the accepted projection and the next refresh starts a new worker', { skip: process.platform === 'win32', timeout: 30_000 }, async () => {
+test('a crashed background worker reports failure and the next refresh starts a new worker', { skip: process.platform === 'win32', timeout: 30_000 }, async () => {
   const root = fixture();
   try {
     const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
@@ -167,19 +167,16 @@ test('a crashed background worker retains the accepted projection and the next r
       assert.notEqual(background, foreground);
       process.kill(background, 'SIGKILL');
       yield* rpc.requestWorkspace(connection, 'refresh', {});
-      const failed = yield* Effect.promise(() => pollUntil(async () => {
-        const value = await projection(rpc, connection);
-        return value.projection.lastError ? value : undefined;
-      }, { description: 'background transport failure is recorded without replacing accepted sources', timeoutMs: 10_000 }));
+      yield* Effect.promise(() => pollUntil(async () => {
+        try { await Effect.runPromise(rpc.requestWorkspace(connection, 'workspace', {})); return undefined; }
+        catch (cause) { return (cause as { code?: string }).code === 'WorkspaceComputeExited' ? true : undefined; }
+      }, { description: 'background transport failure is reported instead of stale success', timeoutMs: 10_000 }));
       const status = yield* Effect.promise(() => command(root, ['server', 'status']));
       assert.equal(status.status, 0, status.stderr);
       const reported = Schema.decodeUnknownSync(Schema.Struct({ state: Schema.Literals(['running', 'degraded']), error: Schema.Struct({ code: Schema.String, message: Schema.String }) }))(JSON.parse(status.stdout));
       assert.equal(reported.error.code, 'WorkspaceComputeExited');
       assert.ok(reported.error.message.length > 0);
-      assert.deepEqual(failed.snapshot, first.snapshot);
-      assert.equal(failed.projection.builtAt, first.projection.builtAt);
-      const nextRead = yield* rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, cwd: root, environment, cache: 'use' });
-      assert.equal(Schema.decodeUnknownSync(Schema.Struct({ exitCode: Schema.Int }))(nextRead).exitCode, 0);
+      yield* Effect.promise(() => assert.rejects(Effect.runPromise(rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, cwd: root, environment, cache: 'use' })), { code: 'WorkspaceComputeExited' }));
       assert.equal(yield* Effect.promise(() => workerPid(root)), foreground);
       yield* rpc.requestWorkspace(connection, 'refresh', {});
       yield* Effect.promise(() => pollUntil(async () => {

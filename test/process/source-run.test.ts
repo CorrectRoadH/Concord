@@ -33,6 +33,8 @@ function installation() {
   const native = join(cache, 'concord/native', basename(nativeArtifactRoot(runtime)));
   cpSync(nativeArtifactRoot(runtime), native, { recursive: true });
   symlinkSync(join(checkout, 'node_modules'), join(tool, 'node_modules'), 'dir');
+  execFileSync('git', ['init', '-q', tool]);
+  execFileSync('git', ['-C', tool, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'Source fixture']);
   execFileSync('git', ['init', '-q', consumer]);
   const call = (...args: string[]) => spawnSync(process.execPath,
     [join(tool, 'src/entry/cli/entry.ts'), '--root', consumer, ...args],

@@ -62,6 +62,12 @@ jobs:
       - run: bun run typecheck:scripts
       - run: bun run typecheck:web
       - run: bun run lint
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: test-native
+          path: ${{ runner.temp }}/test-native
+      - name: Validate and install official native artifact
+        run: bun scripts/prepare-native.ts --prebuilt "$RUNNER_TEMP/test-native"
       - run: bun run concord --json --dry-run check
 
   test:

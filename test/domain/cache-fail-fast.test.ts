@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { mock } from 'node:test';
@@ -192,4 +192,25 @@ test('repository and operation caches propagate real contention while cache-off 
     assert.deepEqual(held.get('config_cache', ['new']), []);
     assert.equal(held.get('config_cache', ['retained'])[0]?.payload, 'retained');
   } finally { held.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#rebuild
+test('a cold persistent cache is absent on read and created by the first derived write', async () => {
+  const root = await createConsumer();
+  const path = join(root, '.git/concord/cache.hawdb');
+  const live = Layer.merge(Workspace.layer, PersistentCache.layer.pipe(Layer.provideMerge(Cache.layer))).pipe(Layer.provide(NodeServices.layer));
+  try {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const repo = yield* (yield* Workspace).openRead(root, { access: 'read' });
+      const cache = PersistentCache.repository(repo);
+      assert.deepEqual(cache.get('query_cache', ['cold']), []);
+      assert.equal(existsSync(path), false);
+      cache.put('query_cache', [{ key: 'cold', payload: 'derived' }]);
+      assert.equal(existsSync(path), true);
+      assert.deepEqual(cache.get('query_cache', ['cold']), [{ key: 'cold', payload: 'derived' }]);
+    })).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, runtime)));
+    const reopened = openHawdb(path, { readOnly: true, create: false }, runtime);
+    try { assert.equal(reopened.get('query_cache', ['cold'])[0]?.payload, 'derived'); }
+    finally { reopened.close(); }
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

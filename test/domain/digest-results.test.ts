@@ -10,6 +10,7 @@ import { makeWorkspaceService } from '../../src/entry/server/service.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 import { fixture } from '../support/workspace-projection-fixture.ts';
 import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.ts';
+import { ConcordError } from '../../src/model/index.ts';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('workspace source identity survives ABA between refreshes and includes supporting sources', async () => {
@@ -89,7 +90,7 @@ test('an observed ABA drift has no result identity, preserves building, and retr
   const drifting = { ...withoutIdentity, changedPaths: ['src/a.ts'] };
   let scans = 0, published = false;
   const service = yield* makeWorkspaceService(ports({
-    restore: () => published ? Effect.succeed(projection) : Effect.fail(new Error('No accepted result')),
+    restore: () => published ? Effect.succeed(projection) : Effect.fail(new ConcordError('WorkspaceProjectionPending', 'No accepted result')),
     compute: () => Effect.sync(() => ++scans === 1 ? drifting : record),
     persist: (_context, candidate) => Effect.sync(() => { if (candidate) published = true; }),
   }));
@@ -122,3 +123,19 @@ test('a changed configuration identity hides the previous accepted workspace bef
   assert.equal(changed.workspace, undefined);
   yield* service.stop;
 })).pipe(Effect.provide(stateLayer))));
+
+// @feature docs/feature/local-data-engine/architecture.md#failure-propagation
+test('resetting a projection identity preserves the failure until successful recovery', () => Effect.runPromise(Effect.gen(function*() {
+  const state = yield* WorkspaceState;
+  const error = { code: 'WorkspaceComputeExited', message: 'Worker exited' };
+  yield* state.accept(projection);
+  yield* state.transition('degraded', error);
+  yield* state.reset;
+  const failed = yield* SubscriptionRef.get(state.value);
+  assert.equal(failed.workspace, undefined);
+  assert.equal(failed.state, 'degraded');
+  assert.deepEqual(failed.error, error);
+  yield* state.accept(projection);
+  yield* state.transition('running');
+  assert.equal((yield* SubscriptionRef.get(state.value)).error, undefined);
+}).pipe(Effect.provide(stateLayer))));

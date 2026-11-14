@@ -126,7 +126,7 @@ test('a new installation automatically replaces a service with a failed computat
     process.kill(pid, 'SIGKILL');
     const query = await command(root, ['check'], entry);
     assert.equal(query.status, 1, query.stdout + query.stderr);
-    assert.equal(JSON.parse(query.stderr).error, 'WorkspaceComputeExited');
+    assert.equal(JSON.parse(query.stderr).error, 'WorkspaceComputeExited', query.stderr);
     assert.equal(record(root).token, before.token);
     const retry = await command(root, ['check']);
     assert.equal(retry.status, 0, retry.stderr);

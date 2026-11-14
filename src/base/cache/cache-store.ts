@@ -62,9 +62,9 @@ export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase, ru
   const missing = () => new HawdbFailure('HawdbUnavailable', 'Persistent cache is absent; start the workspace service or run cache rebuild');
   const parseNamespace = (namespace: HawdbNativeTypes.HawdbNamespace) => ['document_parse', 'code_parse', 'git_baseline'].includes(namespace);
   const use = <A>(namespace: HawdbNativeTypes.HawdbNamespace, writable: boolean, operation: (database: HawdbDatabase | undefined) => A): A =>
-    withPersistentCache(repo, writable, database => operation(database ?? (parseNamespace(namespace) ? memory : undefined)), false, runtime);
+    withPersistentCache(repo, writable, database => operation(database ?? (parseNamespace(namespace) ? memory : undefined)), writable, runtime);
   return {
-    prepareWrite: options => withPersistentCache(repo, true, database => { if (!database) throw missing(); }, options?.create, runtime),
+    prepareWrite: options => withPersistentCache(repo, true, database => { if (!database) throw missing(); }, options?.create ?? true, runtime),
     get: (namespace, keys) => use(namespace, false, database => database?.get(namespace, keys) ?? []),
     scan: namespace => use(namespace, false, database => database?.scan(namespace) ?? []),
     put: (namespace, rows) => use(namespace, true, database => { if (!database) throw missing(); database.put(namespace, rows); }),

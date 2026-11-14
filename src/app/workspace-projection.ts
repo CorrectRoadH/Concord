@@ -34,9 +34,7 @@ export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext'
   const runtime = yield* RuntimeEnvironment;
   const installation = yield* Effect.try({ try: () => workspaceInstallationIdentity(runtime), catch: failure });
   return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config ?? 'absent', 'workspace', installation])) } satisfies WorkspaceProjectionContext;
-}, Effect.mapError(cause => cause.code.startsWith('Hawdb') ? cause : new ConcordError('WorkspaceProjectionUnavailable', 'Cannot identify the workspace cache; repair the configuration path or installation and restart View', {
-  reason: cause.code, message: cause.message,
-})));
+});
 
 
 /** Explicit construction, followed by strict decoding, keeps source bodies out of persistent storage. */

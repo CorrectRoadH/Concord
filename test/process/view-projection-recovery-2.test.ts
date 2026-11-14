@@ -51,8 +51,7 @@ test('a busy native cache is explicitly unavailable and recovers after its handl
       }, { description: 'native cache opening completes with its unavailable state' });
       assert.equal(response.status, 503);
       const body = await response.json() as { error: string; details: { reason: string }; value?: unknown };
-      assert.equal(body.error, 'WorkspaceProjectionUnavailable');
-      assert.equal(body.details.reason, 'HawdbBusy');
+      assert.equal(body.error, 'HawdbBusy');
       assert.equal(body.value, undefined);
     } finally { database.close(); }
     const recovered = await pollUntil(async () => {
@@ -96,8 +95,7 @@ test('an installation missing native artifacts reports unavailable instead of pe
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stderr, /^\{/u, result.stdout + result.stderr);
     const failure = JSON.parse(result.stderr) as { error: string; details: { reason: string } };
-    assert.equal(failure.error, 'WorkspaceProjectionUnavailable', result.stderr);
-    assert.equal(failure.details.reason, 'HawdbUnavailable');
+    assert.equal(failure.error, 'HawdbUnavailable', result.stderr);
   } finally { rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });
 

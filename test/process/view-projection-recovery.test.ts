@@ -81,26 +81,22 @@ test('an interrupted publication blocks the first workspace generation with a na
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('an interrupted publication retains a prior generation with blocked status', async () => {
+test('an interrupted publication reports failure instead of serving a prior generation', async () => {
   const root = (await fixture());
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
-    const previous = await waitForWorkspaceProjection(base);
+    await waitForWorkspaceProjection(base);
     (await interruptPublication(root));
     writeFileSync(join(root, 'src/main.ts'), 'export const unpublishableReplacement = 2;\n');
     const response = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
     assert.equal(response.status, 202);
     const blocked = await pollUntil(async () => {
-      const value = await waitForWorkspaceProjection(base);
-      return value.projection.status === 'blocked' ? value : undefined;
-    }, { description: 'blocked existing generation' });
-    assert.equal(blocked.projection.lastError?.code, 'RecoveryRequired');
-    assert.deepEqual(blocked.snapshot.documents, previous.snapshot.documents);
-    assert.deepEqual(blocked.snapshot.pages, previous.snapshot.pages);
-    assert.deepEqual(blocked.snapshot.sources, previous.snapshot.sources, 'the blocked refresh cannot replace the accepted source generation');
-    const retained = await waitForWorkspaceProjection(base);
-    assert.equal(retained.projection.builtAt, blocked.projection.builtAt);
-    assert.deepEqual(retained.snapshot, blocked.snapshot);
+      const response = await fetchFresh(`${base}/api/workspace`);
+      const body = await response.text();
+      return response.status === 503 && body.includes('RecoveryRequired') ? body : undefined;
+    }, { description: 'failed refresh reports recovery error instead of serving stale success' });
+    assert.match(blocked, /RecoveryRequired/u);
+    assert.ok(!blocked.includes('unpublishableReplacement'));
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
