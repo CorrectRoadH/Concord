@@ -9,7 +9,7 @@ const descriptions: Record<WorkflowSkillTopic, string> = {
   spec: '把需求写成 Concord Spec，明确行为、边界和验收方式。',
   implement: '依据已有 Concord Spec 实现功能并验证代码、测试与契约一致。',
   review: '只读验收一组改动，按 Concord Spec 检查 diff、关系与实际行为。',
-  fix: '修复违反 Concord Spec 的缺陷，先提交失败回归，再修复并核验。',
+  fix: '修复违反 Concord Spec 的缺陷，用回归测试与修复核验确认结果。',
 };
 const render = (topic: WorkflowSkillTopic, version: string): string => `---\nname: concord-${topic}\ndescription: ${descriptions[topic]}\n---\n\n<!-- concord-managed version=${version} -->\n\n运行 \`concord --skill ${topic}\`，读取并执行其中的说明。项目的 \`AGENTS.md\` 指定了其它运行方式（例如 \`bun run concord\`）时按它运行。命令后的文字是本次任务。\n`;
 const occupied = (path: string): never => { throw new ConcordError('SkillPathOccupied', `Workflow skill path is occupied: ${path}`, { path }); };

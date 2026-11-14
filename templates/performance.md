@@ -2,8 +2,14 @@
 
 This page owns the performance budgets of this feature. The measurement method belongs to the project's performance engineering pages; README and Use Case pages link here instead of repeating numbers. Resource safety limits, such as output size caps, belong in the behavior or architecture page that enforces them.
 
-State the reference consumer, reference environment, and load assumptions needed to understand each threshold.
+State the reference consumer, reference environment, and load assumptions needed to understand each threshold. Use the project's language, units, tools, and measurement conventions.
 
 ## Budgets
 
-Add a `## 性能预算` heading with one table: the first column lists scenario IDs `<feature-id>/<name>` in inline code, the middle column says what is measured, and the last column is `<integer>ms`, judged by the warm p50. Use a `## 刷新上限` heading with the same columns for limits judged by the maximum sample. Every scenario ID must have a scenario in `bench/<feature-id>.bench.ts`.
+For each scenario, state the operation, measurement boundary, workload, and starting state. Specify the metric, unit, threshold, and conditions that invalidate a sample.
+
+Link the project's measurement method and executable benchmark or acceptance check. Distinguish latency, throughput, memory, and resource safety limits as needed. Explain why each statistic represents the requirement.
+
+## Measurement Method
+
+Link the Engineering page that owns setup, tools, invocation, sampling, cleanup, and evidence. If it is missing, write the method using this project's own stack. Label illustrative or unmeasured values; do not present a proposed budget as a measured result.

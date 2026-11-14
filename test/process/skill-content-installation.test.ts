@@ -22,6 +22,7 @@ test('private skill installation reports missing and empty installed content', (
     const outside = join(scratch, 'outside'); mkdirSync(outside);
     for (const [path, args] of [
       ['skills/concord/SKILL.md', ['--skill']],
+      ['docs/document-model.md', ['--skill', 'document']],
       ['docs/guides/spec-examples.md', ['--skill', 'document']],
     ] as const) {
       const installed = join(owner, path);
@@ -30,7 +31,7 @@ test('private skill installation reports missing and empty installed content', (
         rmSync(installed);
         const unreadable = spawnSync(process.execPath, [cli, ...args], { cwd: outside, encoding: 'utf8' });
         assert.equal(unreadable.status, 1);
-        assert.equal(unreadable.stdout, '', 'missing examples must not produce a partial guide');
+        assert.equal(unreadable.stdout, '', 'missing resources must not produce a partial guide');
         assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(unreadable.stderr).error, 'SkillContentUnreadable');
         writeFileSync(installed, '');
         const invalid = spawnSync(process.execPath, [cli, ...args], { cwd: outside, encoding: 'utf8' });

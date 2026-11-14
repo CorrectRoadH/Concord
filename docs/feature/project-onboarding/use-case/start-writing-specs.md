@@ -61,7 +61,7 @@
    | 从零写 | `concord --skill docs-from-scratch` |
    | 为已有代码补写 | `concord --skill docs-from-code`，完整路径见[为已有代码补写 Spec 并纳管存量测试](document-existing-code.md) |
 
-   `concord --skill document` 同时输出写作规则与 [Spec 写作示例](../../../guides/spec-examples.md)。示例正文由 docs 拥有，随安装包提供；agent 无需找到安装目录或访问 Concord 源仓库。示例是虚构产品的写法，不是接入项目的需求。
+   `concord --skill document` 同时输出[文档模型](../../../document-model.md)与 [Spec 写作示例](../../../guides/spec-examples.md)。规则与示例正文由 docs 拥有，随安装包提供；agent 无需找到安装目录或访问 Concord 源仓库。示例是虚构产品的写法，不是接入项目的需求。
 
    agent 先完成代表性 Feature 的 README 与一条 Use Case，按实际入口写操作和可观察结果，核对每步都服务同一个用户目标，再扩写其余范围。源码标记不作为正文完成的条件（[先有用户故事](../../../taste.md#t-14)）。交付前运行：
 
@@ -69,7 +69,7 @@
    concord check
    ```
 
-   逐个处理本次改动引入的 finding，报告其余问题；结构检查不代替正文审阅。
+   处理本次改动引入的 finding；既有问题阻塞本次任务时说明依赖，并在授权范围内处理，其余问题留在交付中。结构检查不代替正文审阅。
 
 ## 两份写作指南
 

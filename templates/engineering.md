@@ -1,6 +1,6 @@
 # {{title}}
 
-Engineering declares one capability maintainers need to develop this repository, such as build, testing, or performance measurement. It uses the same page kinds as a Feature; see `docs/document-model.md`. Keep execution logs and delivery progress in Concord Memory rather than this page.
+Engineering declares one capability maintainers need to develop this repository, such as build, testing, or performance measurement. Run `concord --skill document` for the page kinds and examples. Keep execution logs and delivery progress in the task handoff; Memory only holds reusable lessons.
 
 Define local terms in this directory's `concepts.md` and scoped writing policy in `writing.md`; `concord check` validates both.
 

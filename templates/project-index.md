@@ -21,8 +21,8 @@ concepts index or Web glossary for an automatically aggregated view with sources
 ## Writing rules
 
 Write adopted target behavior, constraints, and acceptance in Feature and
-Engineering. Product workflows belong in contracts; development logs,
-investigation history, and implementation progress belong in Concord Memory.
+Engineering. Product workflows belong in contracts. Memory holds reusable lessons;
+execution logs, investigation timelines and delivery progress stay in the task handoff.
 
 Every file under `docs/` and `memory/` can be edited directly; Concord commands
 run the steps a change needs, such as fix verification. `concord check` validates

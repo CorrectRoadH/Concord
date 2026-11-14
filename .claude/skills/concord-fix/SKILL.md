@@ -1,6 +1,6 @@
 ---
 name: concord-fix
-description: 修复违反 Concord Spec 的缺陷，先提交失败回归，再修复并核验。
+description: 修复违反 Concord Spec 的缺陷，用回归测试与修复核验确认结果。
 ---
 
 <!-- concord-managed version=dev -->

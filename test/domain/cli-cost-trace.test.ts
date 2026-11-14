@@ -21,7 +21,7 @@ test('editable packages connect supporting-page tests to their Feature', () => E
  writeProjectConfig(root, { testRoots: ['test', 'tests'] });
  async function query<A>(request: QueryRequest, schema: Schema.ConstraintDecoder<A, never>): Promise<A> {
    const result = await runApplication(executeQuery(root, request));
-   assert.equal(result.exitCode, 0);
+   assert.equal(result.exitCode, 0, JSON.stringify(result.value));
    return Schema.decodeUnknownSync(schema)(result.value);
  }
  async function action<A>(input: unknown, schema: Schema.ConstraintDecoder<A, never>, status = 0): Promise<A> {
@@ -36,10 +36,9 @@ test('editable packages connect supporting-page tests to their Feature', () => E
  function write(path: string, source: string) { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), source); }
 
  const guide = readFileSync(join(root, 'docs/concord.md'), 'utf8');
- assert.match(guide, /concord test list/);
- assert.match(guide, /a product direction in the same genre as Feature that has not been adopted yet\. Its design is incomplete, or it is designed but not scheduled/u);
- assert.match(guide, /Behavior pages \(Feature README, Use Case, cli, library\) state commands, real human and JSON output, exit codes, and named errors\./u);
- assert.match(guide, /The architecture page states how the Feature is implemented\. Run `concord --skill document` for the full rules\./u);
+ assert.match(guide, /concord --skill start/);
+ assert.match(guide, /concord --skill document/);
+ assert.match(guide, /concord --skill fix/);
  for (const path of ['docs/README.md', 'docs/_template/roadmap/use-case/README.md', 'docs/_template/design/README.md', 'docs/_template/engineering/README.md', 'docs/concepts.md', 'docs/architecture.md', 'docs/_template/memory/README.md']) assert.equal(existsSync(join(root, path)), true, path);
  assert.match(readFileSync(join(root, 'AGENTS.md'), 'utf8'), /BEGIN CONCORD AGENT INSTRUCTIONS[\s\S]*concord trace gaps --json/u);
  (await action({ action: 'document.create', kind: 'feature', id: 'accounts', title: 'Accounts', pages: ['library', 'cli', 'architecture', 'use-case'] }, Ack));

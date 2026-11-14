@@ -14,7 +14,7 @@ Write one numbered item per user action that shows how to meet the need. Use the
 
 When external tools participate, state their prerequisites, what data or entrypoint the product hands over, and how the user continues. Verify external commands and guarantees against authoritative documentation. Distinguish each party's responsibility and visible failures; do not turn an internal dependency choice into a user step.
 
-For interactive explanations, an optional `p5` fence can show the process. State the initial conditions, controls and expected observation in prose. Readers explicitly run sketches; animation does not replace acceptance evidence. Keep Mermaid for static flows and read `concord --skill view` for p5 authoring and project library configuration.
+For interactive explanations, an optional `p5` fence can show the process. State the initial conditions and expected observation in prose. Sketches load and play automatically; describe controls only for an interactive experiment. Animation does not replace acceptance evidence. Keep Mermaid for static flows and read `concord --skill view` for p5 authoring and project library configuration.
 
 ## Result
 

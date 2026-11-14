@@ -56,7 +56,7 @@
 | `concord-spec` | `concord --skill spec` | 读现有 Spec 与品味，写明行为、边界与验收方式；有待决的取舍时写 Design 并请维护者决定 |
 | `concord-implement` | `concord --skill implement` | 照着 Spec 实现并关联测试，执行验收；Spec 缺失或与事实冲突时暂停依赖部分，带着证据回到 Spec |
 | `concord-review` | `concord --skill review` | 只读对照 diff、关系与实际行为，区分 Spec 冲突、验证失效和产品缺陷，说明证明范围 |
-| `concord-fix` | `concord --skill fix` | 确认缺陷违反了哪条 Spec，提交失败的回归测试，再提交修复，用 `issue close --fixed` 核验 |
+| `concord-fix` | `concord --skill fix` | 确认被违反的 Spec，按[回归核验](../../local-sdlc/use-case/verify-fix-in-one-commit.md)选择暂存区或提交核验；已有 Issue 时核验后关闭 |
 
 4. Concord 升级后更新 skill 文件。 {#update}
 
@@ -81,6 +81,8 @@
    比较内容时忽略托管标记中的版本：版本较旧但正文与当前版本将写入的相同，不提示；两处副本也按忽略版本后的内容比较。`skills install` 仍把这类文件改写为当前版本的托管标记，列在 `Updated` 下。检查只读，不替你写文件。托管标记记下生成它的 Concord 版本，例如 `<!-- concord-managed version=0.9.0 -->`；同一项目里有人用的 Concord 版本较旧时，他不会因为别人已经更新过文件而看到提示。
 
 ## 验收职责
+
+指南沿用当前任务的范围与授权。`check` 的 finding 按本次引入、必要依赖和其它既有问题处理，不自动把单个功能的任务扩展成整仓治理。完整开发任务中需要修订 Spec 时，先返回写 Spec 阶段，再继续实现；分工任务交给相应负责人，只有未获授权的关键取舍才需要用户决定。
 
 写 Spec 时，关键保证写明前置条件、触发动作、观察入口、预期结果与失败判据；涉及持久化、消息或资源释放时，验收同时观察副作用。简单行为沿用步骤与结果表，不另填重复清单（[写到实现者不用再问](../../../taste.md#t-11)）。
 

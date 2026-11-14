@@ -54,10 +54,10 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 Feature 的页面按读者的问题分工（[读得懂胜过写得全](taste.md#t-1)）。
 
 1. 行为页（类别为行为的页面，见[页面种类](#页面种类)）用使用者的语言声明输入、可观察结果、错误与约束。公开的输入输出结构、协议、机器可读字段、具名错误码、退出码，以及使用者可观察的持久化与恢复保证，属于行为页。行为页不写内部模块、内部数据结构、调用链和引擎选型。
-2. 规范性陈述应能被测试断言。命令页给出完整调用、机器可读输出、退出码、具名错误与最小示例；library 页给出签名、返回值与失败，api 页给出协议的请求、响应与错误。人读输出示例用于理解，可以规范化动态值，不保证逐字稳定（[机器可读输出](feature/local-sdlc/cli.md#机器可读输出)）。实现之前的示例标为预期输出；交付验收核对实际运行，运行记录进入 Memory，示例不作为运行证据。同一输出或错误定义只在一个行为页维护，其它页面链接引用。
+2. 规范性陈述应能被测试断言。命令页给出完整调用、机器可读输出、退出码、具名错误与最小示例；library 页给出签名、返回值与失败，api 页给出协议的请求、响应与错误。人读输出示例用于理解，可以规范化动态值，不保证逐字稳定（[机器可读输出](feature/local-sdlc/cli.md#机器可读输出)）。实现之前的示例标为预期输出；交付验收核对实际运行，运行记录留在交付证据中，示例不作为运行证据。同一输出或错误定义只在一个行为页维护，其它页面链接引用。
 3. architecture 与 data-model 页声明该 Feature 的内部实现：实体归属、数据流、不变量、失败阶段与资源生命周期。它们随实现修改，不重新定义行为。跨 Feature 的系统边界写在项目 `docs/architecture.md`。只改内部实现的修改不改行为页。
 4. Roadmap 与 Feature 同体裁，表示尚未采用的方向，其示例均为预期输出。实现与测试不指向 Roadmap。
-5. 页面种类见[页面种类](#页面种类)。README 与 cli、library 等行为页像使用教程一样写谁用它、能做什么、怎么做；architecture 与 data-model 页是技术实现；Use Case 把功能连到用户旅程。README 给出用户价值、一个照着就能运行的上手示例和 Use Case 导航；输出字段、具名错误与退出码写在 cli 或 library 页，README 只链接它们。
+5. 页面种类见[页面种类](#页面种类)。README 与 cli、library 等行为页像使用教程一样写谁用它、能做什么、怎么做；architecture 与 data-model 页是技术实现；Use Case 把功能连到用户旅程。README 给出用户价值、沿主要使用者实际入口的上手示例和 Use Case 导航；界面操作、命令或调用按产品需要选择。字段、错误与状态由对应细节页拥有，README 只链接它们。
 6. 每个 Use Case 写一种满足用户需求的用法：从什么条件开始，用户怎样操作，最后怎样确认需求得到满足。动作可以是界面操作、命令、调用或与外部工具配合；按实际入口写清看到的结果。用户目标或处理路径明显不同时另写一篇，同一路径的输入变化与错误结果用表格说明（[读得懂胜过写得全](taste.md#t-1)）。
 7. 文字难以说清的过程配图解。多方协作、状态迁移、时序和数据流程用 p5 动画演示，静态结构用 Mermaid。图解只演示页面已声明的规则，不新增规则，也不作为运行证据。
 
@@ -84,7 +84,7 @@ Feature、Engineering 与 Roadmap 的目录是同一种[文档包](concepts.md#p
 ### 路径与识别
 
 1. 文档包的入口是 `README.md`，必需，不拆分。其余页面按需要创建。
-2. `use-case/` 是 Use Case 的集合：`use-case/<u>.md` 是一个用户旅程，`use-case/README.md` 是可选的导航页，不是旅程。Use Case 不嵌套，也不跨多个文件。
+2. `use-case/` 是 Use Case 的集合：`use-case/<u>.md` 是一个用户旅程，`use-case/README.md` 是可选的导航页，不是旅程。Use Case 归属所在的 Feature、Engineering 或 Roadmap 文档包，不嵌套，也不跨多个文件。
 3. 除 `README.md`、`use-case/`、`performance.md`、`concepts.md` 与 `writing.md` 外，一种页面写不下时，把 `<种类>.md` 换成 `<种类>/` 目录：入口是 `<种类>/README.md`，其余页面自由命名，种类都与目录相同。同一种类的单页与目录不能并存。种类目录不产生新的 Feature 或 Engineering，其中的页面与锚点仍以精确路径引用。
 4. 识别顺序：文档包入口，`use-case/` 下的页面，各层的 `concepts.md` 与 `writing.md`，种类单页与种类目录。文档包内仍无法归类的 Markdown 页面由 `concord check` 报告 `UnknownPageKind`；它是 `relation` 类 finding，使检查失败，页面照常被发现、阅读与编辑。拼写接近某个种类时，finding 给出该种类，否则列出全部种类。
 5. 分类目录的 README、文档包外的 `docs/` 普通文档（例如 `docs/guides/<g>.md`）、`docs/_template/` 与非 Markdown 文件不受种类限制。项目的说明性文档放在包外，用链接连到 Spec。
@@ -93,14 +93,14 @@ Feature、Engineering 与 Roadmap 的目录是同一种[文档包](concepts.md#p
 
 - 同一个领域结构或错误被多个入口使用时，只在一个行为页定义，其它页面只写自己入口的映射，例如 HTTP 状态码。
 - 公开文件约定在 `format.md`，内部存储在 `data-model.md`；能被打开阅读不等于公开格式。存储结构简单时可以只写在 `architecture.md`，拆出后只链接。
-- 性能预算只在 Feature 的 `performance.md`，Use Case 与 README 只链接。测量方法归[性能测量](engineering/performance/README.md)这个 Engineering 文档包；测试时限、输出上限这类资源上限写在所属的行为页或实现页，不是预算。
+- 性能预算在所属文档包的 `performance.md`，Use Case 与 README 只链接。测量方法归项目自己的 Engineering 页；语言、工具、文件路径与统计口径按项目选择，通用模板不指定它们。Concord 自身的约定见[性能测量](engineering/performance/README.md)；测试时限、输出上限这类资源上限写在所属的行为页或实现页，不是预算。
 
 ## 只写当前声明
 
 声明式页面只写现在（[写现在，不写过去](taste.md#t-4)）。
 
 1. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。
-2. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交记录和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。
+2. 实施日志、进度、测试运行记录、审阅经过、提交记录和 agent 交接留在任务交付中。调查提炼出的根因与可复用经验归 Memory，还要处理的问题归 Issue，正式采用的目标归 Spec。
 3. 声明式 owner（Feature、Use Case、Engineering、品味、`concepts.md` 与写作规则）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git 保存。
 
 ## 术语与语言

@@ -25,8 +25,10 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   const outside = join(scratch, 'outside');
   mkdirSync(outside);
   const examplePath = 'docs/guides/spec-examples.md';
+  const modelPath = 'docs/document-model.md';
   mkdirSync(join(outside, 'docs/guides'), { recursive: true });
   writeFileSync(join(outside, examplePath), '# Consumer content must not replace packaged examples\n');
+  writeFileSync(join(outside, modelPath), '# Consumer model must not replace the installed model\n');
   const help = await runCli({ argv: ['--help'], cwd: outside, env: process.env });
   assert.equal(help.exitCode, 0, help.stderr);
   assert.match(help.stdout, /concord --skill \[topic\]/);
@@ -55,14 +57,17 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
     assert.equal(reply.exitCode, 0, reply.stderr);
     const source = readFileSync(join(sourceRoot, `skills/concord/references/${guide}.md`), 'utf8');
     const expected = guide === 'document'
-      ? `${source.trimEnd()}\n\n---\n\n${readFileSync(join(sourceRoot, examplePath), 'utf8').trimEnd()}`
+      ? [source, readFileSync(join(sourceRoot, modelPath), 'utf8'), readFileSync(join(sourceRoot, examplePath), 'utf8')].map(section => section.trimEnd()).join('\n\n---\n\n')
       : source.trimEnd();
     assert.equal(reply.stdout.trimEnd(), expected);
     assert.ok(all.stdout.includes(expected));
   }
   const examples = readFileSync(join(sourceRoot, examplePath), 'utf8').trimEnd();
   assert.equal(all.stdout.split(examples).length, 2, 'all includes the docs examples exactly once');
+  const model = readFileSync(join(sourceRoot, modelPath), 'utf8').trimEnd();
+  assert.equal(all.stdout.split(model).length, 2, 'all includes the document model exactly once');
   assert.equal(readFileSync(join(outside, examplePath), 'utf8'), '# Consumer content must not replace packaged examples\n');
+  assert.equal(readFileSync(join(outside, modelPath), 'utf8'), '# Consumer model must not replace the installed model\n');
   assert.equal(existsSync(join(outside, 'concord.config.ts')), false);
 })));
 

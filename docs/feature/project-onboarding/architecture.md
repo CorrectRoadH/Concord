@@ -30,7 +30,11 @@ init 的配置路径与发现范围取自最终计划配置快照；新建目录
 
 ## 写作指南与示例
 
-写作流程由 skill 主题承载，目录树与成稿示例的唯一正文位于 `docs/guides/spec-examples.md`。归档资源同时包含 docs 与 skills；`--skill document` 依次读取该主题和示例，用与其它主题相同的内容校验和具名错误返回正文。`--skill all` 在 document 主题处包含示例一次。
+写作流程由 skill 主题承载，文档分类与页面职责由 `docs/document-model.md` 拥有，目录树与成稿示例位于 `docs/guides/spec-examples.md`。归档资源同时包含 docs 与 skills；`--skill document` 依次读取主题、文档模型和示例，用相同的内容校验和具名错误返回正文。`--skill all` 在 document 主题处包含这两份资料各一次。
 
 读取使用安装资源路径，不以接入项目 cwd 查找示例，也不把示例复制成该项目的 Spec。Herdr 的初始化请求只提供项目位置、写作目标和 `start` 入口；目标路由与范围判断归指南，不在提示词中固定二选一流程。
+
+初始化生成的 `docs/concord.md` 只维护任务到当前 skill 的入口与本地文档导航，不保存配置 Schema、标记语法或修复核验步骤的副本。模板提供对应页面的写作提示，完整分类与写法通过 `--skill document` 取得，不假设接入项目存在 Concord 自身的文档模型文件（[一件事只写一次](../../taste.md#t-3)）。
+
+指南的结构与行为验收分别进行：资源测试核对完整输出、安装路径和失败边界；代表性任务的正文、范围与操作选择按[审阅 agent 指南](../../engineering/testing/use-case/review-agent-guidance.md)验收。检查通过或指南成功输出不证明 agent 能完成任务。
 

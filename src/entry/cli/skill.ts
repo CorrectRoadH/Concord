@@ -70,7 +70,7 @@ const skillPath = (topic: Topic | 'main'): string => resourcePath(
 
 const readTopic = Effect.fn('readSkillTopic')(function*(topic: Topic | 'main') {
   const fs = yield* FileSystem.FileSystem;
-  const paths = [skillPath(topic), ...(topic === 'document' ? [resourcePath('docs/guides/spec-examples.md')] : [])];
+  const paths = [skillPath(topic), ...(topic === 'document' ? [resourcePath('docs/document-model.md'), resourcePath('docs/guides/spec-examples.md')] : [])];
   const sections = yield* Effect.forEach(paths, path => fs.readFileString(path).pipe(
     Effect.mapError(() => new SkillContentUnreadable({ code: 'SkillContentUnreadable', message: `Cannot read packaged skill resource: ${path}` })),
     Effect.flatMap(content => decodeContent(content).pipe(

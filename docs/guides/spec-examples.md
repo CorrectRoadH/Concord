@@ -215,6 +215,58 @@ Use Case 的步骤写用户动作与观察结果。请求头、SQL、组件回�
 
 命令页定义全部参数与错误，文件格式页定义 CSV 字段；Use Case 展示如何组合工具达到目标。已有命令的输出应来自隔离环境的实际运行，未验证的例子保留预期标注。
 
+## 性能：沿用接入项目的技术栈与指标
+
+下面是另一个虚构项目：已有 Go 搜索服务和 Go benchmark，只补性能声明。目录可以这样安排；这些路径、命令和预算是写法示例，不是对接入项目的要求。
+
+```text
+docs/
+├── feature/search/
+│   ├── README.md
+│   └── performance.md
+└── engineering/measurement/
+    └── README.md
+internal/search/search_test.go
+```
+
+`docs/feature/search/performance.md`：
+
+```markdown
+# 搜索性能
+
+以下是目标预算，尚未测量。测量方法由[搜索基准](../../engineering/measurement/README.md)拥有。
+
+## 条件与预算
+
+参考环境为 Linux amd64、专用 2 核 CPU、4 GiB 内存，使用项目锁定的 Go 版本。索引在计时前加载完毕，包含固定的 10 万条记录；查询集、结果数量与排序方式固定。
+
+| 操作 | 测量边界 | 指标与预算 |
+| --- | --- | --- |
+| 单次关键词查询 | 从调用搜索函数到取得前 20 个结果；不含 HTTP、索引加载与磁盘读取 | 每轮平均耗时不超过 200000 ns/op，平均分配不超过 4096 B/op |
+
+这个预算约束常驻索引的查询成本，不声明 HTTP 尾延迟。冷启动与网络请求需要各自的场景和观察入口，不能用本场景的结果证明。
+```
+
+`docs/engineering/measurement/README.md`：
+
+```markdown
+# 搜索基准
+
+维护者用项目已有的 Go benchmark 检查[搜索预算](../../feature/search/performance.md)。基准实现在 `internal/search/search_test.go` 的 `BenchmarkSearch`，不引入另一种语言或工具。
+
+## 运行与判断
+
+从项目根目录执行 `GOMAXPROCS=1 go test ./internal/search -run '^$' -bench '^BenchmarkSearch$' -benchmem -count=5`。这是预期用法，须以该项目实际实现核对。
+
+基准在计时前构造独立的临时索引，加载固定数据；计时循环只调用被测函数，结束后释放索引并删除临时文件。正常退出和失败退出都执行清理。
+
+检查五轮输出的 ns/op 与 B/op 是否各自满足预算，并保留环境、命令与原始输出。若数据集改变、初始化被计入或宿主同时运行其它重负载，结果不能与该预算比较。缺少某轮或基准未被匹配时不算通过。
+
+每轮的 ns/op 是该轮的平均成本，不是单次查询的 p95 或 p99；尾延迟必须用相应请求测量方法验证。
+```
+
+性能页拥有操作与预算，Engineering 拥有运行方法，测试文件拥有可执行定义。预算没有理由要求所有接入项目都采用 Concord 自身的工具、统计口径或目录。
+
 ## 品味与测试关联也要对应真实含义
 
 品味可以写“失败应让使用者看见并能恢复”，解释静默丢失阅读位置为什么不好。“冻结请求序号并取消旧请求”则是架构中的实现机制。

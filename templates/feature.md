@@ -2,7 +2,7 @@
 
 Before writing, read `docs/taste.md` and link each applicable entry ID next to the sentence that relies on it.
 
-This README answers what the feature does and how to start. Write it like a tutorial for the people who use it. Fields, error codes, interface states, and internal mechanisms belong in the other page kinds listed in `docs/document-model.md`; link to them instead of repeating them.
+This README answers what the feature does and how to start. Write it like a tutorial for the people who use it. Fields, error codes, interface states, and internal mechanisms belong in the detail pages described by `concord --skill document`; link to them instead of repeating them.
 
 ## Who It Is For
 

@@ -201,8 +201,8 @@ Before planning, implementing, or reviewing governed work:
 - Run \`concord --skill\` to read the task router from the installed Concord version.
 - Run \`concord --skill <topic>\` for the relevant workflow, where topics include \`init\`, \`document\`, \`code\`, \`test\`, \`memory\`, \`trace\`, \`recovery\`, \`view\`, \`feedback\`.
 - Use \`concord --skill all\` only when the complete offline guide is needed.
-- Before changing behavior, read or update the owning Feature, leaf Use Case, documented CLI page, and any required Design. Then run \`concord trace gaps --json\` to inspect missing explicit code/test relationships before implementation.
-- Write contracts as declarations of intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Memory; product workflows remain valid contract content.
+- Before changing behavior, read or update the owning Spec and the pages for its actual interface. Run \`concord --skill document\` for the document model, docs tree and complete examples. Review the prose before using \`concord trace gaps --json\` to inspect implementation relationships within the task's scope.
+- Write contracts as declarations of intended behavior, constraints, and acceptance. Memory holds reusable lessons; development logs, investigation timelines and delivery progress stay in the task handoff. Product workflows remain valid contract content.
 - Directly edit files under \`docs/\` and \`memory/\`, including relations. Use \`concord memory search\` and \`concord issue search\` for search. Commands run required steps such as fix verification; run \`concord check\` before delivery. Do not maintain a manual INDEX.
 - For remote Issue writes, run remote preview, obtain explicit user agreement to its authorization string (or its action, target, and payload), then remote apply with \`--authorize\`; never infer authorization from preview success, tool availability, or permissive access.
 - Local issues work without GitHub, Linear, credentials, or connections. Use \`concord new issue\` for local observations; local operations never authorize remote mutations.

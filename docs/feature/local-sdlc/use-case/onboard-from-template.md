@@ -94,6 +94,7 @@
 - 已有的 `docs/README.md`、`docs/concepts.md`、`docs/architecture.md` 与写作规则原样保留，不算冲突；不合法的 `docs/concepts.md` 由之后的检查报告。
 - `AGENTS.md` 只创建或刷新带托管标记的 Concord 区块，区块外的内容保留。
 - Concord 区块和 `docs/concord.md` 把 Agent 引到当前安装版本的 `concord --skill`。
+- `docs/concord.md` 提供按任务读取指南的入口与本地文档导航，流程细节从当前 skill 读取。更新 Concord 不重写项目已有说明；模板也不要求接入项目存在 `docs/document-model.md`。
 
 ## 页面选择
 

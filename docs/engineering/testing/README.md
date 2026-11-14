@@ -68,6 +68,7 @@
 | 为一个缺陷写回归测试，修复后关闭 Issue | [写回归测试](use-case/write-regression-test.md) |
 | 增加测试共用的仓库构造、等待或资源回收 | [扩展 Fixture](use-case/extend-fixtures.md) |
 | 处理超出耗时上限的测试文件 | [拆分慢测试](use-case/split-slow-test.md) |
+| 检查 skill、模板与初始化说明是否一致且适用 | [审阅 agent 指南](use-case/review-agent-guidance.md) |
 
 ## 分层
 
