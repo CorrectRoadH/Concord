@@ -161,7 +161,7 @@ function checkTerms(file: string, line: number, value: string, bans: readonly Ba
 
 // @concord-code
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
-export function checkWriting(repo: Repository, selectedPath?: string, persistentCache = repo instanceof LocalRepository): WritingReport {
+export function checkWriting(repo: Repository, selectedPath?: string, persistentCache = repo instanceof LocalRepository, paths: readonly string[] = []): WritingReport {
   return inRepositorySnapshot(repo, () => {
     const inputs = new Map<string, string>([['concord.config.ts', repo.configSnapshot.source]]);
     const memberships = new Map<string, string[]>();
@@ -184,10 +184,16 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
       if (!managed) throw new ConcordError('WritingPolicyNotFound', `Missing managed writing rules: ${selectedPath}`);
       mode = 'managed'; selection = [managed.scope];
     }
+    const projectRoots = selection;
+    if (paths.length) selection = paths.map(path => canonicalPath(path));
     const selectedRoots = [...new Set(selection)].sort();
+    const selected = (path: string): boolean => selectedRoots.some(root => under(path, root));
     const files = new Set<string>();
     for (const root of selectedRoots) {
-      const members = (root === 'docs' ? docsMembers : repo.files(root)).filter(path => /\.(?:md|mdx|svg)$/iu.test(path)).sort();
+      const available = root === 'docs' ? docsMembers : repo.files(root);
+      if (paths.length && available.length === 0) throw new ConcordError('WritingInputNotFound', `Missing writing selection: ${root}`);
+      const members = available.filter(path => /\.(?:md|mdx|svg)$/iu.test(path) && (!paths.length || projectRoots.some(scope => under(path, scope)))).sort();
+      if (paths.length && members.length === 0) throw new ConcordError('WritingInputOutOfScope', `Selection is outside the configured writing scope or contains no Markdown or SVG text: ${root}`);
       memberships.set(root, members);
       if (!members.length && root !== 'docs') throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
       members.forEach(file => files.add(file));
@@ -198,15 +204,15 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
       if (!policySources.has(file) && /\.(?:mdx?|svg)$/iu.test(file)) documents.set(file, source);
     }
     const inputDigest = snapshotDigest([...inputs, ['@writing-parser-version', WRITING_PARSER_VERSION], ['@writing-policy-membership', JSON.stringify(policyPaths)], ['@concept-catalog-membership', JSON.stringify(catalogPaths)]], [...memberships]);
-    const cacheDigest = objectDigest({ inputDigest, selectedPath: selectedPath ?? null });
+    const cacheDigest = objectDigest({ inputDigest, selectedPath: selectedPath ?? null, selection: paths.length ? selectedRoots : null });
     const cached = persistentCache ? readWritingFindings(repo, cacheDigest) : undefined;
     const findings: WritingFinding[] = cached ?? [];
     if (cached === undefined) {
-      for (const legacyPath of repo.files('docs').filter(path => path === 'docs/concord-writing.json' || path.endsWith('/concord-writing.json'))) {
+      for (const legacyPath of repo.files('docs').filter(path => path === 'docs/concord-writing.json' || path.endsWith('/concord-writing.json')).filter(path => !paths.length || selected(path))) {
         findings.push({ file: legacyPath, line: 1, rule: 'LegacyWritingPolicy', message: 'Legacy concord-writing.json detected; convert rules to docs/writing.md', context: legacyPath });
       }
       for (const [catalogPath, catSource] of sourceCatalogs) {
-        if (/^(?:\uFEFF)?---\r?\n[\s\S]*?\bdeprecated\s*:/u.test(catSource)) {
+        if ((!paths.length || selected(catalogPath)) && /^(?:\uFEFF)?---\r?\n[\s\S]*?\bdeprecated\s*:/u.test(catSource)) {
           findings.push({ file: catalogPath, line: 1, rule: 'LegacyWritingPolicy', message: 'Legacy frontmatter deprecated map detected; convert to ## concept and 旧写法： paragraphs', context: catalogPath });
         }
       }
@@ -247,20 +253,20 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
         if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
       }
       for (const item of catalogs.catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, record, concept })))) {
-        if (eligible.has(item.reference) && !used.has(item.reference)) findings.push({ file: item.record.path, line: 1, rule: 'unusedConcept', message: `No selected prose uses ${item.reference}`, context: item.concept.definition.slice(0, 240), source: { path: item.record.path, ref: item.reference } });
+        if ((!paths.length || selected(item.record.path)) && eligible.has(item.reference) && !used.has(item.reference)) findings.push({ file: item.record.path, line: 1, rule: 'unusedConcept', message: `No selected prose uses ${item.reference}`, context: item.concept.definition.slice(0, 240), source: { path: item.record.path, ref: item.reference } });
         if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
       }
     }
     for (const [path, before] of inputs) if (repo.read(path) !== (path === 'concord.config.ts' && before === '' ? undefined : before)) throw new ConcordError('SourceChanged', `${path} changed during writing checks`);
     const currentDocsMembers = repo.files('docs');
     for (const [root, before] of memberships) {
-      const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx|svg)$/iu.test(path)).sort();
+      const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx|svg)$/iu.test(path) && (!paths.length || projectRoots.some(scope => under(path, scope)))).sort();
       if (JSON.stringify(after) !== JSON.stringify(before)) throw new ConcordError('SourceChanged', `${root} membership changed during writing checks`);
     }
     if (JSON.stringify(discovered('policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered('catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('SourceChanged', 'Writing owner membership changed during checks');
     if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
     findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
     if (persistentCache && cached === undefined) writeWritingFindings(repo, cacheDigest, findings);
-    return { operation: 'docs-check', ok: findings.length === 0, complete: true, policy: selectedPath ?? 'project', mode, selectedRoots, files: documents.size, findings, inputDigest };
+    return { operation: 'docs-check', ok: findings.length === 0, complete: true, policy: selectedPath ?? 'project', mode, selectedRoots, selection: selectedRoots, files: documents.size, findings, inputDigest };
   });
 }

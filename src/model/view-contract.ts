@@ -173,7 +173,7 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('source.set'), path: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('writing.index') }),
   Schema.Struct({ action: Schema.Literal('writing.show'), path: Schema.optional(Text) }),
-  Schema.Struct({ action: Schema.Literal('writing.check'), path: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('writing.check'), path: Schema.optional(Text), selection: Schema.optional(Schema.Array(Text)) }),
   Schema.Struct({ action: Schema.Literal('concepts.index') }),
   Schema.Struct({ action: Schema.Literal('concepts.show'), path: Schema.optional(Text) }),
   Schema.Struct({ action: Schema.Literal('config.set'), config: ProjectInputSchema, expectedDigest: Text, ...DryRun }),

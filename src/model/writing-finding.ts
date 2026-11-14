@@ -5,4 +5,4 @@ export interface WritingFinding {
   sources?: readonly NonNullable<WritingFinding['source']>[];
 }
 
-export interface WritingReport { readonly operation: 'docs-check'; readonly ok: boolean; readonly complete: true; readonly policy: string; readonly mode: 'project' | 'managed'; readonly selectedRoots: readonly string[]; readonly files: number; readonly findings: readonly WritingFinding[]; readonly inputDigest: string; }
+export interface WritingReport { readonly operation: 'docs-check'; readonly ok: boolean; readonly complete: true; readonly policy: string; readonly mode: 'project' | 'managed'; readonly selection: readonly string[]; readonly selectedRoots: readonly string[]; readonly files: number; readonly findings: readonly WritingFinding[]; readonly inputDigest: string; }

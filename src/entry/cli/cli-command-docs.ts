@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 import { Effect, Option } from "effect";
-import { Command } from "effect/cli";
+import { Argument, Command } from "effect/cli";
 import { root, optional, sync } from "./cli-base.ts";
 import { withRepo, withQuery } from "./cli-repository.ts";
 
@@ -17,7 +17,7 @@ const docs = Command.make('docs').pipe(Command.withDescription('Check authored p
     }),
     root.pipe(Effect.map(settings => ({ root: Option.getOrUndefined(settings.root), json: settings.json, dryRun: settings.dryRun }))),
   ),
-  Command.make('check', {}, () => withQuery({ name: 'docs.check', input: {} })),
+  Command.make('check', { paths: Argument.String('path').pipe(Argument.variadic()) }, args => withQuery({ name: 'docs.check', input: { selection: args.paths } })),
 ]));
 
 export { docs };

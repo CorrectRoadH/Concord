@@ -328,7 +328,7 @@ async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction
     case 'source.set': return (await setSource(repo, action.path, action.body, action.expectedDigest, dryRun));
     case 'writing.index': return writingIndex(repo);
     case 'writing.show': return showWriting(repo, action.path);
-    case 'writing.check': return checkWriting(repo, action.path);
+    case 'writing.check': return checkWriting(repo, action.path, true, action.selection);
     case 'concepts.index': return indexConcepts(repo);
     case 'concepts.show': return showConcepts(repo, action.path);
     case 'config.set': return (await setConfig(repo, action.config, action.expectedDigest, dryRun));

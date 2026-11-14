@@ -34,7 +34,7 @@ export const QueryRequest = Schema.Union([
   empty('check'),
   empty('trace.check'), operation('trace.show', { reference: Schema.String }), empty('trace.gaps'),
   operation('review', { reference: Schema.optional(Schema.String) }),
-  empty('docs.check'),
+  operation('docs.check', { selection: Schema.optional(Schema.Array(Schema.String)) }),
   empty('taste'), empty('config.show'),
   empty('workspace.show'),
   operation('documents.list', { kind: Schema.optional(DocumentKindSchema) }),
@@ -57,7 +57,7 @@ const queryValue = async (repo: WorkspaceTypes.LocalRepository, request: QueryRe
     case 'review': return (await renderReview(repo, request.input.reference, cache));
     case 'taste': return tasteShow(repo);
     case 'config.show': return { ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source };
-    case 'docs.check': return checkWriting(repo, undefined, cache !== 'off');
+    case 'docs.check': return checkWriting(repo, undefined, cache !== 'off', request.input.selection);
     case 'documents.list': {
       const { kind } = request.input;
       if (kind === 'memory' || kind === 'issue') return { ...knowledgeIndex(repo, kind), operation: 'list' };
