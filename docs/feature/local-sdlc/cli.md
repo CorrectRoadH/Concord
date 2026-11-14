@@ -45,7 +45,7 @@
 - 退出码 0 表示成功。退出码 1 表示命令拒绝执行、检查发现问题或操作失败。
 - 命令拒绝执行时，错误对象写到 stderr，形如 `{"ok":false,"error":"<错误码>","message":"...","details":{...}}`。`details` 可省略。人读输出以 `ok: false`、`error:`、`message:` 三行开头。`check` 这类检查命令发现问题时，结果仍写到 stdout，`ok` 为 false。
 - `--root <worktree>` 指定接入项目。省略时取 cwd 所在 Git worktree 的顶层；`concord.config.ts` 可以不存在。
-- CLI 查询默认使用 `--server=shared`，自动启动或复用[工作区服务](../../concepts.md#workspace-server)；`--server=command` 使用随查询回收的工作区服务。作用域、环境隔离与失败语义见[CLI 查询](../local-data-engine/architecture.md#cli-查询)。
+- CLI 查询默认使用 `--server=shared`，自动启动或复用[工作区服务](../../concepts.md#workspace-server)；`--server=command` 使用随查询回收的工作区服务；`--server=existing` 只连接外部宿主已启动且身份匹配的服务，不启动或替换实例。作用域、环境隔离与失败语义见[CLI 查询](../local-data-engine/architecture.md#cli-查询)。
 - `--dry-run` 放在子命令之前，校验并预览写入，不改文件。人读输出以 `Would apply` 开头。
 - 诊断类读取默认返回后台刷新的快照。尚无快照时等待后台刷新建成快照再输出，刷新失败或超时返回 `QueryPending`（[首次运行](../local-data-engine/use-case/query-asynchronous-projections.md#first-run)）。加 `--fresh` 等待当前来源。
 

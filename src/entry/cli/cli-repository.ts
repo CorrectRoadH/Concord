@@ -39,7 +39,7 @@ function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: 
     const run = operation(repo, settings);
     return yield* (options.unlocked ? run : withSourceSnapshot(repo, run));
     }));
-    const result = yield* (options.initialize || settings.dryRun ? runWithRepository : (yield* ServerLauncher).withCache(Option.getOrUndefined(settings.root), runWithRepository, options.cacheRequired));
+    const result = yield* (options.initialize || settings.dryRun ? runWithRepository : (yield* ServerLauncher).withCache(Option.getOrUndefined(settings.root), runWithRepository, options.cacheRequired)).pipe(Effect.provideService(QueryServerMode, settings.server));
     yield* emit(result, settings.json);
     return result;
   }).pipe(Effect.scoped);

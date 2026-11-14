@@ -4,7 +4,7 @@ import type { Effect, Stdio } from "effect";
 import { Context } from "effect";
 import type { ConcordError } from "../../model/index.ts";
 
-export const QueryServerMode = Context.Reference<'shared' | 'command'>('concord/cli/QueryServerMode', { defaultValue: () => 'shared' });
+export const QueryServerMode = Context.Reference<'shared' | 'command' | 'existing'>('concord/cli/QueryServerMode', { defaultValue: () => 'shared' });
 
 export interface ViewLaunchOptions { readonly root: string; readonly host: string; readonly port: number; readonly inProcess?: boolean }
 export interface ViewLaunchInfo {
@@ -21,7 +21,7 @@ export class ServerLauncher extends Context.Service<ServerLauncher, {
   readonly processIdentity: Effect.Effect<{ readonly pid: number; readonly installation: string }, ConcordError>;
   readonly run: (root: string) => Effect.Effect<void, unknown>;
   readonly start: (root: string) => Effect.Effect<unknown, unknown>;
-  readonly stop: (root: string) => Effect.Effect<unknown, unknown>;
+  readonly stop: (root: string, token?: string) => Effect.Effect<unknown, unknown>;
   readonly status: (root: string, wait?: boolean) => Effect.Effect<unknown, unknown>;
   readonly projection: (root: string) => Effect.Effect<ModelTypes.WorkspaceProjection | undefined, unknown>;
   readonly wait: (root: string, after: string | undefined, timeout: number) => Effect.Effect<WorkspaceWait, ConcordError>;

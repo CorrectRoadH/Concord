@@ -69,3 +69,13 @@ concord --json workspace wait --after <sourceDigest> [--timeout <秒>]
 | `QueryCacheInvalid` | 投影记录无法严格解码 |
 
 不一致的结果仍以 0 退出，消费者先检查 `projection.consistent` 再使用列表。`--fresh` 使用当前来源并等待扫描结果；`--dry-run` 不启动后台刷新。
+
+## 检查与停止服务实例
+
+`concord --json server status` 在存在服务时返回 `token`、`protocol`、`installation`、`state` 与 `compatible`。`compatible` 为布尔值，仅在协议和安装身份均匹配本次 CLI 时为真；它不代表投影已就绪。无服务时返回 `state: absent`。状态查询不替换实例。
+
+`concord server stop --token <token>` 只停止观察到的指定实例。记录或握手已指向其它 token 时成功返回，不停止替代实例；调用者重新查询状态。省略 `--token` 时停止当前实例。两种形式都遵守[退出确认](architecture.md#退出)，不能仅因发送停止请求成功就声明已退出。
+
+远程 mod 发现 `compatible: false` 时用该 token 停止实例，重新观察状态；服务不存在才交给 Herdr core 托管启动。并发替换已有兼容实例时直接复用，持续竞争报告 `WorkspaceServerBusy`。
+
+远程宿主在业务命令上传入 `--server=existing`：只连接协议与安装身份都匹配的现有服务，禁止启动或替换服务。服务缺失或不匹配时返回 `WorkspaceServerUnavailable`，mod 重新执行上述托管流程。初始化等无需服务的本进程操作照常执行；该选项不改变文件写入权限。

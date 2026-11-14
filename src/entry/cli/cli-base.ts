@@ -12,7 +12,7 @@ import { writeStdout } from './invocation.ts';
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
   root: Flag.String('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise use the Git worktree containing cwd; configuration is optional.')),
   json: Flag.Boolean('json').pipe(Flag.withDefault(false)),
-  server: Flag.Literals('server', ['shared', 'command']).pipe(Flag.withDefault('shared'), Flag.withDescription('Query through a shared service or a service owned by this command.')),
+  server: Flag.Literals('server', ['shared', 'command', 'existing']).pipe(Flag.withDefault('shared'), Flag.withDescription('Use a shared service, a command-owned service, or only an existing service.')),
   fresh: Flag.Boolean('fresh').pipe(Flag.withDefault(false), Flag.withDescription('Wait for current diagnostic sources instead of reading an asynchronously refreshed snapshot.')),
   dryRun: Flag.Boolean('dry-run').pipe(Flag.withDefault(false), Flag.withDescription('Validate a document mutation without writing.')),
 }));

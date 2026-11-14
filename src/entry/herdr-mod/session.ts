@@ -22,7 +22,10 @@ const Show = Schema.Struct({ tests: Schema.optional(Schema.Array(Case)), codeDec
 const Check = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String, line: Schema.optional(Schema.Int), message: Schema.String })) });
 const Initialization = Schema.Struct({ createdPaths: Schema.Array(Path) });
 const ErrorReply = Schema.Struct({ error: Schema.String, message: Schema.String });
-const ServerStatus = Schema.Struct({ state: Schema.Literals(['absent', 'opening', 'running', 'degraded', 'draining', 'clearing', 'blocked', 'stopping']) });
+const ServerStatus = Schema.Union([
+  Schema.Struct({ state: Schema.Literal('absent') }),
+  Schema.Struct({ state: Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'blocked', 'stopping']), compatible: Schema.Boolean, token: Schema.String }),
+]);
 const File = Schema.Struct({ path: Path, body: Schema.String, digest: Schema.String });
 export type ModPage = typeof Page.Type;
 export type ModCheck = typeof Check.Type;
@@ -124,13 +127,19 @@ export class ModSession {
 
   command<S extends Schema.Top & { readonly DecodingServices: never }>(args: readonly string[], schema: S, diagnostic = false) {
     return Effect.gen({ self: this }, function*() {
-      const reply = yield* this.io(() => this.host.exec('concord', ['--json', '--root', this.root, ...args], { cwd: this.root, on: this.machine }));
+      const remoteService = this.machine !== null && args[0] !== 'server' && args[0] !== 'init';
+      if (remoteService) yield* this.ensureRemoteService();
+      const reply = yield* this.io(() => this.host.exec('concord', ['--json', ...(remoteService ? ['--server=existing'] : []), '--root', this.root, ...args], { cwd: this.root, on: this.machine }));
       if (reply.code !== 0) {
-        const error = Schema.decodeUnknownExit(Schema.fromJsonString(ErrorReply), { onExcessProperty: 'ignore' })(reply.stderr || reply.stdout);
-        if (error._tag === 'Success') {
-          return yield* Effect.fail(new ModFailure({ message: error.value.message, code: error.value.error, details: reply.stderr || reply.stdout }));
+        const details = [reply.stderr, reply.stdout].filter(Boolean).join('\n');
+        for (const output of [reply.stderr, reply.stdout]) {
+          // Cache warnings and process diagnostics can accompany a JSON error.
+          for (const candidate of [output, ...output.trim().split('\n').reverse()]) {
+            const error = Schema.decodeUnknownExit(Schema.fromJsonString(ErrorReply), { onExcessProperty: 'ignore' })(candidate);
+            if (error._tag === 'Success') return yield* Effect.fail(new ModFailure({ message: error.value.message, code: error.value.error, details }));
+          }
         }
-        if (!diagnostic || !reply.stdout.trim()) return yield* Effect.fail(new ModFailure({ message: 'Concord 命令失败', details: reply.stderr || reply.stdout }));
+        if (!diagnostic || !reply.stdout.trim()) return yield* Effect.fail(new ModFailure({ message: 'Concord 命令失败', details }));
       }
       const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(reply.stdout).pipe(Effect.mapError(failure));
       if (!this.closed) { this.error = ''; this.errorDetails = ''; this.errorCode = ''; }
@@ -250,11 +259,14 @@ export class ModSession {
     })));
   });
 
-  initialize = Effect.fn('ModSession.initialize')(function*(this: ModSession) {
+  initialize = Effect.fn('ModSession.initialize')(function*(this: ModSession, notify: () => void = () => {}) {
     const receipt = yield* this.command(['init'], Initialization);
     if (this.closed) return;
     this.initialization = receipt;
-    yield* this.refresh();
+    this.initialized = true; this.loaded = true;
+    notify();
+    yield* this.refresh(notify).pipe(Effect.mapError(error => error instanceof ModFailure
+      ? new ModFailure({ message: `初始化已完成，读取文档失败：${error.message}`, code: error.code, details: error.details }) : error));
   });
 
   initializationRequest(location: string): string {
@@ -265,21 +277,28 @@ export class ModSession {
 
   checkNow = Effect.fn('ModSession.checkNow')(function*(this: ModSession) { this.check = yield* this.command(['check'], Check, true); });
 
-  private waitForWorkspace = Effect.fn('ModSession.waitForWorkspace')(function*(this: ModSession, after?: string) {
-    if (this.machine !== null) {
-      const status = yield* this.command(['server', 'status'], ServerStatus);
-      if (status.state === 'absent') {
-        // A remote exec reclaims detached children. Transfer the foreground
-        // service to its own core terminal instead of escaping the exec scope.
-        const started = yield* io(() => this.host.exec('hc', ['run', '--on', this.machine!, '--cwd', this.root, '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', this.root], { on: null })).pipe(
-          Effect.mapError(error => new ModFailure({ code: 'HerdrServiceStartFailed', message: 'Herdr 无法启动 Concord 工作区服务', details: error.details })),
-        );
-        if (started.code !== 0) return yield* Effect.fail(new ModFailure({ code: 'HerdrServiceStartFailed', message: 'Herdr 无法启动 Concord 工作区服务', details: [started.stderr, started.stdout].filter(Boolean).join('\n') }));
-        // A terminal receipt precedes the service lock; a read-only handshake
-        // barrier prevents workspace wait from starting a competing child.
-        yield* this.command(['server', 'status', '--wait'], ServerStatus);
-      }
+  private ensureRemoteService = Effect.fn('ModSession.ensureRemoteService')(function*(this: ModSession): Effect.fn.Return<void, ModFailure | ModDisconnected> {
+    let status = yield* this.command(['server', 'status'], ServerStatus);
+    if (status.state !== 'absent' && !status.compatible) {
+      yield* this.command(['server', 'stop', '--token', status.token], Schema.Unknown);
+      status = yield* this.command(['server', 'status'], ServerStatus);
     }
+    if (status.state === 'absent') {
+      // A remote exec reclaims detached children. Transfer the foreground
+      // service to its own core terminal instead of escaping the exec scope.
+      const started = yield* io(() => this.host.exec('hc', ['run', '--on', this.machine!, '--cwd', this.root, '--bg', '--no-parent', '--rm', '--', 'concord', 'server', 'run', '--root', this.root], { on: null })).pipe(
+        Effect.mapError(error => new ModFailure({ code: 'HerdrServiceStartFailed', message: 'Herdr 无法启动 Concord 工作区服务', details: error.details })),
+      );
+      if (started.code !== 0) return yield* Effect.fail(new ModFailure({ code: 'HerdrServiceStartFailed', message: 'Herdr 无法启动 Concord 工作区服务', details: [started.stderr, started.stdout].filter(Boolean).join('\n') }));
+      // A terminal receipt precedes the service lock; require a compatible
+      // handshake before the business command, which cannot start a service.
+      status = yield* this.command(['server', 'status', '--wait'], ServerStatus);
+    }
+    if (status.state === 'absent') return yield* Effect.fail(new ModFailure({ code: 'WorkspaceServerUnavailable', message: 'Concord 工作区服务尚未启动' }));
+    if (!status.compatible) return yield* Effect.fail(new ModFailure({ code: 'WorkspaceServerBusy', message: '另一个 Concord 安装正在使用这个仓库', details: JSON.stringify(status) }));
+  });
+
+  private waitForWorkspace = Effect.fn('ModSession.waitForWorkspace')(function*(this: ModSession, after?: string) {
     return yield* this.command(['workspace', 'wait', ...(after === undefined ? [] : ['--after', after])], WorkspaceWait);
   });
 

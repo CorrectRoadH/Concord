@@ -583,11 +583,11 @@ export default class ConcordMod extends View {
     session.error = error.message; session.errorDetails = error.details ?? ''; session.errorCode = error.code ?? '';
   }
 
-  private act<A, E>(id: string, label: string, cx: Context, effect: Effect.Effect<A, E>, after?: (cx: Context) => void): void {
+  private act<A, E>(id: string, label: string, cx: Context, effect: Effect.Effect<A, E> | ((cx: Context) => Effect.Effect<A, E>), after?: (cx: Context) => void): void {
     if (this.busy.has(id)) return;
     const session = this.session;
     this.busy.set(id, label);
-    this.run(cx, effect.pipe(Effect.ensuring(Effect.sync(() => {
+    this.run(cx, current => (typeof effect === 'function' ? effect(current) : effect).pipe(Effect.ensuring(Effect.sync(() => {
       if (session === this.session) this.busy.delete(id);
     }))), after);
     cx.notify();
@@ -937,7 +937,9 @@ export default class ConcordMod extends View {
     // Background reads keep the page as it is; only the first read of a repository says it is reading.
     if (!session.loaded) return this.statusPage(toolbar, '正在读取 Concord 仓库…', location);
     if (!session.initialized) return this.statusPage(toolbar, '这个仓库还没有初始化 Concord', location, [
-      this.button('initialize', '在这里初始化 Concord', current => this.act('initialize', '正在初始化…', current, session.initialize(), next => this.watch(next)), true),
+      this.button('initialize', '在这里初始化 Concord', current => this.act('initialize', '正在初始化…', current, next => session.initialize(() => { if (!session.closed && session === this.session) next.notify(); }).pipe(
+        Effect.onError(() => Effect.sync(() => { if (session === this.session && session.initialization) this.pollLater(next); })),
+      ), next => this.watch(next)), true),
       ...this.errorElements(),
     ]);
     this.ensureRendered(cx, available);

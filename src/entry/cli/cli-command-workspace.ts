@@ -11,7 +11,7 @@ import { withQuery } from './cli-repository.ts';
 
 const workspace = Command.make('workspace').pipe(Command.withDescription('Inspect the shared human/agent workspace projection.'), Command.withSubcommands([
   Command.make('show', {}, () => withQuery({ name: 'workspace.show', input: {} })),
-  Command.make('projection', {}, () => Effect.gen(function*() { const settings = yield* root; const path = validateViewRoot((yield* viewRoot(settings)), yield* applicationRuntime); const remote = settings.dryRun ? undefined : yield* (yield* ServerLauncher).projection(path); const result = remote ?? (yield* readWorkspaceProjection(yield* workspaceProjectionContext(path))); yield* emit({ operation: 'workspace-projection', ...result }, settings.json); })),
+  Command.make('projection', {}, () => Effect.gen(function*() { const settings = yield* root; const path = validateViewRoot((yield* viewRoot(settings)), yield* applicationRuntime); const remote = settings.dryRun ? undefined : yield* (yield* ServerLauncher).projection(path).pipe(Effect.provideService(QueryServerMode, settings.server)); const result = remote ?? (yield* readWorkspaceProjection(yield* workspaceProjectionContext(path))); yield* emit({ operation: 'workspace-projection', ...result }, settings.json); })),
   Command.make('wait', { after: optional('after'), timeout: Flag.Int('timeout').pipe(Flag.withSchema(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(120))), Flag.withDefault(25)) }, args => Effect.gen(function*() {
     const settings = yield* root;
     const result = yield* (yield* ServerLauncher).wait(yield* viewRoot(settings), Option.getOrUndefined(args.after), args.timeout).pipe(Effect.provideService(QueryServerMode, settings.server));

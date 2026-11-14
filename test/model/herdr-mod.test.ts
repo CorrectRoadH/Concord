@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { digest } from '../../src/model/index.ts';
 import { ModFailure, ModSession, markdownTarget, type ModHost } from '../../src/entry/herdr-mod/index.ts';
 
@@ -30,6 +30,7 @@ function boundary() {
     async exec(command, args, options) {
       assert.equal(command, 'concord');
       const operation = args.includes('--root') ? args.slice(args.indexOf('--root') + 2) : args.slice(2); calls.push(operation);
+      if (operation[0] === 'server') return { code: 0, stdout: JSON.stringify({ state: 'running', compatible: true, token: 'current' }), stderr: '' };
       if (operation[0] === 'action') {
         const input = JSON.parse(operation.filter(value => value.startsWith('--input-text=')).map(value => value.slice('--input-text='.length)).join('')) as { action: string; path: string; body: string; expectedDigest: string };
         const absolute = `${options.cwd}/${input.path}`, source = files.get(absolute);
@@ -143,12 +144,49 @@ test('CLI failures retain a draft without authorizing a write or running check',
   assert.equal(b.session.draft, '# Oversized draft\n');
 });
 
+// @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#init
+test('named CLI errors survive diagnostics on either stream and retain both outputs', async () => {
+  const named = JSON.stringify({ error: 'CleanupFailed', message: 'Service cleanup is blocked', details: { phase: 'cache' } });
+  for (const reply of [
+    { stdout: named, stderr: 'native cache warning' },
+    { stdout: '', stderr: `native cache warning\n${named}\n` },
+    { stdout: '{"createdPaths":[]}', stderr: named },
+  ]) {
+    const session = new ModSession({ exec: async () => ({ code: 1, ...reply }) }, '/repo');
+    for (const diagnostic of [false, true]) await assert.rejects(Effect.runPromise(session.command(['init'], Schema.Unknown, diagnostic)), error => {
+      assert.ok(error instanceof ModFailure);
+      assert.equal(error.code, 'CleanupFailed'); assert.equal(error.message, 'Service cleanup is blocked');
+      for (const output of [reply.stdout, reply.stderr].filter(Boolean)) assert.ok(error.details?.includes(output));
+      return true;
+    });
+  }
+});
+
+// @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#init
+test('initialization retains its receipt when the follow-up read fails and recovery only reads', async () => {
+  const b = boundary(), execute = b.host.exec;
+  let unavailable = true;
+  b.host.exec = async (command, args, options) => {
+    const operation = args.slice(args.indexOf('--root') + 2);
+    if (operation[0] === 'init') { b.calls.push(operation); return { code: 0, stdout: '{"createdPaths":["docs/taste.md"]}', stderr: '' }; }
+    if (unavailable) return { code: 1, stdout: '', stderr: '{"error":"CleanupFailed","message":"Service cleanup is blocked"}' };
+    return execute(command, args, options);
+  };
+  await assert.rejects(Effect.runPromise(b.session.initialize()), error => error instanceof ModFailure && /初始化已完成/u.test(error.message) && error.code === 'CleanupFailed');
+  assert.deepEqual(b.session.initialization, { createdPaths: ['docs/taste.md'] });
+  assert.equal(b.session.initialized, true); assert.equal(b.session.loaded, true);
+  unavailable = false; await Effect.runPromise(b.session.refresh());
+  assert.ok(b.session.pages.length > 0);
+  assert.equal(b.calls.filter(call => call[0] === 'init').length, 1);
+});
+
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#edit
 test('remote drafts use the same digest action and UTF-8 bounded argument chunks', async () => {
   const b = boundary(); b.session = new ModSession(b.host, '/repo', 'vps');
   const execute = b.host.exec;
   b.host.exec = async (command, args, options) => {
     assert.equal(options.on, 'vps');
+    assert.equal(args.includes('--server=existing'), !args.includes('server'));
     for (const arg of args) if (arg.startsWith('--input-text=')) assert.ok(Buffer.byteLength(arg) <= 64 * 1024);
     return execute(command, args, options);
   };
@@ -210,7 +248,7 @@ test('initialization keeps waiting if its first wake-up precedes a readable proj
 });
 
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
-test('remote cold loading keeps its service outside short execs and confirms its handshake before waiting', async () => {
+test('remote cold loading hosts its service and confirms the handshake before its first projection', async () => {
   const b = boundary(), execute = b.host.exec;
   let managed = false, handshaken = false, projections = 0;
   const control: string[][] = [];
@@ -226,19 +264,16 @@ test('remote cold loading keeps its service outside short execs and confirms its
     if (operation[0] === 'server') {
       control.push(operation);
       if (operation.includes('--wait')) handshaken = managed;
-      return { code: 0, stdout: JSON.stringify({ operation: 'server-status', state: managed ? 'opening' : 'absent' }), stderr: '' };
+      return { code: 0, stdout: JSON.stringify(managed ? { state: 'opening', compatible: true, token: 'current' } : { state: 'absent' }), stderr: '' };
     }
-    if (operation[1] === 'projection' && !managed) {
-      return { code: 1, stdout: '', stderr: JSON.stringify({ error: ++projections > 3 ? 'ProbeLimit' : 'WorkspaceProjectionPending', message: 'Workspace is opening' }) };
-    }
-    if (operation[1] === 'wait') {
-      if (managed) assert.equal(handshaken, true, 'a terminal receipt is not a service handshake');
-      return { code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'ready' }), stderr: '' };
-    }
+    assert.equal(handshaken, true, 'a terminal receipt is not a service handshake');
+    assert.equal(args.includes('--server=existing'), true);
+    if (operation[1] === 'projection') projections++;
     return execute(command, args, options);
   };
   const session = new ModSession(b.host, '/repo', 'vps');
   await Effect.runPromise(session.refresh());
+  assert.equal(projections, 1);
   assert.deepEqual(session.documents.map(document => document.path), [path]);
   assert.deepEqual(control, [
     ['server', 'status'],
@@ -265,11 +300,78 @@ test('remote waits reuse an existing service and keep the observed digest', asyn
   const session = new ModSession({ exec: async (command, args) => {
     assert.equal(command, 'concord');
     const operation = args.slice(args.indexOf('--root') + 2); calls.push(operation);
-    return { code: 0, stdout: JSON.stringify(operation[0] === 'server' ? { state: 'running' } : { operation: 'workspace-wait', changed: false, sourceDigest: 'kept' }), stderr: '' };
+    return { code: 0, stdout: JSON.stringify(operation[0] === 'server' ? { state: 'running', compatible: true, token: 'current' } : { operation: 'workspace-wait', changed: false, sourceDigest: 'kept' }), stderr: '' };
   } }, '/repo', 'vps');
   session.workspaceDigest = 'kept';
   assert.deepEqual(await Effect.runPromise(session.wait()), { operation: 'workspace-wait', changed: false, sourceDigest: 'kept' });
   assert.deepEqual(calls, [['server', 'status'], ['workspace', 'wait', '--after', 'kept']]);
+});
+
+// @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
+test('remote upgrades stop only the observed token and reuse a compatible replacement or host once', async () => {
+  for (const replaced of [false, true]) {
+    const calls: string[][] = [];
+    let observations = 0;
+    const session = new ModSession({ exec: async (command, args, options) => {
+      if (command === 'hc') {
+        calls.push(['host']); assert.deepEqual(options, { on: null });
+        return { code: 0, stdout: '{"address":"vps/t2"}', stderr: '' };
+      }
+      const operation = args.slice(args.indexOf('--root') + 2); calls.push(operation);
+      assert.equal(options.on, 'vps');
+      if (operation[1] === 'stop') return { code: 0, stdout: '{}', stderr: '' };
+      if (operation[1] === 'status') {
+        const status = observations++ === 0 ? { state: 'running', token: 'observed', compatible: false }
+          : observations === 2 && !replaced ? { state: 'absent' }
+            : { state: 'running', token: 'current', compatible: true };
+        assert.equal(args.includes('--server=existing'), false);
+        return { code: 0, stdout: JSON.stringify(status), stderr: '' };
+      }
+      assert.equal(args.includes('--server=existing'), true);
+      return { code: 0, stdout: '{"operation":"workspace-wait","changed":false,"sourceDigest":"kept"}', stderr: '' };
+    } }, '/repo', 'vps');
+    session.workspaceDigest = 'kept';
+    await Effect.runPromise(session.wait());
+    assert.deepEqual(calls, [
+      ['server', 'status'], ['server', 'stop', '--token', 'observed'], ['server', 'status'],
+      ...replaced ? [] : [['host'], ['server', 'status', '--wait']],
+      ['workspace', 'wait', '--after', 'kept'],
+    ]);
+  }
+});
+
+// @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
+test('remote installation competition is bounded and does not submit a business request', async () => {
+  for (const hostBeforeCompetition of [false, true]) {
+    const calls: string[][] = [];
+    let observations = 0;
+    const session = new ModSession({ exec: async (command, args) => {
+      if (command === 'hc') { calls.push(['host']); return { code: 0, stdout: '{}', stderr: '' }; }
+      const operation = args.slice(args.indexOf('--root') + 2); calls.push(operation);
+      if (operation[1] === 'stop') return { code: 0, stdout: '{}', stderr: '' };
+      assert.equal(operation[1], 'status');
+      const status = observations++ === 1 && hostBeforeCompetition ? { state: 'absent' }
+        : { state: 'running', compatible: false, token: `other-${observations}` };
+      return { code: 0, stdout: JSON.stringify(status), stderr: '' };
+    } }, '/repo', 'vps');
+    await assert.rejects(Effect.runPromise(session.command(['check'], Schema.Unknown)), error => error instanceof ModFailure && error.code === 'WorkspaceServerBusy');
+    assert.equal(calls.filter(call => call[1] === 'stop').length, 1);
+    assert.equal(calls.filter(call => call[0] === 'host').length, Number(hostBeforeCompetition));
+    assert.equal(calls.some(call => call[0] === 'check'), false);
+  }
+});
+
+// @use-case docs/feature/herdr-mod/use-case/edit-and-check.md
+test('a remote service change after status cannot replay an unknown write', async () => {
+  const calls: string[][] = [];
+  const session = new ModSession({ exec: async (_command, args) => {
+    const operation = args.slice(args.indexOf('--root') + 2); calls.push(operation);
+    if (operation[0] === 'server') return { code: 0, stdout: '{"state":"running","compatible":true,"token":"current"}', stderr: '' };
+    assert.equal(args.includes('--server=existing'), true);
+    return { code: 1, stdout: '', stderr: '{"error":"WorkspaceServerUnavailable","message":"Service changed"}' };
+  } }, '/repo', 'vps');
+  await assert.rejects(Effect.runPromise(session.command(['action', '--input-text={"action":"document.set"}'], Schema.Unknown)), error => error instanceof ModFailure && error.code === 'WorkspaceServerUnavailable');
+  assert.equal(calls.length, 2); assert.equal(calls.filter(call => call[0] === 'action').length, 1);
 });
 
 // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open

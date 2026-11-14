@@ -20,16 +20,19 @@ Concord mod 是可独立分发、也随归档提供的一组 JavaScript 文件�
 - 刷新：布局侧栏或所属 tab 在前台的独立 pane 循环运行 `concord --json workspace wait --after <sourceDigest>`，命令返回新的 `sourceDigest` 时重新读一次投影；当前打开的文档与滚动位置保持不变，正文按重载规则更新。独立 pane 所属 tab 不在前台时不等待，回到前台时立即刷新一次。服务不可用（例如 `HawdbUnavailable`）或仓库还没有初始化时，改为每 2 秒重新取一次，所以在终端里运行 `concord init` 后 mod 自动显示文档。
 - 连接：`exec` 因机器不可达而失败时显示“连不上 <机器>”，每 2 秒重试，恢复后自动继续。
 - 读取失败：当前仓库的只读刷新返回错误后，每 2 秒重试一次，正在读取时不叠加请求；成功后清除错误。切换仓库或关闭时取消重试，不重放失败的写入。
+- 命令错误：分别从 stderr 与 stdout 解码具名错误；日志和告警不能遮住另一个输出流或同一流内独立 JSON 行中的错误。交给 agent 的详情保留两个输出流。初始化回执一旦成功就保留，随后的读取失败说明初始化已完成，并沿用只读刷新重试。
 
 ### 远程服务与读取终止
 
-Herdr 的远程 `exec` 经 `hc exec` 执行；这个调用结束时会回收它的全部后代，包括 detached 进程。Concord mod 因此在每次远程 `workspace wait` 之前运行 `concord --json server status`。服务不存在时，在 Herdr 宿主本机执行 `hc run --on <machine> --cwd <root> --bg --no-parent --rm -- concord server run --root <root>`，由 Herdr core 在指定机器与仓库创建独立后台终端托管前台服务。启动不依赖远端命令环境能从 PATH 找到 `hc`。已有服务时直接等待，不启动新终端。本机保持原有 CLI 启动方式。
+Herdr 的远程 `exec` 经 `hc exec` 执行；这个调用结束时会回收它的全部后代，包括 detached 进程。Concord mod 因此在每次远程业务命令之前运行 `concord --json server status`。服务不存在时，在 Herdr 宿主本机执行 `hc run --on <machine> --cwd <root> --bg --no-parent --rm -- concord server run --root <root>`，由 Herdr core 在指定机器与仓库创建独立后台终端托管前台服务。启动不依赖远端命令环境能从 PATH 找到 `hc`。已有兼容服务时直接使用，不启动新终端。本机保持原有 CLI 启动方式。
+
+状态中的 `compatible` 同时核对协议与当前 CLI 的安装身份；为假时，只运行 `server stop --token <token>` 停止该实例，再重新查询状态。若并发替换已经产生兼容实例则复用；不存在才托管启动。一次准备最多停止一个实例、托管启动一次，之后仍不兼容就报告 `WorkspaceServerBusy`，不循环替换。服务控制命令不递归准备服务；`init` 在当前命令中执行，也跳过准备，成功后的刷新遵守准备规则。所有远程业务命令使用公开的 `--server=existing`，确保状态检查之后服务消失或安装变化时只报告 `WorkspaceServerUnavailable`，不在短 exec 内启动或替换服务。读取按只读刷新规则重试，写入不重放。选项与状态字段见[检查与停止服务实例](../local-data-engine/cli.md#检查与停止服务实例)。
 
 终端不创建 pane 或 tab，不抢焦点，不附加界面标签；没有父终端，不依赖短查询或 mod 的生命周期。工作区服务仍拥有持久句柄、服务锁与子进程，按既有退出协议回收；服务退出后 `--rm` 删除终端。mod 切换仓库、关闭或重连不停止共享服务。并发启动由 Concord 的服务锁裁决，落败进程退出，其终端同样自动删除。不得通过删除 `HC_SCOPE` 等宿主标记逃避回收，也不修改 Herdr 的全局环境或启动普通查询之外的应用。
 
-`hc run` 返回零只说明终端创建成功。创建后先运行 `concord --json server status --wait`，这个只读命令最多等 10 秒，直到服务完成握手，绝不自动启动服务；它成功后才运行 `workspace wait`，避免查询抢先启动一个随 exec 退出的临时服务。投影可读仍由随后成功的 `workspace projection` 证明。创建终端的非零结果转换为 `HerdrServiceStartFailed`，保留 stdout/stderr 供交给 agent；机器不可达仍按连接失败处理。握手超时报告 `WorkspaceServerUnavailable`。服务在 status 与 wait 之间退出，或 CLI 因协议或安装身份变化替换服务时，本轮结果不能证明服务仍存在，下一次等待重新检查并按需托管；不重放写入。服务升级、锁争用与不可用的错误继续由 Concord 的公开命令处理。
+`hc run` 返回零只说明终端创建成功。创建后先运行 `concord --json server status --wait`，这个只读命令最多等 10 秒，直到服务完成握手，绝不自动启动服务；确认 `compatible: true` 后才运行业务命令，避免查询抢先启动一个随 exec 退出的临时服务。投影可读仍由随后成功的 `workspace projection` 证明。创建终端的非零结果转换为 `HerdrServiceStartFailed`，保留 stdout/stderr 供交给 agent；机器不可达仍按连接失败处理。握手超时报告 `WorkspaceServerUnavailable`。服务在 status 与业务命令之间退出，或另一 CLI 替换服务时，本轮结果不能证明服务仍存在，下一次读取重新检查并按需托管；不重放写入。服务升级、锁争用与不可用的错误继续由 Concord 的公开命令处理。
 
-一次刷新最多读取三次投影，中间最多等待两次；等待不带 `--after`，使用 CLI 默认的 25 秒期限。第三次仍返回 `WorkspaceProjectionPending` 时，将这个具名错误交给状态页，停止本轮读取，不再等待。已经读到的内容保留；没有内容时显示错误和交给 agent 的请求。切换目标后旧读取不能更新新会话。后台变化等待保留 `--after <sourceDigest>`，每次等待前同样确认远程服务；这项控制查询不计作导航刷新，不改变已运行服务的一次投影读取成本（[快到每次都愿意跑](../../taste.md#t-7)）。
+一次刷新最多读取三次投影，中间最多等待两次；等待不带 `--after`，使用 CLI 默认的 25 秒期限。第三次仍返回 `WorkspaceProjectionPending` 时，将这个具名错误交给状态页，停止本轮读取，不再等待。已经读到的内容保留；没有内容时显示错误和交给 agent 的请求。切换目标后旧读取不能更新新会话。后台变化等待保留 `--after <sourceDigest>`，每次等待前同样确认远程服务；控制查询不计作导航刷新，已有兼容服务时，每个远程业务命令只增加一次状态查询，导航仍只读取一次投影（[快到每次都愿意跑](../../taste.md#t-7)）。
 
 验收用真实 CLI 与临时仓库观察：远程短命令回收完其后代后，独立托管的工作区服务仍能被后续命令复用；mod 先启动后由终端直接查询、终端先启动后由 mod 查询，两种顺序都保持同一个服务 PID；两个并发启动最多保留一个服务；停止服务后托管终端删除。持续 pending 的替身只模拟命令边界，验证第三次失败能到达状态页，不复制服务实现。
 

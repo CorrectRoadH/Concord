@@ -242,7 +242,7 @@ class Boundary {
     await this.commandGate?.promise;
     if (this.commandError) return this.commandError;
     const operation = args.includes('--root') ? args.slice(args.indexOf('--root') + 2) : args.slice(2); this.calls.push(operation);
-    if (operation[0] === 'server' && operation[1] === 'status') return { code: 0, stdout: JSON.stringify({ state: 'running' }), stderr: '' };
+    if (operation[0] === 'server' && operation[1] === 'status') return { code: 0, stdout: JSON.stringify({ state: 'running', compatible: true, token: 'current' }), stderr: '' };
     if (operation[0] === 'workspace' && operation[1] === 'wait') {
       const result = pending<{ code: number; stdout: string; stderr: string }>();
       this.watches.push({ root: options?.cwd ?? '', result });
@@ -1263,6 +1263,29 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           assert.equal(b.requests.filter(call => call.args[0] === '--version').length, 1);
         } finally { await b.close(); }
       }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#init
+    await t.test('a failed read after successful initialization keeps the receipt and retries only reading', async () => {
+      const b = await start(boundary => { boundary.files.delete('/repo/docs/taste.md'); }, () => host.output.find('initialize') !== undefined);
+      const execute = b.exec.bind(b);
+      let unavailable = true;
+      b.exec = async (command, args, options) => {
+        if (unavailable && args.includes('projection')) return { code: 1, stdout: '{"error":"CleanupFailed","message":"Service cleanup is blocked"}', stderr: 'native cache warning' };
+        return execute(command, args, options);
+      };
+      try {
+        b.click('initialize');
+        await b.until(() => /初始化已完成/u.test(b.output.text()));
+        assert.ok(b.output.text().includes('新建了 1 个文件'));
+        assert.ok(b.output.find('copy-initialization'));
+        assert.equal(b.output.find('initialize'), undefined);
+        assert.ok(b.output.text().includes('Service cleanup is blocked'));
+        unavailable = false; b.fire(2000);
+        await b.until(() => b.output.find(`page-${page}`) !== undefined);
+        assert.ok(b.output.find('copy-initialization'));
+        assert.equal(b.output.text().includes('Service cleanup is blocked'), false);
+        assert.equal(b.calls.filter(call => call[0] === 'init').length, 1);
+      } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('layout sidebar ignores delayed root resolution from an earlier tab', async () => {

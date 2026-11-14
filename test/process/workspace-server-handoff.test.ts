@@ -1,4 +1,4 @@
-// 跨进程保证：服务与 IPC——同协议的不同安装共享实例；协议变化或显式停止在旧 owner 退出后交接。
+// 跨进程保证：服务与 IPC——不同安装或协议在旧 owner 退出后交接；同一安装复用实例。
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -26,10 +26,14 @@ const workerPid = (root: string, role = 'foreground') => pollUntil(async () => {
 }, { description: 'installed service owns a real computation process', timeoutMs: 10_000 });
 
 // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md#upgrade-running-service
-test('another installation shares the same protocol service without changing its token', { timeout: 30_000 }, async () => {
+test('another installation replaces the same protocol service and concurrent callers reuse the winner', { timeout: 30_000 }, async () => {
   const root = (await fixture()), installation = mkdtempSync(join(tmpdir(), 'concord-server-handoff-'));
   try {
     const entry = privateSourceInstallation(installation);
+    const absent = await command(root, ['--server=existing', 'list', 'feature']);
+    assert.equal(absent.status, 1, absent.stdout);
+    assert.equal(JSON.parse(absent.stderr).error, 'WorkspaceServerUnavailable');
+    assert.equal(existsSync(recordPath(root)), false, 'external host mode never launches a service');
     const started = await command(root, ['server', 'start'], entry);
     assert.equal(started.status, 0, started.stderr);
     const before = record(root);
@@ -41,19 +45,41 @@ test('another installation shares the same protocol service without changing its
       assert.equal(record(root).token, before.token, 'inherited scopes cannot replace another installation');
       assert.equal(await processExited(before.pid), false);
     }
-    const query = await command(root, ['list', 'feature']);
-    assert.equal(query.status, 0, query.stderr);
-    assert.match(query.stdout, /Reader/);
+    const status = await command(root, ['server', 'status']);
+    assert.equal(status.status, 0, status.stderr);
+    assert.equal(JSON.parse(status.stdout).compatible, false);
+    for (const args of [['list', 'feature'], ['workspace', 'projection']]) {
+      const mismatched = await command(root, ['--server=existing', ...args]);
+      assert.equal(mismatched.status, 1, mismatched.stdout);
+      assert.equal(JSON.parse(mismatched.stderr).error, 'WorkspaceServerUnavailable');
+      assert.equal(record(root).token, before.token, 'external host mode never replaces a service');
+    }
+    const localRead = await command(root, ['--server=existing', 'action', '--input-text', JSON.stringify({ action: 'file.get', path: 'docs/feature/reader/README.md' })]);
+    assert.equal(localRead.status, 0, localRead.stderr);
+    assert.equal(record(root).token, before.token, 'local reads and status must not replace an installation');
+    const queries = await Promise.all([command(root, ['list', 'feature']), command(root, ['list', 'feature'])]);
+    for (const query of queries) {
+      assert.equal(query.status, 0, query.stderr);
+      assert.match(query.stdout, /Reader/);
+    }
     const after = record(root);
-    assert.equal(after.token, before.token);
-    assert.equal(after.installation, before.installation);
-    assert.equal(await processExited(before.pid), false);
+    assert.notEqual(after.token, before.token);
+    assert.notEqual(after.installation, before.installation);
+    assert.equal(await processExited(before.pid), true);
+    const compatible = await command(root, ['server', 'status']);
+    assert.equal(JSON.parse(compatible.stdout).compatible, true);
+    const staleStop = await command(root, ['server', 'stop', '--token', before.token]);
+    assert.equal(staleStop.status, 0, staleStop.stderr);
+    assert.equal(record(root).token, after.token, 'a stale stop token cannot stop the winner');
+    const hosted = await command(root, ['--server=existing', 'list', 'feature']);
+    assert.equal(hosted.status, 0, hosted.stderr);
     for (const input of [{ action: 'file.get', path: 'docs/feature/reader/README.md' }, { action: 'page.render', path: 'docs/feature/reader/README.md', theme: { background: '#fff', foreground: '#000' } }]) {
       const read = await command(root, ['action', '--input-text', JSON.stringify(input)]);
       assert.equal(read.status, 0, read.stderr);
-      assert.equal(record(root).token, before.token);
+      assert.equal(record(root).token, after.token);
     }
-    await command(root, ['server', 'stop']);
+    const stopped = await command(root, ['server', 'stop', '--token', after.token]);
+    assert.equal(stopped.status, 0, stopped.stderr);
     await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'replacement service releases ownership', timeoutMs: 8000 });
   } finally { await stop(root); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });
@@ -87,7 +113,7 @@ test('a different data protocol retains control frames for automatic service rep
 });
 
 // @feature docs/feature/local-data-engine/architecture.md#启动与裁决
-test('a computation failure preserves its service until explicit stop selects a healthy installation', { timeout: 30_000 }, async () => {
+test('a new installation automatically replaces a service with a failed computation', { timeout: 30_000 }, async () => {
   const root = await fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-compute-fail-'));
   const failures: unknown[] = [];
   try {
@@ -98,15 +124,14 @@ test('a computation failure preserves its service until explicit stop selects a 
     const pid = await workerPid(root);
     writeFileSync(join(installation, 'src/entry/server/compute-worker.ts'), 'process.exit(1);\n');
     process.kill(pid, 'SIGKILL');
-    const query = await command(root, ['check']);
+    const query = await command(root, ['check'], entry);
     assert.equal(query.status, 1, query.stdout + query.stderr);
     assert.equal(JSON.parse(query.stderr).error, 'WorkspaceComputeExited');
     assert.equal(record(root).token, before.token);
-    await stop(root);
-    assert.equal(await processExited(before.pid), true);
     const retry = await command(root, ['check']);
     assert.equal(retry.status, 0, retry.stderr);
     assert.notEqual(record(root).token, before.token);
+    assert.equal(await processExited(before.pid), true);
   } catch (cause) { failures.push(cause); } finally {
     try {
       await stop(root);
