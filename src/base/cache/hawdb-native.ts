@@ -260,7 +260,9 @@ function open(path: string | undefined, options: { readonly readOnly: boolean; r
   } catch (cause) {
     let error = hawdbFailure(cause);
     try {
-      if (path !== undefined && !options.readOnly && error.code === 'HawdbCacheSchemaMismatch') error = new CacheSchemaMismatch(error.message, cacheSchemaIdentity(path));
+      const nativeCause = cause instanceof HawDBError ? cause : error.cause;
+      const unsupportedStorage = database !== undefined && nativeCause instanceof HawDBError && nativeCause.kind === 'unsupported_storage_format';
+      if (path !== undefined && !options.readOnly && (error.code === 'HawdbCacheSchemaMismatch' || unsupportedStorage)) error = new CacheSchemaMismatch(error.message, cacheSchemaIdentity(path));
     } catch (observationFailure) { error = hawdbFailure(observationFailure); }
     try { database?.close(); library?.close(); } finally { if (borrowedGate === undefined) gate?.close(); }
     throw error;

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { linkSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -9,6 +10,30 @@ import { CacheSchemaMismatch, PersistentCache, acquireHawdbClearGuard, deleteIns
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { verifiedHawdbLibrary } from '../../src/base/installation/index.ts';
 import { createConsumer } from '../support/consumer.ts';
+
+// @feature docs/feature/local-data-engine/architecture.md#cache-schema-invalidation
+test('the persistent owner automatically rebuilds real unsupported row-page v1 storage', async () => {
+  const root = await createConsumer();
+  const privateDir = join(root, '.git/concord'), path = join(privateDir, 'cache.hawdb');
+  const runtime = makeRuntimeEnvironment(root, process.env);
+  try {
+    mkdirSync(path, { recursive: true });
+    execFileSync('tar', ['-xzf', new URL('../fixtures/hawdb/row-page-v1.tar.gz', import.meta.url).pathname, '-C', path]);
+    const source = join(root, 'docs/taste.md'), before = readFileSync(source, 'utf8');
+    const lock = join(path, 'owner.hawdb.lock'), inode = statSync(lock, { bigint: true }).ino;
+    assert.throws(() => openHawdb(path, { create: false, readOnly: true }, runtime), /unsupported_storage_format.*version 1/u);
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const owner = yield* PersistentCache.owner(privateDir);
+      yield* owner.open;
+      assert.equal((yield* owner.status).status, 'ready');
+      assert.deepEqual((yield* owner.snapshot).config_cache, []);
+    })).pipe(Effect.provide(PersistentCache.layer.pipe(Layer.provide(NodeServices.layer))), Effect.provideService(RuntimeEnvironment, runtime)));
+    assert.equal(statSync(lock, { bigint: true }).ino, inode);
+    assert.equal(readFileSync(source, 'utf8'), before);
+    const reopened = openHawdb(path, { create: false, readOnly: true }, runtime);
+    reopened.close();
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 async function fixture() {
   const root = await createConsumer();
