@@ -143,7 +143,7 @@ test('source mod initializes through the real CLI, copies the agent request and 
     await wait(() => output?.find('copy-initialization') !== undefined);
     const files = execFileSync('git', ['-C', root, 'ls-files', '--others', '--exclude-standard', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
     assert.match(output!.text(), new RegExp(`新建了 ${files.length} 个文件`, 'u'));
-    const request = `${root} 刚初始化了 Concord。\n请运行 concord --skill start，先问我从零写 Spec 还是为已有代码补写，再按对应的写作指南开始写。`;
+    const request = `${root} 刚初始化了 Concord。\n请运行 concord --skill start，结合我的需求和仓库现状，参照 docs 目录树与文档示例编写 Spec。`;
     assert.ok(output!.text().includes(request));
     output!.find('copy-initialization')!.click!(undefined, context);
     assert.equal(clipboard, request);
@@ -178,6 +178,7 @@ test('source mod initializes through the real CLI, copies the agent request and 
     for (const kind of ['feature', 'engineering']) {
       const directory = `docs/${kind}/cart/architecture`;
       const rootPage = `docs/${kind}/cart/README.md`;
+      await wait(() => output?.find(`page-${rootPage}`) !== undefined);
       output!.find(`page-${rootPage}`)!.click!(undefined, context);
       await wait(() => output?.find(`concord-body-${rootPage}`) !== undefined);
       const folder = output!.find(`page-${directory}/README.md`);

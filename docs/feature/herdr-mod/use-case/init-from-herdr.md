@@ -25,14 +25,14 @@
 
    ```text
    ~/code/reader 刚初始化了 Concord。
-   请运行 concord --skill start，先问我从零写 Spec 还是为已有代码补写，再按对应的写作指南开始写。
+   请运行 concord --skill start，结合我的需求和仓库现状，参照 docs 目录树与文档示例编写 Spec。
    ```
 
-   维护者点“复制给 agent”，贴进旁边的 agent。mod 不判断项目有没有代码，也不在阅读区显示指南正文：指南是写给 agent 的，agent 读它之后问维护者走哪条路，见[初始化后开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md)。
+   维护者点“复制给 agent”，贴进旁边的 agent。mod 不判断项目有没有代码，也不在阅读区显示指南正文：指南是写给 agent 的，agent 读它之后沿用已明确的目标，只询问影响写作范围的未决问题，见[初始化后开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md)。
 
 4. 在终端里让 agent 写第一个 Feature。 {#new-feature}
 
-   mod 是用来读的，不提供新建文档的按钮：新 Feature 要先想清楚用户故事，这件事在和 agent 的对话里完成。agent 按维护者选定的写作指南创建 Feature 后，它在一秒内出现在文档列表里，点开就能读。
+   mod 是用来读的，不提供新建文档的按钮：新 Feature 要先想清楚用户故事，这件事在和 agent 的对话里完成。agent 按本次目标与写作指南创建 Feature 后，它在一秒内出现在文档列表里，点开就能读。
 
 ## 结果
 

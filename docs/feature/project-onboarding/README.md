@@ -7,7 +7,7 @@
 - 用一条 `concord init` 接入仓库：先预览完整变更，确认后才写入，已有文件保留。
 - 不写配置就使用 `check`、`trace` 与 Web 工作台；需要运行测试时才写 `concord.config.ts`。
 - 在 `docs/taste.md` 里写下项目品味，功能开发发现的通用约束经明确修订进入品味。
-- 让 coding agent 从根 `AGENTS.md` 找到 Concord 指引，并在问过维护者从零写还是为已有代码补写之后读对应的写作指南。
+- 让 coding agent 从根 `AGENTS.md` 找到 Concord 指引，结合本次目标读取写作指南与完整示例。
 
 ## 上手
 
@@ -50,7 +50,7 @@ findings: none
 - 创建 Feature 时以参数选择页面：README 必需，其余页面可选。
 - 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，`check` 检查结果是否一致。
 - init 在根 `AGENTS.md` 中维护 Concord 的[托管区块](concepts.md#managed-block)，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
-- init 结束时让维护者把 `concord --skill start` 交给 agent：agent 先问维护者从零写还是为已有代码补写，再读对应的[写作指南](../../concepts.md#writing-guide)。init 不替维护者判断项目属于哪种情况。
+- init 结束时让维护者把 `concord --skill start` 交给 agent：agent 结合请求与仓库现状读取对应的[写作指南](../../concepts.md#writing-guide)，仅澄清影响范围的未决目标；已明确的方向直接沿用。
 - init 与 `concord skills install` 在项目中安装四个工作流 skill（`concord-spec`、`concord-implement`、`concord-review`、`concord-fix`），Claude Code 与 Codex 共用同一份文件。
 - 还没有初始化的仓库里，CLI、Web 工作台与 Concord mod 都提示先初始化，不给出空的通过结果。
 - Memory 固定位于 worktree 根的 `memory/`。

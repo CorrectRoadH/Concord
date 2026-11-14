@@ -15,8 +15,8 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 
 - 首次接入、配置或模板：运行 `concord --skill init`。
 - 开发流程的四步：写 Spec 运行 `concord --skill spec`，照着 Spec 实现运行 `concord --skill implement`，按 Spec 验收运行 `concord --skill review`，修复缺陷运行 `concord --skill fix`。项目中的 `concord-spec` 等 skill 就是这四个 skill 主题的入口。
-- 为项目写第一批 Spec：运行 `concord --skill start`，它让你先问维护者从零写还是为已有代码补写，再读 `concord --skill docs-from-scratch` 或 `concord --skill docs-from-code`。
-- Feature、Use Case、Engineering、Roadmap、Design 的布局、写法与采用：运行 `concord --skill document`。
+- 为项目写第一批 Spec：运行 `concord --skill start`，结合本次目标与仓库现状选择指南；补写用 `concord --skill docs-from-code`，新项目用 `concord --skill docs-from-scratch`，已明确的范围直接沿用。
+- Feature、Use Case、Engineering、Roadmap、Design 的布局、写法与采用：运行 `concord --skill document`，同时阅读随包 docs 的目录树和完整成稿示例。
 - 整文件、函数和代码段的实现关联与位置查询：运行 `concord --skill code`。
 - 测试标记、测试执行与修复核验：运行 `concord --skill test`。
 - Memory 的类型、状态与关系：运行 `concord --skill memory`。

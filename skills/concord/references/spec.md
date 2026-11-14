@@ -1,6 +1,6 @@
 # 写 Spec
 
-把一个需求写成实现者不用再问的 Spec。只改 `docs/`，不写实现代码。
+把一个需求写成实现者不用再问的 Spec。只改 `docs/`，不写实现代码。先读 `concord --skill document` 提供的 docs 目录树和完整成稿示例，再按本项目目标写作。
 
 1. 读现状：`concord list feature`、`concord show <相关 Feature>`，读 `docs/taste.md` 与生效的 `concepts.md`。找出需求落在哪个 Feature；没有合适的就新建。
 2. 写行为：先明确谁想完成什么，再用 Use Case 写满足需求的具体用法：起始状态、带 `{#id}` 的操作步骤、看到的结果和完成判据。步骤按实际入口写界面操作、命令、调用或外部工具配合，不按现有接口逐项倒推用例。Feature README 像使用教程；同一路径的输入变化和错误写成表格。尚未运行验证的结果标为预期结果。

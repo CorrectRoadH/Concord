@@ -14,7 +14,7 @@ List the capabilities in the user's language. Link shared terms to `concepts.md#
 
 ## Quick Start
 
-Show one complete example a reader can run as written, with the output they see.
+Show one complete path through the main user's actual interface, with the result they see after each action. Run `concord --skill document` for the docs tree and complete examples.
 
 ## How It Works
 

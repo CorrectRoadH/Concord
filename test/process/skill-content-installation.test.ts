@@ -20,17 +20,24 @@ test('private skill installation reports missing and empty installed content', (
       assert.ok(existsSync(join(owner, path)), `source skill is missing ${path}`);
     }
     const outside = join(scratch, 'outside'); mkdirSync(outside);
-    const installedMain = join(owner, 'skills/concord/SKILL.md');
-    const original = readFileSync(installedMain, 'utf8');
-    try {
-      rmSync(installedMain);
-      const unreadable = spawnSync(process.execPath, [cli, '--skill'], { cwd: outside, encoding: 'utf8' });
-      assert.equal(unreadable.status, 1);
-      assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(unreadable.stderr).error, 'SkillContentUnreadable');
-      writeFileSync(installedMain, '');
-      const invalid = spawnSync(process.execPath, [cli, '--skill'], { cwd: outside, encoding: 'utf8' });
-      assert.equal(invalid.status, 1);
-      assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(invalid.stderr).error, 'SkillContentInvalid');
-    } finally { writeFileSync(installedMain, original); }
+    for (const [path, args] of [
+      ['skills/concord/SKILL.md', ['--skill']],
+      ['docs/guides/spec-examples.md', ['--skill', 'document']],
+    ] as const) {
+      const installed = join(owner, path);
+      const original = readFileSync(installed, 'utf8');
+      try {
+        rmSync(installed);
+        const unreadable = spawnSync(process.execPath, [cli, ...args], { cwd: outside, encoding: 'utf8' });
+        assert.equal(unreadable.status, 1);
+        assert.equal(unreadable.stdout, '', 'missing examples must not produce a partial guide');
+        assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(unreadable.stderr).error, 'SkillContentUnreadable');
+        writeFileSync(installed, '');
+        const invalid = spawnSync(process.execPath, [cli, ...args], { cwd: outside, encoding: 'utf8' });
+        assert.equal(invalid.status, 1);
+        assert.equal(invalid.stdout, '');
+        assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(invalid.stderr).error, 'SkillContentInvalid');
+      } finally { writeFileSync(installed, original); }
+    }
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });

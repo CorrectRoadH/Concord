@@ -1,48 +1,26 @@
 # 为已有代码补写 Spec
 
-适用于已经有代码、测试或旧文档的项目。目标是让 Spec 准确描述代码现在做什么，并把已有测试和实现关联到 Spec。Spec 只写确认过的行为：代码做了什么，以实际运行为准；该不该这样做，由维护者决定。
+用项目已有的需求、文档、代码和运行证据补写 Spec。目标是让读者理解能力、用法与边界；代码是调查材料，不自动成为正确的产品规则。沿用本次请求的范围，关键歧义才询问。
 
-维护者已经选定这条路；还没选时先读 `concord --skill start`。
+## 先理解，再写正文
 
-## 1. 盘点入口
+先读项目说明、相关旧文档、生效的品味与术语，再按用户目标查页面、命令、公开接口与测试。吸收仍然有效的决策，遇到代码与约定冲突时记录现象或 Issue，不擅自把代码行为定为需求。过时或拿不准的旧文档不自行删除。
 
-列出使用者能接触到的入口：命令与参数、公开 API、页面、配置文件、环境变量和现有测试。按使用者想完成的事把它们分组，每组是一个候选 Feature。把候选清单交给维护者确认，再开始写。
+运行 `concord --skill document`，阅读其中的 docs 目录树和完整成稿示例，再选择本批 Feature。直接编辑文件即可；需要骨架时可用 `concord new`，按实际入口选择页面，不默认生成 CLI 或所有页面。
 
-从这些入口还原满足需求的具体用法，包括界面交互和外部工具配合，不为每个函数或命令各造一个 Use Case。评估重复建设时分别判断用户需要的呈现与底层基础能力；保留或替换功能须说明原有需求怎样继续得到满足，写法见 `concord --skill document`。
+先完成代表性 README 与一条 Use Case。README 从主要使用者的入口讲上手，Use Case 的步骤推进同一个目标；独立目标分别写。界面交互写用户动作与观察结果，内部调用、存储与资源生命周期归架构页。相关术语与系统边界随正文一起补齐。
 
-## 2. 每批写一个 Feature
+已有行为在授权的隔离环境核对；未执行的示例标为预期结果，不能凭阅读代码声称实际运行。先审阅正文的用户目标、操作路径与页面分工，再扩写其它能力。用户追加新需求时，按 `concord --skill spec` 写目标，只调查相关现状，不等整仓补写结束。
 
-一次只写一个 Feature，写完运行 `concord check` 再写下一个：
+## 正文稳定后再关联
 
-```sh
-concord new feature <name> --title "<标题>" --pages cli,use-case
-```
+只要求文档时，不修改源码、测试或运行配置。任务包含存量接入时，在文档路径与含义稳定后，再按 `concord --skill code` 和 `concord --skill test` 关联真正对应的实现与断言。缺口如实保留，不为使 trace 无缺口而随意添加标记、补实现或创建无关文档。
 
-README 写谁用、能做什么、上手示例；谁用、为什么用读代码看不出来，问维护者，不自己编。cli 或 library 页写完整调用、输出、退出码与错误。示例在临时目录实际运行后复制，不凭阅读代码推测输出；每次运行都会变的值写成省略号。
-
-## 3. 不确定的行为写成 Issue
-
-读不出意图的行为不写成规则，例如两个入口对同一输入结果不同、错误信息与文档矛盾、明显绕过检查的分支。把现象和复现命令写进 `docs/issues/<id>.md`，由维护者决定它是需求还是缺陷。确认为需求后再写进 Spec。
-
-## 4. 关联已有测试与实现
-
-每个 Use Case 主流程的步骤带 `{#id}`。给已有测试加标记，给实现加代码声明：
+按需配置来源根与 runner，见 `concord --skill init`；运行测试不是补写正文的固定前置。检查当前范围可用：
 
 ```sh
-concord test marker --contract <use-case 路径>
-concord code marker --contract <use-case 路径> --scope file
+concord docs check docs/feature/<feature>
+concord trace gaps <feature>
 ```
 
-完整语法见 `concord --skill test` 与 `concord --skill code`。运行 `concord trace gaps <feature>` 与 `concord docs check docs/feature/<feature>`，先聚焦查看当前批次的缺口与写作问题；全部批次处理后再用无参 `concord trace gaps` 与 `concord check` 检查全仓。标记表示关联，不表示覆盖。
-
-需要 `test run` 或修复核验时，在 `concord.config.ts` 配置 `runner`；测试或源码不在 `test/`、`tests/`、`src/` 时配置 `testRoots` 与 `sourceRoots`，见 `concord --skill init`。
-
-## 5. 处理原有文档
-
-init 保留仓库原有的文档原文。逐份阅读：仍然成立的内容并入对应 Feature 或 `docs/architecture.md`；过程记录、排障经过和经验写进 `memory/`；已经过时或拿不准的内容列给维护者处理，不自行删除。
-
-## 6. 提炼品味和名词
-
-代码和评审中反复出现的取舍，经维护者确认后写成 `docs/taste.md` 的条目。代码里的领域名词写进 `docs/concepts.md`；同一概念在代码和文档里有几种写法时，选一种作为 term，其余写进“旧写法”，`concord docs check` 会找出它们。
-
-页面写法的完整规则见 `concord --skill document`。
+交付前运行 `concord check`，处理本次改动引入的问题并报告其它 finding。说明写了哪些能力、哪些结论待决定、哪些结果未验证、哪些关联仍缺失。标记表示关联，不表示测试覆盖；结构通过不表示文档好读或行为正确。

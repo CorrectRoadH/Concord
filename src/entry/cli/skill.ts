@@ -70,12 +70,14 @@ const skillPath = (topic: Topic | 'main'): string => resourcePath(
 
 const readTopic = Effect.fn('readSkillTopic')(function*(topic: Topic | 'main') {
   const fs = yield* FileSystem.FileSystem;
-  const content = yield* fs.readFileString(skillPath(topic)).pipe(
-    Effect.mapError(() => new SkillContentUnreadable({ code: 'SkillContentUnreadable', message: `Cannot read packaged skill topic: ${topic}` })),
-  );
-  return yield* decodeContent(content).pipe(
-    Effect.mapError(() => new SkillContentInvalid({ code: 'SkillContentInvalid', message: `Packaged skill topic is invalid: ${topic}` })),
-  );
+  const paths = [skillPath(topic), ...(topic === 'document' ? [resourcePath('docs/guides/spec-examples.md')] : [])];
+  const sections = yield* Effect.forEach(paths, path => fs.readFileString(path).pipe(
+    Effect.mapError(() => new SkillContentUnreadable({ code: 'SkillContentUnreadable', message: `Cannot read packaged skill resource: ${path}` })),
+    Effect.flatMap(content => decodeContent(content).pipe(
+      Effect.mapError(() => new SkillContentInvalid({ code: 'SkillContentInvalid', message: `Packaged skill resource is invalid: ${path}` })),
+    )),
+  ), { concurrency: 1 });
+  return sections.map(section => section.trimEnd()).join('\n\n---\n\n');
 });
 
 export const skillProgram = Effect.fn('skillProgram')(function*(argv: unknown) {

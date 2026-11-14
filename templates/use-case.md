@@ -2,7 +2,7 @@
 
 ## User Goal
 
-State who wants what and why, in the user's language. This goal motivates the concrete usage below; a requirement alone is not a Use Case.
+State who wants what and why, in the user's language. Every step must advance this goal; independent goals belong in separate Use Cases. Run `concord --skill document` for the docs tree and complete examples.
 
 ## Starting State
 

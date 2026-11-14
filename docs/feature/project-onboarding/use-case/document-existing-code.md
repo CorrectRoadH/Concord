@@ -6,21 +6,23 @@
 
 ## 起始状态
 
-- 仓库已走完[初始化后开始写 Spec](start-writing-specs.md)，维护者选择了“为已有代码补写”，agent 已读取 `concord --skill docs-from-code`。
+- 本次目标包括为已有代码补写 Spec，agent 已按[写作入口](start-writing-specs.md)读取 `concord --skill docs-from-code` 与 `concord --skill document` 中的目录树和完整示例。
 - 仓库中已有实现源码、测试文件与原有文档。
 
 ## 完整路径
 
-1. 盘点入口并实际运行，写下第一个 Feature 与 Use Case。 {#write-verified-behavior}
+1. 理解已有约定，写下第一个 Feature 与 Use Case。 {#write-verified-behavior}
 
-   agent 盘点使用者能接触到的命令、公开 API、页面、配置文件与现有测试，按使用者目标分成候选 Feature，交给维护者确认。每次只写一个 Feature：
+   agent 先读项目说明、相关旧文档、品味与术语，再检查使用者接触的页面、命令、公开接口与相关测试。按本次目标选择代表性 Feature，参照[写作示例](../../../guides/spec-examples.md)直接编辑 README 和一条 Use Case；也可用模板创建骨架：
 
    ```sh
-   concord new feature cart --title "购物车" --pages cli,use-case
+   concord new feature cart --title "购物车" --pages ui,use-case
    concord new use-case add-item --feature cart --title "加入商品"
    ```
 
-   谁用它、解决什么问题先问维护者；命令输出和行为在临时目录实际运行现有程序后复制，不凭阅读代码推测（[只声称证明过的](../../../taste.md#t-5)）。
+   已明确的用户目标直接沿用；关键歧义才询问。页面按读者需要选择，GUI 用法从界面开始。行为与示例在隔离环境核对，未执行的结果标为预期结果，不凭代码阅读声称验证通过（[只声称证明过的](../../../taste.md#t-5)）。
+
+   正文先核对上手是否服务主要使用者、步骤是否推进同一个目标、内部机制是否归属架构页，再扩写。相关术语与系统边界随本批文档一起补齐。
 
 2. 把读不出意图的行为记为 Issue。 {#record-unclear-behavior}
 
@@ -32,9 +34,9 @@
 
    由维护者判断它是正式需求还是缺陷：确认为需求后再写进 Use Case 并关闭 Issue；确认为缺陷则留作待修复的 Issue。
 
-3. 关联已有实现与测试，清点未关联的存量测试。 {#link-existing-sources}
+3. 在接入范围内关联已有实现与测试。 {#link-existing-sources}
 
-   用 `concord code marker` 与 `concord test marker` 生成注释，加到这一批 Feature 对应的实现源码与现有测试上。先检查当前 Feature 的关系缺口与写作规则；配置了 adapter 时，再收集原生测试清单查看剩余未关联测试：
+   文档路径和语义稳定后，若任务包含存量接入，用 `concord code marker` 与 `concord test marker` 生成注释，加到真正实现或断言该行为的源码与测试上。只写文档的任务跳过源码标记和配置修改。按当前 Feature 查看关系与写作问题；需要盘点全部测试且配置了 adapter 时，再运行发现：
 
    ```sh
    concord --fresh trace gaps cart
@@ -43,11 +45,11 @@
    concord --fresh trace gaps
    ```
 
-   按[找出没有关联 Use Case 的测试](../../local-sdlc/use-case/find-unlinked-tests.md)查看 `unlinkedTests`，随后续 Feature 批次逐步关联或清理。
+   按[找出没有关联 Use Case 的测试](../../local-sdlc/use-case/find-unlinked-tests.md)查看 `unlinkedTests`。缺口如实保留，不为消除缺口关联无关测试或扩展本次实现范围。关联不表示覆盖。
 
 4. 整理原有文档、提炼术语与品味并运行检查。 {#absorb-legacy-docs}
 
-   仓库原有的文档在初始化后保留原样。把其中仍然成立的产品行为并入对应 Feature，可复用的排障经验与历史取舍移入 `memory/`；代码和文档中混用的领域名词写进 `docs/concepts.md`，把弃用的同义词列入旧写法；反复出现的工程偏好经维护者确认后写入 `docs/taste.md`。每完成一批运行一次检查：
+   仓库原有文档在初始化后保留原样。按本次范围吸收有效约定，重复规则明确归属；过时或存疑文档不擅自删除。可复用经验归 `memory/`，进度留在交接中。品味只提炼维护者采用的判断标准，具体机制归架构页。交付前运行检查：
 
    ```sh
    concord check
@@ -55,11 +57,12 @@
 
 ## 结果
 
-存量能力按 Feature 逐批纳管，存疑行为在 `docs/issues/` 中等待维护者拍板，已纳管的测试与实现可通过 `concord show` 反查。
+本次范围内的能力有可读的 Spec，存疑行为留在 `docs/issues/`。交付说明写作范围、未决问题、未验证结果和关联缺口；已纳管的测试与实现可通过 `concord show` 反查。
 
 | 情形 | 结果 |
 | --- | --- |
 | 代码实际运行结果与旧文档描述不一致 | 示例与现状按实际运行记录，差异记入 Issue 或请维护者当场决定目标行为 |
+| 用户追加新增能力 | 按 `concord --skill spec` 设计新增目标，只调查相关现状，不等待整仓补写或关联结束 |
 | 存量测试只验证构建、架构依赖或基准测试等仓库维护机制 | 为该机制创建 `docs/engineering/<t>/`，让测试标记指向 Engineering 文档包 |
 | 仓库里还有尚未整理的说明文档 | 留在文档包外（例如 `docs/guides/`），`check` 不把包外普通文档判为 `UnknownPageKind` |
 | 源码或测试不在默认的 `src/`、`test/`、`tests/` 目录 | 按[安全维护项目配置](maintain-project-config.md)在 `concord.config.ts` 中配置 `sourceRoots` 与 `testRoots` |

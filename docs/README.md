@@ -24,6 +24,7 @@
 - [品味](taste.md)：判断“什么是好的”的共同标准。
 - [术语](concepts.md)：每个名词只有一个写法和一个定义。
 - [文档模型](document-model.md)：每类页面写什么、放在哪里。
+- [Spec 写作示例](guides/spec-examples.md)：目录树、完整正文与页面分工；`concord --skill document` 同时提供这些示例。
 
 ## 它是怎么搭起来的
 

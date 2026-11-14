@@ -41,7 +41,7 @@
    Inspect configuration: concord doctor
    ```
 
-   agent 读这份指南后先问维护者从零写还是为已有代码补写，见[初始化后开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md)。
+   agent 读这份指南后结合用户目标与仓库现状开始写作，只澄清关键歧义，见[初始化后开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md)。
 
    创建的内容：
 
@@ -72,7 +72,7 @@
 
 ## 结果
 
-仓库得到一套可编辑的文档结构。下一步让 agent 读 `concord --skill start`，问清从零写还是为已有代码补写，再写第一份 Spec。
+仓库得到一套可编辑的文档结构。下一步让 agent 读 `concord --skill start`，参照目录树与完整示例，按本次目标写第一份 Spec。
 
 `concord.config.ts` 可以不存在。没有配置时，测试根取存在的 `test/`、`tests/`，实现源码根取存在的 `src/`；需要 `test run` 或修复核验时再配置 `runner`。配置项见[项目接入](../../project-onboarding/README.md)。
 

@@ -24,6 +24,9 @@ after(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: tru
 test('packed CLI exposes the skill entrypoint and selected topics outside a consumer', () => Effect.runPromise(Effect.promise(async () => {
   const outside = join(scratch, 'outside');
   mkdirSync(outside);
+  const examplePath = 'docs/guides/spec-examples.md';
+  mkdirSync(join(outside, 'docs/guides'), { recursive: true });
+  writeFileSync(join(outside, examplePath), '# Consumer content must not replace packaged examples\n');
   const help = await runCli({ argv: ['--help'], cwd: outside, env: process.env });
   assert.equal(help.exitCode, 0, help.stderr);
   assert.match(help.stdout, /concord --skill \[topic\]/);
@@ -46,14 +49,20 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   assert.equal(all.exitCode, 0, all.stderr);
   assert.match(all.stdout, /# 初始化与模板/);
   assert.match(all.stdout, /# Issue 与多来源反馈/);
-  for (const guide of ['start', 'docs-from-scratch', 'docs-from-code', 'spec', 'implement', 'review', 'fix']) {
+  for (const guide of ['start', 'docs-from-scratch', 'docs-from-code', 'document', 'spec', 'implement', 'review', 'fix']) {
     assert.ok(main.stdout.includes(`concord --skill ${guide}`));
     const reply = await runCli({ argv: ['--skill', guide], cwd: outside, env: process.env });
     assert.equal(reply.exitCode, 0, reply.stderr);
     const source = readFileSync(join(sourceRoot, `skills/concord/references/${guide}.md`), 'utf8');
-    assert.equal(reply.stdout.trimEnd(), source.trimEnd());
-    assert.ok(all.stdout.includes(source.trimEnd()));
+    const expected = guide === 'document'
+      ? `${source.trimEnd()}\n\n---\n\n${readFileSync(join(sourceRoot, examplePath), 'utf8').trimEnd()}`
+      : source.trimEnd();
+    assert.equal(reply.stdout.trimEnd(), expected);
+    assert.ok(all.stdout.includes(expected));
   }
+  const examples = readFileSync(join(sourceRoot, examplePath), 'utf8').trimEnd();
+  assert.equal(all.stdout.split(examples).length, 2, 'all includes the docs examples exactly once');
+  assert.equal(readFileSync(join(outside, examplePath), 'utf8'), '# Consumer content must not replace packaged examples\n');
   assert.equal(existsSync(join(outside, 'concord.config.ts')), false);
 })));
 

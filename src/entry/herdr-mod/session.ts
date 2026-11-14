@@ -258,7 +258,7 @@ export class ModSession {
   });
 
   initializationRequest(location: string): string {
-    return `${location} 刚初始化了 Concord。\n请运行 concord --skill start，先问我从零写 Spec 还是为已有代码补写，再按对应的写作指南开始写。`;
+    return `${location} 刚初始化了 Concord。\n请运行 concord --skill start，结合我的需求和仓库现状，参照 docs 目录树与文档示例编写 Spec。`;
   }
 
   suspend(): void { this.observation = {}; this.fileObservation += 1; }

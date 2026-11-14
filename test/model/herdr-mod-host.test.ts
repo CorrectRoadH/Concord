@@ -1211,7 +1211,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         const b = await start(boundary => { boundary.files.delete('/repo/docs/taste.md'); boundary.spaceList[0]!.machine = machine; }, () => host.output.find('initialize') !== undefined);
         try {
           b.click('initialize'); await b.until(() => b.output.find('copy-initialization') !== undefined);
-          const request = `${machine === null ? '/repo' : 'vps 上的 /repo'} 刚初始化了 Concord。\n请运行 concord --skill start，先问我从零写 Spec 还是为已有代码补写，再按对应的写作指南开始写。`;
+          const request = `${machine === null ? '/repo' : 'vps 上的 /repo'} 刚初始化了 Concord。\n请运行 concord --skill start，结合我的需求和仓库现状，参照 docs 目录树与文档示例编写 Spec。`;
           assert.ok(b.output.text().includes(request)); b.click('copy-initialization'); assert.equal(b.clipboard, request);
           assert.equal(b.output.find('read-guide'), undefined); assert.equal(b.output.find('concord-writing-guide'), undefined);
           b.selectTab('t2', '/other', machine); await b.until(() => b.output.find('initialize') !== undefined);
