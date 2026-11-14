@@ -12,7 +12,7 @@
 | 正文与页面 | 直接编辑文件 | 富文本与源码编辑 |
 | 元数据、源码、配置 | 直接编辑文件，或 `action --input <file|->` | 详情、源码、设置表单 |
 | 生命周期 | `issue`、`memory`、`roadmap start` | 对应记录的操作表单或结构化 action |
-| 测试与修复核验 | `test list/run/verify` | 测试与运行页 |
+| 测试关联与收集观察 | `test list/show`，清单由显式 `test discover` 产生 | 测试关系、具体用例与 label |
 | 声明辅助 | — | 代码与测试声明助手生成可粘贴的注释 |
 | Git 变化 | `git status`、`git diff <path> --area staged|unstaged|untracked` | Git 面板 |
 | 多来源反馈 | `feedback`、`issue link` | 反馈列表、来源、连接与本地笔记 |
@@ -30,7 +30,7 @@
 | 字段 | 含义 |
 | --- | --- |
 | `status` | `ready` 或 `refresh-failed`（最近刷新失败，展示上一份结果） |
-| `current` | 恒为 `false`；结果不表示当前来源有效，不授权写入、check、fixed、恢复或证据裁决 |
+| `current` | 恒为 `false`；结果不表示当前来源有效，不授权写入、check、恢复或证据裁决 |
 | `builtAt`、`builtFrom`、`builtUntil` | 构建区间 |
 | `complete` | 扫描完整、无 finding |
 | `changedPaths` | 构建期间变化的文件或目录，排序去重；`.` 表示影响范围未知 |

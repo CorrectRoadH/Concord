@@ -1,8 +1,8 @@
 # 多客户端共享工作区服务操作
 
-Agent 在 CLI 中修改项目并运行测试，人在 [Concord mod](../../feature/herdr-mod/README.md) 或 [Web 工作台](../../feature/web-workbench/README.md)中审阅，三者通过同一个[工作区服务](../../concepts.md#workspace-server)调度写入与测试任务。切换界面不需要再启动一份测试，断线后可以按[操作票据](concepts.md#operation-ticket)确认结果。
+Agent 在 CLI 中修改项目并收集具体测试用例，人在 [Concord mod](../../feature/herdr-mod/README.md) 或 [Web 工作台](../../feature/web-workbench/README.md)中审阅，三者通过同一个[工作区服务](../../concepts.md#workspace-server)调度写入与收集任务。切换界面不需要重复收集，断线后可以按[操作票据](concepts.md#operation-ticket)确认结果。
 
-工作区服务的项目目录隔离、自动启动、锁与 `--server=command` 生命周期由[本地数据引擎](../../feature/local-data-engine/architecture.md#工作区服务)拥有（[适配项目的开发方式](../../taste.md#t-9)）。本 Roadmap 将 CLI 与 Herdr 的写入、恢复及测试执行也纳入同一个工作区服务调度。
+工作区服务的项目目录隔离、自动启动、锁与 `--server=command` 生命周期由[本地数据引擎](../../feature/local-data-engine/architecture.md#工作区服务)拥有（[适配项目的开发方式](../../taste.md#t-9)）。本 Roadmap 将 CLI 与 Herdr 的写入、恢复及原生测试收集也纳入同一个工作区服务调度。
 
 ```mermaid
 flowchart LR
@@ -25,7 +25,7 @@ concord check
 concord view
 
 # Agent 提交测试并等待；Concord mod 与 Web 同时显示这个任务。
-concord test run '<测试 ID>'
+concord test discover
 ```
 
 人和 agent 仍可直接编辑项目文件。工作区服务发现变化、重新核验来源并更新各界面；编辑器有未保存草稿时保留草稿并提示冲突（[文件是界面，命令只是助手](../../taste.md#t-6)）。

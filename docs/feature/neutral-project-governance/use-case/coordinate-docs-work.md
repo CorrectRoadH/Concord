@@ -2,12 +2,12 @@
 
 ## 用户目标
 
-父 Agent 在多人共享的 worktree 上，把已定稿的文档目标切成互斥写集交给不同 Agent，并用可重新执行的检查收据验收每份交付，最后由一个 finalizer 收尾。
+父 Agent 在多人共享的 worktree 上，把已定稿的文档目标切成互斥写集交给不同 Agent，用静态文档检查收据核对范围与依赖，再由父 agent 审阅交付。收尾只运行 Concord 自身的全局静态检查。
 
 ## 起始状态
 
 - 项目已初始化，`docs/feature/cart/` 与 `docs/feature/search/` 已提交；search 的改写要参考 cart 的新 README。
-- 项目可在 `concord.config.ts` 的 `docsWork` 中声明检查命令、finalizer 与共享路径，见 [Docs Work 配置](../cli.md#docs-work-配置)；本例不声明，使用内建检查 `writing` 与内建 finalizer `concord check`。
+- 项目可在 `concord.config.ts` 的 `docsWork` 中声明共享路径，见 [Docs Work 配置](../cli.md#docs-work-配置)；检查固定为内建 `writing`，收尾固定为 `concord check`；不接受项目命令。
 - 命令、计划格式与收据字段见 [CLI](../cli.md#docs-work)。
 
 ## 完整路径

@@ -113,7 +113,7 @@
 | `IndexReadinessUnknown`、`PartialResult` | 不声称符号或调用集合完整 |
 | `LanguageServerFailed`、`AnalysisBudgetExceeded`、`AnalysisCancelled` | 清理进程组，不发布新观察 |
 | `AnalysisSourceChanged`、`AnalysisInputUnverified` | 拒绝当前观察，旧结果只作历史 |
-| `AnalysisCleanupUnknown` | 保留 runner 阻断，不发布 |
+| `AnalysisCleanupUnknown` | 保留 外部观察阻断，不发布 |
 
 ## 验收
 
@@ -129,12 +129,12 @@
 | 测试经 testRoots 中的转调函数调用同一步骤的实现 | `observed`，level 为 `step`，保留 `OpenWorldCalls` |
 | 只观察到其它 Feature 的实现 | `not-observed` |
 | 超出默认深度 3、能力缺失、动态调用、框架回调与子进程边界 | 带对应缺口 |
-| server 启动失败、超时、取消、超输出，或主进程退出后子进程存活 | 具名失败，核验整个进程组与管道已清理；清理未知时保留 runner 阻断 |
+| server 启动失败、超时、取消、超输出，或主进程退出后子进程存活 | 具名失败，核验整个进程组与管道已清理；清理未知时保留 外部观察阻断 |
 | 分析期间修改转调文件、fixture、配置、成员集合或 server 实际脚本 | 整个分析单元拒绝发布 |
 | 原生清单的范围、绑定或选中集合变化 | 观察输入身份变化 |
 | 原生用例没有范围 | 使用文件级并带 `FileScope`，测试关联 ID 与 `check` 关系不变 |
 | server 发出编辑或执行请求 | 拒绝；server 自行修改项目文件由输入复核检出 |
-| 静态入口、`test run` 与编辑器服务 | 都不启动 language server |
+| 静态入口、`test list/show` 与编辑器服务 | 都不启动 language server |
 | 固定源码、profile、server 与可复现环境，清空后重新分析 | 关系与身份相同；环境或索引无法核验时标明缺口，不承诺无条件相同 |
 
 以构建打包后的 CLI 在隔离 Git 消费者中验证；可控 LSP 进程只模拟协议边界与异常。声明某语言受支持前，须对该 server 的固定版本运行真实语言 fixture，并按语言、server 版本与 profile 版本分别给出源码关系、符号定位与调用观察的证据；证据不足时只承诺标记关系与具名缺口。

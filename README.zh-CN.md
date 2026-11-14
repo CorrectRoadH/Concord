@@ -6,7 +6,7 @@
 
 Concord 是面向开发者和 coding agent 的本地 Spec 驱动开发工具。Spec 是软件必须做什么的唯一事实来源。人审阅 Spec 的变化；agent 按 Spec 实现，并用测试证明；Concord 检查 Spec、实现与测试是否仍然一致。CLI 和随包提供的 Web 工作台操作同一份仓库文件。
 
-所有内容都是 Git worktree 中的普通文件，人和 agent 直接编辑全部文件。Concord 命令执行变化需要运行的步骤，例如修复核验。`concord check` 检查 Spec、测试与实现是否仍然一致。核心流程不需要账号、模型 API 或云服务。
+所有内容都是 Git worktree 中的普通文件，人和 agent 直接编辑全部文件。Concord 命令执行变化需要运行的步骤，例如原生测试收集和安全引用改写。`concord check` 检查 Spec、测试与实现是否仍然一致。核心流程不需要账号、模型 API 或云服务。
 
 ## 开发流程：Spec 先于实现
 
@@ -71,7 +71,7 @@ Concord 让审阅从 Spec 开始。Spec 是仓库中的 Markdown，代码与测�
 | agent 每次从零开始，重新决定定过的事 | 跨 Feature 的规则写进品味，方案取舍写进 Design，调查结论写进 Memory，都在仓库里 | 新会话读到的是现行约定和理由，不会推翻已经定下的语义 |
 | 改了 Spec，不知道代码和测试该改哪里 | 测试与代码用源码标记指向 Use Case 或其中一步；反向关系与关系缺口从源码推导 | 从变化的行为出发检查关联代码与测试，再调查缺口中是否有遗漏的工作 |
 | 重构把 Spec 和测试一起搅乱 | 行为页（README、Use Case、cli、library）与 architecture 页分开 | 只改实现时只改 architecture 页，行为页和指向它们的测试保持稳定 |
-| 问题没有证据就被宣布修复 | 缺陷写成 Issue；`issue close --fixed` 核验 runner 在缺陷提交上失败、在修复提交上通过，删除 Issue，并输出供提交说明保存的结论 | 审阅者按记录的提交与测试 ID 重放核验 |
+| 审阅者缺少验证上下文 | 标记和可选收集连接 Spec、具体用例与 label；agent 使用项目工具验证并报告证据 | 审阅者检查实现、测试范围与实际结果 |
 | 改着改着，Spec、测试和实现对不上了 | `concord check` 报告断开的链接、指向不存在 Spec 的标记和用错的词 | 人和 agent 直接改文件，出错时马上知道 |
 | 开发日志混进 Spec | 过程写进 Memory，待调查的问题写进 Issue，`docs/` 只保留当前声明 | Spec 始终描述系统现在必须怎样 |
 | 想法还没定，或者定了但暂不实现 | Roadmap 用 Feature 的写法保存方向，采用时移入 `docs/feature/` | 未定的方向不会被误当作现行要求 |
@@ -119,7 +119,7 @@ Concord 让审阅从 Spec 开始。Spec 是仓库中的 Markdown，代码与测�
 | 文件 | 是什么 | 谁在什么时候读 |
 | --- | --- | --- |
 | `AGENTS.md` 中的 Concord 区块 | 告诉 agent 先读 Concord 的指引、交付前运行检查 | agent 每次进入仓库时读 |
-| `concord.config.ts` | 可选配置：源码根、测试根、测试 runner、p5 扩展库 | 默认约定不适用时才需要 |
+| `concord.config.ts` | 可选配置：源码根、测试根、收集 adapter、p5 扩展库 | 默认约定不适用时才需要 |
 | 源码与测试中的标记 | 测试顶部的 `// @use-case <path>`，实现旁的 `// @concord-implements <path>` | 由 `check` 和 `trace` 读取，生成反向关系 |
 | Git 私有目录下的 `concord/` | 每个 worktree 独立的缓存与写入恢复记录 | 不需要读；缓存可以用 `concord cache clear` 删除，结论不变；恢复记录由 `concord recover` 处理，不要手工删除 |
 
@@ -201,16 +201,17 @@ concord test list
 concord show greeting
 ```
 
-`check` 校验关系、生命周期规则和项目写作规则，不执行测试。要运行测试声明，把 `concord test list` 返回的 ID 传给 `concord test run <id>`。默认 runner 使用 Node 原生测试；需要其它 runner 时，在 `concord.config.ts` 中配置。详见[测试指引](skills/concord/references/test.md)。
+`check` 校验文档、关系与写作规则，不执行测试。按需用 `test discover` 收集具体用例、label 与来源位置，用 `test show` 查看绑定；收集不证明执行或覆盖。coding agent 直接使用项目自己的测试命令。详见[测试指引](skills/concord/references/test.md)。
 
 ## 修复缺陷
 
-1. 把缺陷写成 Issue：`concord new issue duplicate-sku`，或直接创建 `docs/issues/duplicate-sku.md`。
-2. 提交会失败的回归测试，带标记 `@issue docs/issues/duplicate-sku.md`。
-3. 提交修复，不改动该测试、runner 配置与测试指向的 Spec。
-4. 运行 `concord issue close duplicate-sku --fixed --reason "..."`。Concord 在缺陷提交与 HEAD 上分别运行配置的 runner。核验通过后删除 Issue、移除它的 `@issue` 标记，并输出应写进提交说明的结论。
+1. 找到被违反的 Spec，补充适用的回归测试。需要跟踪待办才创建 Issue；已有 Issue 可以用 `@issue docs/issues/duplicate-sku.md` 关联。
+2. agent 使用项目自己的命令复现和验证修复，负责环境与清理，报告实际命令、结果和未验证范围。
+3. 运行 `concord check` 核对文档与关联；处理完用 `concord issue close duplicate-sku --reason "..."` 关闭 Issue。
 
-保留回归测试及其 Use Case 关联。重放时，用 `concord test verify` 指定提交说明中的测试 ID 与两个提交。核验只证明 runner 在这两个快照上的运行结果，不代表完整测试覆盖。见[核验修复并关闭缺陷](docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md)。
+关闭原子删除 Issue 及对应的 `@issue` 行，保留测试正文与 Spec 关系，输出供提交说明保存的结论。它不运行测试，不要求特定提交或验证凭证。见[用项目自己的工具验证改动](docs/feature/local-sdlc/use-case/validate-change-with-project-tools.md)。
+
+
 
 ## 打开 Web 工作台
 
@@ -245,7 +246,7 @@ concord --skill test
 concord --skill memory
 ```
 
-用 `concord <command> --help` 查看精确参数，`--json` 获取结构化结果，`--root /path/to/project` 指定其它项目目录。Agent 直接编辑 Spec、Issue 与 Memory；`issue close --fixed`、`roadmap start` 等命令执行这些变化需要运行的步骤。
+用 `concord <command> --help` 查看精确参数，`--json` 获取结构化结果，`--root /path/to/project` 指定其它项目目录。Agent 直接编辑 Spec、Issue 与 Memory；`issue close`、`roadmap start` 等命令执行这些变化需要运行的步骤。
 
 ## 深入使用
 

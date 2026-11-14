@@ -60,7 +60,7 @@ web/            浏览器前端，只调用 HTTP 接口
 | [project-onboarding](../../feature/project-onboarding/README.md) | `domain/onboarding` |
 | [taste](../../feature/taste/README.md) | `domain/taste` |
 | [feedback](../../feature/feedback/README.md) | `domain/feedback`、`domain/issues` |
-| [neutral-project-governance](../../feature/neutral-project-governance/README.md) | `domain/tests`（runner 与 adapter）、`domain/docs-work` |
+| [neutral-project-governance](../../feature/neutral-project-governance/README.md) | `domain/tests`（标记、原生收集与绑定）、`domain/docs-work` |
 | [local-data-engine](../../feature/local-data-engine/README.md) | `base/cache`、`entry/server` |
 | [portable-coordination](../../feature/portable-coordination/README.md) | `base/publication` |
 | [web-workbench](../../feature/web-workbench/README.md) | `entry/http`、`web/` |
@@ -118,7 +118,7 @@ Concord 只以 CLI 交付，全部模块都是内部实现，不作为包导出�
 | Publication | 进程内写互斥、单一 `journal.json`、CAS 摘要核对、原子替换与自动恢复 |
 | Cache | 内存增量工作区图与 `cache.hawdb` 持久缓存的读写 |
 | Git | 状态、diff、提交与 worktree 操作 |
-| OwnedProcess | 外部子进程（如测试 runner、LSP 外部服务）的启动、信号、进程组清理确认与输出预算 |
+| OwnedProcess | 外部子进程（如测试收集器、LSP 外部服务）的启动、信号、进程组清理确认与输出预算 |
 
 **RuntimeEnvironment**：每个入口提供自己的值。其余代码从它取得路径、环境与子进程的设置，不直接读取宿主进程，缺少的变量不回落到宿主。规则见[进程内 CLI](../testing/architecture.md#进程内-cli)。
 
@@ -177,16 +177,16 @@ Queries 是应用操作端口，CLI 与 Concord mod 默认通过 RPC 调用工�
 | `git-status`、`git-diff` | 服务内核 | 当前 Git 状态与定向 diff | `GET /api/git`、`GET /api/git/diff` | 是 |
 | `p5-compile` | 服务内核 | 当前来源捕获与编译 | `POST /api/p5/compile` | — |
 | `action` | 服务内核 | 统一写入、恢复、反馈与缓存操作；写入后直接增量更新工作区图 | `POST /api/action` | 是 |
-| `job-start`、`job-list`、`job-cancel` | 服务内核监督，runner 经 `OwnedProcess` | 单槽测试任务 | `POST /api/jobs`、`GET /api/jobs`、`DELETE /api/jobs/:id` | 是 |
+| `test discover`、`code analyze` | 服务内核监督，经 `OwnedProcess` | 单槽外部观察 | 通过显式应用操作调用，不暴露测试执行 API | 是 |
 | `cache-clear`、`cache-status`、`cache-rebuild` | 服务内核 | 缓存状态、清理与重建 | 经 `action` | 是 |
 
-测试任务只有一个槽位。浏览器断开不取消任务；取消要确认外部 runner 进程组退出后才释放槽位。`view export` 只在 CLI 本进程执行。
+收集与语言分析共用外部观察槽位。取消要确认自有进程组退出后才释放槽位。`view export` 只在 CLI 本进程执行。
 
 ## 进程能力
 
 | 进程 | 角色与能力 |
 | --- | --- |
-| 工作区服务（单内核） | 持有唯一 `server/lock` 与持久 `cache.hawdb`，维护内存增量工作区图与内部解析线程池，执行全部查询、写入、恢复、LSP overlay 计算与测试任务监督，提供 RPC 与 HTTP 接口 |
+| 工作区服务（单内核） | 持有唯一 `server/lock` 与持久 `cache.hawdb`，维护内存增量工作区图与内部解析线程池，执行全部查询、写入、恢复、LSP overlay 计算与外部观察监督，提供 RPC 与 HTTP 接口 |
 | CLI / `concord lsp` / Concord mod | 薄客户端：定位项目目录，经本机 socket 调用工作区服务并渲染输出；`--server=command` 或无服务模式在本进程内运行同一内核 Layer |
 
 每个入口的 Layer 构建在测试中验证：缺少能力时编译或构建失败，不在运行时才发现。
@@ -199,8 +199,8 @@ Queries 是应用操作端口，CLI 与 Concord mod 默认通过 RPC 调用工�
 | 工作区服务协议 | `effect/rpc`（请求关联、具名错误、取消、结果流）经 `effect/socket` | 二进制序列化与传输准入，见[协议](../../feature/local-data-engine/architecture.md#协议) |
 | 当前状态与订阅 | SubscriptionRef | 每个订阅只保留最新状态；慢订阅的旧状态被替换，计入发送预算 |
 | 合并监听事件与增量刷新 | Stream 与 Schedule | 去抖合并文件变更事件，按变更路径增量更新工作区图 |
-| 读写与维护互斥 | Semaphore / Ref | 进程内串行化写入、缓存清理与单槽测试任务；跨进程只需唯一 `server/lock` |
-| 在途请求与取消 | FiberMap、FiberSet | 键为连接与请求身份；中断外部 runner 时确认进程组回收 |
+| 读写与维护互斥 | Semaphore / Ref | 进程内串行化写入、缓存清理与单槽外部观察；跨进程只需唯一 `server/lock` |
+| 在途请求与取消 | FiberMap、FiberSet | 键为连接与请求身份；中断外部观察进程 时确认进程组回收 |
 | 启动就绪 | Deferred | — |
 | HTTP 与静态资源 | HttpRouter、HttpStaticServer | Host/Origin 校验，见[Web 工作台架构](../../feature/web-workbench/architecture.md) |
 | 测试中的时间与协议 | TestClock；RpcTest | 服务状态机与计时在测试进程内以 Layer 加 TestClock 验证 |

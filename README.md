@@ -79,7 +79,7 @@ Concord starts review from the spec. The spec is Markdown in the repository. Cod
 | Every agent session starts from zero and re-decides settled questions | Cross-feature preferences live in the taste file, tradeoffs in Design records, and findings in Memory, all in the repository | A new session reads the current rules and their reasons instead of overturning them |
 | A spec changes, but nobody knows where to update code or tests | Tests and code point to a Use Case or step through source annotations; reverse links and relationship gaps are derived from source | Start at the changed behavior, inspect the linked code and tests, and investigate gaps for missing work |
 | Refactors churn the spec and the tests | Behavior pages (README, Use Case, CLI, library) are separate from the architecture page | A behavior-preserving refactor changes only the architecture page, so behavior pages and the tests pointing at them stay stable |
-| Bugs are declared fixed without evidence | A defect becomes an Issue; `issue close --fixed` verifies that the runner fails on the defect commit and passes on the fix, deletes the Issue, and prints the result for the commit message | Reviewers can replay the verification from the recorded commits and test IDs |
+| Reviewers lack validation context | Source annotations and optional collection connect specs to concrete cases and labels; the agent runs project tools and reports evidence | Reviewers inspect the implementation, test scope and actual results |
 | Specs, tests, and code drift apart | `concord check` reports broken links, markers that point at missing specs, and misused words | People and agents edit files directly and learn about mistakes right away |
 | Development logs leak into the spec | Process goes to Memory and open questions go to Issues; `docs/` keeps only current declarations | The spec always describes what the system must do now |
 | Ideas are not settled, or settled but not scheduled | Roadmap keeps a direction in Feature form until `roadmap start` moves it into `docs/feature/` | Unsettled directions are never mistaken for current requirements |
@@ -127,7 +127,7 @@ A file's location and its single top-level heading give it identity, kind, and n
 | File | What it is | Who reads it, and when |
 | --- | --- | --- |
 | The Concord block in `AGENTS.md` | Tells agents to read the Concord guidance and run the check before delivery | Agents, every time they enter the repository |
-| `concord.config.ts` | Optional configuration: source roots, test roots, test runner, p5 libraries | Only when the defaults do not fit |
+| `concord.config.ts` | Optional configuration: source roots, test roots, collection adapters, p5 libraries | Only when the defaults do not fit |
 | Annotations in source and tests | `// @use-case <path>` at the top of a test, `// @concord-implements <path>` next to code | Read by `check` and `trace` to derive reverse links |
 | `concord/` in the Git private directory | Per-worktree cache, write recovery records, and leases | Not for reading; `concord cache clear` removes the cache without changing results, while recovery records are handled by `concord recover` and must not be deleted by hand |
 
@@ -209,16 +209,17 @@ concord test list
 concord show greeting
 ```
 
-`check` validates relationships, lifecycle rules, and the project's writing policy; it does not run tests. To execute a test declaration, pass an ID returned by `concord test list` to `concord test run <id>`. The default runner uses Node's test runner; configure your project's runner in `concord.config.ts` when needed. See the [test guide](skills/concord/references/test.md).
+`check` validates document structure, relationships and writing rules. Optional `test discover` collects native cases, labels and locations; `test show` displays their bindings to source annotations. Collection does not prove execution or coverage. Coding agents run tests with the project's own tools. See the [test guide](skills/concord/references/test.md).
 
 ## Fix a defect
 
-1. Write the defect as an Issue: `concord new issue duplicate-sku`, or create `docs/issues/duplicate-sku.md` directly.
-2. Commit a regression test that fails, annotated with `@issue docs/issues/duplicate-sku.md`.
-3. Commit the fix without changing the test, the runner configuration, or the spec it points to.
-4. Run `concord issue close duplicate-sku --fixed --reason "..."`. Concord runs the configured runner on the defect commit and on HEAD. If verification succeeds, it deletes the Issue, removes its `@issue` markers, and prints the result to include in your commit message.
+1. Identify the violated spec and add an appropriate regression test. Create an Issue only when work needs tracking; an existing Issue can be linked with `@issue docs/issues/duplicate-sku.md`.
+2. Use the project's test commands to reproduce the defect and validate the fix. The agent manages the environment and cleanup, then reports the commands, results and unverified scope.
+3. Run `concord check` for document and relationship checks. Close a handled Issue with `concord issue close duplicate-sku --reason "..."`.
 
-Keep the regression test and its Use Case link. Replay verification with `concord test verify`, using the test IDs and commits recorded in the commit message. This establishes the runner's result on those two snapshots, not complete test coverage. See [verify a fix and close a defect](docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md).
+Closing atomically removes the Issue and its `@issue` markers, preserves the regression test and Spec links, and prints the reason for the commit message. It neither runs tests nor requires particular commits or test receipts. See [validate changes with project tools](docs/feature/local-sdlc/use-case/validate-change-with-project-tools.md).
+
+
 
 ## Open the web workspace
 
@@ -253,7 +254,7 @@ concord --skill test
 concord --skill memory
 ```
 
-Use `concord <command> --help` for exact arguments, `--json` for structured results, and `--root /path/to/project` to target another worktree. Agents edit specs, Issues, and Memory directly; commands such as `issue close --fixed` and `roadmap start` run the steps those changes require.
+Use `concord <command> --help` for exact arguments, `--json` for structured results, and `--root /path/to/project` to target another worktree. Agents edit specs, Issues, and Memory directly; commands such as `issue close` and `roadmap start` run the steps those changes require.
 
 ## Go further
 

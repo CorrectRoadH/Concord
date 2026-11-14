@@ -2,7 +2,7 @@
 
 ## 用户目标
 
-维护者从尚未接入的 Git worktree 顶层完成初始化，得到可以继续维护的 Concord 项目；不需要 runner 或覆盖默认值的项目不写配置。
+维护者从尚未接入的 Git worktree 顶层完成初始化，得到可以继续维护的 Concord 项目；不需要覆盖默认值的项目不写配置。
 
 ## 起始状态
 
@@ -53,7 +53,7 @@
    Inspect configuration: concord doctor
    ```
 
-   在终端中 init 逐项询问测试根、源码根与 runner；非 TTY 不等待交互，按确定的默认值执行。`--test-root`、`--source-root`、`--runner-config`、`--docs-only` 与 `--yes` 表达同样的选择。本例没有选择 runner 或覆盖，所以不创建 `concord.config.ts`。
+   在终端中 init 逐项询问测试根与源码根；非 TTY 不等待交互，按确定的默认值执行。`--test-root`、`--source-root`、`--docs-only` 与 `--yes` 表达同样的选择。本例没有覆盖默认值，所以不创建 `concord.config.ts`。
 
    init 写入的文件：
 
@@ -63,31 +63,21 @@
    - `AGENTS.md` 中的 Concord 托管区块：引导 coding agent 运行 `concord --skill` 读取当前安装版本的说明。
    - 四个工作流 skill，见[用工作流 skill 走开发流程](run-workflow-from-agent.md)。
 
-3. 需要 `test run` 或修复核验时，初始化时就配置 runner。 {#runner}
+3. 测试不在默认目录时覆盖发现范围。 {#configure}
 
    ```sh
-   concord init --test-root spec --runner-config runner.json
+   concord init --test-root spec
    ```
 
-   `runner.json` 是一个 runner 对象，例如 `{"argv":["node","--test","{file}"],"timeoutMs":60000}`。init 据此创建 `concord.config.ts`：
+   init 创建静态配置：
 
    ```ts
-   export default {
-     "testRoots": [
-       "spec"
-     ],
-     "runner": {
-       "argv": [
-         "node",
-         "--test",
-         "{file}"
-       ],
-       "timeoutMs": 60000
-     }
-   };
+   export default { testRoots: ['spec'] };
    ```
 
-   测试或实现不在约定位置时用 `--test-root`、`--source-root` 覆盖发现范围；没有测试的项目可以没有测试根。之后的修改见[安全维护项目配置](maintain-project-config.md)。
+   实现不在约定位置时用 `--source-root`；没有测试的项目可以没有测试根。需要具体原生用例和 label 时按[收集原生测试](../../local-sdlc/use-case/collect-native-tests.md)配置可选 adapter。测试执行由 agent 使用项目命令完成，初始化不询问执行器。之后的修改见[安全维护项目配置](maintain-project-config.md)。
+
+
 
 4. 让 agent 读取 Concord 指引与写作指南。 {#guide}
 
@@ -124,7 +114,7 @@
 | 情形 | 结果 |
 | --- | --- |
 | 新项目 | 必有 `docs/taste.md`；其中的示例由作者写入真实条目时替换 |
-| 没有选择 runner 或覆盖 | 不创建 `concord.config.ts`；`check`、`trace` 与 Web 工作台按[默认值](../format.md#配置项)工作 |
+| 没有覆盖默认值 | 不创建 `concord.config.ts`；`check`、`trace` 与 Web 工作台按[默认值](../format.md#配置项)工作 |
 | 没有 `AGENTS.md` | 创建它 |
 | 已有 `AGENTS.md` | 只追加或刷新边界明确的托管区块，区块外的原字节保留 |
 | `AGENTS.md` 中的托管标记残缺 | 原子拒绝，不覆盖未知内容 |

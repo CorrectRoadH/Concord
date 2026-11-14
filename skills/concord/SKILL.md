@@ -1,13 +1,13 @@
 ---
 name: concord
-description: 在本地 Git 仓库中使用 Concord 维护产品 Spec、代码与测试标记、Issue、工程 Memory、追踪关系与修复核验；需要读写 Concord 文档、关闭缺陷或解释检查结论时使用。
+description: 在本地 Git 仓库中使用 Concord 维护产品 Spec、代码与测试标记、Issue、工程 Memory、追踪关系与原生测试收集；需要读写 Concord 文档、关闭缺陷或解释检查结论时使用。
 ---
 
 # Concord
 
 Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与测试中的 Concord 标记、Issue 与 Memory 各自保存在自己的文件里，关系从中推导。先遵守接入项目的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
 
-`docs/` 与 `memory/` 下的文件都可以直接编辑。具名命令执行需要运行的步骤，例如修复核验、Issue 关闭与 Roadmap 采用；各操作的当前写法由对应主题说明。
+`docs/` 与 `memory/` 下的文件都可以直接编辑。具名命令执行需要运行的步骤，例如原生收集、Issue 关闭与 Roadmap 采用；各操作的当前写法由对应主题说明。
 
 只在任务授权范围内修改文件或运行写命令。`check`、`trace` 无 finding 不等于测试覆盖率；提交、push、发版、部署和远端消息仍需独立授权。
 
@@ -18,7 +18,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 - 为项目写第一批 Spec：运行 `concord --skill start`，结合本次目标与仓库现状选择指南；补写用 `concord --skill docs-from-code`，新项目用 `concord --skill docs-from-scratch`，已明确的范围直接沿用。
 - Feature、Use Case、Engineering、Roadmap、Design 的布局、写法与采用：运行 `concord --skill document`，同时取得文档模型、目录树和完整成稿示例。
 - 整文件、函数和代码段的实现关联与位置查询：运行 `concord --skill code`。
-- 测试标记、测试执行与修复核验：运行 `concord --skill test`。
+- 测试标记、具体用例与 label 收集：运行 `concord --skill test`。
 - Memory 的内容、关系与维护：运行 `concord --skill memory`。
 - Issue、缺陷修复流程与 GitHub / Linear 来源：运行 `concord --skill feedback`。
 - 检查、关系追踪与审阅：运行 `concord --skill trace`。

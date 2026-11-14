@@ -2,9 +2,9 @@
 
 ## 所有权
 
-Concord 拥有路径身份推导、源码标记与测试支持文件映射、稳定 case 身份派生、trace、Issue 与 Memory 的字段与状态转换校验、[修复核验](../local-sdlc/README.md#证据的范围)。CLI、Web 与 action 共用同一实现；入口和存储适配可以不同，生命周期与核验不变量只有一个解释。
+Concord 拥有路径身份推导、源码标记与测试支持文件映射、稳定 case 身份派生、trace、Issue 与 Memory 的字段与状态转换校验与原生用例收集/绑定。CLI、Web 与 action 共用同一实现；入口和存储适配可以不同，生命周期与静态检查不变量只有一个解释。
 
-接入项目拥有测试 runner、执行环境、候选产品的构建与安装，以及产品命令、Preview、示例同步、文档站与 PR 编辑格式。Concord 只通过配置的 runner 运行测试，按退出码解释结果，不签发原生 case 覆盖或正式可靠性结论。Concord 的 `review` 保留 Spec、测试、Issue 与 Memory 的审阅能力。依据：产品工具归接入项目、治理归 Concord。
+接入项目拥有测试 runner、执行环境、候选产品的构建与安装，以及产品命令、Preview、示例同步、文档站与 PR 编辑格式。Concord 只收集用例与 label、派生绑定；测试执行与结果解释由 agent 负责，不签发测试通过或覆盖结论。Concord 的 `review` 保留 Spec、测试、Issue 与 Memory 的审阅能力。依据：产品工具归接入项目、治理归 Concord。
 
 ## 升级
 
@@ -22,7 +22,7 @@ Concord 只读写[当前格式](../../architecture.md#当前格式)，不提供�
 
 ## Docs Work
 
-`docs work` 的运行状态保存在 Git-private `concord/docs-work/v1/<run-id>/`，由工作区服务的写互斥协调原子更新，不再单独维护目录级文件锁。检查子进程超时或取消时回收进程组。
+`docs work` 的运行状态保存在 Git-private `concord/docs-work/v1/<run-id>/`，由工作区服务的写互斥协调原子更新，不再单独维护目录级文件锁。检查直接调用 Concord 自身的静态规则，不创建外部检查进程或运行项目命令。
 
 ## 命令入口
 

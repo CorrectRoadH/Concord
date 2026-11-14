@@ -34,6 +34,6 @@
 
 ## 还在路上的
 
-- [多客户端共享工作区服务操作](roadmap/shared-project-service/README.md)：CLI、Herdr 与 Web 通过工作区服务共享写入与测试任务的目标方案。
+- [多客户端共享工作区服务操作](roadmap/shared-project-service/README.md)：CLI、Herdr 与 Web 通过工作区服务共享写入与收集任务的目标方案。
 - [Roadmap](roadmap/README.md)：还没开始实现的方向。
 - [Issue](issues/README.md)：待处理的问题与请求。

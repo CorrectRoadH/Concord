@@ -1,6 +1,6 @@
 # 本地 SDLC 闭环
 
-功能该做成什么样、代码怎么实现、哪些测试在守护它，通常散落在聊天记录、PR 描述和各人的记忆里。Concord 把它们放回同一个 Git 仓库：Spec 写在 `docs/`，测试和代码用一行标记指向 Spec，`concord check` 核对三者是否仍然一致。
+功能该做成什么样、代码怎么实现、哪些测试在守护它，通常散落在聊天记录、PR 描述和各人的记忆里。Concord 把它们放回同一个 Git 仓库：Spec 写在 `docs/`，测试和代码用一行标记指向 Spec，`concord check` 核对文档与关联。
 
 面向的读者是维护者和 coding agent。全部内容都是仓库里的普通文件，可以直接编辑，不需要账号、模型 API 或云服务。`new`、`roadmap start`、`issue close` 等命令只做必须由程序完成的操作，并把结果写进文件。
 
@@ -10,7 +10,7 @@
 - **把测试和代码连到 Spec。** 在测试或实现文件里写一行标记，Concord 从源码反查出某个 Use Case 由哪些测试守护、由哪些代码实现。
 - **找出没有关联 Use Case 的测试。** 每个测试标注它验证的 Use Case 或其中一步。`concord test discover` 收集测试框架认识的全部测试后，`concord trace gaps` 列出没有关联任何 Use Case 的测试。缺少关联不表示测试没有价值，维护者结合测试目的决定如何处理（[只声称证明过的](../../taste.md#t-5)）。
 - **让 check 守住一致性。** Spec 被删除、改名或标记写错时，`concord check` 指出出错的文件和行。
-- **用证据关闭缺陷。** 缺陷记为 Issue。回归测试在缺陷提交上失败、在修复提交上通过，Concord 核验这两点后才把 Issue 关为已修复。
+- **处理问题并留下结论。** agent 用项目自己的命令验证改动，处理完关闭 Issue。关闭不执行测试，也不要求重放此前的验证。
 - **积累工程知识。** 调查结论、根因和裁决写成 Memory，之后可以按关键词检索。
 
 ## 上手：从一个 Use Case 到一次通过的检查
@@ -81,7 +81,7 @@
 
    检查以退出码 1 失败，指出标记所在的文件和行。改正标记后重新通过。
 
-完整的命令清单、JSON 输出和错误码见[命令体验](cli.md)，文档路径、frontmatter 与标记的写法见[文档与标记格式](format.md)，校验配置、adapter 消息与导出产物的 JSON Schema 见[机器可读 Schema](cli.md#机器可读-schema)。
+完整的命令清单、JSON 输出和错误码见[命令体验](cli.md)，文档路径、frontmatter 与标记的写法见[文档与标记格式](format.md)，校验配置、收集 adapter 消息与导出产物的 JSON Schema 见[机器可读 Schema](cli.md#机器可读-schema)。
 
 ## Spec、测试与实现怎样保持一致
 
@@ -185,8 +185,7 @@ export default function (p: P5) {
 - [发现测试并重建缓存](use-case/discover-annotated-tests.md)
 - [从源码追踪实现归属](use-case/trace-code-ownership.md)
 - [分析其它语言的代码声明与测试依赖](use-case/analyze-other-languages.md)
-- [通过 adapter 执行原生测试用例](use-case/run-native-test-adapters.md)
-- [用自己的执行器接入 Concord](use-case/run-tests-with-own-runner.md)
+- [收集原生测试并关联具体用例](use-case/collect-native-tests.md)
 
 检查与审阅：
 
@@ -198,8 +197,7 @@ export default function (p: P5) {
 
 修复缺陷与积累知识：
 
-- [核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)
-- [一次提交核验小修复](use-case/verify-fix-in-one-commit.md)
+- [用项目自己的工具验证改动](use-case/validate-change-with-project-tools.md)
 - [检索与维护工程知识](use-case/recall-and-maintain-memory.md)
 
 保护项目目录：
@@ -220,25 +218,22 @@ export default function (p: P5) {
 
 ### 证据的范围
 
-证据只表达实际证明的范围（[只声称证明过的](../../taste.md#t-5)）。
+源码标记声明关系，原生收集说明框架报告了哪些用例、label 与位置；二者均不证明执行、断言正确或覆盖率（[只声称证明过的](../../taste.md#t-5)）。
 
-- 源码声明不等于执行，命令成功不等于逐 case 覆盖或正式 E2E 可靠性。修复核验也不描述成原生 runner 的逐 case 覆盖率。
-- Issue 标记为 fixed 时，同一冻结命令必须在缺陷提交上以非零结果结束、在修复提交上通过，两者之间测试、runner 输入与所指 Spec 不变。
-- 核验通过后删除 Issue，结论输出给提交说明，可用 `test verify` 在声明的输入与环境下重放。command 结果不证明逐 case 执行。完整路径见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
-- 文档、品味结构或关系检查不得被展示为实现合规、功能完成或测试覆盖的证明。
+测试结果由项目工具产生，agent 报告命令、执行范围、结果与未验证项。关闭 Issue 的结论只说明问题如何处理，不是测试通过凭证。
 
 ### 测试的边界
 
-Concord 用源码标记把测试关联到 Spec，通过配置的 `runner` 运行测试，并只按 runner 的退出码解释结果。它不登记测试套件，不签发原生 case 覆盖或正式可靠性结论（[证据的范围](#证据的范围)）。
+Concord 解析源码标记，并可收集原生测试清单，将标记关联到具体用例。执行由 coding agent 使用项目工具完成（[工具提供上下文，agent 负责执行验证](../../taste.md#t-16)）。
 
 | 归属 | 内容 |
 | --- | --- |
-| 项目拥有 | 测试框架与原生 runner、执行环境与执行副本、候选产品的构建与安装、进程与容器等外部资源的清理，以及何时、在哪个通道执行哪些测试 |
-| Concord 拥有 | 发现范围、源码标记解析、稳定 case 身份、`concord test run`，以及以 fixed 关闭 Issue 前的修复核验 |
+| 项目与 agent | 测试命令、选择执行范围、环境与依赖、构建与安装、测试进程和容器的清理、结果解释及 CI |
+| Concord | 静态标记、稳定关联身份、原生用例与 label 收集、范围或显式原生 ID 绑定、关联查询与缺口 |
 
-发现范围默认取存在的 `test/`、`tests/`，测试在其它位置时配置 `testRoots`。Concord 不读取 Nx metadata，也没有固定 e2e 目录、host/provider 分类或 pr/main/nightly/release 通道。所有权划分见[治理边界](../neutral-project-governance/architecture.md#所有权)。
+发现范围默认取存在的 `test/`、`tests/`，其它位置用 `testRoots` 指定。未配置收集 adapter 不影响静态关联、检查和 Issue 关闭。
 
-逐 case 的原生证据、可靠性观察与政策下限不属于 Concord，需要它们的项目在自己的 CI 中实现，其结论不参与 Issue 的关闭判定。仓库中已有的治理配置与原生测试证据原地保留，Concord 不读取、不删除。接入验收见[按 Concord 规范接入软件项目](../neutral-project-governance/use-case/adopt-neutral-governance.md#验收)。
+Concord 不提供测试执行、红绿快照核验、测试报告裁决或通过凭证，不要求测试与修复拆分提交。具体流程见[用项目自己的工具验证改动](use-case/validate-change-with-project-tools.md)。
 
 ## 依据的品味
 

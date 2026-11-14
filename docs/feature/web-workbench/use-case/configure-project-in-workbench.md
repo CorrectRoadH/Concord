@@ -12,19 +12,19 @@
 
 1. 打开「项目设置」查看生效的配置与原文。 {#open-settings}
 
-   点击左侧主侧栏的「项目设置」，页面展示当前生效的测试根、源码根、runner 配置，以及服务端安全读取的 `concord.config.ts` 原文与摘要：
+   点击左侧主侧栏的「项目设置」，页面展示当前生效的测试根、源码根、收集 adapter 配置，以及服务端安全读取的 `concord.config.ts` 原文与摘要：
 
    ```text
    项目设置
    concord.config.ts
    testRoots: test, tests
    sourceRoots: src
-   runner: node --test {file}
+   testAdapters: none
    ```
 
 2. 修改配置并自动保存。 {#save-config}
 
-   在项目设置中修改 `testRoots`、`sourceRoots` 或 `runner` 后停止输入 800ms，工作台以读取时的配置原文作为前像提交 `config.set`，写入 `concord.config.ts`。保存后工作台显示构建中，按新配置重新构建工作区投影（[自动保存](../ui.md#自动保存)）。
+   在项目设置中修改 `testRoots`、`sourceRoots` 或 `testAdapters` 后停止输入 800ms，工作台以读取时的配置原文作为前像提交 `config.set`，写入 `concord.config.ts`。保存后工作台显示构建中，按新配置重新构建工作区投影（[自动保存](../ui.md#自动保存)）。
 
 3. 维护外部反馈连接。 {#configure-feedback}
 
@@ -32,7 +32,7 @@
 
 4. 在「诊断与工具」中查看健康状态。 {#inspect-workspace-health}
 
-   点击主侧栏的「诊断与工具」，查看工作区扫描完整性、配置诊断、缓存状态与测试任务槽位状态。服务启动时若恢复过中断的写入，这里列出 `journalStatus` 与保留了外部编辑的文件。
+   点击主侧栏的「诊断与工具」，查看工作区扫描完整性、配置诊断、缓存状态与外部观察任务槽位状态。服务启动时若恢复过中断的写入，这里列出 `journalStatus` 与保留了外部编辑的文件。
 
 ## 结果
 

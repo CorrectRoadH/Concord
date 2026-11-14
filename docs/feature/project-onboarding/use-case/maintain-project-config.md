@@ -2,7 +2,7 @@
 
 ## 用户目标
 
-维护者只在需要 runner 或偏离约定时写配置，获得 TypeScript 类型提示，并保持读取、编辑、验证和恢复行为一致。
+维护者只在需要原生收集或偏离约定时写配置，获得 TypeScript 类型提示，并保持读取、编辑、验证和恢复行为一致。
 
 ## 起始状态
 
@@ -67,7 +67,7 @@
      at ["extra"]
    ```
 
-   写成运行时表达式，例如 `export default { runner: makeRunner() };`：
+   写成运行时表达式，例如 `export default { testRoots: discoverTestRoots() };`：
 
    ```text
    ok: false

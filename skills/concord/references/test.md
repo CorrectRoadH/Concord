@@ -1,6 +1,6 @@
-# 测试标记与执行
+# 测试标记与原生收集
 
-测试根默认是存在的 `test/`、`tests/`，源码根默认是存在的 `src/`，其它位置用 `concord.config.ts` 的 `testRoots`、`sourceRoots` 配置。`.env`、`.env.*` 与 `dist` 始终排除；vendor 或生成文件用 `sourceIgnore: ['src/generated', 'tests/vendor']` 排除。每项是仓库相对文件或目录（含子树），不支持 glob；显式来源根优先，文档、runner.sourceFiles 和直接读写仍严格校验。
+测试根默认是存在的 `test/`、`tests/`，源码根默认是存在的 `src/`，其它位置用 `concord.config.ts` 的 `testRoots`、`sourceRoots` 配置。`.env`、`.env.*` 与 `dist` 始终排除；vendor 或生成文件用 `sourceIgnore: ['src/generated', 'tests/vendor']` 排除。每项是仓库相对文件或目录（含子树），不支持 glob；显式来源根优先，文档和直接读写仍严格校验。
 
 Concord 从测试根里的 Concord 标记读取唯一正向关系，不解析宿主测试语法。标记存在即表示该测试关联存在。先让目标 Feature 或 Use Case 存在，再生成注释：
 
@@ -8,7 +8,7 @@ Concord 从测试根里的 Concord 标记读取唯一正向关系，不解析宿
 concord test marker --contract docs/feature/login/use-case/expired-token.md
 ```
 
-把输出放进测试文件；`//`、`#` 和 `--` 都是标记。回归测试在同一标记块加 `@issue docs/issues/<id>.md`，指向它守护的 Issue，可重复。没有 `@name` 时运行覆盖整个文件，不声称选中了某个原生用例。示意：
+把输出放进测试文件；`//`、`#` 和 `--` 都是标记。回归测试在同一标记块加 `@issue docs/issues/<id>.md`，指向它守护的 Issue，可重复。`@name` 提供稳定关联身份，不是执行选择器。示意：
 
 ```ts
 // @use-case docs/feature/login/use-case/expired-token.md
@@ -48,59 +48,28 @@ concord test list --json
 concord test show <derived-reference> --json
 ```
 
-`test run` 执行项目 runner 或匹配的 adapter，返回本次结果；既可以传 `neref_...` 测试关联 ID，也可以直接传 Feature、Use Case、Engineering 的路径、短选择器或 `<path>#<anchor>`（按 case ID 顺序运行指向该目标的全部 `active` 测试声明，自动跳过 `@status retired`）。`test discover` 也会显式启动 adapter 和框架收集进程：
+## 原生测试收集
+
+按需在 `concord.config.ts` 声明 `testAdapters`。每项声明 `id`、位于测试根内且互不重叠的 `include`，以及 `builtin` 或外部 `argv`。未覆盖的文件仍保留静态标记能力。
 
 ```sh
-concord test run <derived-reference-or-spec-ref> --json
-concord test run docs/feature/login/use-case/expired-token.md#reject-token --json
-concord test verify --staged --json
-concord test verify --fix <commit> --json
-concord test verify --defect <commit> --fix <commit> <derived-reference> --json
+concord test discover --json
+concord test show <derived-reference> --json
+concord trace gaps --json
 ```
 
-未配置 adapter 或无法精确绑定时，执行范围是整个作者声明的 command，不是底层 runner 的逐 case 原生结果。超时、信号、启动失败、已知零执行、全 skip/todo 或输出限制不是通过；通用 runner 的 unknown execution 也不能表述为 native case passed。
+收集返回框架认识的具体用例、原生身份、参数组、范围与 label（`tags`），能力不足则返回 gap。`test list/show` 的 `bindings` 在 Concord 内派生当前标记对应的原生用例，提供其 label 与位置；消费者不自行重写绑定算法。
 
-小修复把回归测试和修复一起暂存，运行 `concord test verify --staged`，通过后一次提交并把结论写进提交说明。红快照是 HEAD 加上暂存区中 `testRoots` 下的改动，绿快照是全部暂存内容；未暂存改动不参与，命令不修改工作目录、暂存区或引用。提交后用 `concord test verify --fix <commit>` 重放。Issue 只在工作要留到以后或交给别人时才建；已有 Issue 的缺陷修复用 `issue close <id> --fixed` 核验后删除 Issue 与对应 `@issue` 标记。测试与修复可以在同一提交，也可以先单独提交失败回归，再提交修复；两个提交路径用 `test verify --defect <commit> --fix <commit> <derived-reference>` 重放。完整流程与拒绝条件见 `concord --skill feedback`。
+有真实范围时自动绑定；没有范围时可以在同一标记块写 `@native <收集返回的完整nativeId>`。原生 ID 或 label 不替代 Spec 关系，不改变关联 ID。参数组按真实 group 与范围识别，不能按同名或 label 合并。
 
-暂存区核验把每个标记块视为一个用例，正文是块结束到同文件下一标记块之前的原文，最后一条到 EOF；按原文逐字符比较，空白与注释也算变化。标记在 HEAD 不存在则为新增；第一个块之前的内容不选中任何用例。没有 `@name` 的 command runner 按文件运行，`Tests` 仍列被选中的用例，红绿结果用 `scope: "file"` 表示文件退出结果；带 `@name` 或由原生 adapter 精确运行时为 `scope: "case"`。同一文件内多个未命名用例共用一次文件运行。
+外部 adapter 使用 `concord.test-adapter/v1` 的 `collect-plan` 与 `collect-parse`。每请求一个新进程，stdin/stdout 各一个 JSON；响应回显 format、op、requestId、planId 与 inputs。通过 `concord schema test-adapter` 读取完整字段和预算。
 
-## 原生 adapter
+收集可以加载项目模块或编译列举，但不派发测试体，也不以执行测试补齐清单。加载模块可能有副作用，必须信任项目和收集工具。Concord 管理自己的收集进程、输出与产物目录；超时、取消、截断、输入漂移或清理未知都不能成为成功清单。
 
-在 `concord.config.ts` 声明 `testAdapters`。每项的 `include` 是 `testRoots` 内的文件或目录，按完整路径段匹配，不支持 glob；不同项的范围不得相交。未覆盖的文件保持原 runner 行为。
+普通查询与 `concord check` 不启动收集；缺少或过期观察如实展示，不影响静态关系或 Issue 关闭。收集、label 和绑定不证明测试执行、通过或覆盖率。
 
-```ts
-testAdapters: [{
-  id: 'python',
-  include: ['test/python'],
-  builtin: 'pytest',
-  frameworkVersion: '9.2.0',
-  implementationFiles: [],
-  inputRoots: ['fixtures'],
-  lockFiles: ['uv.lock'],
-  envNames: ['PATH', 'HOME', 'UV_CACHE_DIR'],
-}]
-```
+## 运行与验证
 
-内置名称为 `node-test`、`vitest`、`pytest`、`go`、`cargo`。固定框架版本必须与实际运行环境匹配；JVM 由外部 provider 提供。外部 adapter 用非空 `argv` 代替 `builtin`，并在 `implementationFiles` 列出执行脚本及其传递实现文件；`node adapter.ts` 不能只摘要 Node。`inputRoots` 应覆盖 fixture、导入支持文件和构建配置；锁文件由 `lockFiles` 声明。只把 `envNames` 中的环境变量传给进程，结果不记录环境值或原始计划参数。
+coding agent 依项目的 AGENTS、Engineering 和 CI 约定，直接选择并运行测试，处理环境、超时与清理，报告实际命令、范围、结果和未验证项。Concord 不提供测试执行、红绿核验或结果裁决，不要求拆分提交，也不重复执行以关闭 Issue。
 
-```sh
-concord test discover test/python/test_login.py --json
-concord test list --json
-concord test run <derived-reference> --require-native --json
-```
-
-`test list/show` 仅展示已有观察，带 `current`、`complete`、`gaps`；不会运行收集。`check`、`trace` 和关系身份不依赖观察缓存。run 始终重新收集当前目标，不使用旧清单作为选择依据。
-
-仓库内输入在执行前后核对成员和字节；`inputScope` 展示纳入文件、摘要、排除项及版本。输入根覆盖测试、源码及声明的 fixture/配置目录；显式 `sourceIgnore` 子树属于排除项，不能把实际依赖排除后宣称完整。无法冻结的系统库、工具链、外部服务和包缓存以 `ExternalInputUnknown` 标记，观察的 `complete=false`。这项环境 gap 不阻止精确选择或逐项结果；结果保留 gap、配置框架版本、可读取的框架和运行时版本。结果的 `complete` 仅表示原生报告完整，不表示环境已冻结。
-
-完整声明范围可以自动绑定标记和参数组。缺少范围时，在同一标记块添加 `@native <native-id>`，使用 collect 返回的带 provider 命名空间的 ID。它可以与 `@name` 共存，但不改变关联 ID。原生标签不创建关联；范围绑定与显式选择冲突时失败。没有精确绑定时执行范围为文件；`--require-native` 或无法满足的显式 `@native` 返回 `NativeSelectionUnsupported`。
-
-Node 24 的独立原生收集能力未获验证时，返回 `NodeCollectionUnsupported`，不能声明原生选择。Go 的顶层列举不保证动态子测试完整；执行报告出现额外子项时 invalid。Cargo 内置入口限于明确 library root 或 integration-test target，按 target 拆分调用。缺少范围、参数组或标签能力时不推断这些元数据。
-
-内置 Cargo 的模块化名称无法确定源码文件归属时，返回 `CargoFileMembershipUnknown`。报告目录安全读取当前依赖 Linux `/proc/self/fd`；其它平台返回 `ReportUnsafe`，不使用未经核验的路径读取替代。
-
-外部程序使用 `concord.test-adapter/v1` 四种 op：`collect-plan`、`collect-parse`、`select-plan`、`report-parse`。每请求一个新进程，stdin/stdout 各一个 JSON；响应回显 format、op、requestId、planId 和 inputs。Concord 严格解码计划、状态与报告，拒绝未知字段、重复键、非有限数、越界路径与超预算报告。进程状态和清理由 Concord 裁决。
-
-收集默认 60 秒、测试默认 300 秒、整个 run 默认 600 秒；`collectTimeoutMs`、`runTimeoutMs`、`wallTimeoutMs` 与 `budgets` 只可缩小硬上限。超时、取消、截断、输入漂移和清理未知不能被成功 JSON 覆盖。清理未知会保留 runner 阻断现场。
-
-原生结果记录非空 requested、逐项 observed、Invocation 状态和分配、输入与计划摘要。每项恰好一次 passed、命令退出 0、清理完成才是通过；完整结果至少一项 failed 且命令非零退出才是失败。缺失、重复、额外、skip/todo、解析和基础设施失败为 invalid。
+缺陷修复见 `concord --skill fix`；Issue 的引用清理与关闭见 `concord --skill feedback`。

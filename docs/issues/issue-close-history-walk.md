@@ -14,4 +14,4 @@ relations:
 
 ## 期望
 
-不给 `--defect` 时能找到回归测试首次出现的提交；读取历史文件失败时报告真实原因，而不是把可读的文件报成不可读。
+按[项目验证职责](../feature/local-sdlc/use-case/validate-change-with-project-tools.md)移除关闭时的测试执行与历史遍历，不为已移除的核验流程修补提交推断。实现工作由[测试执行职责仍留在 Concord 实现中](agent-owned-test-execution.md)承接；运行时未移除前保留此复现。

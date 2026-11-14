@@ -111,4 +111,4 @@ Concord 有两种运行模式：源码模式直接运行 worktree 中的 `.ts`�
 
 没有调用者的脚本直接删除。性能测量脚本的计时与采样见[性能测量实现](../performance/architecture.md)。
 
-编译程序启用 package.json 的 exports/入口解析，以加载锚定于安装 app/package.json 的固定工具及显式选择的项目测试框架；不把调用者 cwd 当作 Concord 依赖解析根。dotenv、bunfig preload 与 tsconfig 自动加载仍关闭。项目框架仅在用户执行其测试命令的边界加载，包元数据存在本身不执行脚本。
+编译程序启用 package.json 的 exports/入口解析，以加载锚定于安装 app/package.json 的固定工具及显式选择的项目测试框架；不把调用者 cwd 当作 Concord 依赖解析根。dotenv、bunfig preload 与 tsconfig 自动加载仍关闭。项目框架仅在显式原生收集的边界加载，包元数据存在本身不执行脚本。

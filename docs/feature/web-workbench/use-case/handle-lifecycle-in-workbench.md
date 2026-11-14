@@ -32,7 +32,7 @@
 
    预期输出：填写「关闭理由」，点「关闭草稿」，页面提示「Issue 已关闭。」，Issue 文件被删除。
 
-   关闭已修复的缺陷时，工作台先执行[修复核验](../../local-sdlc/use-case/resolve-with-command-evidence.md)，核验通过才关闭；Web 不接受调用方提供的核验结论。
+   关闭已处理的缺陷时，工作台提交处理结论，按普通关闭操作校验引用与前像后删除 Issue 及对应标记；不执行测试或接收测试通过凭证。验证由 [coding agent](../../local-sdlc/use-case/validate-change-with-project-tools.md) 使用项目工具完成。
 
 4. 处理 Memory 与 Roadmap。 {#other}
 

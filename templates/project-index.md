@@ -25,7 +25,7 @@ Engineering. Product workflows belong in contracts. Memory holds reusable lesson
 execution logs, investigation timelines and delivery progress stay in the task handoff.
 
 Every file under `docs/` and `memory/` can be edited directly; Concord commands
-run the steps a change needs, such as fix verification. `concord check` validates
+run concrete operations such as test collection and reference updates. Agents run project tests directly. `concord check` validates
 the current documents. Derive indexes and reverse relations instead of maintaining them.
 
 Define each fact in one owner and link to it elsewhere. Roadmap does not

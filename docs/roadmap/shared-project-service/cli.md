@@ -6,19 +6,19 @@
 
 `--server shared|command` 与 `concord server start|run|status|stop` 的连接、替换与[命令作用域查询](../../feature/local-data-engine/architecture.md#命令作用域查询)规则由[本地数据引擎](../../feature/local-data-engine/architecture.md#工作区服务)拥有。
 
-本 Roadmap 下，有副作用的 CLI 命令同样经由[工作区服务](../../concepts.md#workspace-server)派发；`--dry-run` 通过同一服务规划，不发布来源、不执行 runner，也不使用持久缓存。
+本 Roadmap 下，有副作用的 CLI 命令同样经由[工作区服务](../../concepts.md#workspace-server)派发；`--dry-run` 通过同一服务规划，不发布来源、不启动外部观察，也不使用持久缓存。
 
 ## 执行与观察
 
 ```text
-concord test run <测试 ID> [--background]
+concord test discover [<file>...]
 concord operation list [--json]
 concord operation show <票据> [--json]
 concord operation wait <票据> [--json]
 concord operation cancel <票据> [--json]
 ```
 
-有副作用的命令自动完成准备、输入上传与提交，默认等待结果。`test run --background` 在提交受理后返回票据；`--server=command` 拒绝这个选项，避免命令退出立即取消刚提交的任务。
+有副作用的命令自动完成准备、输入上传与提交，默认等待结果。观察操作使用同一票据查询和取消；没有测试执行或通用命令入口。
 
 票据在 JSON 中为 `{instance, operationId}`，命令参数使用 `<instance>:<operationId>`。实例和操作 ID 都是工作区服务签发的不含冒号的标识，客户端不能自行生成一个 ID 来开始执行。
 
@@ -40,7 +40,7 @@ type Operation = {
 
 `list` 返回 `{instance, operations}`，只包含票据、操作名、状态与时间；`show` 和 `wait` 可以附带完整结果。输入、凭据与[执行上下文](concepts.md#execution-context)不进入这些响应。
 
-`succeeded` 只表示应用调用完成；测试是否通过、检查是否存在 finding 由领域结果判断。CLI 等待终态后沿用该领域结果的退出码；取消为 130，结果未知或清理失败为 1。查询一个失败操作的状态本身可以成功返回。
+`succeeded` 只表示应用调用完成；观察是否完整、检查是否存在 finding 由领域结果判断。CLI 等待终态后沿用该领域结果的退出码；取消为 130，结果未知或清理失败为 1。查询一个失败操作的状态本身可以成功返回。
 
 `cancel` 对准备状态立即释放输入，对排队状态停止派发，对运行状态提出取消请求。返回 `cancelling` 不证明进程已经退出；写入提交可能最终成功，取消不是回滚。
 
@@ -70,11 +70,11 @@ changes 默认最多等待十五秒；没有变化时返回原 cursor。整个�
 
 ## 断线与记录保留
 
-只读查询断线后允许重做一次，领域失败不自动重试。写入和测试一旦发送 submit，就只能查询或再次提交同一票据，不能因为响应丢失重新 prepare。
+只读查询断线后允许重做一次，领域失败不自动重试。写入和外部观察一旦发送 submit，就只能查询或再次提交同一票据，不能因为响应丢失重新 prepare。
 
 终态结果最多保存十分钟；容量不足时可以更早淘汰。服务重启、票据过期且已删除、或记录淘汰后，结果明确未知，不能据此推断没有执行。只有客户端确定尚未发送 submit 时，才可以安全重新准备输入。
 
-工作区服务不承诺跨重启继续执行任务。来源文件、测试证据、journal 与测试任务状态继续由各自 Spec 拥有；缓存、相同文件内容或操作列表都不能代替恢复裁决。
+工作区服务不承诺跨重启继续执行任务。来源文件、收集观察、journal 与外部观察任务状态继续由各自 Spec 拥有；缓存、相同文件内容或操作列表都不能代替恢复裁决。
 
 ## 具名失败
 
@@ -85,7 +85,7 @@ CLI 请求失败沿用 `{error, message, details?}` 的错误信封，非零退�
 | `OperationInputInvalid` | 长度、偏移、摘要、UTF-8 或操作 Schema 无效；尚未派发 |
 | `OperationExpired` | 仍可识别的准备记录已超期，尚未派发；记录已删除时使用结果未知 |
 | `OperationOutcomeUnknown` | 票据或执行结果无法确认；检查来源与恢复材料，不自动重跑 |
-| `JobBusy` | 同一项目的测试运行槽被占用 |
+| `JobBusy` | 同一项目的外部观察任务槽位被占用 |
 | `CleanupFailed` | 受管进程清理未确认，保留阻断和诊断 |
 
 已有来源、配置、发布与恢复失败保持原语义。工作区服务不能把领域失败转换成另一条执行路径上的成功。

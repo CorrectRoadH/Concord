@@ -1,44 +1,23 @@
-# 缓存与中断恢复
+# 恢复本地写入与观察状态
 
-HawDB 只拥有可重建投影与可丢弃缓存。它位于 `git rev-parse --git-path concord` 返回目录下的 `cache.hawdb`，主 worktree 通常是 `.git/concord/cache.hawdb`，linked worktree 则位于对应 Git-private 目录，不是项目根的 `.concord`。状态与维护命令：
-
-```sh
-concord cache status --json
-concord cache clear
-concord cache rebuild
-```
-
-缓存损坏、schema 不符或写失败时，查询应回退权威源码而非返回陈旧声明或关系。`cache clear` 不删除 journal、Issue 或 Memory。`cache rebuild` 不接受 `--dry-run`。
-
-`cache clear` 取得同级 Concord 协调锁及所选 HawDB 提交对应的根、分支锁。先删数据，再删嵌套锁，最后删空目录，保留根目录、根 owner.hawdb.lock 和 cache.hawdb.concord.lock 的 inode。不要删锁抢占。clear 因占用、路径异常或 I/O 失败而拒绝或部分完成时保留现场，处理原因后重试。
-
-普通只读观察和 status 不修改来源或逻辑缓存行，允许已有库的内部派生文件重建及同级协调锁创建。缺失数据库不初始化。dry-run 与 cache-off 不打开持久库；dry-run status 对已有内容报告 unavailable，并说明持久访问关闭。
-
-clear 只删除 cache.hawdb 内的数据，不删除同级协调锁。clear --dry-run 展示条目、保留路径与原生产物可用性；实际执行重新验证所有权。native binary digest differs 是安装故障，清缓存不能修复。远端快照消失后需显式 fetch，本地 Issue 与 Memory 保留。
-
-缓存只对写入它的引擎版本有效，换用不同引擎版本的 Concord 时缓存按不可用处理并重建。短期解析及 Git baseline 使用进程内 HawDB；清理本进程不表示其它进程的短期缓存已清空，它们仍须核对当前来源。
-
-Concord 自己的写入（命令助手与 Web 保存）对文档、配置、Issue、Memory 与源码使用短 publication lease、记录前像的 journal 和逐文件原子 rename。查询声明 `access: read`，使用乐观 snapshot，并拒绝真正发布。普通写入仅在提交阶段取得独占所有权；外部执行、恢复、cache rebuild 与 cache clear 保留各自的独占边界。dry-run 预览使用乐观 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
+Concord 的工作区服务拥有单一服务锁、文档写互斥和外部观察任务槽位。文件是事实来源，HawDB 是可重建缓存；不要用删除缓存代替事务或进程恢复。
 
 ```sh
 concord recover --json
 ```
 
-恢复先记录并回收观察到的已死 publication token，再在独占保护下选择唯一 journal。后续引擎不隐式回收新到达的持有者；即使该持有者已死，本次也返回 Busy，留待下一次显式恢复记录。只在当前内容等于前像或 planned digest 时回滚或完成。`RecoveryConflict` 保留外部编辑和 journal，多 journal 冲突先于 runner 报告。不要删 journal、抢锁或用 cache 命令绕过恢复。
+服务启动自动处理未完成的 `journal.json`。目标仍等于前像或计划摘要时完成或回滚；外部编辑优先，清理陈旧 journal 并在 `warnings` 列出保留的路径。恢复不覆盖未知编辑，也不依赖配置文件仍然存在。
 
-同 worktree、同 host、最多一个 exclusive 加多个 shared 是合法加入暂态。全部持有者均已确认 ESRCH 时，recover 逐 token 回收该暂态。任一活着的持有者、第二个 exclusive、未知文件、host 不匹配、EPERM、PID 复用或未知持有者都保留现场。恢复不以年龄推断死亡。回收死 token 只证明这些 token 的 ESRCH，不解释未复现的 macOS 现场原因。
+输出包含 `operation`、`status`、`changedPaths`、`journalStatus`、`warnings` 与 `observationSlot`。journal 状态为 `clean`、`completed`、`rolledBack` 或 `discarded`；外部观察为 `absent`、`running` 或 `blocked`。
 
-共享 token 加入现有目录后，须重读完整的持有者集合。只有自己的 token 存在，且全部持有者为同 worktree 的 shared，才开始受保护读取。writer 已替换目录时，加入者撤销自己的 token 并报告 Busy，不能开始读取。writer 释放时只删除自己的持有者记录。尚未通过准入的 shared 记录不授予读取，也不阻止 writer 释放。
+测试收集与语言分析共享观察槽位；Concord 不管理 agent 独立执行的测试。清理未知只阻断新的外部观察，文档读写与 Issue 关闭仍可进行。恢复保留已经完成的 journal 处理结果，不把观察阻断解释成仓库不可写。
 
-只有当前格式（C-009）。无法解码的 journal 或配置返回 `InvalidData`：保留 journal、锁和目标文件，不反复调用普通 recover；配置改写为当前格式。
+持有者已死不证明子进程已清理。先确认同一主机没有遗留收集或分析进程，再使用输出提供的当前 token：
 
-`--dry-run` 与 access 分开。它走同一规划校验，不发布项目文件。既有 dry-run 仍是预览，不会因为查询使用 read 而变成写入。已有 owner 的仓库仍须短快照 lease 和当前 journal 障碍，可能首次创建私有协调目录。只有全新且无 owner/锁的 init 预览可以完全不创建私有状态。它不等于真实发布完成。`recover` 不接受 `--dry-run`。
+```sh
+concord recover --release-observation-slot <token>
+```
 
+存活持有者返回 `ObservationSlotActive`；token 或主机不符返回 `ObservationSlotMismatch`。成功释放登记的占用与观察产物，不创建或回收测试核验 worktree。不要手工删除锁、journal、运行状态或未知文件。
 
-发布协调使用 Node 文件 API 的短 publication lease，不需要外部 flock 或磁盘探测程序。`concord recover` 自动选择唯一的当前普通或 Trace journal，多 journal 时保留并拒绝。HawDB 仅为可清空缓存；不要把 journal、runner.lease 或 run 状态当作缓存删除。测试运行期间允许文档发布，但会使该次运行失效，即使稍后撤销修改也不会重新有效。runner 的 finalizing/quarantined、死父 PID 或未知状态阻断后续写操作；父进程死亡不证明子进程清理完成，必须先确认进程现场。不提供混合版本协调。
-
-恢复完成后重新取得短独占快照，直接核验 worktree 私有协调路径上的当前 journal 与 runner。init 回滚后不要求配置文件仍在。并发新发布可使最终核验 Busy。Busy 时早先的 journal 结果不是恢复完成，保留新 owner 后重试。
-
-`--json` 返回 `operation`、原 journal 结果、`changedPaths` 和 `coordination`。`journalStatus` 保留 journal 处理结果。`coordination.publication.reclaimedTokens` 列出已回收 token。`coordination.runner.status` 为 `absent`、`running` 或 `blocked`；blocked 带具名原因。无事务且 runner 为 absent 或健康 running 时可以返回 clean。runner 不确定时返回 blocked，并保留 journal 的实际处理结果。CLI 对 blocked 使用失败退出码。Web 与 action 保留相同状态字段。
-
-初次独占检查已发现 runner blocked 时，不开始任何 journal 恢复。此时 `journalStatus` 为 pending 或 clean，`changedPaths` 为空。journal 恢复之后 runner 变为 blocked 时，保留已完成的 `journalStatus`，总 status 设为 blocked。统一入口保留 prepared 和 committed 现场。recover 不删除 runner.lease、run state 或未知文件。blocked 表示当前操作无法恢复完整写能力。持久缓存句柄在 snapshot 结束前关闭。读取期间的缓存更新不取得独占发布锁；缓存不能安全使用时回源。
+`--dry-run` 只属于允许预览的领域写入，`recover` 不接受它。路径、前像与写互斥保护不能用换入口绕过；恢复结果与实际未完成项必须如实报告。

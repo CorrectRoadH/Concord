@@ -2,22 +2,22 @@
 
 ## 用户目标
 
-agent 写了一大堆测试，维护者想知道哪些测试没有说明自己在验证哪种用法，再逐个决定是补上关联还是删掉。
+agent 写了一大堆测试，维护者想知道哪些测试没有说明自己在验证哪种用法，再结合断言、实现和 Spec 判断应如何处理。
 
 ## 起始状态
 
-- 项目配置了能列出原生测试的 adapter，见[通过 adapter 执行原生测试用例](run-native-test-adapters.md)。
+- 项目配置了能列出原生测试的 adapter，见[收集原生测试并关联具体用例](collect-native-tests.md)。
 - 部分测试带 `@use-case` 标记，另一些没有。
 
 ## 完整路径
 
-1. 收集测试框架认识的全部测试。 {#discover}
+1. 收集框架可列举的测试。 {#discover}
 
    ```sh
    concord test discover
    ```
 
-   adapter 运行项目的测试框架，记下它列出的每个测试。
+   adapter 调用框架的收集入口，记录能列举的测试及能力缺口，不派发测试体。
 
 2. 列出没有关联的测试。 {#list}
 
@@ -46,12 +46,11 @@ agent 写了一大堆测试，维护者想知道哪些测试没有说明自己�
 
 3. 逐个决定。 {#decide}
 
-   - 测试确实守护某种用法：找到对应的 Use Case 步骤，加上标记，例如 `// @use-case docs/feature/cart/use-case/add-item.md#add`。找不到对应的 Use Case，就先把这种用法写成 Use Case。
-   - 测试没有守护任何用法：删掉它。
+   agent 阅读断言与相关实现，判断它守护产品行为、工程不变量，还是已不适用。确认目标后再补写缺失的 Spec 或标记；没有足够信息时保留测试并记录待查项。只有独立审阅确认无效或重复才删除，不能从“没有关联”直接推出“没用”。
 
 ## 结果
 
-`unlinkedTests.tests` 为空时，每个测试都能回答“我在验证哪种用法”。读测试时，可以按 Use Case 和步骤分组阅读。
+`unlinkedTests.tests` 为空只说明当前观察范围内没有报告缺关联项。仍须查看收集能力、过期状态与绑定缺口；不能推断全部测试都已关联、都有价值或行为已覆盖。
 
 | 情形 | 结果 |
 | --- | --- |
@@ -65,4 +64,4 @@ agent 写了一大堆测试，维护者想知道哪些测试没有说明自己�
 ## Spec 来源
 
 - [检查关系缺口](inspect-relationship-gaps.md)
-- [通过 adapter 执行原生测试用例](run-native-test-adapters.md)
+- [收集原生测试并关联具体用例](collect-native-tests.md)

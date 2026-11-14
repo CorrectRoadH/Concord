@@ -8,17 +8,13 @@
 
 旧写法：`发布 revision`
 
-## 测试任务槽位 {#test-slot}
+## 外部观察任务槽位 {#observation-slot}
 
-工作区服务内同一项目目录唯一的测试执行位置。CLI、Web 与修复核验共用它；长时间执行不进入[写互斥](../../concepts.md#write-exclusion)。
+工作区服务内同一项目目录唯一的受管外部观察位置。测试收集与语言分析共用它；长时间观察不进入[写互斥](../../concepts.md#write-exclusion)，不管理 agent 独立运行的测试。
 
-旧写法：`runner 租约`、`runner 槽`
+## 外部观察任务状态 {#observation-slot-status}
 
-## 测试任务状态 {#test-slot-status}
-
-[测试任务槽位](#test-slot)的状态：`absent`、`running` 或 `blocked`，`blocked` 带具名原因。外部测试子进程组清理不确定时报告 `blocked`。
-
-旧写法：`runner 状态`
+[外部观察任务槽位](#observation-slot)的状态：`absent`、`running` 或 `blocked`，`blocked` 带具名原因。自有外部进程组清理不确定时报告 `blocked`，只阻断新的外部观察。
 
 ## 来源快照 {#source-snapshot}
 

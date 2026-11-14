@@ -14,7 +14,7 @@ Concord 用自己的流程开发和验收自己。
 
 ## 目标
 
-- 自举配置使用公开 runner argv，不依赖 shell 或 NiceEval。
+- 自举测试直接使用项目固定版本的 Bun，不依赖 Concord 执行适配或 NiceEval。
 - sourceRoots 覆盖 `src`、`repository`、`web` 与 `scripts`；testRoots 覆盖 `test`。
 - 自举检查只读检查当前仓库的配置与可扫描标记，不递归运行完整门禁，也不修改当前仓库。命令见[自举检查命令](cli.md)，隔离副本的机制见[自举实现](architecture.md)。
 
@@ -28,9 +28,9 @@ Concord 用自己的流程开发和验收自己。
 
 | 情形 | 做法 |
 | --- | --- |
-| 调整 runner | runner argv 变化会使旧的[命令证据](concepts.md#command-evidence)不再代表当前定义。先用 doctor 与 check 验证配置，再按需重新采集 |
+| 调整测试配置 | agent 根据影响选择相关项目测试，交付实际命令与结果 |
 | 中断写入之后 | 服务启动时自动恢复；`recover` 的 `warnings` 列出保留了外部编辑的文件，由维护者确认内容 |
-| 审阅交接 | reviewer 用 trace 与 review 输出定位 Spec、测试和 Memory，再直接审阅正文与源码。命令证据是可复核输入，不替代测试设计判断 |
+| 审阅交接 | reviewer 用 trace 与 review 输出定位 Spec、测试和 Memory，再直接审阅正文与源码。实际测试结果是可复核输入，不替代测试设计判断 |
 
 ## 仓库文档入口
 

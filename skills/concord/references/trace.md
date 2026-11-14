@@ -13,7 +13,7 @@ concord review docs/feature/login/README.md
 concord review
 ```
 
-`check` 与 `trace check` 校验当前文件的放置、引用、重复、循环、概念与写作规则，不执行测试。`docs check [<path>...]` 只对所选文件或目录执行写作与术语检查，供单篇或单 Feature 编辑时快速反馈。修复核验通过对应命令执行，见 `concord --skill fix`；已关闭的 Issue 不保留在当前文件中。`show` 与 `trace show` 接受 canonical path、短选择器或 `<path>#<anchor>`；传入 `<path>#<anchor>` 时先校验该步骤或标题 anchor 存在，再只返回直接指向它的测试、代码声明与 incoming 关系。
+`check` 与 `trace check` 校验当前文件的放置、引用、重复、循环、概念与写作规则，不执行测试。`docs check [<path>...]` 只对所选文件或目录执行写作与术语检查，供单篇或单 Feature 编辑时快速反馈。行为验证由 agent 使用项目工具完成，见 `concord --skill fix`；已关闭的 Issue 不保留在当前文件中。`show` 与 `trace show` 接受 canonical path、短选择器或 `<path>#<anchor>`；传入 `<path>#<anchor>` 时先校验该步骤或标题 anchor 存在，再只返回直接指向它的测试、代码声明与 incoming 关系。
 
 `trace gaps [<feature-or-path>]` 列出没有显式 code/test 关系的 Feature、Use Case，以及没有直接关系的已建档 `docs/feature/*/cli.md`；传入 Feature、Use Case 或 Engineering 的路径或短选择器时只输出该目标范围内的缺口。Feature 汇总子 Use Case，CLI 页面则要求关系直接指向页面或 anchor。结果不是覆盖率，也无法发现从未建档的命令；这类 inventory 仍由产品拥有。
 
@@ -25,4 +25,4 @@ concord review
 
 `trace show`, `trace gaps` and `review` read completed historical projections and request background refresh. Their output includes the snapshot time and refresh status.
 
-With no projection yet, the first run waits for the background refresh and prints the projection it publishes; `QueryPending` means that refresh failed or timed out. Use `--fresh` to wait for current sources. Use `check` or `trace check` for current validation. Historical projections cannot authorize writes or fix verification.
+With no projection yet, the first run waits for the background refresh and prints the projection it publishes; `QueryPending` means that refresh failed or timed out. Use `--fresh` to wait for current sources. Use `check` or `trace check` for current validation. Historical projections cannot authorize writes.

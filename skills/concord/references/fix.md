@@ -2,9 +2,10 @@
 
 缺陷是实现违反了 Spec。Spec 本身不对时，先按 `concord --skill spec` 改 Spec，不走这个流程。
 
-1. 确认依据：找到被违反的 Use Case 步骤或 cli、library 页条目。
-2. 小修复写回归测试和修复，一起暂存。测试标记指向被违反的 Spec，不要求 `@issue`。
-3. 运行 `concord test verify --staged` 与相关测试、`concord check`，核验通过后一次提交，把输出结论写进提交说明。提交后用 `concord test verify --fix <commit>` 重放。
-4. Issue 只在工作要留到以后或交给别人时才建。已有 Issue 时给测试加 `@issue docs/issues/<id>.md`；测试与修复可以同一提交，也可以先单独提交失败回归再提交修复。之后运行 `concord issue close <id> --fixed`，核验通过后删除 Issue 与对应标记。
+1. 找到被违反的 Use Case 步骤或行为条目；用关系查询定位实现和测试，必要时收集原生用例与 label。
+2. 在能观察到缺陷的最低一层补充或调整回归测试，关联被违反的 Spec。直接使用项目测试工具确认复现，排除环境或基础设施失败。
+3. 修复后运行与改动相关的测试和项目必需检查。agent 负责选择范围、准备环境、处理超时和清理；报告实际命令、结果与未验证项，不为了流程额外拆分提交或重复验证。
+4. 运行 `concord check` 核对文档与关联，和测试结果分开报告。Issue 只在仍有工作要留给以后或别人时创建；已有 Issue 的回归标记可以带 `@issue`。
+5. 问题处理完运行 `concord issue close <id> --reason <text>`。关闭原子删除 Issue 和对应的 `@issue` 行，保留测试正文与其它标记，不读取测试结果或提交历史，也不再执行测试。
 
-结论只证明选中的冻结命令在红快照上失败、在绿快照上通过，不证明其它情形已覆盖。Issue、核验与 Memory 的细节见 `concord --skill feedback`。
+没有适用自动测试时按项目要求验证并说明证据局限。关联、收集和静态检查不证明覆盖或测试通过。Issue 与 Memory 的细节见 `concord --skill feedback`。

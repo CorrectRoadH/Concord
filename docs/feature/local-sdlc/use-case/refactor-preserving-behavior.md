@@ -43,15 +43,14 @@
 
    `test/cart.test.js` 中的 `@use-case` 标记保持不变。
 
-3. 检查关系并按步骤直接运行关联测试。 {#verify-refactor}
+3. 检查关系，由 agent 验证行为。 {#verify-refactor}
 
    ```sh
    concord check
    concord --fresh show docs/feature/cart/use-case/add-item.md#add
-   concord test run docs/feature/cart/use-case/add-item.md#add
    ```
 
-   `show` 反映迁移后的新源码位置，`test run` 直接按步骤引用运行守护该步骤的测试，不需要先复制 `neref_...` 哈希：
+   `show` 反映迁移后的源码位置和关联测试：
 
    ```text
    codeDeclarations:
@@ -59,13 +58,9 @@
        Implements: docs/feature/cart/use-case/add-item.md#add
    ```
 
-   ```text
-   Command pass — neref_854212737ecad7effc4666629752cb98
-   Scope: command (does not prove native case coverage)
-   Execution: unknown; exit: 0; cleanup: true
-   ```
+   `check` 校验声明语法、作用域和目标；agent 按项目约定选择受影响测试，使用项目命令确认行为并报告结果，见[项目验证流程](validate-change-with-project-tools.md)。
 
-   `check` 校验新文件中的代码声明语法、作用域和目标有效；`test run` 通过项目配置的 runner 验证外部行为仍然通过。
+
 
 ## 结果
 

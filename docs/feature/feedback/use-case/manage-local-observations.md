@@ -58,7 +58,7 @@
 
 | 情形 | 结果 |
 | --- | --- |
-| 缺陷修好了 | 见[核验修复并关闭缺陷](../../local-sdlc/use-case/resolve-with-command-evidence.md)：`issue close --fixed` 先核验再删除 |
+| 缺陷修好了 | agent 按[项目验证流程](../../local-sdlc/use-case/validate-change-with-project-tools.md)确认结果，再用普通 `issue close --reason` 删除；关闭不执行测试 |
 | 还有页面或其它 Issue 链接这个 Issue | 拒绝关闭，返回 `IssueReferenced` 并列出链接位置；先改写这些链接 |
 | 来自 GitHub 或 Linear 的 Issue | 关闭只删除本地笔记，不写远端；远端写入见[远端 Issue 写入](../../neutral-project-governance/use-case/mutate-remote-issue.md) |
 | 直接删除 Issue 文件 | 与 `issue close` 效果相同，但没有结论输出；仍有链接指向它时，`check` 报告断开的链接 |

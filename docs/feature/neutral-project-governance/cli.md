@@ -16,18 +16,16 @@ concord docs work finalize <run-id>
 
 ### Docs Work 配置
 
-项目可在 `concord.config.ts` 的 `docsWork` 中声明检查命令、finalizer 与共享路径：
+项目可在 `concord.config.ts` 的 `docsWork` 中声明共享路径：
 
 ```ts
 docsWork?: {
-  checks?: Record<string, { argv: readonly string[]; timeoutMs?: number }>;
-  finalizer?: { argv: readonly string[]; timeoutMs?: number };
   sharedPaths?: readonly string[];
 }
 ```
 
-- argv 不经过 shell，cwd 为仓库根；恰为 `{paths}` 的元素展开为对应 item 当前 write 集合的文件列表。展开后超过 128 KiB 返回 `DocsWorkArgvTooLong`，不截断路径。`timeoutMs` 默认 600000；退出码 0 为 passed，其它退出码、超时或信号为 failed。
-- 省略时内建检查 `writing` 对 write 路径运行 `concord docs check` 默认规则，内建 finalizer 运行 `concord check`。
+- item 检查固定为 `writing`，直接调用与 `concord docs check` 相同的静态检查；finalize 固定调用 `concord check` 的领域检查，不启动子命令，不修改文档。
+- 不接受外部 argv、finalizer 或超时配置，不以 Docs Work 包装项目测试、安装、构建或 agent 的工作（[工具提供上下文，agent 负责执行验证](../../taste.md#t-16)）。
 - `sharedPaths` 默认为 `docs/README.md` 及存在的 `docs/concepts.md`、`docs/writing.md`；项目配置文件始终是共享路径。
 - prepare 记录配置文件与 `docsWork` 解析结果的 `configDigest`；之后 check、verify 与 finalize 发现不一致时返回 `DocsWorkConfigChanged`，不运行检查。item 不能通过修改配置替换自己的检查。
 
@@ -42,7 +40,7 @@ interface DocsWorkPlanV1 {
     write: readonly string[];   // 文件、目录（以 / 结尾）或 glob
     read?: readonly string[];   // 默认 []
     blockedBy?: readonly string[];
-    checks?: readonly string[]; // 默认 ["writing"]
+    checks?: readonly "writing"[]; // 唯一允许值，默认 ["writing"]
   }[];
 }
 ```
@@ -65,9 +63,9 @@ prepare 聚合全部问题，返回 `DocsWorkPlanInvalid`（`details.problems: {
 
 ### 检查、核验与收尾
 
-- check 先核对 read：排除本 item 及其直接或传递 blockedBy item 的 write 后，read 与共享路径的 digest 必须等于 prepare 时的值，否则返回 `DocsWorkReadChanged`（列出路径），不写收据。然后依次运行检查，写入 reported 收据；检查失败时收据标记 failed 并退出 1。
-- `--verify` 要求当前 reported 收据 digest 等于参数、writeDigest 未变且全部检查 passed，否则返回 `DocsWorkReceiptMismatch`。每个 blockedBy item 已有 verified 收据，否则返回 `DocsWorkDependencyUnverified`。随后重新运行同一检查，全部通过才写 verified 并记录依赖的 verified 收据 digest。reported 是 Agent 的自报，verified 不信任其中的结果。
-- finalize 要求 configDigest 未变，每个 item 的 verified 收据、writeDigest 与 read 核对仍有效，且记录的依赖等于对应 item 当前 verified 收据；否则返回 `blocked` 并按 item 列出原因，不运行 finalizer，退出 1。finalizer 可以写共享路径，结果为 `finalized` 或 `failed`（退出 1）；已 finalized 后再次运行返回 `DocsWorkFinalized`。同一 run 的写操作被占用时返回 `DocsWorkBusy`。
+- check 先核对 read：排除本 item 及其直接或传递 blockedBy item 的 write 后，read 与共享路径的 digest 必须等于 prepare 时的值，否则返回 `DocsWorkReadChanged`（列出路径），不写收据。然后运行内建静态检查，写入 reported 收据；检查失败时收据标记 failed 并退出 1。
+- `--verify` 要求当前 reported 收据 digest 等于参数、writeDigest 未变且全部检查 passed，否则返回 `DocsWorkReceiptMismatch`。每个 blockedBy item 已有 verified 收据，否则返回 `DocsWorkDependencyUnverified`。随后重新运行同一检查，全部通过才写 verified 并记录依赖的 verified 收据 digest。reported 与 verified 都由 Concord 静态检查产生，后者确认当前输入和依赖仍符合规则；两者均不表示 agent 的语义审阅或任务验收。
+- finalize 要求 configDigest 未变，每个 item 的 verified 收据、writeDigest 与 read 核对仍有效，且记录的依赖等于对应 item 当前 verified 收据；否则返回 `blocked` 并按 item 列出原因，不运行最终静态检查，退出 1。最终静态检查只读当前仓库，结果为 `finalized` 或 `failed`（退出 1）；已 finalized 后再次运行返回 `DocsWorkFinalized`。同一 run 的写操作被占用时返回 `DocsWorkBusy`。
 
 ### 收据
 
@@ -95,7 +93,7 @@ changedPaths 是 write 集合内相对 baseCommit 有变化的路径；summary �
 
 ### 证明范围
 
-verified 只说明声明范围内的内容通过了声明的检查（[证据的范围](../local-sdlc/README.md#证据的范围)）：写入其它 item 的 write 会在那个 item 的 verify 或 finalize 时被拒绝，任何 item 都未声明的路径上的改动不被报告，由父 Agent 的 diff 验收负责。Docs Work 不启动、等待或关闭 Agent，不合并 diff，不修改 docs。run 状态只属于当前 worktree，不进入 Git，不自动删除；`show` 列出其位置。状态文件与互斥见[架构](architecture.md#docs-work)。
+verified 只说明声明范围内的内容通过了 Concord 的静态文档规则（[证据的范围](../local-sdlc/README.md#证据的范围)）：写入其它 item 的 write 会在那个 item 的 verify 或 finalize 时被拒绝，任何 item 都未声明的路径上的改动不被报告，由父 Agent 的 diff 验收负责。Docs Work 不启动、等待或关闭 Agent，不合并 diff，不修改 docs。run 状态只属于当前 worktree，不进入 Git，不自动删除；`show` 列出其位置。状态文件与互斥见[架构](architecture.md#docs-work)。
 
 ## 远端 Issue 写入
 

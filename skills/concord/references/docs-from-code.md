@@ -16,7 +16,7 @@
 
 只要求文档时，不修改源码、测试或运行配置。任务包含存量接入时，在文档路径与含义稳定后，再按 `concord --skill code` 和 `concord --skill test` 关联真正对应的实现与断言。缺口如实保留，不为使 trace 无缺口而随意添加标记、补实现或创建无关文档。
 
-按需配置来源根与 runner，见 `concord --skill init`；运行测试不是补写正文的固定前置。检查当前范围可用：
+按需配置来源根与可选收集 adapter，见 `concord --skill init`；运行测试不是补写正文的固定前置。检查当前范围可用：
 
 ```sh
 concord docs check docs/feature/<feature>

@@ -70,7 +70,6 @@
    ```sh
    concord check
    concord --fresh trace gaps cart
-   concord test run docs/feature/cart/use-case/add-item.md
    ```
 
    ```text
@@ -80,7 +79,7 @@
    findings: none
    ```
 
-   `check` 确认全部引用有效且写作规则通过，`trace gaps cart` 确认该 Feature 修改后的步骤没有遗漏实现或测试关联，`test run` 直接按 Use Case 路径运行当前全部 `active` 测试（自动跳过 `@status retired`）。
+   `check` 核对引用和写作规则，`trace gaps cart` 提供缺少关联的提示；agent 结合 Spec 与源码判断测试范围，使用项目命令验证行为。关联缺口不证明功能缺失，退役标记不改变项目测试工具的运行方式。
 
 ## 结果
 

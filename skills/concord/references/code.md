@@ -1,7 +1,7 @@
 # Code declarations
 
 
-源码与测试自动发现支持在 `concord.config.ts` 设置 `sourceIgnore: ['src/generated', 'tests/vendor']`。每项是仓库相对文件或目录（含子树），不支持 glob；显式来源根优先，文档、runner.sourceFiles 和直接读写仍严格校验。
+源码与测试自动发现支持在 `concord.config.ts` 设置 `sourceIgnore: ['src/generated', 'tests/vendor']`。每项是仓库相对文件或目录（含子树），不支持 glob；显式来源根优先，文档和直接读写仍严格校验。
 代码声明描述实现与 Feature / Use Case / Engineering 的关联。它既不是测试声明，也不是完成或覆盖证明。真实注释是唯一 owner；无需另写关系 JSON。
 
 先读取 `concord.config.ts`。`sourceRoots` 是可选的仓库相对路径数组，省略时使用存在的 `src/`，没有该目录则为空；默认扫描其中 JS/TS 文件；配置 languageServers 后也扫描相应后缀的文本标记。JS/TS 支持，包括 `.js/.jsx/.ts/.tsx/.mjs/.cjs/.mts/.cts`。新项目可用 `concord init --source-root src`，该选项可重复并可与 `--docs-only` 组合。已有项目直接维护配置，不重复 init。`testRoots` 与 `sourceRoots` 可重叠，各标签属于自己的扫描器；`doctor` 提示缺失目录。
@@ -69,14 +69,14 @@ export function parseOrder(input: string) {
 
 引用只服务于当前扫描，不是永久历史身份、CAS token 或授权。自动消费者应重新 list/locate 并核对文件、符号和范围，不能凭旧引用的查询成功认定历史连续。移动或复制实现后重新查询即可，不需要命名新 ID。
 
-合法配置下，代码标注错误不会阻断 `test list/show/run` 或 `issue close --fixed`；这些命令继续执行原有文档与测试校验。代码声明不能替代测试或修复核验。
+合法配置下，代码标注错误不会阻断 `test list/show` 或 `issue close`；这些命令继续执行原有文档与测试校验。代码声明不能替代 agent 的测试与审阅。
 
 
 ## 多语言标记与显式分析
 
 非 JS/TS 声明使用 languageServers profile 的注释前缀，沿用 file、code、begin/end 与紧邻的 implements 标记。身份由 canonical 文件路径与标记块序号派生。文件声明定位到文件，region 定位到配对标记；code 没有当前符号观察时定位到标记行。
 
-`concord code analyze --json` 是唯一显式 LSP 分析入口，不接受 dry-run。JS/TS 测试使用内置 TypeScript 模块解析，静态命令、test run 与编辑器服务均不隐式启动 server。观察存于 HawDB，不能创建关联、签发证据或影响 check。
+`concord code analyze --json` 是唯一显式 LSP 分析入口，不接受 dry-run。JS/TS 测试使用内置 TypeScript 模块解析，静态命令与编辑器服务均不隐式启动 server。观察存于 HawDB，不能创建关联、签发证据或影响 check。
 
 配置每个 server 的 id、languageId、extensions、argv、cwd、initializationOptions、implementationFiles、sourceFiles、profile 与 budgets。cwd 为仓库内目录，`.` 为根。implementationFiles 必须包含实际入口、脚本、插件与依赖锁；不要只声明 node 等启动器。扩展后缀唯一且不重叠，不接受 JS/TS 扩展。typescript 是内置分析器的保留 ID。
 
@@ -86,7 +86,7 @@ server 必须在 initialize 的 serverInfo.version 确认固定版本。只接�
 
 budgets 接受 totalMs、requestMs、outputBytes、messageBytes、messages、requests、concurrency、files、symbols、nodes、depth。深度默认 3，其它默认值为包级上限；数值为正整数且不得突破固定上限。请求串行执行，遵守配置的并发上限。
 
-environment 只显式选择 PATH、LANG、LC_ALL、TZ、TMPDIR、SYSTEMROOT，不传递其它环境或凭据。server 是消费者信任的程序；拒绝 applyEdit 和执行请求不能阻止它自行写文件。输入改变返回 AnalysisSourceChanged，清理未知保留 runner 阻断。
+environment 只显式选择 PATH、LANG、LC_ALL、TZ、TMPDIR、SYSTEMROOT，不传递其它环境或凭据。server 是消费者信任的程序；拒绝 applyEdit 和执行请求不能阻止它自行写文件。输入改变返回 AnalysisSourceChanged，清理未知保留 外部观察阻断。
 
 code list、trace show --fresh、test show 的 analysis 返回 observations 与 relevance。观察保留 inputs、observedAt、current、complete、gaps、分析器/profile 与可选 locator。没有目标交集时显示“未观察到交集”，历史观察不能用于当前判定。
 

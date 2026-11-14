@@ -74,7 +74,7 @@
 
 仓库得到一套可编辑的文档结构。下一步让 agent 读 `concord --skill start`，参照目录树与完整示例，按本次目标写第一份 Spec。
 
-`concord.config.ts` 可以不存在。没有配置时，测试根取存在的 `test/`、`tests/`，实现源码根取存在的 `src/`；需要 `test run` 或修复核验时再配置 `runner`。配置项见[项目接入](../../project-onboarding/README.md)。
+`concord.config.ts` 可以不存在。没有配置时，测试根取存在的 `test/`、`tests/`，实现源码根取存在的 `src/`；需要具体用例及 label 时按需配置收集 adapter。配置项见[项目接入](../../project-onboarding/README.md)。
 
 `init` 拒绝时退出 1，不写任何文件：
 
@@ -116,7 +116,7 @@ Feature、Engineering 与 Roadmap 只要求 README。`concord new` 的 `--pages`
 
 ## 可执行 quick start
 
-项目 README 提供从空 Git 仓库到第一次 `test run` 的完整命令：创建 Feature 与 Use Case、三种代码声明和一个真实 Node 测试。打包验收直接执行归档内 README 的 quick start，核对 3 条实现声明、1 条测试、一次 `Command pass` 和按行定位结果。
+项目 README 提供从空 Git 仓库到第一次测试关联查询 的完整命令：创建 Feature 与 Use Case、三种代码声明和一个真实 Node 测试。打包验收直接执行归档内 README 的 quick start，核对 3 条实现声明、1 条测试 和按行定位结果。
 
 ## Spec 来源
 

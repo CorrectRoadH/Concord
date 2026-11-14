@@ -2,7 +2,7 @@
 
 Concord 通过工作区服务的进程内读写调度、CAS 摘要核对与单一 `journal.json` 协调一个 worktree 的写入，HawDB 只是可丢弃的缓存。本页负责来源读取、原子写入与自动恢复。用户路径见[协调本地发布](use-case/coordinate-local-publications.md)。
 
-每种操作的依赖矩阵见[本地 SDLC 架构](../local-sdlc/architecture.md#操作依赖)。测试任务槽位与证据定稿见[项目架构的发布协调](../../architecture.md#发布协调)，按操作声明依赖的理由见[操作依赖与发布协调](../../architecture.md#操作依赖与发布协调)。
+每种操作的依赖矩阵见[本地 SDLC 架构](../local-sdlc/architecture.md#操作依赖)。外部观察任务槽位与观察发布见[项目架构的发布协调](../../architecture.md#发布协调)，按操作声明依赖的理由见[操作依赖与发布协调](../../architecture.md#操作依赖与发布协调)。
 
 ## 实体归属 {#entity-ownership}
 
@@ -22,7 +22,7 @@ dry-run 决定计划是否发布，与 access 无关；它执行与真实写入�
 
 ## 数据流 {#data-flow}
 
-工作区服务持有唯一的 `server/lock`，[写互斥](../../concepts.md#write-exclusion)与[测试任务槽位](concepts.md#test-slot)都是服务内存中的信号量。命令在本进程内运行内核时同样先取得 `server/lock`，因此磁盘上没有第二种协调锁，也没有需要回收的持有记录。
+工作区服务持有唯一的 `server/lock`，[写互斥](../../concepts.md#write-exclusion)与[外部观察任务槽位](concepts.md#observation-slot)都是服务内存中的信号量。命令在本进程内运行内核时同样先取得 `server/lock`，因此磁盘上没有第二种协调锁，也没有需要回收的持有记录。
 
 写入在服务内排队进入写互斥，最多等待 3 秒，超时返回 `RepositoryBusy`。进入后核对计划依赖的全部文件摘要，任一变化即以 `SourceChanged` 拒绝。
 
@@ -40,7 +40,7 @@ dry-run 决定计划是否发布，与 access 无关；它执行与真实写入�
 
 ## 错误 {#errors}
 
-相互竞争的写入若依赖了被先到者改变的文件，后者以 `SourceChanged` 拒绝。恢复结果报告 `operation`、`status`、`journalStatus`（`clean`、`completed`、`rolledBack` 或 `discarded`）、`changedPaths`、`warnings` 与[测试任务状态](concepts.md#test-slot-status)。外部测试子进程组清理无法确认时报告 `blocked`。
+相互竞争的写入若依赖了被先到者改变的文件，后者以 `SourceChanged` 拒绝。恢复结果报告 `operation`、`status`、`journalStatus`（`clean`、`completed`、`rolledBack` 或 `discarded`）、`changedPaths`、`warnings` 与[外部观察任务状态](concepts.md#observation-slot-status)。外部观察子进程组清理无法确认时报告 `blocked`。
 
 ## 身份与复用 {#identity-and-reuse}
 

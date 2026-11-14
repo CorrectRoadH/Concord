@@ -69,7 +69,7 @@
    再运行一次 `concord recover --json`，已没有遗留 journal：
 
    ```json
-   {"operation":"recover","status":"clean","changedPaths":[],"journalStatus":"clean","warnings":[],"testSlot":{"status":"absent"}}
+   {"operation":"recover","status":"clean","changedPaths":[],"journalStatus":"clean","warnings":[],"observationSlot":{"status":"absent"}}
    ```
 
    `recover` 经由工作区服务在写互斥下执行与服务启动时相同的恢复。目标文件已被外部编辑时，`journalStatus` 为 `discarded`，`warnings` 列出保留了外部内容的路径。
@@ -87,9 +87,9 @@
 | 服务在发布途中被 `SIGKILL` | 下一次启动的服务先恢复再应答；目标全部是计划内容时完成，否则回滚到前像 |
 | 遗留 journal 的目标文件已被外部编辑 | 保留磁盘内容，删除 journal，`journalStatus` 为 `discarded` 并在 `warnings` 报告路径；后续读写照常 |
 | `journal.json` 无法解码 | 按陈旧记录删除并在 `warnings` 报告，不阻断读写 |
-| `recover` 的输出 | `operation`、`status`、`journalStatus`（`clean`、`completed`、`rolledBack` 或 `discarded`）、`changedPaths`、`warnings` 与 `testSlot.status` |
-| 测试任务槽位清理不确定 | `testSlot.status` 为 `blocked` 并带具名原因；新的测试任务被拒绝，文档读写照常 |
-| 测试执行期间发布无关文档 | 不被阻塞；输入变化或清理不确定时不能产生通过的证据 |
+| `recover` 的输出 | `operation`、`status`、`journalStatus`（`clean`、`completed`、`rolledBack` 或 `discarded`）、`changedPaths`、`warnings` 与 `observationSlot.status` |
+| 外部观察任务槽位清理不确定 | `observationSlot.status` 为 `blocked` 并带具名原因；新的外部观察任务被拒绝，文档读写照常 |
+| 收集或分析期间发布无关文档 | 不被阻塞；输入变化时观察不能发布为当前结果；清理未知只阻断后续外部观察 |
 | 删除缓存 | 只影响可丢弃的缓存状态，不删除 journal |
 | 不安全路径 | 按[路径安全](../../local-sdlc/architecture.md#路径安全)拒绝 |
 

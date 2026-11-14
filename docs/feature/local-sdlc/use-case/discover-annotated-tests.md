@@ -69,7 +69,7 @@
 ## 标记规则
 
 - 每个标记块只选一个 Spec。多个标记块可以关联同一个 Feature、Engineering 或 Use Case。
-- `@status retired` 表示测试已退役，不参与修复核验。
+- `@status retired` 表示作者声明该测试关联已退役，不据此改变项目测试执行。
 - 工具不从测试语法推断跳过或待办状态。
 
 ## 忽略路径
@@ -91,5 +91,5 @@ sourceIgnore: ['games/ljkx/generated', 'tests/fixtures/vendor']
 
 ## Spec 来源
 
-- 命令与输出：[CLI](../cli.md#测试与证据)
+- 命令与输出：[CLI](../cli.md#测试关联与-issue-关闭)
 - 缓存身份与重建：[架构](../architecture.md#编译管线)

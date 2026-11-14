@@ -56,7 +56,7 @@
 | `concord-spec` | `concord --skill spec` | 读现有 Spec 与品味，写明行为、边界与验收方式；有待决的取舍时写 Design 并请维护者决定 |
 | `concord-implement` | `concord --skill implement` | 照着 Spec 实现并关联测试，执行验收；Spec 缺失或与事实冲突时暂停依赖部分，带着证据回到 Spec |
 | `concord-review` | `concord --skill review` | 只读对照 diff、关系与实际行为，区分 Spec 冲突、验证失效和产品缺陷，说明证明范围 |
-| `concord-fix` | `concord --skill fix` | 确认被违反的 Spec，按[回归核验](../../local-sdlc/use-case/verify-fix-in-one-commit.md)选择暂存区或提交核验；已有 Issue 时核验后关闭 |
+| `concord-fix` | `concord --skill fix` | 确认被违反的 Spec，按[回归核验](../../local-sdlc/use-case/validate-change-with-project-tools.md)选择暂存区或提交核验；已有 Issue 时核验后关闭 |
 
 4. Concord 升级后更新 skill 文件。 {#update}
 

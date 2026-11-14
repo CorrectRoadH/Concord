@@ -2,7 +2,7 @@
 
 ## 用户目标
 
-Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use Case、测试、代码声明、Issue、Memory 与修复核验之间的关系，判断这次变更有没有可审阅的验收依据。
+Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use Case、测试、代码声明、Issue与 Memory 之间的关系，判断这次变更有没有可审阅的验收依据。
 
 ## 起始状态
 
@@ -43,7 +43,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
    ```markdown
    # Concord review
 
-   This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe ownership; fix verification does not prove native case coverage.
+   This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe relationships; collection and bindings do not prove execution or coverage.
 
    ## Contracts and decisions
 
@@ -73,7 +73,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
 
 - 目录名前缀相似的相邻 Feature 不会混入。
 - 删除、改名或退役测试后，下一次 `trace` 立即反映当前源码。
-- fixed 缺少修复核验、`unknown` 执行结果和修复核验的边界在材料中明确写出，不当作覆盖率。
+- 收集观察缺失、过期或能力不足时明确标注；关系材料不当作测试通过或覆盖率，语义审阅和证据判断由 reviewer 完成。
 - 这些命令都不运行测试，不发送到 GitHub，也不修改远端。
 
 ## Spec 来源

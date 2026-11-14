@@ -2,7 +2,7 @@
 
 本页按日常顺序列出命令、实际输出、退出码与错误。示例来自一个只有 `src/cart.js` 与 `test/cart.test.js` 的接入项目。摘要和时间戳因运行而异，其余字段与真实输出一致；标为预期输出的示例尚待实现核对。实现方式见[架构](architecture.md)。
 
-全部文件都可以直接编辑。命令只做必须由程序完成的操作，例如修复核验与 Roadmap 采用，并把结果写进文件；`check` 检查结果是否一致。
+全部文件都可以直接编辑。命令只做必须由程序完成的操作，例如引用改写与 Roadmap 采用，并把结果写进文件；`check` 检查结果是否一致。
 
 ## 命令面
 
@@ -12,12 +12,12 @@
 | `new <类别> <名称>` | 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Issue 或 Memory |
 | `show <路径、选择器或路径#anchor>` | 一个文档或精确 anchor 及其关系、测试与实现 |
 | `list [类别]` | 列出文档 |
-| `check` | 放置、关系、概念、写作与修复核验记录 |
+| `check` | 放置、关系、概念与写作 |
 | `trace` | 关系图与缺口；`trace show` 支持 `<路径#anchor>`，`trace gaps` 支持 `[<路径或选择器>]` |
-| `test` | `list`、`show`、`discover`、`marker`、`run <case-id或spec-ref>`、`verify <issue>` |
+| `test` | `list`、`show`、`discover`、`marker` |
 | `code` | `marker`、`list`、`at`、`analyze`：实现与 Spec 的关联 |
 | `use-case` | `steps`、`format`、`rename-step`：Use Case 步骤 |
-| `issue` | `close`（删除 Issue，fixed 时先核验）、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
+| `issue` | `close`（删除 Issue 与对应标记，不执行测试）、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
 | `memory` | `link`、`search`；摘要列表用 `list memory` |
 | `move <源路径> <目标路径>` | 移动 Feature 或 Engineering 中的一页或整个文档包，并改写指向它的链接、关系、测试标记与代码声明 |
 | `roadmap` | `start <roadmap> [--feature <id>]`：移入 `docs/feature/`，省略 `--feature` 时 Feature ID 与 Roadmap 同名；取消方向即删除目录，历史在 Git |
@@ -42,7 +42,7 @@
 ## 通用约定
 
 - 每个命令都接受 `--json`。Agent 与脚本读取 JSON，不解析人读输出。JSON 字段是公开 Spec。
-- 退出码 0 表示成功。退出码 1 表示命令拒绝执行、检查发现问题或测试失败。
+- 退出码 0 表示成功。退出码 1 表示命令拒绝执行、检查发现问题或操作失败。
 - 命令拒绝执行时，错误对象写到 stderr，形如 `{"ok":false,"error":"<错误码>","message":"...","details":{...}}`。`details` 可省略。人读输出以 `ok: false`、`error:`、`message:` 三行开头。`check` 这类检查命令发现问题时，结果仍写到 stdout，`ok` 为 false。
 - `--root <worktree>` 指定接入项目。省略时取 cwd 所在 Git worktree 的顶层；`concord.config.ts` 可以不存在。
 - CLI 查询默认使用 `--server=shared`，自动启动或复用[工作区服务](../../concepts.md#workspace-server)；`--server=command` 使用随查询回收的工作区服务。作用域、环境隔离与失败语义见[CLI 查询](../local-data-engine/architecture.md#cli-查询)。
@@ -96,14 +96,14 @@ Inspect configuration: concord doctor
 {
   "operation": "doctor",
   "ok": true,
-  "configuration": {"testRoots": ["test", "tests"], "sourceRoots": ["src"], "runner": {"argv": ["node", "--test", "{file}"], "timeoutMs": 60000}},
+  "configuration": {"testRoots": ["test", "tests"], "sourceRoots": ["src"]},
   "missingTestRoots": ["tests"],
   "missingSourceRoots": [],
   "documents": 3,
   "cases": 1,
   "codeDeclarations": 1,
   "findings": [],
-  "nextSteps": ["Run concord check to validate all relations.", "Configure runner to run tests and verify fixes."]
+  "nextSteps": ["Run concord check to validate all relations."]
 }
 ```
 
@@ -325,32 +325,43 @@ codeDeclarations: 1
 
 发布范围见[步骤改写的发布](architecture.md#步骤改写的发布)。
 
-## 测试与修复核验
+## 测试关联与 Issue 关闭
 
-`concord --json test list` 列出测试根中的标记。`cases[].id` 是 `test run` 使用的 case ID：
+`concord --json test list` 列出测试根中的标记，`test show <case-id>` 显示目标、源码位置与已有收集观察。`cases[].id` 是关联身份，不能作为 Concord 的执行入口。以下为预期输出节选，`bindings` 字段见下文：
 
 ```json
-{"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"contract":"docs/feature/cart/use-case/add-item.md","issues":[],"status":"active","framework":"marker","skipped":false}],"observations":[]}
+{"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"contract":"docs/feature/cart/use-case/add-item.md","issues":[],"status":"active"}],"observations":[]}
 ```
 
-`concord test run <case-id或spec-ref>` 用配置的 runner 运行测试，argv 不经过 shell：
+`issue close <issue> [--reason <text>]` 校验当前引用与前像，原子删除 Issue 和指向它的 `@issue` 行，保留测试与其它标记，输出处理结论。没有测试、未配置收集、没有历史提交或工作区有其它改动都不阻止关闭；仍被页面或其它 Issue 引用时返回 `IssueReferenced`。
 
-- 传入 `neref_...` 测试关联 ID 时，运行该测试声明所在文件。
-- 传入 Feature、Use Case、Engineering 的路径、短选择器或 `<路径>#<anchor>`（例如 `docs/feature/cart/use-case/add-item.md#add`）时，解析指向该目标的全部 `active` 测试声明（跳过 `@status retired`），按 case ID 顺序依次执行，agent 不必先运行 `test list` 或 `show` 查找哈希 ID。Feature 汇总自身、附页与所属 Use Case；Use Case 汇总自身与步骤；`<路径>#<anchor>` 只取直接指向该步骤或 anchor 的声明。目标不存在时返回 `ReferenceNotFound` 或 `AnchorNotFound`；目标没有任何 `active` 测试声明时返回 `TestNotFound`（退出 1）。
+关闭不接受 `--fixed`、`--defect` 或 `--fix`，不运行测试或复用任何通过凭证。`test` 的命令面只有 `list`、`show`、`marker` 与 `discover`；测试执行和验证证据见[用项目自己的工具验证改动](use-case/validate-change-with-project-tools.md)。
 
-人读输出：
+### 具体用例绑定输出
 
-```text
-Command fail — neref_854212737ecad7effc4666629752cb98
-Scope: command (does not prove native case coverage)
-Execution: ran; exit: 1; cleanup: true
-Timeout: false; cancelled: false; signal: null
-Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
+`test list` 与 `test show` 除源码标记和观察外，都返回 `bindings`。list 每个标记一项，show 只返回所选标记的一项；绑定在查询时由 Concord 的同一算法派生，不写另一份登记表，消费者不重新推导。
+
+```ts
+interface NativeBindingView {
+  testId: string;
+  current: boolean;
+  complete: boolean;
+  nativeCases: readonly {
+    nativeId: string;
+    project: string;
+    file: string;
+    kind: "leaf" | "suite";
+    group?: string;
+    range?: { startLine: number; endLine: number; sourceDigest: string };
+    tags: Readonly<Record<string, string>>;
+  }[];
+  gaps: readonly string[];
+}
 ```
 
-测试通过时首行为 `Command pass`，退出 0；测试失败时退出 1。运行结果不保存。`--json` 输出 `commandOutcome`、`execution`、`exitCode`、`timedOut`、`cleanupOk` 与 `arguments`。`commandOutcome` 取 `pass`、`fail` 或 `invalid`。`execution` 只描述执行的测试数量，与退出码无关：取 `ran`、`none`、`skipped` 或 `unknown`，分别表示执行的测试数大于 0、等于 0、全部跳过或无法判断。
+`nativeCases` 是当前绑定的清单项投影，提供具体身份、label 和位置。无当前收集时 `current: false`、`complete: false`、集合为空并报告观察缺失或过期；过期清单仍可在 `observations` 查看，不能混入当前绑定。
 
-`issue close <issue> --fixed --reason <text> [--defect <commit>]` 先核验回归测试在缺陷提交上失败、在当前 HEAD 上通过，再删除 Issue 文件并输出可写进提交说明的结论。`test verify --defect <D> --fix <F> <test-id>...` 按提交与测试重放核验，不改变结论。`test verify --staged` 从暂存区核验一次还没提交的修复，`test verify --fix <F>` 重放一个同时含测试与修复的提交，见[一次提交核验小修复](use-case/verify-fix-in-one-commit.md)。完整路径、输出与错误码见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
+当前清单缺范围且没有有效 `@native`、存在歧义或原生 ID 失效时，保留静态关系，绑定集合为空，`complete: false` 并返回具体 gap。成功绑定仍携带清单的能力缺口；`complete` 只描述本次收集与绑定的完整性，不证明全部测试、执行或覆盖。Web 读取同一结果，不能以同名或 label 猜测绑定。
 
 ## 缓存与恢复
 
@@ -399,39 +410,36 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 ## 原生测试 adapter
 
-`concord test discover [<file>...]` 显式运行配置的 adapter，保存可丢弃的原生清单观察。`test list/show` 只读展示 `current`、`complete` 与 `gaps`；`check` 与 `trace` 不运行收集、不依据观察改变关系结论。
+`concord test discover [<file>...]` 显式收集框架用例、label 与来源位置，保存可丢弃的原生清单观察。`test list/show`、`trace` 与 Web 只读取已有观察，展示 `current`、`complete` 与 `gaps`，普通查询不启动收集。
 
-`concord test run <case-id>` 重新收集并绑定当前原生集合；`--require-native` 要求精确原生选择。范围不足时可以在源码标记块添加 `@native <native-id>`；它不参与 v1 关联身份。无法精确绑定时执行范围为文件级 command；显式要求 native 时具名失败。
+`testAdapters` 每项声明 `id`、位于 `testRoots` 内且互不重叠的 `include`，以及 `builtin` 或外部 `argv`。可选项仅有收集超时、预算和允许传递的 `envNames`；没有测试运行配置。
 
-配置 `testAdapters` 按测试根内的路径段匹配且不得重叠。每项声明 `id`、`include` 与 `builtin` 或外部 `argv`（可选覆盖超时、预算与允许传递的 `envNames`）；不需要手工枚举 `implementationFiles`、`inputRoots`、`frameworkVersion` 或 `lockFiles`。未覆盖的文件使用原 runner。
-
-原生运行结果包含 requested、observed、Invocation 状态及输入摘要。green、red 与 invalid 表达逐项执行裁决；command scope 的 pass/fail 不表述为原生通过。缺少、重复、额外、skip、超时或清理未知均为 invalid，不能作为修复核验的任一端。能力与边界见[原生 adapter Use Case](use-case/run-native-test-adapters.md)。
-
-`inputScope` 展示仓库内输入成员、摘要、排除项和框架/运行时版本。系统库、工具链、外部服务和包缓存无法冻结时，观察标记 `ExternalInputUnknown`、`complete=false`；仍可按完整 provider 收集范围授权精确 native 选择。运行结果保留环境 gap 和版本，`complete` 仅表示逐项报告完整。
+当前输入上的原生清单按来源范围或标记中的 `@native` 与测试关联绑定。`tags` 保存框架 label；清单、label 与绑定不创建 Spec 关系，不改变关联 ID，不表示测试执行结果。流程见[收集原生测试并关联具体用例](use-case/collect-native-tests.md)。
 
 ### 超时与预算
 
-`collectTimeoutMs`、`runTimeoutMs` 与 `wallTimeoutMs` 的默认值为 60000、300000 与 600000 毫秒。外部 adapter 可以在配置中调大，硬上限分别是 600000、7200000 与 7200000 毫秒，供打包、安装后再运行的正式 E2E 使用；内置 adapter 只能缩小默认值。超时、取消与进程组回收规则不随上限改变。`budgets` 可缩小响应、输出、原生项、调用数及报告文件预算，不扩大[协议硬上限](#adapter-协议)。
+`collectTimeoutMs` 默认 60000 毫秒，`wallTimeoutMs` 默认 600000 毫秒；硬上限分别是 600000 与 7200000 毫秒，内置 adapter 只能缩小默认值。wall 预算包含全部收集调用和解析，终止后的进程清理有界且必须确认。
+
+`budgets` 可缩小协议响应、进程输出、原生项、调用数与收集产物预算。超时、取消、输出截断或非零收集退出都不能被成功 JSON 覆盖，返回具名收集错误；不产生测试通过或失败结果。
 
 ### adapter 协议
 
-外部 adapter 使用 `concord.test-adapter/v1`；每次请求启动一个受管子进程，stdin/stdout 各一个 JSON，stderr 只用于诊断。Concord 拥有原生 Invocation 的执行、状态裁决和报告目录。协议的 JSON Schema 由 `concord schema test-adapter` 输出，见[机器可读 Schema](#机器可读-schema)；adapter 可以用任何语言实现。
+外部 adapter 使用 `concord.test-adapter/v1` 的 `collect-plan` 与 `collect-parse`。每请求一个新进程，stdin/stdout 各一个 JSON，stderr 只用于诊断。`concord schema test-adapter` 输出这两个操作的 JSON Schema。
 
-`concord.test-adapter/v1` 的请求与响应都含 `format`、`op` 与 `requestId`，响应回显 `planId` 与 `inputs`；未知字段、重复键、非有限数与超限值拒绝，返回 `AdapterProtocolInvalid`。
+请求与响应含 `format`、`op`、`requestId`；响应回显 `planId` 与 `inputs`。未知字段、重复键、非有限数与超限值返回 `AdapterProtocolInvalid`。协议不包含测试选择计划、执行报告或通过凭证。
 
 | op | 输入 | 输出 |
 | --- | --- | --- |
-| `collect-plan` | 文件与成员摘要 | 非空 Invocation 列表与 `planContext` |
-| `collect-parse` | 同一 context 与 `planContext`、全部调用状态、捕获输出与报告描述 | `cases`、`capabilities`、`completeness` |
-| `select-plan` | 去重 nativeIds 与当前清单身份 | 非空 Invocation 列表及各自负责的 requested 子集 |
-| `report-parse` | 同一计划、requested、状态与报告 | `observed`、`capabilities`、`completeness` |
+| `collect-plan` | 文件与成员摘要 | 非空收集 Invocation 列表与 `planContext` |
+| `collect-parse` | 同一 context、`planContext`、全部调用状态、捕获输出与收集产物描述 | `cases`、`capabilities`、`completeness` |
 
-- Invocation 含 `invocationId`、不经 shell 的非空 `argv`、仓库相对 `cwd`、取自配置白名单的 `envNames` 与 Concord 分配目录内的相对 `reports`；响应不能携带秘密值。Concord 回传每个调用的退出码、信号、超时、取消、截断与清理状态，parser 的成功响应不能覆盖它们。收集或运行因某个 Invocation 失败而结束时（例如 `CollectFailed`），错误的 `details.invocations` 列出每个 Invocation 的这些状态，以及 stdout 与 stderr 各自末尾最多 64 KiB，使用者不必重跑就能看到失败原因。
-- `capabilities` 分别声明真实收集、leaf 或参数组、精确选择、逐项报告、范围、标签与 skip 可见性，每项观察带 provenance。静态 AST 候选不能声明真实收集；范围缺失时不用单行位置伪造结束行。
-- 原生项含 `nativeId`、`project`、`file`、`kind`（leaf 或 suite）、`group`、`range`、`selection` 与 `tags`。`nativeId` 含 provider 命名空间；range 为以 1 起计、两端包含的行号加源码摘要。同一 group 共享声明范围与 project。`complete` 为 false 时 `gaps` 非空；为 true 只表示 provider 声明的收集范围完整。
-- 硬上限：响应 8 MiB，每调用 stdout 与 stderr 合计 16 MiB，原生项 100000，Invocation 128，报告文件 64 个、单个 8 MiB、合计 32 MiB。
+- Invocation 含 `invocationId`、不经 shell 的非空 `argv`、仓库相对 `cwd`、白名单 `envNames` 与 Concord 分配目录内的相对 `reports`。产物只用于收集，响应不含秘密值。
+- Concord 回传各调用的退出码、信号、超时、取消、截断与清理状态，parser 不能覆盖进程失败。错误的 `details.invocations` 保留这些状态与 stdout、stderr 各自至多 64 KiB 的尾部。
+- `capabilities` 只声明真实收集、leaf、参数组、范围及 label 元数据能力，每项带 provenance。没有能力时报告 gap；静态 AST 猜测不能冒充框架收集。
+- 原生项含 `nativeId`、`project`、`file`、`kind`（leaf 或 suite），以及真实提供的 `group`、`range` 与 `tags`。原生身份带 provider 命名空间；range 是从 1 起、包含两端的行号与源码摘要，不由单一 location 猜测。没有执行用 `selection` token。
+- 响应上限 8 MiB；每调用 stdout 与 stderr 合计 16 MiB；原生项 100000；Invocation 128；收集产物最多 64 个、单个 8 MiB、合计 32 MiB。
 
-`collect-plan` 之前取得 run 所有权，见[原生 adapter](architecture.md#原生-adapter)。
+`inputScope` 展示仓库内成员摘要、排除项与框架版本。仓库外工具链和环境无法冻结时保留 `ExternalInputUnknown`，不把 `complete` 解释为测试覆盖。进程与产物归属见[原生 adapter](architecture.md#原生-adapter)。
 
 ## 编辑器服务
 
@@ -441,15 +449,15 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 导航仅使用同版当前输入。过期请求返回 ContentModified（-32801），取消返回 RequestCancelled（-32800）；输入缺失发布 EditorInputsIncomplete。悬停明确说明未提供分析观察，不将缺失观察解释成没有关系。
 
-服务只读，不提供 formatting、codeAction、executeCommand 或 willRenameFiles；未知编辑执行请求返回 EditorMethodNotSupported（-32601）。不启动 language server、collector 或 runner，不监听网络，不持久化 overlay。关闭、EOF 或 SIGINT 终结任务与句柄。预算与完整生命周期见[编辑器 Use Case](use-case/use-editor-service.md)。
+服务只读，不提供 formatting、codeAction、executeCommand 或 willRenameFiles；未知编辑执行请求返回 EditorMethodNotSupported（-32601）。不启动 language server、collector 或测试进程，不监听网络，不持久化 overlay。关闭、EOF 或 SIGINT 终结任务与句柄。预算与完整生命周期见[编辑器 Use Case](use-case/use-editor-service.md)。
 
 ## 观察与相关性
 
 原生清单、依赖分析与相关性判定返回同一观察结构：`value`、`inputs`（全部实际输入的摘要，含实现与版本）、`complete`、`gaps`（`complete` 为 false 时的具名原因）、`observedAt` 与 `current`（输入摘要与当前源码一致）。
 
-- 只有 `test discover`、`code analyze` 与 `test run` 的执行前收集产生观察；其它命令与编辑器服务只读取。
+- 只有显式 `test discover` 与 `code analyze` 产生观察；其它命令与编辑器服务只读取。
 - 观察可丢弃。`check` 的退出码、finding 与 `complete` 不读取观察，冷缓存、热缓存、缓存损坏与清空后结论相同。
-- `current` 为 false 的观察只作历史展示，带来源与时间，不用于选择执行或相关性判定。
+- `current` 为 false 的观察只作历史展示，带来源与时间，不用于当前绑定或相关性判定。
 
 相关性判定只报告观察到的正向交集，不输出“无关”结论：
 
@@ -458,7 +466,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 | `observed` | 测试依赖中观察到声明实现目标的代码，带 `level`：`step`、`use-case` 或 `feature`；文件范围的结果同时带 `FileScope` |
 | `not-observed` | 未观察到这样的代码，总带 `gaps`，例如 `FileScope`、`DepthLimit`、`NoSourceImports`、`SubprocessBoundary`、`NoAnalyzer`、`SnapshotNotCurrent` |
 
-`not-observed` 不表示测试与 Spec 无关；CLI、review 与工作台写作“未观察到交集”并列出原因。只观察到其它 Feature 或同 Feature 另一 Use Case 的实现也不推出无关。判定不产生 finding，不改变退出码，关联与观察都不证明执行、断言正确或覆盖率，不用于修复核验。文件级 import 只能证明文件中的声明交集，不证明该文件每个 case 都调用了实现。
+`not-observed` 不表示测试与 Spec 无关；CLI、review 与工作台写作“未观察到交集”并列出原因。只观察到其它 Feature 或同 Feature 另一 Use Case 的实现也不推出无关。判定不产生 finding，不改变退出码，关联与观察都不证明执行、断言正确或覆盖率，不作为测试结果。文件级 import 只能证明文件中的声明交集，不证明该文件每个 case 都调用了实现。
 
 ## 机器可读输出
 

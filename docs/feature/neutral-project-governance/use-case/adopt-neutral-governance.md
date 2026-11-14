@@ -11,13 +11,13 @@
 
 ## 完整路径
 
-1. 初始化，测试不在默认位置时覆盖发现范围，需要运行测试时配置 runner。 {#init}
+1. 初始化，测试不在默认位置时覆盖发现范围。 {#init}
 
    ```sh
-   concord init --test-root spec --runner-config runner.json
+   concord init --test-root spec
    ```
 
-   `runner.json` 为 `{"argv":["node","--test","{file}"],"timeoutMs":60000}`。init 把 `testRoots` 与 `runner` 写进 `concord.config.ts`，其余按约定，见[渐进选择并初始化项目](../../project-onboarding/use-case/initialize-project.md#runner)。品味文件存在即生效。
+   init 把 `testRoots` 写进 `concord.config.ts`，其余按约定，见[渐进选择并初始化项目](../../project-onboarding/use-case/initialize-project.md#configure)。品味文件存在即生效。
 
 2. 写 Feature 与 Use Case，给测试加标记。 {#link}
 
@@ -50,40 +50,33 @@
 
    查询、trace 与 Web 从权威源码派生关系，不隐式运行测试，也不因项目没有某个产品的通道、包名或 host 而失败。`Declaration: active` 只表示标记存在，不表示测试通过。
 
-4. 通过项目的 runner 运行测试。 {#run}
+4. agent 使用项目命令验证行为。 {#run}
 
    ```sh
-   concord test run neref_7c0a61a1e94b429fafcb4e49eb734a90
+   node --test spec/add.test.mjs
    ```
 
-   ```text
-   Command pass — neref_7c0a61a1e94b429fafcb4e49eb734a90
-   Scope: command (does not prove native case coverage)
-   Execution: unknown; exit: 0; cleanup: true
-   Timeout: false; cancelled: false; signal: null
-   Arguments: ["node","--test","spec/add.test.mjs"]
-   ```
+   agent 记录执行范围、结果与未验证项；Concord 的收集与关系查询不代替测试。需要原生用例身份和 label 时，可以显式 `test discover`，但不注册测试执行命令。
 
-   结果只按 runner 退出码解释，不声称逐 case 覆盖或正式可靠性。
-
-5. 缺陷记为 Issue，先提交失败的回归测试，再提交修复，以 fixed 关闭。 {#fix}
+5. 关闭处理完的 Issue。 {#fix}
 
    ```sh
-   concord issue close total-wrong --fixed --reason "合计不再重复计入运费"
+   concord issue close total-wrong --reason "合计不再重复计入运费；相关测试通过"
    ```
 
-   关闭前通过[修复核验](../../local-sdlc/README.md#证据的范围)，完整步骤见[核验修复并关闭缺陷](../../local-sdlc/use-case/resolve-with-command-evidence.md)。缺测试、缺提交、区间含 merge 或 shallow clone 时具名返回 `FixUnverifiable`。
+   关闭原子删除 Issue 和对应标记，不读取测试结果或 Git 历史，不要求工作区干净，流程见[用项目自己的工具验证改动](../../local-sdlc/use-case/validate-change-with-project-tools.md)。
+
+
 
 ## 结果
 
 | 情形 | 结果 |
 | --- | --- |
-| 没有 NiceEval/Nx 产品配置、通道或执行器分类的软件项目 | 完成 Spec→实现/测试关联→执行→Issue 修复核验→审阅闭环；源码声明不被显示为执行通过 |
+| 没有 NiceEval/Nx 产品配置、通道或执行器分类的软件项目 | 完成 Spec→实现/测试关联→agent 验证→Issue 关闭→审阅闭环；源码声明不被显示为执行通过 |
 | 没有 `concord.config.ts` | 静态查询、trace 与 Web 照常可用 |
-| 缺少 `runner` | 只阻断测试运行与修复核验 |
+| 没有收集 adapter | 静态关联与 Issue 关闭不受影响 |
 | 测试位于默认根之外 | 经 `testRoots` 覆盖后可以静态查询 |
-| 任一入口写入 fixed 关闭 | 都带核验结论 |
-| 删除 runner 配置 | 不能使没有核验的 fixed 通过检查 |
+| 任一入口关闭 Issue | 都只校验引用和前像，不启动测试 |
 | 活跃锁、pending journal 或未知前像 | 新入口不能绕过 |
 | Web 中有未提交的编辑 | 保留 |
 

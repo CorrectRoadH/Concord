@@ -22,7 +22,7 @@ canonical 仓库相对路径是唯一身份。目录名与文件名是同类别�
 
 ## Issue
 
-Issue 只表示还要处理的问题。处理完就删除文件：`issue close` 先执行需要的步骤，例如 fixed 时核验回归测试，再删除 Issue，并输出可写进提交说明的结论。[关系](concepts.md#relation)带角色：`spec` 指向这个 Issue 涉及的 Spec，`investigation` 与 `root-cause` 指向 Memory，`related` 指向另一个 Issue。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。
+Issue 只表示还要处理的问题。处理完就删除文件：`issue close` 校验引用与前像，原子删除 Issue 和对应 `@issue` 行，输出可写进提交说明的结论；测试由 agent 使用项目工具完成，关闭不再运行。[关系](concepts.md#relation)带角色：`spec` 指向这个 Issue 涉及的 Spec，`investigation` 与 `root-cause` 指向 Memory，`related` 指向另一个 Issue。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。
 
 ## Memory
 
@@ -38,7 +38,7 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 
 发布与恢复使用工作区服务的写互斥与单一 `journal.json` 协议。读取使用[来源快照](feature/portable-coordination/concepts.md#source-snapshot)，提交短期独占并核对期望摘要；dry-run 不发布文件。陈旧或外部编辑冲突的 `journal.json` 在服务启动或恢复时以磁盘当前文件为准自动清理，不锁死仓库。
 
-配置 `concord.config.ts` 可以不存在；存在时只声明 runner、测试与源码目录的覆盖、排除项与可选集成，见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md)。
+配置 `concord.config.ts` 可以不存在；存在时只声明测试与源码目录的覆盖、排除项与可选集成，见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md)。
 
 ## 事实归属
 

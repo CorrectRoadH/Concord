@@ -128,10 +128,6 @@ Git 的一个工作目录，包括其中的文件与 index：主 worktree，或 
 
 Issue 或 Memory 指向另一个文档的一条带角色的链接，写在 frontmatter 的 `relations` 中。角色说明这条链接的意思；Issue 的角色见 [Issue 字段](feature/feedback/architecture.md#issue-字段)，Memory 的角色见[文档模型](document-model.md#memory)。
 
-## 修复核验 {#fix-verification}
-
-把缺陷 Issue 关为已修复之前的核验：回归测试在缺陷提交上失败、在修复提交上通过；通过后删除 Issue，结论输出给提交说明。它只证明这一条命令的结果，不证明测试覆盖。
-
 ## 门禁 {#gate}
 
 交付前必须全部通过的检查。
@@ -182,7 +178,7 @@ advisory 是不使检查失败的提示，不算 finding。原生诊断与缓存
 
 [工作区服务](#workspace-server)在提交写入时持有的进程内独占：同一项目目录同一时刻只有一个写入在核对[前像](#preimage)、写 journal 并替换文件。读取与准备计划不进入写互斥。
 
-写互斥只存在于内存，不在磁盘留下持有记录；进程退出即释放，中断的写入由[恢复](#recovery)处理。修复核验等测试命令占用的是[测试任务槽位](feature/portable-coordination/concepts.md#test-slot)。
+写互斥只存在于内存，不在磁盘留下持有记录；进程退出即释放，中断的写入由[恢复](#recovery)处理。原生收集与语言分析占用的是[外部观察任务槽位](feature/portable-coordination/concepts.md#observation-slot)。
 
 旧写法：`租约`、`发布租约`、`写锁`
 
@@ -198,7 +194,7 @@ advisory 是不使检查失败的提示，不算 finding。原生诊断与缓存
 
 ## 恢复 {#recovery}
 
-工作区服务启动或运行 `concord recover` 时核对 `journal.json` 与测试任务状态，自动完成或回滚中断的写入，并在外部编辑冲突时以磁盘当前文件为准清理陈旧 journal。
+工作区服务启动或运行 `concord recover` 时核对 `journal.json` 与外部观察任务状态，自动完成或回滚中断的写入，并在外部编辑冲突时以磁盘当前文件为准清理陈旧 journal。
 
 ## 发布 {#publication}
 

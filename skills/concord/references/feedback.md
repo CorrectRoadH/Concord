@@ -23,27 +23,19 @@ source: {...}                    # 导入时写入的远端来源
 
 ## 编辑与关闭
 
-直接编辑 Issue 文件的正文与关系。处理完运行 `concord issue close <id> --reason <text>`：命令删除 Issue，输出一段写进提交说明的结论；缺陷修好时用 `--fixed`，先核验再删除。仍有页面或其它 Issue 链接它时拒绝。用 `concord list issue --json` 列出 Issue，`concord show <id> --json` 读取它及派生关系。
+直接编辑 Issue 文件的正文与关系。处理完运行 `concord issue close <id> --reason <text>`：命令删除 Issue，输出一段写进提交说明的结论，并原子清理对应的 `@issue` 行；不执行测试。仍有页面或其它 Issue 链接它时拒绝。用 `concord list issue --json` 列出 Issue，`concord show <id> --json` 读取它及派生关系。
 
 ## 修复缺陷
 
-小修复当场写回归测试与修复，一起暂存并运行 `concord test verify --staged`，核验通过后一次提交，把输出结论写入提交说明。它不要求 Issue；只有工作要留到以后或交给别人时才建 Issue。提交后用 `concord test verify --fix <commit>` 重放。
-
-已有 Issue 时，测试带 `@issue docs/issues/<id>.md` 与对应 Spec 标记。可以把测试与修复一起提交，也可以按两个提交的线性路径先提交失败回归、再提交修复。两个提交之间测试文件、runner 配置、`runner.sourceFiles` 与测试指向的 Spec 保持不变。
+按 `concord --skill fix` 用项目自己的工具复现和验证。agent 选择相关测试、管理环境和进程、解释结果；不要求两个提交、冻结快照或统一测试结果格式。已有 Issue 时可以在测试标记中带 `@issue docs/issues/<id>.md`。
 
 ```sh
-concord test verify --staged --json
-concord test verify --fix <commit> --json
-concord issue close expired-token-accepted --fixed --json
-concord issue close expired-token-accepted --fixed --defect <commit> --fix <commit> --json
-concord test verify --defect <commit> --fix <commit> <derived-reference> --json
+concord issue close expired-token-accepted --reason "修复过期判断；相关测试通过" --json
 ```
 
-`issue close --fixed` 只要求 Issue 文件与回归测试文件没有未提交改动。缺陷提交默认是修复提交的 first-parent 历史中最早出现全部回归标记的提交；首次出现分散时用 `--defect` 指定。测试与修复分在两个提交时，两端在轻量临时 worktree 中执行。它们在同一提交时，红快照由第一个父提交加上该提交在 `testRoots` 之下的改动推导，绿快照是修复提交本身。
+关闭只检查当前引用和文件前像，原子删除 Issue 与对应 `@issue` 行，保留测试及 Spec 标记。没有测试、未配置收集、没有历史提交或工作区有其它改动都不是关闭障碍；仍有其它文档链接它时先处理引用。输出结论留给提交说明，不建立测试通过凭证。
 
-红快照上的冻结命令非零、绿快照上零才核验成立，之后删除 Issue 与回归测试里对应的 `@issue` 行，输出结论供写入提交说明，不在 Issue 中存储结果。缺少测试或提交、锁文件不匹配、区间含 merge、超时或清理未知时拒绝；进程失败带提交、步骤、命令和输出尾部。command runner 不区分断言失败与构建失败；没有 `@name` 时，推导核验的保证落在整个文件，结果标为 `scope: "file"`，按名称或原生用例运行时标为 `scope: "case"`。`test verify` 重放只报告结果，不写文件。
-
-远端 Closed / Done 不证明本地修复；fixed 始终经过这条核验。
+远端 Closed / Done 不能替代本地修复判断。维护者或 agent 审阅代码与验证证据后决定处理结论，Concord 不重复运行测试。
 
 ## 建立连接并读取
 

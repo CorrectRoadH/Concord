@@ -1,6 +1,6 @@
 # {{title}}
 
-An Issue is a problem that still needs handling. When it is handled, `concord issue close` runs the needed steps and deletes this file; Git keeps the history.
+An Issue is a problem that still needs handling. When it is handled, `concord issue close` checks references and atomically deletes this file and its `@issue` markers without running tests; Git keeps the history.
 
 ## Observation
 
@@ -18,4 +18,4 @@ List the smallest repeatable steps, inputs, and resulting output.
 
 Record evidence and remaining hypotheses. Put reusable findings in Memory and link them from the `relations` frontmatter with the `investigation` or `root-cause` role.
 
-For a defect, read `concord --skill fix` and `concord --skill feedback` for the current verification and closure workflow. Closing a handled Issue deletes this file; put the verification conclusion in the commit message, not a closed-Issue record.
+For a defect, read `concord --skill fix` and `concord --skill feedback`. The agent uses project tools to validate the fix and reports the actual results. Closing a handled Issue deletes this file; put the reason and validation evidence in the commit message, not a closed-Issue record.
