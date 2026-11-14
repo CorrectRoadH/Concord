@@ -48,7 +48,7 @@
 
 worktree、配置原文或安装产物变化后旧结果不再展示，先报告 Pending。
 
-`workspace projection` 在有同协议的服务时向服务读取，否则直接读取持久行，遇 `HawdbBusy` 在 500 ms 内重试，仍占用则不可用。
+`workspace projection` 在有协议与安装身份均匹配的服务时向服务读取，否则直接读取持久行，遇 `HawdbBusy` 在 500 ms 内重试，仍占用则不可用。
 
 ## PR 静态预览导出
 

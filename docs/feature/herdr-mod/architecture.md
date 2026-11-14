@@ -27,7 +27,7 @@ Herdr 的远程 `exec` 经 `hc exec` 执行；这个调用结束时会回收它�
 
 终端不创建 pane 或 tab，不抢焦点，不附加界面标签；没有父终端，不依赖短查询或 mod 的生命周期。工作区服务仍拥有持久句柄、服务锁与子进程，按既有退出协议回收；服务退出后 `--rm` 删除终端。mod 切换仓库、关闭或重连不停止共享服务。并发启动由 Concord 的服务锁裁决，落败进程退出，其终端同样自动删除。不得通过删除 `HC_SCOPE` 等宿主标记逃避回收，也不修改 Herdr 的全局环境或启动普通查询之外的应用。
 
-`hc run` 返回零只说明终端创建成功。创建后先运行 `concord --json server status --wait`，这个只读命令最多等 10 秒，直到服务完成握手，绝不自动启动服务；它成功后才运行 `workspace wait`，避免查询抢先启动一个随 exec 退出的临时服务。投影可读仍由随后成功的 `workspace projection` 证明。创建终端的非零结果转换为 `HerdrServiceStartFailed`，保留 stdout/stderr 供交给 agent；机器不可达仍按连接失败处理。握手超时报告 `WorkspaceServerUnavailable`。服务在 status 与 wait 之间退出，或 CLI 因协议变化替换服务时，本轮结果不能证明服务仍存在，下一次等待重新检查并按需托管；不重放写入。服务升级、锁争用与不可用的错误继续由 Concord 的公开命令处理。
+`hc run` 返回零只说明终端创建成功。创建后先运行 `concord --json server status --wait`，这个只读命令最多等 10 秒，直到服务完成握手，绝不自动启动服务；它成功后才运行 `workspace wait`，避免查询抢先启动一个随 exec 退出的临时服务。投影可读仍由随后成功的 `workspace projection` 证明。创建终端的非零结果转换为 `HerdrServiceStartFailed`，保留 stdout/stderr 供交给 agent；机器不可达仍按连接失败处理。握手超时报告 `WorkspaceServerUnavailable`。服务在 status 与 wait 之间退出，或 CLI 因协议或安装身份变化替换服务时，本轮结果不能证明服务仍存在，下一次等待重新检查并按需托管；不重放写入。服务升级、锁争用与不可用的错误继续由 Concord 的公开命令处理。
 
 一次刷新最多读取三次投影，中间最多等待两次；等待不带 `--after`，使用 CLI 默认的 25 秒期限。第三次仍返回 `WorkspaceProjectionPending` 时，将这个具名错误交给状态页，停止本轮读取，不再等待。已经读到的内容保留；没有内容时显示错误和交给 agent 的请求。切换目标后旧读取不能更新新会话。后台变化等待保留 `--after <sourceDigest>`，每次等待前同样确认远程服务；这项控制查询不计作导航刷新，不改变已运行服务的一次投影读取成本（[快到每次都愿意跑](../../taste.md#t-7)）。
 

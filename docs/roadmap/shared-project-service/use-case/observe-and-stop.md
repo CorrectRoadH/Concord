@@ -17,7 +17,7 @@ CLI 或界面已经取得[操作票据](../concepts.md#operation-ticket)，提�
 
 写入已经进入提交区时，取消可能得到成功结果。取消不表示回滚；客户端必须读取终态。关闭浏览器只是断开连接。
 
-`concord server stop` 停止接收新操作并收拢已有工作。协议相同的其它安装直接使用正在运行的工作区服务；协议不同时按[启动与裁决](../../../feature/local-data-engine/architecture.md#启动与裁决)停止旧服务，再启动自己的服务。
+`concord server stop` 停止接收新操作并收拢已有工作。协议与安装身份都匹配时直接使用正在运行的工作区服务；任一不匹配时按[启动与裁决](../../../feature/local-data-engine/architecture.md#启动与裁决)停止旧服务，再启动自己的服务。
 
 ## 在 CI 中使用
 
