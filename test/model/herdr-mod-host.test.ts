@@ -39,6 +39,8 @@ class Element {
   state: State | undefined;
   scroll: State | undefined;
   width: number | undefined;
+  maxHeight: number | undefined;
+  scrollsVertically = false;
   pointer = false;
   hovered = false;
   background: string | undefined;
@@ -58,11 +60,12 @@ class Element {
   on_mouse_down_out(body: (event: MouseButtonEvent, cx: Context) => void) { this.mouseDownOut = body; return this; }
   size_full() { return this; } flex_1() { return this; } min_w(_v: number) { return this; } min_h(_v: number) { return this; }
   max_w(_v: number) { return this; } items_center() { return this; } items_start() { return this; } justify_center() { return this; }
+  max_h(v: number) { this.maxHeight = v; return this; }
   max_w_full() { return this; }
   w(v: number) { this.width = v; return this; } h(_v: number) { return this; } gap(_v: number) { return this; }
   p(_v: number) { return this; } px(_v: number) { return this; } py(_v: number) { return this; }
   bg(v: string) { this.background = v; return this; } text_color(_v: string) { return this; } text_size(_v: number) { return this; }
-  rounded(_v: number) { return this; } overflow_y_scroll() { return this; }
+  rounded(_v: number) { return this; } overflow_y_scroll() { this.scrollsVertically = true; return this; }
   items_stretch() { return this; } overflow_hidden() { return this; }
   size(_v: number) { return this; } flex_none() { return this; }
   pl(_v: number) { return this; } pr(_v: number) { return this; }
@@ -423,10 +426,49 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       try {
         b.rightClick(`page-${page}`); b.chooseMenu('复制绝对路径');
         assert.equal(b.clipboard, `vps:/repo/${page}`);
-        b.click(`page-${page}`); await b.until(() => b.output.find('finding-0') !== undefined);
+        b.click(`page-${page}`); await b.until(() => b.output.find('toggle-check-details') !== undefined);
+        b.click('toggle-check-details');
         b.rightClick('finding-0'); b.chooseMenu('复制问题');
         assert.equal(b.clipboard, `${page}:12 单子→订单`);
         assert.equal(b.output.find('concord-context-menu'), undefined);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#fix
+    await t.test('many repository findings preserve reading and offer bounded details with a complete agent handoff', async () => {
+      const findings = Array.from({ length: 85 }, (_, index) => ({ path: `test/very-long-directory/diagnostic-${index}.test.ts`, line: index + 1, message: `Reference target does not exist: docs/feature/missing-${index}/README.md` }));
+      const b = await start(boundary => {
+        boundary.spaceList[0]!.machine = 'vps';
+        boundary.findings.push(...findings);
+        boundary.files.set(`/repo/${findings[84]!.path}`, '\n'.repeat(84) + '// Source of the last finding\n');
+      });
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        assert.match(b.output.find('concord-check')!.text(), /仓库有 85 个检查问题/u);
+        assert.equal(b.output.find('finding-0'), undefined, 'details are collapsed initially');
+        assert.match(b.output.find(`concord-body-${page}`)!.text(), /Cart/u);
+        b.click('copy-check');
+        assert.match(b.clipboard, /vps:\/repo/u);
+        for (const finding of findings) assert.ok(b.clipboard.includes(`${finding.path}:${finding.line} ${finding.message}`));
+        b.click('toggle-check-details');
+        assert.ok(b.output.find('finding-84'), 'all findings remain available');
+        for (const height of [600, 320]) {
+          b.output.sizeChanged!({ width: 480, height }, b.context());
+          const details = b.output.find('concord-check-details')!;
+          assert.equal(details.scrollsVertically, true);
+          assert.ok(details.maxHeight! <= 200 && details.maxHeight! <= height / 4);
+          assert.ok(b.output.find(`concord-body-${page}`));
+        }
+        b.click('finding-84'); await b.until(() => b.output.find('concord-source-editor') !== undefined);
+        assert.match(b.output.find('concord-source-editor')!.state!.value(), /85  \/\/ Source of the last finding/u);
+        b.click('toggle-check-details');
+        assert.equal(b.output.find('concord-check-details'), undefined);
+        assert.ok(b.output.find(`concord-body-${page}`));
+        b.click('toggle-check-details');
+        b.findings = [];
+        b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'fixed' }), stderr: '' });
+        await b.until(() => b.output.find('concord-check') === undefined);
+        assert.ok(b.output.find(`concord-body-${page}`));
+        assert.deepEqual(b.errors, []);
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md

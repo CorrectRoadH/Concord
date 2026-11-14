@@ -91,6 +91,7 @@ export default class ConcordMod extends View {
   private panelWidth = 480;
   private panelHeight = 600;
   private treeHidden = false;
+  private checkDetailsExpanded = false;
   private busy = new Map<string, string>();
 
   init(initialProps: Readonly<Record<string, unknown>> | undefined, cx: AsyncContext): void {
@@ -276,6 +277,7 @@ export default class ConcordMod extends View {
     const retained = this.sessions.get(key);
     this.sessions.delete(key);
     this.session = retained?.session ?? new ModSession({ exec }, cwd, machine);
+    this.checkDetailsExpanded = false;
     this.cli = this.cliMachines.has(machine) ? 'ready' : 'checking';
     this.pageLease = retained?.pageLease; this.renderedPage = retained?.renderedPage;
     this.rendering = false; this.renderError = '';
@@ -814,6 +816,26 @@ export default class ConcordMod extends View {
     ]);
   }
 
+  private checkElements(): Element[] {
+    const session = this.session;
+    if (session.checking || !session.check || session.check.ok) return [];
+    const findings = session.check.findings;
+    const request = `Concord 在 ${this.locationLabel(session.root, session.machine)} 检查发现 ${findings.length} 个问题。\n请按项目 Spec 修复这些问题，并重新运行 concord check 确认结果。\n\n完整问题列表：\n${findings.map(finding => `${finding.path}:${finding.line ?? 1} ${finding.message}`).join('\n')}`;
+    return [v_flex().id('concord-check').flex_none().min_w(0).px(12).py(8).gap(6).border_b(1).border_color(color('border')).children([
+      text(`仓库有 ${findings.length} 个检查问题`).min_w(0).truncate().text_color(color('blocked')),
+      h_flex().min_w(0).gap(6).children([
+        this.button('toggle-check-details', this.checkDetailsExpanded ? '收起详情' : '查看详情', cx => { this.checkDetailsExpanded = !this.checkDetailsExpanded; cx.notify(); }),
+        this.copyButton('copy-check', request, false),
+      ]),
+      ...(this.checkDetailsExpanded ? [v_flex().id('concord-check-details').min_w(0).min_h(0).max_h(Math.min(200, this.panelHeight / 4)).overflow_y_scroll().children(findings.map((finding, index) =>
+        this.menu(clickableRow(`finding-${index}`).h(52).flex_none().min_w(0).items_start().py(6).child(v_flex().flex_1().min_w(0).gap(2).children([
+          text(finding.message).min_w(0).truncate(),
+          mono(`${finding.path}:${finding.line ?? 1}`).min_w(0).text_size(12).text_color(color('dim')).truncate(),
+        ])).on_click((_event, cx) => this.location(finding.path, finding.line ?? 1, cx)), `${finding.path}:${finding.line ?? 1}`, [{ label: '复制问题', text: `${finding.path}:${finding.line ?? 1} ${finding.message}` }]),
+      ))] : []),
+    ])];
+  }
+
   private relationshipElements(): Element[] {
     const session = this.session;
     const tests = session.detail.tests ?? [], codes = session.detail.codeDeclarations ?? [];
@@ -861,9 +883,7 @@ export default class ConcordMod extends View {
       text(session.checking ? '已保存，正在检查…' : session.saving ? '正在保存…' : session.draft !== undefined ? session.error ? '保存失败' : '等待保存…' : session.checkFailed ? '已保存，检查失败' : session.check?.ok ? '已保存' : '').text_size(11).text_color(color('dim')),
       ...(this.copied === 'context-menu' ? [text('已复制').id('context-menu-copied').text_size(11).text_color(color('dim'))] : []),
     ]), session.selected, session.documents.find(item => item.path === session.selected)?.title ?? session.pages.find(item => item.path === session.selected)?.name ?? session.selected);
-    const banners: Element[] = [];
-    if (!session.checking && session.check && !session.check.ok) banners.push(this.banner('concord-check', `${session.check.findings.length} 个问题`, session.check.findings.map((finding, index) =>
-      this.menu(clickableRow(`finding-${index}`).children([mono(`${finding.path}:${finding.line ?? 1}`), text(finding.message).min_w(0).truncate()]).on_click((_event, cx) => this.location(finding.path, finding.line ?? 1, cx)), `${finding.path}:${finding.line ?? 1}`, [{ label: '复制问题', text: `${finding.path}:${finding.line ?? 1} ${finding.message}` }])), session.check.ok ? 'done' : 'blocked'));
+    const banners = this.checkElements();
     if (session.deleted) banners.push(this.banner('concord-deleted', '这页已被删除', []));
     const body: Element[] = [];
     if (this.conceptText) body.push(v_flex().id('concord-concept-card').p(12).gap(6).rounded(7).bg(color('raised')).children([

@@ -28,7 +28,7 @@ declare module 'gpui-kit' {
     size_full(): this; flex_1(): this; min_w(value: number): this; min_h(value: number): this;
     size(value: number): this; flex_none(): this;
     w(value: number): this; h(value: number): this; gap(value: number): this;
-    max_w(value: number): this; items_center(): this; items_start(): this; justify_center(): this;
+    max_w(value: number): this; max_h(value: number): this; items_center(): this; items_start(): this; justify_center(): this;
     max_w_full(): this;
     p(value: number): this; px(value: number): this; py(value: number): this;
     bg(value: string): this; text_color(value: string): this; text_size(value: number): this;
