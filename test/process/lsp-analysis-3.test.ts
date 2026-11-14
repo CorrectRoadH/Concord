@@ -1,5 +1,5 @@
 // 跨进程保证：外部程序——真实外部adapter重新发现输入变化后使language server observation失效并重算native范围。
-import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
+import { stop as stopWorkspaceServer } from '../support/workspace-server-fixture.ts';
 import { Schema } from 'effect';
 import { runCli } from '../support/cli.ts';
 import { sourceCli, createDocument, createConsumer, installedConcordCli, assert, execFileSync, spawn, spawnSync, copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, dirname, join, resolve, tmpdir, test, Effect, buildSync, analysisBudgets, LanguageServersSchema, type LanguageServer, documentSymbols, positionOffset, bindSymbol, LspConnection, AnalysisObservationSchema, AnalysisViewSchema, historicalAnalysis, relevanceFor, CodeDeclarationSchema, decode, type AnnotatedCase, type DocumentRecord, observation, LocalRepository, withPersistentCache, observeOwnedProcessGroup, hydrateQueryValue, TraceShowValue, pollUntil, readProjectConfig, writeProjectConfig, sourceRoot, cli, target, source, write, call, ack, failure, analysis, codeList, projectCheck, server, consumer } from '../support/lsp-analysis-fixture.ts';
@@ -45,7 +45,7 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     assert.equal(second.value.dependencies[0]!.scope, 'native-case');
     assert.deepEqual(second.value.dependencies[0]!.declarations, []);
     assert.equal((await invoke(['code', 'list'], codeList)).analysis.relevance[0]!.relevance.verdict, 'not-observed');
-    stopWorkspaceServer(root);
+    await stopWorkspaceServer(root);
     const repo = (await LocalRepository.open(root));
     try { repo.snapshot(() => withPersistentCache(repo, true, database => {
       const row = database!.get('annotation_cache', ['native-inputs/v1/range-fixture'])[0]!;
@@ -61,5 +61,5 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     assert.ok(fallback.value.dependencies[0]!.gaps.includes('NativeRangeUnavailable'));
     assert.ok(fallback.value.dependencies[0]!.gaps.includes('FileScope'));
     assert.deepEqual((await invoke(['check'], projectCheck)), baseline);
-  } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); rmSync(external, { recursive: true, force: true }); }
+  } finally { await stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); rmSync(external, { recursive: true, force: true }); }
 })));

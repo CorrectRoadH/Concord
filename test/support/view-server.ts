@@ -7,7 +7,6 @@ import { connectWorkspaceSocket, requestWorkspace, waitForServerHandshake } from
 import { stopWorkspaceServer } from './stop-workspace-server.ts';
 import { sourceCli, sourceCliCommand } from './source-consumer.ts';
 import { packageCommand } from '../../scripts/package-command.ts';
-import { runCli } from './cli.ts';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly installedBin?: string; readonly signal?: AbortSignal; readonly cliView?: boolean }
 export interface ViewServerHandle {
@@ -45,14 +44,12 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     child = spawn(command!, [...prefix, '--root', options.root, '--json', ...(direct ? ['server', 'run'] : ['view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)])], { stdio: ['ignore', 'pipe', 'pipe'], ...(options.installedBin ? { env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' } } : {}) });
     const stop = async () => {
       // Keep the parent's event loop available to reap its directly owned service.
-      if (direct) {
-        const reply = await runCli({ argv: ['--root', options.root, '--json', 'server', 'stop'], cwd: process.cwd(), env: process.env });
-        if (reply.exitCode !== 0) throw new Error(`Source service cleanup failed: ${reply.stdout}${reply.stderr}`);
-        return;
-      }
-      if (!options.installedBin) return stopWorkspaceServer(options.root, entry);
-      const reply = spawnSync(command!, [...prefix, '--root', options.root, '--json', 'server', 'stop'], { encoding: 'utf8', timeout: 20_000 });
-      if (reply.status !== 0) throw new Error(`Installed service cleanup failed: ${reply.stdout}${reply.stderr}`);
+      const stopped = spawn(command!, [...prefix, '--root', options.root, '--json', 'server', 'stop'], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 });
+      let stdout = '', stderr = '';
+      stopped.stdout.on('data', data => { stdout += String(data); });
+      stopped.stderr.on('data', data => { stderr += String(data); });
+      const [code] = await once(stopped, 'close');
+      if (code !== 0) throw new Error(`Service cleanup failed: ${stdout}${stderr}`);
     };
     const processHandle = child;
     let diagnostics = '';
@@ -85,7 +82,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       let closing: Promise<void> | undefined;
         return { ...ready, process: processHandle, startupOutput, get stderr() { return diagnostics; }, close: () => closing ??= (async () => {
         try { await Effect.runPromise(Scope.close(scope, Exit.void)); }
-        finally { try { await stop(); } finally { await terminate(processHandle); } }
+        finally { await stop(); await terminate(processHandle); }
       })().catch(cause => { closing = undefined; throw cause; }) };
     }
     const ready = await new Promise<Schema.Schema.Type<typeof Ready>>((accept, reject) => {

@@ -43,7 +43,7 @@ export const verifiedDownload = Effect.fn('archive.download')(function*(url: str
   }
   const staging = join(cache, `.download-${randomUUID()}`);
   yield* Effect.acquireRelease(Effect.succeed(staging), path => fs.remove(path, { force: true }).pipe(Effect.orDie));
-  yield* run('curl', ['--fail', '--location', '--silent', '--show-error', '--retry', '2', '--max-time', '180', '--output', staging, url]);
+  yield* run('curl', ['--fail', '--location', '--silent', '--show-error', '--retry', '5', '--retry-max-time', '120', '--max-time', '180', '--output', staging, url]);
   if (sha256(yield* fs.readFile(staging)) !== digest) return yield* new ArchiveFailed({ message: `SHA-256 mismatch: ${url}` });
   yield* fs.rename(staging, destination);
   return destination;

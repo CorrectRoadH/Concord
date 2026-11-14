@@ -14,6 +14,7 @@ import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { fetchFresh, parseWorkspaceProjection } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { syncBuiltinMocks } from '../support/builtin-mocks.ts';
+import { command } from '../support/workspace-server-fixture.ts';
 
 const git = (root: string, ...argv: string[]) => execFileSync('git', ['-C', root, ...argv]);
 
@@ -210,14 +211,13 @@ test('unconfirmed real service cleanup preserves the consumer and its diagnostic
   const diagnostic = Buffer.from('unconfirmed service cleanup retained for diagnosis\n');
   yield* Effect.tryPromise(async () => {
     const intended = new Error('intentional failure with stop subprocess unavailable');
-    const original = childProcess.spawnSync;
+    const original = childProcess.spawn;
     let blockedStops = 0;
-    const probe = mock.method(childProcess, 'spawnSync', function(...args: unknown[]) {
+    const probe = mock.method(childProcess, 'spawn', function(...args: unknown[]) {
       const argv = args[1];
       if (Array.isArray(argv) && argv[argv.indexOf('--root') + 1] === workspace.root && argv.at(-2) === 'server' && argv.at(-1) === 'stop') {
         blockedStops++;
-        const stderr = 'intentional server stop subprocess failure\n';
-        return { pid: 0, output: [null, '', stderr], stdout: '', stderr, status: 1, signal: null };
+        throw new Error('intentional server stop subprocess failure');
       }
       return Reflect.apply(original, childProcess, args);
     });
@@ -235,7 +235,8 @@ test('unconfirmed real service cleanup preserves the consumer and its diagnostic
       probe.mock.restore();
       syncBuiltinMocks();
       if (existsSync(workspace.root)) {
-        stopWorkspaceServer(workspace.root);
+        const stopped = await command(workspace.root, ['server', 'stop']);
+        assert.equal(stopped.status, 0, stopped.stdout + stopped.stderr);
         assertExited(instance.pid);
         rmSync(workspace.root, { recursive: true, force: true });
       }

@@ -394,7 +394,7 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
       const object = Schema.decodeUnknownExit(Schema.Record(Schema.String, Schema.Json))(reply.value);
       if (object._tag === 'Success' && object.value.cache !== undefined) {
         const observed = Schema.decodeUnknownExit(Schema.Record(Schema.String, Schema.Json))(object.value.cache);
-        if (observed._tag === 'Success') return { ...reply, value: { ...object.value, cache: { ...observed.value, status: 'unavailable', detail: native.failure.message } } };
+        if (observed._tag === 'Success') return { ...reply, value: { ...object.value, cache: { ...observed.value, status: 'unavailable', detail: `${native.failure.code}: ${native.failure.message}` } } };
       }
       return reply;
     }
