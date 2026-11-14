@@ -1,4 +1,4 @@
-// Real Worker requests observe transactions, paging, cancellation and handle release.
+// 跨进程保证：原生模块与句柄——真实 Worker 请求验证事务、分页、取消排空和句柄释放。
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';

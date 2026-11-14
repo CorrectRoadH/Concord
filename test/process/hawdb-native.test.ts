@@ -1,4 +1,4 @@
-// Cross-process guarantees: official C ABI ownership, lazy admission, clear and crash recovery.
+// 跨进程保证：原生模块与句柄——官方 C ABI 句柄互斥，clear 与崩溃恢复保留已提交数据。
 import { loadHawDB, HawDBError } from '@nowledge/hawdb-bun';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

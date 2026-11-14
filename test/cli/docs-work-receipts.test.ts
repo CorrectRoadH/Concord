@@ -1,4 +1,4 @@
-// Cross-process contract: stdin plans and persisted static receipts survive separate CLI invocations.
+// CLI preserves stdin plans and static receipts across invocations.
 import { runCli } from '../support/cli.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 import assert from 'node:assert/strict';
@@ -21,7 +21,7 @@ function docsWorkCli(root: string, signal: AbortSignal) {
 }
 const item = (id: string, write: string[]) => ({ id, goal: `Update ${id}`, write });
 
-test('stdin plans and trailing shared CLI flags preserve static receipts across processes', async t => {
+test('stdin plans and trailing shared CLI flags preserve static receipts across invocations', async t => {
   const root = fixture();
   const { call, report, verify } = docsWorkCli(root, t.signal);
   try {

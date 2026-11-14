@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -84,7 +84,7 @@ test('dispatch strips only its two selector arguments before real Vitest collect
       const report = join(project, `${label} report.json`);
       const result = invoke([...entry, project, file, report], undefined, project);
       assert.deepEqual(result, { status: 0, stdout: '', stderr: '' });
-      assert.deepEqual(JSON.parse(readFileSync(report, 'utf8')), [{ name: 'entry argument fixture', file, project: 'default', skipped: false }]);
+      assert.deepEqual(JSON.parse(readFileSync(report, 'utf8')), [{ name: 'entry argument fixture', file, project: 'default', tags: {} }]);
     }
   } finally { rmSync(project, { recursive: true, force: true }); }
 });

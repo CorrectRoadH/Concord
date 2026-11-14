@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#句柄与打开模式
 import { cacheDatabasePath, inspectCacheClear, cachePhysicalBytes } from './cache-file.ts';
-import { hawdbIdentity, type HawdbDatabase } from './hawdb-native.ts';
+import { HawdbFailure, hawdbIdentity, type HawdbDatabase } from './hawdb-native.ts';
 import { decodeEnvelope } from '../../model/index.ts';
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { packageRoot } from '../installation/index.ts';
@@ -23,7 +23,7 @@ export function inspectCacheStatus(privateDir: string, enabled: boolean, access:
       const payload = projections.includes('workspace_projection') ? database.scan('workspace_projection').find(row => row.key === 'workspace')?.payload : undefined;
       const sourceDigest = payload === undefined ? undefined : decodeEnvelope(JSON.parse(payload)).record?.sourceDigest;
       return { ...(sourceDigest === undefined ? {} : { sourceDigest }), status: projections.length === 0 ? 'empty' : 'ready', path, detail: `projections: ${projections.join(', ')}` };
-    } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; }
+    } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof HawdbFailure ? `${cause.code}: ${cause.message}` : cause instanceof Error ? cause.message : String(cause) }; }
   };
   let report: ReturnType<typeof inspect>;
   try { report = inspect(); } finally { release(); }

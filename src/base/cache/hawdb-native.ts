@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Schema } from 'effect';
 import { ConcordError } from '../../model/index.ts';
-import { HAWDB_REVISION, HAWDB_VERSION, hawdbTarget, nativeFileIdentity, packageRoot, verifiedHawdbLibrary } from '../installation/index.ts';
+import { HAWDB_REVISION, HAWDB_VERSION, hawdbTarget, nativeFileIdentity, packageRoot, sourceInstallation, verifiedHawdbLibrary } from '../installation/index.ts';
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { acquireFileLock, FileLockFailure, type FileLock } from '../file-lock/index.ts';
 import { assertCacheDatabaseSafe, inspectCacheClear } from './cache-file.ts';
@@ -31,10 +31,17 @@ export function hawdbFailure(cause: unknown): HawdbFailure {
 }
 export function acquireHawdbOwnerGate(path: string): FileLock {
   try { return acquireFileLock(join(dirname(path), 'cache.hawdb.concord.lock')); }
-  catch (cause) { throw hawdbFailure(cause); }
+  catch (cause) {
+    if (cause instanceof FileLockFailure && cause.reason === 'busy') throw new HawdbFailure('HawdbBusy', 'Persistent cache is owned by another command', { cause });
+    throw hawdbFailure(cause);
+  }
 }
 export function verifyHawdbArtifact(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): void {
-  try { verifiedHawdbLibrary(runtime); } catch (cause) { throw hawdbFailure(cause); }
+  try { verifiedHawdbLibrary(runtime); }
+  catch (cause) {
+    const error = hawdbFailure(cause);
+    throw new HawdbFailure(error.code, `${error.message}. ${sourceInstallation ? 'Run bun run build:native.' : 'Reinstall Concord for this platform.'}`, { cause });
+  }
 }
 export const validateHawdbArtifact = verifyHawdbArtifact;
 export function hawdbIdentity(runtime: RuntimeEnvironmentSnapshot = defaultRuntime) {

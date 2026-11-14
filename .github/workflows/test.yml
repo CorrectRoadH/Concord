@@ -98,7 +98,9 @@ jobs:
         run: |
           bun scripts/prepare-native.ts --prebuilt "$RUNNER_TEMP/test-native"
       - name: Run Bun tests for this shard
-        run: bun run test --parallel=2 --shard=${{ matrix.shard }} --reporter=junit --reporter-outfile=.test-results/junit.xml --timings=.test-results/timings.json --update-timings
+        run: |
+          mkdir -p .test-results
+          bun run test --parallel=2 --shard=${{ matrix.shard }} --reporter=junit --reporter-outfile=.test-results/junit.xml --timings=.test-results/timings.json --update-timings
       - name: Preserve test failure diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.2

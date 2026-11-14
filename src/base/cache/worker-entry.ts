@@ -16,8 +16,9 @@ import { updateKnowledge, queryKnowledge, discardKnowledge } from './hawdb-searc
 let runtime: RuntimeEnvironmentSnapshot | undefined, privateDir: string | null = null;
 let database: NativeDatabase | undefined, memory: NativeDatabase | undefined, gate: FileLock | undefined;
 let identity: string | undefined, lastId = 0, closed = false;
+let persistentError: HawdbFailure | undefined;
 const persistent = () => {
-  if (!database) throw new HawdbFailure('HawdbUnavailable', 'Persistent database is unavailable');
+  if (!database) throw persistentError ?? new HawdbFailure('HawdbUnavailable', 'Persistent database is unavailable');
   return database;
 };
 const transient = () => {
@@ -57,6 +58,7 @@ function execute(request: DatabaseRequest, check: () => void): DatabaseValue {
     try { check(); deleteInspectedCache(inspectCacheClear(privateDir), guard.verify); }
     finally { guard.close(); }
     database = openHawdb(path, { readOnly: false, create: true }, runtime, gate);
+    persistentError = undefined;
     return { status: inventory.empty ? 'empty' : 'cleared', path };
   }
   const db = input.op === 'search' || input.op === 'discard-search' ? input.memory ? transient() : persistent() : persistent();
@@ -101,11 +103,12 @@ parentPort!.on('message', (raw: unknown) => {
   try { const value = execute(request, check); if (request.operation.op !== 'close') check(); outcome = { ok: true, value }; }
   catch (cause) {
     const error = hawdbFailure(cause);
+    if (request.operation.op === 'open' || request.operation.op === 'clear') persistentError = error;
     if (error.code === 'HawdbCommitUnknown') {
       // Do not replay the failed operation. Its caller must rediscover all sources.
       const prior = database; database = undefined;
       try { prior?.close(); if (privateDir && runtime && gate) database = openHawdb(cacheDatabasePath(privateDir), { readOnly: false, create: true }, runtime, gate); }
-      catch { /* Preserve the initial unknown-outcome error and the files. */ }
+      catch (cause) { persistentError = hawdbFailure(cause); }
       memory?.close(); memory = undefined;
     }
     outcome = { ok: false, code: error.code, message: error.message };

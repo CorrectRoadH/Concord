@@ -1,5 +1,5 @@
 // 跨进程保证：运行环境——真实 entry 的帮助、分组命令、skill 与参数错误和进程内程序逐字一致。
-// 跨进程保证：进程终止与信号——取消进程内 CLI 后，真实 runner 及后代 PID/socket 已退出，宿主信号监听已释放。
+// 跨进程保证：进程终止与信号——取消进程内 CLI 收集后，真实 adapter 及后代 PID/socket 已退出，宿主信号监听已释放。
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -9,7 +9,6 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Schema } from 'effect';
-import { deriveTestReference } from '../../src/model/index.ts';
 import { runCli, type CliResult } from '../support/cli.ts';
 import { createConsumer, retainConsumer } from '../support/consumer.ts';
 import { createDocument } from '../support/operations.ts';
@@ -85,7 +84,7 @@ test('real startup output agrees byte for byte with the captured full command pr
 });
 
 const Ready = Schema.Struct({
-  role: Schema.Literals(['runner', 'descendant']),
+  role: Schema.Literals(['collector', 'descendant']),
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
   cwd: Schema.String,
@@ -121,7 +120,7 @@ function assertExited(pid: number): void {
 const signalListeners = () => Object.fromEntries(Object.keys(constants.signals).map(name => [name, process.rawListeners(name)]));
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
-test('abort awaits the real runner and descendant sockets and releases host signal listeners', async () => {
+test('abort awaits the real collection adapter and descendant sockets and releases host signal listeners', async () => {
   const root = (await createConsumer());
   const sockets = new Set<Socket>();
   const records = new Map<Ready['role'], Ready>();
@@ -156,7 +155,7 @@ test('abort awaits the real runner and descendant sockets and releases host sign
     const handshakePort = address.port;
     const childSource = (role: Ready['role']) => `
 import { createServer, connect } from 'node:net';
-${role === 'runner' ? "import { spawn } from 'node:child_process';\nspawn(process.execPath, ['invocation-child.ts'], { stdio: 'ignore' });" : ''}
+${role === 'collector' ? "import { spawn } from 'node:child_process';\nspawn(process.execPath, ['invocation-child.ts'], { stdio: 'ignore' });" : ''}
 const server = createServer(socket => socket.end('alive\\n'));
 server.listen(0, '127.0.0.1', () => {
   const address = server.address();
@@ -172,22 +171,22 @@ server.listen(0, '127.0.0.1', () => {
     mkdirSync(join(root, 'test'), { recursive: true });
     const file = 'test/invocation.test.ts';
     writeFileSync(join(root, file), "import test from 'node:test';\n// @feature docs/feature/invocation/README.md\n// @name invocation-runtime\ntest('invocation-runtime', () => {});\n");
-    writeFileSync(join(root, 'invocation-runner.ts'), childSource('runner'));
+    writeFileSync(join(root, 'invocation-collector.ts'), childSource('collector'));
     writeFileSync(join(root, 'invocation-child.ts'), childSource('descendant'));
-    writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], sourceRoots: [], runner: {
-      kind: 'command', argv: [process.execPath, 'invocation-runner.ts'], sourceFiles: ['invocation-runner.ts', 'invocation-child.ts'], timeoutMs: 5000,
-    } });
+    writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], sourceRoots: [], testAdapters: [{
+      id: 'invocation', include: ['test'], argv: [process.execPath, 'invocation-collector.ts'], implementationFiles: ['invocation-collector.ts', 'invocation-child.ts'],
+      envNames: ['PATH', 'HOME', 'CONCORD_ISOLATION_VALUE'], collectTimeoutMs: 5000,
+    }] });
     const env: NodeJS.ProcessEnv = { ...plainEnvironment(), USERPROFILE: join(root, 'profile'), XDG_CACHE_HOME: process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), CONCORD_ISOLATION_VALUE: 'invocation-only-🧭' };
     delete env.HOME;
     delete env.HERDR_APP_HOME;
-    const reference = deriveTestReference(file, file, 'invocation-runtime');
-    running = runCli({ argv: ['--json', 'test', 'run', reference], cwd: root, env, signal: controller.signal });
-    const completedEarly = running.then(result => { throw new Error(`CLI completed before runner readiness: ${JSON.stringify(result)}`); });
+    running = runCli({ argv: ['--json', 'test', 'discover', file], cwd: root, env, signal: controller.signal });
+    const completedEarly = running.then(result => { throw new Error(`CLI completed before collector readiness: ${JSON.stringify(result)}`); });
     await Promise.race([ready, completedEarly]);
-    for (const role of ['runner', 'descendant'] as const) {
+    for (const role of ['collector', 'descendant'] as const) {
       const report = records.get(role)!;
       assert.equal(report.cwd, root, `${role} inherits the invocation cwd`);
-      assert.equal(report.value, 'invocation-only-🧭', `${role} inherits the complete invocation environment`);
+      assert.equal(report.value, 'invocation-only-🧭', `${role} inherits the declared invocation environment`);
       assert.equal(report.home, null, `${role} cannot recover absent HOME from its host`);
       assert.equal(await isListening(report.port), true, `${role} really owns its ready socket`);
     }
@@ -201,7 +200,7 @@ server.listen(0, '127.0.0.1', () => {
     const next = await runCli({ argv: ['--json', 'new', 'memory', 'after-cancel'], cwd: root, env });
     assert.equal(next.exitCode, 0, next.stderr);
     assert.equal(next.stderr, '');
-    assert.equal(existsSync(join(root, 'memory/after-cancel.md')), true, 'publication is available after runner cancellation');
+    assert.equal(existsSync(join(root, 'memory/after-cancel.md')), true, 'publication is available after collection cancellation');
   } finally {
     controller.abort();
     if (running !== undefined) await Promise.allSettled([running]);

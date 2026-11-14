@@ -7,6 +7,7 @@ import { connectWorkspaceSocket, requestWorkspace, waitForServerHandshake } from
 import { stopWorkspaceServer } from './stop-workspace-server.ts';
 import { sourceCli, sourceCliCommand } from './source-consumer.ts';
 import { packageCommand } from '../../scripts/package-command.ts';
+import { runCli } from './cli.ts';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly installedBin?: string; readonly signal?: AbortSignal; readonly cliView?: boolean }
 export interface ViewServerHandle {
@@ -42,7 +43,13 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const direct = !options.installedBin && !options.cliView;
     const [command, ...prefix] = options.installedBin ? packageCommand(entry) : sourceCliCommand(entry);
     child = spawn(command!, [...prefix, '--root', options.root, '--json', ...(direct ? ['server', 'run'] : ['view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)])], { stdio: ['ignore', 'pipe', 'pipe'], ...(options.installedBin ? { env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' } } : {}) });
-    const stop = () => {
+    const stop = async () => {
+      // Keep the parent's event loop available to reap its directly owned service.
+      if (direct) {
+        const reply = await runCli({ argv: ['--root', options.root, '--json', 'server', 'stop'], cwd: process.cwd(), env: process.env });
+        if (reply.exitCode !== 0) throw new Error(`Source service cleanup failed: ${reply.stdout}${reply.stderr}`);
+        return;
+      }
       if (!options.installedBin) return stopWorkspaceServer(options.root, entry);
       const reply = spawnSync(command!, [...prefix, '--root', options.root, '--json', 'server', 'stop'], { encoding: 'utf8', timeout: 20_000 });
       if (reply.status !== 0) throw new Error(`Installed service cleanup failed: ${reply.stdout}${reply.stderr}`);
@@ -78,7 +85,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       let closing: Promise<void> | undefined;
         return { ...ready, process: processHandle, startupOutput, get stderr() { return diagnostics; }, close: () => closing ??= (async () => {
         try { await Effect.runPromise(Scope.close(scope, Exit.void)); }
-        finally { stop(); await terminate(processHandle); }
+        finally { try { await stop(); } finally { await terminate(processHandle); } }
       })().catch(cause => { closing = undefined; throw cause; }) };
     }
     const ready = await new Promise<Schema.Schema.Type<typeof Ready>>((accept, reject) => {
@@ -104,7 +111,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       try {
         // Release the View client's HTTP lease and RPC transport before stopping its service.
         await terminate(processHandle);
-      } finally { stop(); }
+      } finally { await stop(); }
     })().catch(cause => { closing = undefined; throw cause; }) };
   } catch (cause) {
     let cleanupFailure: unknown;

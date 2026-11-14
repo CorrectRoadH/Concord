@@ -1,4 +1,4 @@
-// 跨进程保证：CLI RPC 与 HTTP 搜索共享服务持久库，clear 和退出排空数据库 Worker。
+// 跨进程保证：服务与 IPC——CLI RPC 与 HTTP 搜索共享服务持久库，clear 和退出排空数据库 Worker。
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

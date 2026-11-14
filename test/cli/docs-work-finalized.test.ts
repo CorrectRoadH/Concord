@@ -1,4 +1,4 @@
-// Cross-process contract: a finalized run remains finalized in another CLI process.
+// CLI reports persisted finalization without changing its receipt.
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';

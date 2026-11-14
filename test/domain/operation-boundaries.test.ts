@@ -117,12 +117,12 @@ test('read access refuses publication but permits a dry-run preview without writ
 })))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('read access cannot publish source or invalidate a run while another reader holds ownership', () => runApplication(Effect.tryPromise(async () => (await withConsumer(async root => {
+test('read access cannot publish source or invalidate an observation while another reader holds ownership', () => runApplication(Effect.tryPromise(async () => (await withConsumer(async root => {
   writeProjectConfig(root, { testRoots: ['test'] });
   write(root, 'test/source.ts', 'export const value = 1;\n');
   let runToken = '';
   (await withRepo(root, repo => { runToken = repo.snapshot(() => beginRun(root, process.env)).lease.owner.token; }));
-  const statePath = join(root, `.git/concord/run-${runToken}.json`);
+  const statePath = join(root, `.git/concord/observation-${runToken}.json`);
   const state = readFileSync(statePath, 'utf8');
   const lease = acquireTraceLeaseSync(root, 'shared', 'other-reader', undefined, undefined, process.env)!;
   try {
