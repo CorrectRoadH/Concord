@@ -33,4 +33,3 @@ test('a foreground read finishes while a background scan remains blocked', () =>
   assert.equal(yield* Fiber.join(read), 'foreground');
   yield* service.stop;
 })).pipe(Effect.provide(stateLayer))));
-
