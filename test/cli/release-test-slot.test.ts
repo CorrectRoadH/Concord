@@ -10,7 +10,7 @@ import { fixture } from '../support/publication-ownership-fixture.ts';
 
 const invoke = (root: string, args: string[], json = true) => runCli({ argv: ['--root', root, ...(json ? ['--json'] : []), ...args], cwd: process.cwd(), env: process.env, stdin: '', signal: AbortSignal.timeout(15000) });
 function deadPid(): number {
-  const child = spawnSync(process.execPath, ['--eval', 'process.exit(0)']);
+  const child = spawnSync('git', ['--version']);
   assert.equal(child.status, 0); return child.pid;
 }
 function ownerFixture(root: string, pid: number, host = hostname()) {

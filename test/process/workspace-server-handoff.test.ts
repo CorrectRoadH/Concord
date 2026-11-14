@@ -1,4 +1,4 @@
-// 跨进程保证：服务与 IPC——同协议的不同安装共享实例，协议或源码变化在旧 owner 退出后交接。
+// 跨进程保证：服务与 IPC——同协议的不同安装共享实例；协议变化或显式停止在旧 owner 退出后交接。
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -87,7 +87,7 @@ test('a different data protocol retains control frames for automatic service rep
 });
 
 // @feature docs/feature/local-data-engine/architecture.md#启动与裁决
-test('a service failing computation with WorkspaceComputeExited is automatically replaced on retry', { timeout: 30_000 }, async () => {
+test('a computation failure preserves its service until explicit stop selects a healthy installation', { timeout: 30_000 }, async () => {
   const root = await fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-compute-fail-'));
   const failures: unknown[] = [];
   try {
@@ -99,9 +99,14 @@ test('a service failing computation with WorkspaceComputeExited is automatically
     writeFileSync(join(installation, 'src/entry/server/compute-worker.ts'), 'process.exit(1);\n');
     process.kill(pid, 'SIGKILL');
     const query = await command(root, ['check']);
-    assert.equal(query.status, 0, query.stderr);
-    assert.notEqual(record(root).token, before.token);
+    assert.equal(query.status, 1, query.stdout + query.stderr);
+    assert.equal(JSON.parse(query.stderr).error, 'WorkspaceComputeExited');
+    assert.equal(record(root).token, before.token);
+    await stop(root);
     assert.equal(await processExited(before.pid), true);
+    const retry = await command(root, ['check']);
+    assert.equal(retry.status, 0, retry.stderr);
+    assert.notEqual(record(root).token, before.token);
   } catch (cause) { failures.push(cause); } finally {
     try {
       await stop(root);
@@ -115,7 +120,7 @@ test('a service failing computation with WorkspaceComputeExited is automatically
 
 
 // @feature docs/engineering/build/architecture.md#从源码运行
-test('source edits replace the same checkout service only after the previous owner exits', { timeout: 45_000 }, async () => {
+test('source edits retain the running service until an explicit stop and restart', { timeout: 45_000 }, async () => {
   const root = (await fixture()), installation = mkdtempSync(join(tmpdir(), 'concord-source-reload-'));
   let entry = '';
   try {
@@ -127,6 +132,12 @@ test('source edits replace the same checkout service only after the previous own
     writeFileSync(join(tool, 'src/source-reload-fixture.ts'), 'export {};\n');
     const query = await command(root, ['list', 'feature'], entry);
     assert.equal(query.status, 0, query.stderr);
+    assert.equal(record(root).token, before.token);
+    assert.equal(record(root).sourceDigest, before.sourceDigest);
+    assert.equal((await command(root, ['server', 'stop'], entry)).status, 0);
+    assert.equal(await processExited(before.pid), true);
+    const restarted = await command(root, ['list', 'feature'], entry);
+    assert.equal(restarted.status, 0, restarted.stderr);
     const after = record(root);
     assert.notEqual(after.token, before.token);
     assert.equal(after.installation, before.installation);

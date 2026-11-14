@@ -26,18 +26,18 @@ export function humanOutput(value: unknown): string {
   if (!Predicate.isObject(value)) return scalar(value);
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
   if (value.error && Predicate.isObject(value.details) && Predicate.isObject(value.details.process)) {
-    const process = value.details.process;
+    const diagnostic = value.details.process;
     return [
       `ok: false`, `error: ${String(value.error)}`, `message: ${String(value.message)}`, 'process:',
-      ...(typeof process.commit === 'string' ? [`  commit: ${process.commit}`] : []),
-      `  step: ${String(process.step)}${process.op ? ` (${String(process.op)})` : ''}`,
-      `  argv: ${JSON.stringify(process.argv)}`, `  cwd: ${String(process.cwd)}`,
-      `  exit: ${scalar(process.exitCode)}`, `  signal: ${scalar(process.signal)}`,
-      `  timedOut: ${String(process.timedOut)}`, `  cancelled: ${String(process.cancelled)}`,
-      ...(typeof process.error === 'string' ? [`  error: ${process.error}`] : []),
+      ...(typeof diagnostic.commit === 'string' ? [`  commit: ${diagnostic.commit}`] : []),
+      `  step: ${String(diagnostic.step)}${diagnostic.op ? ` (${String(diagnostic.op)})` : ''}`,
+      `  argv: ${JSON.stringify(diagnostic.argv)}`, `  cwd: ${String(diagnostic.cwd)}`,
+      `  exit: ${scalar(diagnostic.exitCode)}`, `  signal: ${scalar(diagnostic.signal)}`,
+      `  timedOut: ${String(diagnostic.timedOut)}`, `  cancelled: ${String(diagnostic.cancelled)}`,
+      ...(typeof diagnostic.error === 'string' ? [`  error: ${diagnostic.error}`] : []),
       ...(['stdout', 'stderr'] as const).flatMap(channel => {
-        const output = String(process[channel] ?? '');
-        return [`  ${channel} (last ${Buffer.byteLength(output)} bytes${process[`${channel}Truncated`] ? ', truncated' : ''}):`, indent(output, 4)];
+        const output = String(diagnostic[channel] ?? '');
+        return [`  ${channel} (last ${Buffer.byteLength(output)} bytes${diagnostic[`${channel}Truncated`] ? ', truncated' : ''}):`, indent(output, 4)];
       }),
     ].join('\n');
   }

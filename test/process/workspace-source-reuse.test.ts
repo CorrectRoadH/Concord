@@ -1,4 +1,4 @@
-// 跨进程保证：同协议的来源变化不授权停止共享服务，显式 stop 仍回收它。
+// 跨进程保证：服务与 IPC——同协议的来源变化不授权停止共享服务，显式 stop 仍回收它。
 import assert from 'node:assert/strict';
 import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
