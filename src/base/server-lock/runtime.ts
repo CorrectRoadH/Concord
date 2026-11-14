@@ -58,7 +58,7 @@ export function readServerRecord(privateDir: string, requireSocket = true): Serv
     stat = lstatSync(path, { throwIfNoEntry: false });
   }
   if (!stat) return undefined;
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 16 * 1024) throw new ConcordError('WorkspaceServerUnavailable', 'Server record must be a bounded regular file');
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 16 * 1024) throw new ConcordError('WorkspaceServerUnavailable', 'Server record must be a bounded regular file', { mode: stat.mode, links: stat.nlink, bytes: stat.size });
   let contents: string;
   try { contents = readFileSync(path, 'utf8'); }
   catch (cause) {
