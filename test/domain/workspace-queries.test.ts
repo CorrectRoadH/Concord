@@ -64,7 +64,7 @@ test('current query operations on read-only computation capabilities match cache
       for (const request of requests) {
         yield* Effect.promise(() => t.test(request.name, async () => {
           const expected = await runApplication(executeQuery(root, request, 'off'));
-          const actual = await Effect.runPromise(Effect.scoped(executeQuery(root, request).pipe(Effect.provide(CacheSnapshot.layer()), Effect.provideContext(context))).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+          const actual = await Effect.runPromise(Effect.scoped(executeQuery(root, request).pipe(Effect.provide(CacheSnapshot.layer()), Effect.provideService(CacheDerivations, CacheDerivations.make()), Effect.provideContext(context))).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
           assert.deepEqual(comparable(actual), comparable(expected));
         }));
       }

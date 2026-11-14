@@ -27,4 +27,4 @@ export type { WorkspaceMetadata, WorkspaceOpenOptions } from './context.ts';
 
 export { readRepositoryBytes } from './storage.ts';
 
-export { repositoryRuntime } from './repository-runtime.ts';
+export { bindRepositoryRuntime, repositoryRuntime } from './repository-runtime.ts';

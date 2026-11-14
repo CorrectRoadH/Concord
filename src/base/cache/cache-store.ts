@@ -67,7 +67,10 @@ export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase, ru
     prepareWrite: options => withPersistentCache(repo, true, database => { if (!database) throw missing(); }, options?.create ?? true, runtime),
     get: (namespace, keys) => use(namespace, false, database => database?.get(namespace, keys) ?? []),
     scan: namespace => use(namespace, false, database => database?.scan(namespace) ?? []),
-    put: (namespace, rows) => use(namespace, true, database => { if (!database) throw missing(); database.put(namespace, rows); }),
+    put: (namespace, rows) => {
+      if (repo.persistentCache === 'off') return;
+      return use(namespace, true, database => { if (!database) throw missing(); database.put(namespace, rows); });
+    },
     namespaces: () => withPersistentCache(repo, false, database => database?.namespaces() ?? [], false, runtime),
   };
 }

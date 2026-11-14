@@ -75,7 +75,7 @@ test('steps C2 C5 C9 C13 C14 group declarations without turning absent associati
   }
   const cachePath = join(repo.privateDir, 'cache.hawdb');
   rmSync(cachePath, { recursive: true, force: true }); writeFileSync(cachePath, 'damaged cache');
-  assert.equal((await buildTrace(repo, 'use')).complete, true);
+  await assert.rejects(buildTrace(repo, 'use'), { code: 'UnsafePath' });
   rmSync(cachePath);
   clearCache(repo);
   assert.equal((await buildTrace(repo, 'use')).complete, true);

@@ -201,7 +201,13 @@ test('a cold persistent cache is absent on read and created by the first derived
   const live = Layer.merge(Workspace.layer, PersistentCache.layer.pipe(Layer.provideMerge(Cache.layer))).pipe(Layer.provide(NodeServices.layer));
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      const repo = yield* (yield* Workspace).openRead(root, { access: 'read' });
+      const workspace = yield* Workspace;
+      const off = yield* workspace.openRead(root, { access: 'read', persistentCache: 'off' });
+      const disabled = PersistentCache.repository(off);
+      disabled.put('query_cache', [{ key: 'skipped', payload: 'derived' }]);
+      assert.equal(existsSync(path), false);
+      assert.throws(() => disabled.prepareWrite(), { code: 'HawdbUnavailable' });
+      const repo = yield* workspace.openRead(root, { access: 'read' });
       const cache = PersistentCache.repository(repo);
       assert.deepEqual(cache.get('query_cache', ['cold']), []);
       assert.equal(existsSync(path), false);

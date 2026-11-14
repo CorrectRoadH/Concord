@@ -371,7 +371,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       verify: runtime.verify,
       health: cache.verify,
       context,
-      sourceDigest: backgroundComputation.run({ kind: 'source-digest' }).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(Schema.String)(value)), Effect.mapError(failure)),
+      sourceDigest: backgroundComputation.run({ kind: 'source-digest' }).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(Schema.String)(value)), Effect.mapError(workspaceServerFailure)),
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources), Effect.provideService(RuntimeEnvironment, execution)),
       restore: ctx => owned(readWorkspaceProjection(ctx), true).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } })), Effect.provideService(RuntimeEnvironment, execution)),
       persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt), true).pipe(Effect.provideService(RuntimeEnvironment, execution)),

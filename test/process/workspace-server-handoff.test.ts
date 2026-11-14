@@ -118,11 +118,16 @@ test('a new installation automatically replaces a service with a failed computat
   const failures: unknown[] = [];
   try {
     const entry = privateSourceInstallation(installation);
+    const workerEntry = join(installation, 'src/entry/server/compute-worker.ts');
+    const failFlag = join(root, '.git', 'fail-computation');
+    writeFileSync(workerEntry, `import { existsSync } from 'node:fs';
+if (existsSync(${JSON.stringify(failFlag)})) process.exit(1);
+${readFileSync(workerEntry, 'utf8')}`);
     const started = await command(root, ['server', 'start'], entry);
     assert.equal(started.status, 0, started.stderr);
     const before = record(root);
     const pid = await workerPid(root);
-    writeFileSync(join(installation, 'src/entry/server/compute-worker.ts'), 'process.exit(1);\n');
+    writeFileSync(failFlag, 'fail');
     process.kill(pid, 'SIGKILL');
     const query = await command(root, ['check'], entry);
     assert.equal(query.status, 1, query.stdout + query.stderr);

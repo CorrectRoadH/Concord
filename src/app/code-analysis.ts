@@ -3,7 +3,7 @@ import { snapshotBytes } from '../base/sources/index.ts';
 import { Effect, Schema } from "effect";
 import { buildTrace, requireValidTrace } from "../domain/trace/index.ts";
 import { worktreeIdentity } from "../base/git/index.ts";
-import { openReadRepository, repositoryRuntime, type LocalRepository } from "../base/workspace/index.ts";
+import { bindRepositoryRuntime, openReadRepository, repositoryRuntime, type LocalRepository } from "../base/workspace/index.ts";
 import { closeRepositoryCache, PersistentCache } from "../base/cache/index.ts";
 import { readCachePayloads, writeCachePayloads } from "../base/cache/index.ts";
 import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../base/publication/index.ts";
@@ -84,6 +84,7 @@ async function captureReader(reader: LocalRepository, runtime: RuntimeEnvironmen
     },
     publish: () => { throw new ConcordError('ReadOnlyRepository', 'Analysis capture is read-only'); },
   };
+  bindRepositoryRuntime(source, repositoryRuntime(reader));
   try {
     const captured = (await reader.snapshot(async () => {
       try { return (await PersistentCache.withView(reader, source, async () => (await captureAnalysisInputs(source, runtime)))); }
