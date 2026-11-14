@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#启动与裁决
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Context, Effect, Layer, Schema } from 'effect';
@@ -20,8 +21,18 @@ export const ServerRecord = Schema.Struct({
   socket: Schema.Struct({ path: Schema.String, device: Schema.String, inode: Schema.String }),
 });
 export type ServerRecord = typeof ServerRecord.Type;
-export function serverInstallation(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? workspaceIdentity('dev', digest(`source:${realpathSync(packageRoot)}`)) : workspaceInstallationIdentity(runtime); }
-export function serverSourceDigest(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? workspaceInstallationIdentity(runtime) : undefined; }
+function sourceHead(runtime: RuntimeEnvironmentSnapshot): string {
+  const env = { ...runtime.env };
+  for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+  try {
+    const head = execFileSync('git', ['-C', packageRoot, 'rev-parse', '--verify', 'HEAD^{commit}'], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000, maxBuffer: 4096 }).trim();
+    return Schema.decodeUnknownSync(Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u)))(head);
+  } catch (cause) {
+    throw new ConcordError('SourceRevisionUnavailable', 'Cannot read the Concord source checkout Git HEAD; ensure it has a valid commit', cause);
+  }
+}
+export function serverInstallation(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? workspaceIdentity('dev', `source:${realpathSync(packageRoot)}@${sourceHead(runtime)}`) : workspaceInstallationIdentity(runtime); }
+export function serverSourceDigest(runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})) { return sourceInstallation ? sourceHead(runtime) : undefined; }
 export const serverCwd = packageRoot;
 const identity = (path: string) => {
   const stat = lstatSync(path, { bigint: true });

@@ -145,7 +145,7 @@ test('a new installation automatically replaces a service with a failed computat
 
 
 // @feature docs/engineering/build/architecture.md#从源码运行
-test('source edits retain the running service until an explicit stop and restart', { timeout: 45_000 }, async () => {
+test('source HEAD changes replace the service while uncommitted edits reuse it', { timeout: 45_000 }, async () => {
   const root = (await fixture()), installation = mkdtempSync(join(tmpdir(), 'concord-source-reload-'));
   let entry = '';
   try {
@@ -159,16 +159,22 @@ test('source edits retain the running service until an explicit stop and restart
     assert.equal(query.status, 0, query.stderr);
     assert.equal(record(root).token, before.token);
     assert.equal(record(root).sourceDigest, before.sourceDigest);
-    assert.equal((await command(root, ['server', 'stop'], entry)).status, 0);
-    assert.equal(await processExited(before.pid), true);
+    execFileSync('git', ['-C', tool, 'add', 'src/source-reload-fixture.ts']);
+    execFileSync('git', ['-C', tool, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Change source HEAD']);
     const restarted = await command(root, ['list', 'feature'], entry);
     assert.equal(restarted.status, 0, restarted.stderr);
     const after = record(root);
     assert.notEqual(after.token, before.token);
-    assert.equal(after.installation, before.installation);
+    assert.notEqual(after.installation, before.installation);
+    assert.equal(after.sourceDigest, execFileSync('git', ['-C', tool, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
     assert.notEqual(after.sourceDigest, before.sourceDigest);
     assert.equal(await processExited(before.pid), true);
     assert.equal((await command(root, ['server', 'stop'], entry)).status, 0);
+    assert.equal(existsSync(recordPath(root)), false);
+    rmSync(join(tool, '.git'), { recursive: true });
+    const missing = await command(root, ['server', 'start'], entry);
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /SourceRevisionUnavailable/);
     assert.equal(existsSync(recordPath(root)), false);
   } finally { if (entry) await command(root, ['server', 'stop'], entry); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });

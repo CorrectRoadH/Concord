@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, symlinkSync } from 'node:fs';
 import { dirname, join, basename } from 'node:path';
 import { nativeArtifactRoot, nativeSourceFiles } from '../../src/base/installation/index.ts';
@@ -19,5 +20,9 @@ export function privateSourceInstallation(target: string): string {
   }
   cpSync(nativeArtifactRoot(runtime), join(target, '.test-cache/concord/native', basename(nativeArtifactRoot(runtime))), { recursive: true });
   symlinkSync(join(checkout, 'node_modules'), join(target, 'node_modules'), 'junction');
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+  execFileSync('git', ['init', '-q', target], { env });
+  execFileSync('git', ['-C', target, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-qm', 'Source installation fixture'], { env });
   return join(target, 'src/entry/cli/entry.ts');
 }
