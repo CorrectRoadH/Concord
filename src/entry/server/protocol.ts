@@ -13,7 +13,7 @@ export const PROTOCOL = WORKSPACE_PROTOCOL;
 export const FRAME_LIMIT = 1024 * 1024;
 export const RESULT_LIMIT = 32 * FRAME_LIMIT;
 export const ReadCodec = SchemaBinary.toCodec(WorkspaceRead);
-export const ServerState = Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']);
+export const ServerState = Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'blocked', 'stopping']);
 export type ServerState = typeof ServerState.Type;
 export const strict = <S extends Schema.Top>(schema: S): S['Rebuild'] => schema.annotate({ parseOptions: { onExcessProperty: 'error' } });
 export class WorkspaceServerError extends Schema.TaggedError<WorkspaceServerError>()('WorkspaceServerError', {

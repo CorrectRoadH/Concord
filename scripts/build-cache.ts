@@ -7,7 +7,8 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { acquireRecoverablePublicationLease, CoordinationError, ownerIsAlive, readLeaseOwner, releaseFileLease, type FileLease } from '../src/base/publication/file-lease.ts';
-import { decodeNativeArtifact, HAWDB_ABI, HAWDB_REVISION } from '../src/base/installation/hawdb-native-contract.ts';
+import { HAWDB_VERSION, HAWDB_REVISION } from '../src/base/installation/hawdb-native-contract.ts';
+import { verifyNativeArtifactDirectory } from '../src/base/installation/native-artifact.ts';
 import { readNativeRelease } from '../src/base/installation/native-release.ts';
 import { archiveTarget } from './archive-support.ts';
 import { BuildIdentity } from './build-identity.ts';
@@ -92,7 +93,7 @@ export const buildDigest = Effect.fn('build.cache.digest')(function*(checkout: s
   const native = prebuilt !== undefined ? yield* buildCacheTree(resolve(prebuilt), undefined, true)
     : (yield* fs.exists(cachedNative)) ? yield* buildCacheTree(cachedNative, undefined, true) : null;
   return sha(JSON.stringify({ entries, platform: process.platform, arch: process.arch, node: process.version,
-    abi: process.versions.modules, bun: process.versions.bun ?? null, cpu: target === 'linux-x64' ? 'bun-linux-x64-baseline' : 'bun-darwin-arm64', target, nativeAbi: HAWDB_ABI, nativeRevision: HAWDB_REVISION,
+    abi: process.versions.modules, bun: process.versions.bun ?? null, cpu: target === 'linux-x64' ? 'bun-linux-x64-baseline' : 'bun-darwin-arm64', target, nativeVersion: HAWDB_VERSION, nativeRevision: HAWDB_REVISION,
     requirePortableNative: process.env.CONCORD_REQUIRE_PORTABLE_NATIVE ?? '', commit, linuxLibraries, native, tools, compiler }));
 });
 
@@ -160,15 +161,7 @@ const validatePackage = Effect.fn('build.cache.validatePackage')(function*(archi
   if (!filename.endsWith(`-${target}.tar.gz`)) return yield* new BuildCacheFailed({ message: 'Archive target differs from requested build target' });
   const expectedNativeTarget = target === 'linux-x64' ? 'linux-x64-glibc' : target;
   const native = join(root, 'dist/native', expectedNativeTarget);
-  const metadata = yield* fs.readFileString(join(native, 'artifact.json'));
-  const artifact = yield* Effect.try({ try: () => decodeNativeArtifact(JSON.parse(metadata)), catch: fail });
-  const release = yield* Effect.try({ try: () => readNativeRelease(checkout), catch: fail });
-  if (artifact.target !== expectedNativeTarget || artifact.testHooks || process.env.CONCORD_REQUIRE_PORTABLE_NATIVE === '1' && !artifact.portable || artifact.sourceDigest !== release.sourceDigest
-    || artifact.cargoLockDigest !== release.cargoLockDigest
-    || artifact.binarySha256 !== sha(yield* fs.readFile(join(native, 'hawdb.node')))
-    || artifact.noticesSha256 !== sha(yield* fs.readFile(join(native, 'THIRD-PARTY-NOTICES.txt')))) {
-    return yield* new BuildCacheFailed({ message: 'Native package identity differs from build inputs' });
-  }
+  yield* Effect.try({ try: () => verifyNativeArtifactDirectory(native, expectedNativeTarget, false, readNativeRelease(checkout)), catch: fail });
   const entries = yield* buildCacheTree(archiveRoot, path => path === manifestName || path === '.in-use' || path.startsWith('.in-use/'));
   for (const entry of entries) {
     if (entry.kind !== 'link') continue;
@@ -238,7 +231,7 @@ export const prepareBuildCache = Effect.fn('build.cache.prepare')(function*(chec
     const native = join(yield* nativeInputCache(checkout), target === 'linux-x64' ? 'linux-x64-glibc' : target);
     if (!(yield* fs.exists(native))) {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const code = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['scripts/prepare-native.ts', '--all-modes'], { cwd: checkout, stdout: 'inherit', stderr: 'inherit' }));
+      const code = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['scripts/prepare-native.ts'], { cwd: checkout, stdout: 'inherit', stderr: 'inherit' }));
       if (Number(code) !== 0) return yield* new BuildCacheFailed({ message: `Native preparation exited ${code}` });
     }
   }

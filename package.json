@@ -10,7 +10,7 @@
     "concord": "bun --no-env-file --config=/dev/null src/entry/cli/entry.ts",
     "bench": "bun --no-env-file --config=/dev/null bench/index.ts",
     "build:herdr": "bun --no-env-file --config=/dev/null scripts/build-herdr-mod.ts",
-    "build:native": "bun --no-env-file --config=/dev/null scripts/prepare-native.ts --all-modes",
+    "build:native": "bun --no-env-file --config=/dev/null scripts/prepare-native.ts",
     "dev": "bun --no-env-file --config=/dev/null --bun node_modules/vite/bin/vite.js",
     "lint": "bun --no-env-file --config=/dev/null --bun node_modules/oxlint/bin/oxlint src web test scripts bench *.config.ts",
     "typecheck": "bun --no-env-file --config=/dev/null node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
@@ -24,6 +24,7 @@
     "typescript": "7.1.0-beta"
   },
   "devDependencies": {
+    "@nowledge/hawdb-bun": "0.31.0",
     "@codemirror/commands": "6.11.1",
     "@codemirror/lang-javascript": "6.2.5",
     "@codemirror/language": "6.13.1",
@@ -84,7 +85,8 @@
     "@effect/platform-node-shared": "4.1.2"
   },
   "patchedDependencies": {
-    "typescript@7.1.0-beta": "patches/typescript@7.1.0-beta.patch"
+    "typescript@7.1.0-beta": "patches/typescript@7.1.0-beta.patch",
+    "@nowledge/hawdb-bun@0.31.0": "patches/@nowledge%2Fhawdb-bun@0.31.0.patch"
   },
   "trustedDependencies": ["esbuild"]
 }

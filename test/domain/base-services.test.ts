@@ -100,7 +100,7 @@ test('entry layers build the declared reader and operation capabilities', async 
     ['CLI', cliLayer, true, true, true],
     ['HTTP operation process', operationLayer(), true, false, true],
     ['reader worker', readerLayer, false, false, false],
-    ['cache maintenance worker', writerLayer, true, true, false],
+    ['persistent writer', writerLayer, true, true, false],
   ] as const) {
     const context = await Effect.runPromise(Effect.scoped(Layer.build(layer)).pipe(Effect.provide(NodeServices.layer), Effect.provideService(RuntimeEnvironment, nativeRuntime)));
     assert.equal(Option.isSome(Context.getOption(context, Workspace)), true, name);

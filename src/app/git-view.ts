@@ -14,7 +14,7 @@ import { Sources } from '../base/sources/index.ts';
 export interface GitBaselineCache { database?: HawdbDatabase; }
 const baselineArtifacts = new WeakMap<GitBaselineCache, string>();
 function baselineDatabase(cache: GitBaselineCache, runtime: RuntimeEnvironmentSnapshot): HawdbDatabase {
-  const selection = JSON.stringify([nativeArtifactRoot(runtime), runtime.env.CONCORD_NATIVE_TEST_HOOKS === '1']);
+  const selection = nativeArtifactRoot(runtime);
   if (baselineArtifacts.get(cache) !== selection) closeGitBaselineCache(cache);
   if (cache.database) verifyHawdbArtifact(runtime);
   else cache.database = createMemoryHawdb(runtime);

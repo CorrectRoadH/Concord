@@ -8,7 +8,7 @@
 
 - 项目已初始化，安装的是打包后的 Concord。
 - 注解、代码、配置和远端反馈快照共用 Git-private 目录中的同一个 `cache.hawdb`，彼此以命名空间隔离。
-- 缓存目录可写。只读命令也可能需要写入：工作区服务可以保存查询产生的可重建缓存行，读取也可能重建缓存内部的派生文件或创建协调锁。
+- 缓存目录可写。只读命令也可能需要写入：工作区服务可以保存查询产生的可重建缓存行，读取也可能重建缓存内部的派生文件或创建 Concord 准入锁。
 
 ## 完整路径
 
@@ -37,7 +37,6 @@
    path: /tmp/demo/.git/concord/cache.hawdb
    detail: projections: annotation_cache, query_cache, workspace_projection
    physicalBytes: 7418888
-   reclaimThresholdBytes: 1073741824
    ```
 
    `ready` 表示投影可读，不表示某次扫描命中。全部字段见 [CLI](../cli.md#缓存状态)。
@@ -70,6 +69,8 @@
    preserve:
      /tmp/demo/.git/concord/cache.hawdb
      /tmp/demo/.git/concord/cache.hawdb/owner.hawdb.lock
+     /tmp/demo/.git/concord/cache.hawdb/branches/metadata.hawdb.lock
+     …
      /tmp/demo/.git/concord/cache.hawdb.concord.lock
    native:
      status: ready
@@ -89,7 +90,7 @@
    path: /tmp/demo/.git/concord/cache.hawdb
    ```
 
-   clear 只删除 `cache.hawdb` 内的缓存内容，执行时重新检查路径与所有权。缓存目录、根 `owner.hawdb.lock` 与同级 `cache.hawdb.concord.lock` 的 inode 保留。工作区服务运行时，clear 经由服务执行。
+   clear 只删除 `cache.hawdb` 内的缓存数据，执行时取得全部引擎锁并重新检查路径与所有权。缓存目录、全部引擎锁及承载它们的目录、同级 `cache.hawdb.concord.lock` 的 inode 保留。工作区服务运行时，clear 经由服务执行。
 
 6. 再次运行命令。 {#rebuild}
 
@@ -106,19 +107,19 @@
 | 读取远端反馈快照或诊断投影 | 工作区服务运行时经由服务读取；没有服务而库被占用时报告不可用，不当作空集合 |
 | 远端快照读取失败 | 不触发网络请求，不覆盖已捕获的本地 Issue |
 | 一次完整的远端 fetch 写入缓存 | 合并是原子的，时间戳单调，同版本内容冲突受保护 |
-| 换用引擎版本不同的 Concord | 缓存按不可用处理并重建；远端观察需要显式刷新，本地已捕获的 Issue 保留 |
+| 换用引擎版本不同的 Concord | 缓存按结构不兼容处理，命令使用内存缓存，提示显式 clear；远端观察需要显式刷新，本地已捕获的 Issue 保留 |
 | `--dry-run` 或关闭缓存 | 不访问持久数据库；`feedback` 使用本地 Issue 已捕获的来源信息，不发远端请求 |
-| `cache status --dry-run` | 只检查路径和原生产物：缓存缺失或只含根 `owner.hawdb.lock` 时为 `empty`，其它情况为 `unavailable` 并说明持久访问关闭，不声称 `ready` |
+| `cache status --dry-run` | 只检查路径和原生产物：缓存缺失或只含引擎锁时为 `empty`，其它情况为 `unavailable` 并说明持久访问关闭，不声称 `ready` |
 | 原生产物摘要错误 | 扫描与状态查询给出相同的诊断：产物路径、预期与实际摘要，以及修复安装的提示；clear 不能修复安装 |
 | 原生产物加载失败后修好安装 | 期间缓存调用按不可用回源，不返回未经验证的成功；长期运行的进程在下一次重试时恢复 |
 | clear 遇到 symlink、越界路径、外部硬链接或活动句柄 | 拒绝删除；完整计数的内部硬链接允许清理 |
-| 缓存目录不存在时 clear | 无操作；只有完整预检后只含根 `owner.hawdb.lock` 的目录报告 `empty`，未知内容不归为空 |
-| clear 中断或部分失败 | 保留现场并具名报告；再次 clear 继续完成 |
+| 缓存目录不存在时 clear | 无操作；只有完整预检后只含引擎锁的目录报告 `empty`，未知内容不归为空 |
+| clear 中断或部分失败 | 保留现场并具名报告，服务进入 blocked；重启服务后再次 clear 继续完成 |
 | 缓存目录很大 | 目录总容量与文件数量不限制打开、状态检查和清理，校验不因目录大而跳过 |
-| 缓存物理体积超过上限 | 后台回收或丢弃缓存，不改变任何命令结果；丢弃之后的命令冷启动重建 |
-| 启用缓存的扫描遇到引擎报告的只读增量恢复失败 | 恢复后继续；恢复不删除目录、不覆盖文档、不创建缺失的数据库，恢复失败仍报告不可用 |
+| 缓存物理体积增长 | 不自动回收或丢弃；`physicalBytes` 如实报告，需要时由使用者运行 `concord cache clear` |
+| 数据库有不完整尾部或损坏 | 服务的可写打开只修复物理不完整尾部；其它损坏保留现场并报告 `HawdbCorrupt`，命令回源，由使用者显式 clear |
 
-物理体积上限、后台维护、批处理与恢复的机制见[架构](../architecture.md#缓存的使用与维护)。
+体积、批处理与恢复的机制见[架构](../architecture.md#缓存的使用与维护)。
 
 ### 验收方式
 
@@ -130,7 +131,7 @@
 - 工作区服务运行时，4 个只读命令与 1 个写命令并发，全部成功且不以 `HawdbBusy` 失败；服务运行时 `feedback list` 的远端快照与只运行 CLI 时相同。
 - 三个启动者同时启动只得到一个服务；服务在请求中被 `SIGKILL` 后下一次调用正常；临时仓库使用 `--server=command` 查询时，命令结束前回收后台进程。
 - 服务退出或机器重启后，残留运行记录即使损坏或设备身份失效，下一次查询也能启动服务；`server stop` 成功确认已经停止。仍有持有者或无法验证服务锁时保留现场并报告错误。
-- 同进程双向与跨进程的句柄互斥，clear 与直接调用 HawDB 的分支句柄双向阻止并报告 busy 类别；损坏库的受锁清理、空库重开、根锁与同级锁 inode 保留。
+- 同进程双向与跨进程的句柄互斥，clear 与直接调用 HawDB 的分支句柄双向阻止并报告 busy 类别；close 到取得清理锁之间被外部抢占、清理中替换根或锁、重开争用；损坏库的受锁清理、空库重开、全部引擎锁与同级锁 inode 保留。
 - 缓存目录外的其它文件、目录或内部文件为 symlink、跨目录内部链接与外部链接、内部锁别名、预检后链接或身份变化、新增成员，以及中断清理后的重试。
 - 清空后离线读取本地 Issue；无 SQLite 运行时导入。
 - 在没有 Rust 与系统 Node.js 的环境中离线解压发版归档后实际操作，覆盖 Linux 与 macOS 原生产物及产物缺失或身份不匹配。

@@ -12,7 +12,7 @@ import { scopedServerLock } from './index.ts';
 
 const Identity = Schema.Struct({ device: Schema.String, inode: Schema.String });
 export const ServerRecord = Schema.Struct({
-  state: Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']),
+  state: Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'blocked', 'stopping']),
   pid: Schema.Int, startedAt: Schema.String, token: Schema.String,
   lock: Identity, installation: Schema.String, protocol: Schema.String,
   sourceDigest: Schema.optional(Schema.String),

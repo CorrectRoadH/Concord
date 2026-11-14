@@ -9,7 +9,8 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "types": [
-      "node"
+      "node",
+      "bun"
     ],
     "rootDir": "src",
     "outDir": "dist",

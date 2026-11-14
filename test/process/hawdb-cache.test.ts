@@ -1,6 +1,6 @@
 // 跨进程保证：原生模块与句柄——native清理guard保持owner inode并拒绝检查后引入的外链、替换与新成员。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
-import { initialize, runApplication, installedConcordCli, assert, createHash, execFileSync, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, resolve, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, ScanReport, freshConsumer, cli, cacheDiskSnapshot } from './hawdb-cache-fixture.ts';
+import { runApplication, assert, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, tmpdir, join, test, Effect, acquireHawdbClearGuard, deleteInspectedCache, inspectCacheClear, freshConsumer, cli, cacheDiskSnapshot } from './hawdb-cache-fixture.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
@@ -39,7 +39,7 @@ test('fresh dry-run and cache-off processes never touch an existing complete cac
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('clear unlinks internal aliases before native locks and can retry after detected mutations', () => {
+test('clear removes internal aliases, preserves all native locks and retries after detected mutations', () => {
   for (const mutation of ['none', 'external-link', 'replace', 'new-member']) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-clear-links-')));
     const path = join(root, 'cache.hawdb');
@@ -49,6 +49,7 @@ test('clear unlinks internal aliases before native locks and can retry after det
     writeFileSync(data, 'retained bytes'); linkSync(data, alias); writeFileSync(nestedLock, '');
     const guard = acquireHawdbClearGuard(path, nativeRuntime);
     const rootInode = statSync(path).ino; const lockInode = statSync(join(path, 'owner.hawdb.lock')).ino;
+    const nestedInode = statSync(nestedLock).ino;
     const siblingInode = statSync(`${path}.concord.lock`).ino;
     try {
       let verifications = 0;
@@ -59,7 +60,7 @@ test('clear unlinks internal aliases before native locks and can retry after det
           if (mutation === 'replace') { renameSync(data, outside); writeFileSync(data, 'replacement'); }
           if (mutation === 'new-member') writeFileSync(join(path, 'introduced'), 'new content');
         }
-        if (!existsSync(nestedLock)) assert.ok(!existsSync(data) && !existsSync(alias), 'non-lock data must be deleted before any native lock');
+        assert.equal(statSync(nestedLock).ino, nestedInode, 'clear must never unlink an engine lock');
       });
       if (mutation === 'none') run();
       else {
@@ -67,7 +68,9 @@ test('clear unlinks internal aliases before native locks and can retry after det
         if (existsSync(outside)) { assert.equal(readFileSync(outside, 'utf8'), 'retained bytes'); rmSync(outside); }
         deleteInspectedCache(inspectCacheClear(root), guard.verify);
       }
-      assert.deepEqual(readdirSync(path), ['owner.hawdb.lock']);
+      assert.deepEqual(readdirSync(path).sort(), ['owner.hawdb.lock', 'right']);
+      assert.equal(statSync(nestedLock).ino, nestedInode);
+      assert.equal(existsSync(data), false); assert.equal(existsSync(alias), false);
       assert.equal(statSync(path).ino, rootInode);
       assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, lockInode);
       assert.equal(statSync(`${path}.concord.lock`).ino, siblingInode);

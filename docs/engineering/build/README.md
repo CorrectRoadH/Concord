@@ -10,7 +10,7 @@
 git clone https://github.com/CorrectRoadH/Concord.git
 cd Concord
 bun install --frozen-lockfile
-bun run build:native # 下载并校验固定版本的 HawDB 二进制
+bun run build:native # 下载并校验固定版本的官方 HawDB 动态库
 bun run concord --help
 bun run test
 ```
@@ -48,7 +48,7 @@ Spec 声明依赖的选择、更新与校验规则，不重复记录具体版本
 1. 实现、测试和构建脚本采用严格 TypeScript，执行与副作用通过 Effect 组织。不添加手工维护的 JavaScript，不绕过类型检查；编译输出和 JavaScript 消费者兼容 fixture 除外。
 2. Effect 依赖精确固定，使用 API 前读取已安装依赖自带的指引。不可信边界严格 Schema 解码并返回具名失败。
 3. 归档中的 `bin/concord` 是用 `bun build --compile --bytecode` 为该目标编译的单个可执行文件，内含 Bun 运行时、打包后的应用代码与预编译字节码。工作区服务、计算进程、操作进程等子进程都由这个可执行文件以内部入口启动；`runtime/` 保存 ripgrep 和平台动态库，`bin/concord` 本身不是启动脚本。
-4. 本仓库不包含 Rust 或 HawDB 编译。原生桥接由 HawDB fork 构建并按[引擎版本和桥接修订](architecture.md#原生绑定复用)发布；Concord 只下载、校验和使用二进制。领域决策、来源核验、测试和构建编排使用 TypeScript/Effect。
+4. 本仓库不包含 Rust 或 HawDB 编译。Concord 使用官方 `@nowledge/hawdb-bun` 适配器与官方发行的 C ABI 动态库，按[原生绑定复用](architecture.md#原生绑定复用)固定、下载与校验，不维护桥接 fork。领域决策、来源核验、测试和构建编排使用 TypeScript/Effect。
 5. 本条约束 Concord 自身。接入项目的语言、包管理器和运行时由其自行选择。
 
 ## 验收

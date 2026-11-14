@@ -18,7 +18,7 @@ import { OwnedProcess, OwnedProcessLive, ProcessEventsLive, makeOwnedProcessServ
 import { Git } from '../../base/git/index.ts';
 import { Workspace } from '../../base/workspace/index.ts';
 import { Sources } from '../../base/sources/index.ts';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter, awaitCacheMaintenance } from '../../base/cache/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.ts';
 import { mergeLocalFeedbackObservation } from '../../domain/feedback/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
@@ -512,4 +512,4 @@ export const runCommand = <R>(command: Command.Command<any, any, any, any, R>, a
     );
   } else yield* program.pipe(Effect.catch(cliFailure));
   return yield* (yield* CliInvocation).exitCode;
-})).pipe(Effect.provide(cliLayer), Effect.provide(CliInvocation.layer(argv)), Effect.ensuring(Effect.flatMap(RuntimeEnvironment, runtime => Effect.promise(() => awaitCacheMaintenance(runtime))))));
+})).pipe(Effect.provide(cliLayer), Effect.provide(CliInvocation.layer(argv))));

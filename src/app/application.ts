@@ -8,7 +8,7 @@ import { openReadRepository, openWriteRepository, Workspace } from "../base/work
 import { Sources } from '../base/sources/index.ts';
 import type { OwnedProcess } from '../base/process/index.ts';
 import { checkCurrentProject } from "./check-current.ts";
-import { Effect, Result, Predicate } from "effect";
+import { Effect, Result, Predicate, Schedule } from "effect";
 import { recoverLocalState } from "./recovery.ts";
 import { waitForPublication } from "../base/publication/index.ts";
 import { getGitStatus, type GitBaselineCache } from "./git-view.ts";
@@ -24,6 +24,7 @@ import { readFeedbackCache } from "../base/cache/index.ts";
 import { rebuildCache } from './cache-rebuild.ts';
 import { HawdbFailure } from "../base/cache/index.ts";
 import { editKnowledge, knowledgeIndex, knowledgeSearchRecords, removeIssue } from "./knowledge.ts";
+import { KnowledgeSearch, type KnowledgeSearchOwner } from './knowledge-search.ts';
 import { inspectDocuments, inspectDocumentFile, isSourcePath, readSource, setConfig, setMarkdown, setSource } from "./editing.ts";
 import { annotationSnippet } from "../domain/onboarding/index.ts";
 import { doctor } from "./onboarding.ts";
@@ -305,7 +306,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' | 'file.get' | 'page.render' }>): Promise<unknown> {
+async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' | 'file.get' | 'page.render' }>, searchOwner?: KnowledgeSearchOwner, signal?: AbortSignal): Promise<unknown> {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
     case 'document.create': throw new ConcordError('InvalidInput', 'Creation must run in its Effect scope');
@@ -314,12 +315,12 @@ async function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction
     case 'document.set': return (await setMarkdown(repo, action.path, action.body, action.expectedDigest, dryRun));
     case 'roadmap.start': return (await adoptRoadmap(repo, action.id, action.feature, dryRun));
     case 'memory.index': return knowledgeIndex(repo, 'memory');
-    case 'memory.search': return knowledgeSearchRecords(repo, 'memory', action.query);
+    case 'memory.search': return knowledgeSearchRecords(repo, 'memory', action.query, searchOwner, signal);
     case 'issue.link': return (await linkIssue(repo, action.id, action.memory, dryRun, action.role));
     case 'issue.list': { const { action: _, ...filter } = action; return { operation: 'issue-list', drafts: listFeedback(repo, undefined, filter).map(item => item.document) }; }
     case 'feedback.list': { const { action: _, ...filter } = action; return { operation: 'feedback-list', feedback: listFeedback(repo, undefined, filter) }; }
     case 'issue.index': return knowledgeIndex(repo, 'issue');
-    case 'issue.search': return knowledgeSearchRecords(repo, 'issue', action.query);
+    case 'issue.search': return knowledgeSearchRecords(repo, 'issue', action.query, searchOwner, signal);
     case 'issue.edit': return (await editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun));
     case 'issue.remove': return (await removeIssue(repo, action.id, action.expectedDigest, dryRun));
     case 'issue.close': return (await closeIssue(repo, action.id, action.reason, dryRun));
@@ -388,7 +389,20 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
   if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
+  const owner = yield* Effect.serviceOption(KnowledgeSearch);
+  const searchOwner = owner._tag === 'Some' ? owner.value : undefined;
+  if (action.action === 'memory.search' || action.action === 'issue.search') {
+    return yield* withRepository(root, repo => Effect.gen(function*() {
+      const sources = yield* Sources;
+      let pending: Promise<unknown> | undefined;
+      const search = Effect.tryPromise({
+        try: interrupted => pending = repo.snapshot(() => executeWithRepo(repo, action, searchOwner, signal === undefined ? interrupted : AbortSignal.any([signal, interrupted]))),
+        catch: failure,
+      }).pipe(Effect.ensuring(Effect.promise(async () => { await pending?.then(() => undefined, () => undefined); })));
+      return yield* sources.snapshot(repo, timing === undefined ? search : timing.effect(`view.action.${action.action}`, search));
+    }), { access: 'read', dryRun }, timing).pipe(Effect.retry({ times: 2, schedule: Schedule.spaced('50 millis'), while: error => error.code === 'SourceChanged' || error.code === 'FileChangedSinceRead' && error.details === 'source-observation' }));
+  }
+  return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action, searchOwner, signal))), { access: actionAccess(action.action), dryRun }, timing);
 });
 // @concord-end
 

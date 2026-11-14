@@ -1,6 +1,23 @@
-# Memory 与 Issue 的检索数据
+# 缓存与检索数据
 
-本页定义[检索投影](concepts.md#knowledge-search-projection)在 HawDB 中的结构。来源核对、查询与资源释放由[检索架构](architecture.md#knowledge-search)拥有。全部结构位于已有 `cache.hawdb`，由工作区服务持有；它们可整体删除重建，不拥有文件、Issue 生命周期或发布恢复材料。
+本页定义普通缓存表与[检索投影](concepts.md#knowledge-search-projection)在 HawDB 中的结构。来源核对、查询与资源释放由[检索架构](architecture.md#knowledge-search)拥有。全部结构位于已有 `cache.hawdb`，由工作区服务的[数据库 Worker](architecture.md#数据库-worker) 持有；它们可整体删除重建，不拥有文件、Issue 生命周期或发布恢复材料。
+
+## 缓存表 {#cache-tables}
+
+普通缓存命名空间共用一张关系表：
+
+| 表 | 列 | 约束 |
+| --- | --- | --- |
+| `concord_cache_entries` | `namespace TEXT`、`cache_key TEXT`、`payload BYTEA`、`sequence BIGINT` | `(namespace, cache_key)` 复合主键 |
+| `concord_cache_schema` | `version TEXT` | 主键；值为 `concord.cache/v2` |
+
+schema 身份不是 `concord.cache/v2` 时按[结构不兼容](architecture.md#打开与恢复模式)处理，不读取或转换旧格式（[当前格式](../../architecture.md#当前格式)）。各命名空间的条目与字节配额、按 `sequence` 的插入顺序淘汰由 TypeScript 精确维护，与[资源预算](architecture.md#资源预算)一致。upsert 以新的 `sequence` 重新插入，使被覆盖的键按最近写入排队。
+
+普通缓存行与检索代次共享 96 MiB 持久逻辑预算；检索部分按代次节点的 `logicalBytes` 计入。
+
+### 观察值的比较替换 {#compare-and-replace}
+
+`query_cache` 与 `workspace_projection` 的函数型更新拆成两步：主线程从一次读取的前像计算候选值，Worker 在一个事务中比较当前 payload 与期望前像的精确字节，相同才原子替换。不同即冲突，主线程按新前像重新计算，最多再试两次；不做无条件写入。
 
 ## 文档节点 {#documents}
 
@@ -33,7 +50,7 @@ CREATE FULLTEXT INDEX ON :MemorySearchDocument(searchText)
 
 写入端对 `${title}\n${body}` 执行与现有搜索相同的 JavaScript `toLocaleLowerCase()`。查询端精确采用 `query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean)`；不执行词干化、Unicode 规范化、标点删除或同义词扩展。大小写转换必须使用同一服务运行时和 locale，不能让 Rust 与 TypeScript 各自决定归一化。
 
-`definitionDigest` 覆盖检索结构版本、文档解析器身份、归一化算法、Bun / Unicode 运行时身份和实际 locale。任一项改变，整个对应集合失效。HawDB 的 n-gram 只用于候选筛选，最终精确谓词对已经归一化的原字符串执行；不以分词结果替代搜索语义。无可用 gram 的合法词项由[引擎精确扫描](architecture.md#knowledge-search-query)处理，候选始终是精确命中的超集。
+`definitionDigest` 覆盖检索结构版本、文档解析器身份、归一化算法、Bun / Unicode 运行时身份和实际 locale。任一项改变，整个对应集合失效。HawDB 的 n-gram 只用于候选筛选，最终精确谓词对已经归一化的原字符串执行；不以分词结果替代搜索语义。无可用 gram 的合法词项由[零命中复核](architecture.md#knowledge-search-recheck)处理，不依赖引擎对空 token 的候选访问。
 
 ## 代次节点 {#generation}
 
@@ -46,18 +63,19 @@ CREATE FULLTEXT INDEX ON :MemorySearchDocument(searchText)
 | `definitionDigest` | String | 结构、解析与归一化身份 |
 | `sourceDigest` | String | 按路径排序的完整 `(path, digest)` 集合摘要，包含空集合 |
 | `documentCount` | Integer | 非负，须与这一种类的文档节点数相符 |
+| `logicalBytes` | Integer | 非负，这一完整集合的文档属性与代次信封按 JSON 的 UTF-8 字节数；由宿主输入核验，在同一事务中更新，不是 RSS |
 
 代次节点只代表完整集合。首次构建在一个写事务内创建全部文档与代次；增量更新在一个写事务内替换变化节点、删除消失节点并替换代次。更新使用路径定位；路径改名不保留旧身份。修改 `searchText` 时由 HawDB 在相同提交中维护索引，不能单独提交文档再异步提交其搜索索引。
 
-更新全部在一次原生调用内完成，事务内部可以分批执行语句，但只能在全部语句成功后提交事务。完整变更集和内部语句批次分别遵守[资源预算](architecture.md#资源预算)；不能通过跨调用持有事务或逐批提交绕过上限。构建或更新失败回滚该事务；旧代次可以留在磁盘，却不能在来源已变时作为当前结果返回。没有代次、身份不符或节点计数不符都视为不可用集合，禁止从存在的部分节点推断完整结果。
+更新全部在一个 Worker 请求的同一同步事务回调内完成，回调内部可以分批执行语句，但只能在全部语句成功后提交事务。完整变更集和内部语句批次分别遵守[资源预算](architecture.md#资源预算)；不能通过跨请求持有事务或逐批提交绕过上限。构建失败、更新失败或提交前取消回滚该事务，提交结果未知按[事务与提交结果](architecture.md#事务与提交结果)处理；旧代次可以留在磁盘，却不能在来源已变时作为当前结果返回。没有代次、身份不符或节点计数不符都视为不可用集合，禁止从存在的部分节点推断完整结果。
 
-一次原生检索调用在内部持有同一个数据库读事务，读取代次、筛选文档和取得正文；内部分批共用快照、引擎路径顺序与累计预算，调用返回前释放事务。返回的代次必须与应用层本次来源观察一致；数据库快照不代替文件核验。
+一个检索请求在同一个同步事务回调内读取代次、筛选文档和取得正文；内部分批共用快照、引擎路径顺序与累计预算，回调返回前释放事务。返回的代次必须与应用层本次来源观察一致；数据库快照不代替文件核验。
 
 ## 来源观察与生命周期 {#source-observations}
 
 文件身份、最近核验的摘要、目录集合与来源诊断复用服务的增量工作区图，不再持久化一份独立文件登记表。图中的记录把本次来源视图与 `generation` 关联；只有关联仍有效时才能复用数据库内容。没有已核验来源记录时，数据库里的 `digest` 不能自行证明文件当前性。
 
-节点与代次由工作区服务在现有写入调度中更新。解析线程没有数据库句柄，CLI、Web、LSP 与测试 runner 不取得持久写入权。内存降级使用同一结构；clear、句柄关闭、重建与取消遵守[资源生命周期](architecture.md#knowledge-search-lifecycle)。
+节点与代次由工作区服务在现有写入调度中经数据库 Worker 更新。解析线程没有数据库句柄，CLI、Web、LSP 与测试 runner 不取得持久写入权。内存降级使用同一结构；clear、句柄关闭、重建与取消遵守[资源生命周期](architecture.md#knowledge-search-lifecycle)。
 
 ## 容量与淘汰 {#capacity}
 

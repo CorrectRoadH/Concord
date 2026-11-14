@@ -30,7 +30,7 @@ import { startViewServer } from '../support/view-server.ts';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.ts';
-import { hawdbTarget } from '../../src/base/installation/index.ts';
+import { hawdbLibraryName, hawdbTarget } from '../../src/base/installation/index.ts';
 import { installationResources } from '../support/source-resources.ts';
 import { sourceCli, prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 
@@ -91,7 +91,7 @@ test('an installation missing native artifacts reports unavailable instead of pe
   try {
     privateSourceInstallation(installation);
     const installed = installation;
-    rmSync(join(installationResources(installed).native, hawdbTarget(), 'hawdb.node'));
+    rmSync(join(installationResources(installed).native, hawdbTarget(), hawdbLibraryName(hawdbTarget())));
     const result = spawnSync(process.execPath, [sourceCli(installed), '--root', root, '--json', 'workspace', 'projection'], { env: { ...process.env, XDG_CACHE_HOME: join(installation, '.test-cache') }, encoding: 'utf8', timeout: 20_000 });
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stderr, /^\{/u, result.stdout + result.stderr);

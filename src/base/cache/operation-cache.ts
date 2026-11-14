@@ -7,14 +7,13 @@ import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { assertLeasePath } from '../publication/index.ts';
 import { openCurrentPersistentCache } from './persistent-handle.ts';
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from './cache-file.ts';
-import { HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace, type HawdbReclamation } from './hawdb-native.ts';
+import { HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace } from './hawdb-native.ts';
 
 /** Private to base: an operation owns handles, never a workspace metadata value. */
 export class OperationCache extends Context.Service<OperationCache, {
   readonly privateDir: string;
   readonly read: (namespace: HawdbNamespace, keys?: readonly string[]) => readonly HawdbEntry[];
   readonly update: (namespace: HawdbNamespace, key: string, update: (prior: string | undefined) => string) => void;
-  readonly reclaim: () => HawdbReclamation;
   readonly enterPublication: () => void;
   readonly leavePublication: () => void;
   readonly publishing: () => boolean;
@@ -71,7 +70,6 @@ export const withOperationCache = <A, E, R>(workspace: WorkspaceMetadata, runtim
             }
             handle.put(namespace, [{ key, payload: update(handle.get(namespace, [key])[0]?.payload) }]);
           },
-          reclaim: () => open(true)!.reclaim(),
           enterPublication: () => {
             if (closed) throw new ConcordError('OperationFailed', 'Cannot publish from a closed source snapshot');
             close();

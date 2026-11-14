@@ -1,13 +1,13 @@
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { createHash } from 'node:crypto';
-import { lstat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { Console, Effect, FileSystem, Schema, Stream, type PlatformError } from 'effect';
+import { Console, Effect, FileSystem, Schema, Stream } from 'effect';
 import { FetchHttpClient, HttpClient } from 'effect/http';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
-import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget, readNativeRelease, nativeReleaseAsset, type HawdbTarget } from "../src/base/installation/index.ts";
+import { HAWDB_TARGETS, hawdbLibraryName, hawdbTarget, type HawdbTarget } from "../src/base/installation/hawdb-native-contract.ts";
 
-import { nativeCacheRoot } from "../src/base/installation/index.ts";
+import { nativeCacheRoot, verifyNativeArtifactDirectory } from '../src/base/installation/native-artifact.ts';
+import { readNativeRelease, nativeReleaseAsset } from '../src/base/installation/native-release.ts';
 
 import { makeRuntimeEnvironment } from '../src/base/environment/index.ts';
 
@@ -19,12 +19,6 @@ class NativePreparationFailed extends Schema.TaggedError<NativePreparationFailed
   override get message(): string { return this.detail; }
 }
 const preparationFailure = (cause: unknown) => new NativePreparationFailed({ detail: cause instanceof Error ? cause.message : String(cause) });
-// FileSystem.stat follows symlinks; artifact and license boundaries must not.
-const inspectEntry = (path: string) => Effect.tryPromise({ try: () => lstat(path), catch: preparationFailure });
-const shaFile = Effect.fn('native.shaFile')(function*(path: string) {
-  const fs = yield* FileSystem.FileSystem;
-  return hash(yield* fs.readFile(path));
-});
 const commandOutput = Effect.fn('native.commandOutput')(function*(command: string, args: readonly string[], limit = 1024 * 1024) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const child = yield* spawner.spawn(ChildProcess.make(command, args, { stderr: 'inherit' }));
@@ -37,61 +31,21 @@ const commandOutput = Effect.fn('native.commandOutput')(function*(command: strin
   if (code !== 0) return yield* new NativePreparationFailed({ detail: `${command} exited ${code}` });
   return text;
 }, Effect.scoped);
-const LicenseDigests = Schema.Array(Schema.Struct({ path: Schema.String, sha256: Schema.String }));
-const licenseMarker = 'Concord license file digests:';
-const licenseDigests = Effect.fn('native.licenseDigests')(function*(folder: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const files = ['HAWDB-LICENSE.txt', 'UPSTREAM.txt'];
-  const visit = Effect.fn('native.visitLicenseDirectory')(function*(directory: string): Effect.fn.Return<void, NativePreparationFailed | PlatformError.PlatformError, FileSystem.FileSystem> {
-    for (const name of yield* fs.readDirectory(join(folder, directory))) {
-      const path = `${directory}/${name}`;
-      const entry = yield* inspectEntry(join(folder, path));
-      if (entry.isDirectory()) yield* visit(path);
-      else if (entry.isFile()) files.push(path);
-      else return yield* new NativePreparationFailed({ detail: `native license must be a regular file: ${path}` });
-    }
-  });
-  if (!(yield* inspectEntry(join(folder, 'licenses'))).isDirectory()) return yield* new NativePreparationFailed({ detail: 'native licenses must be a regular directory' });
-  yield* visit('licenses');
-  return yield* Effect.all(files.sort().map(path => shaFile(join(folder, path)).pipe(Effect.map(sha256 => ({ path, sha256 })))));
-});
-const ArgsSchema = Schema.Struct({ output: Schema.optional(Schema.String), prebuilt: Schema.optional(Schema.String), requirePortable: Schema.Boolean, testHooks: Schema.Boolean, allModes: Schema.Boolean, target: Schema.optional(Schema.Literals(HAWDB_TARGETS)) });
+const ArgsSchema = Schema.Struct({ output: Schema.optional(Schema.String), prebuilt: Schema.optional(Schema.String), requirePortable: Schema.Boolean, target: Schema.optional(Schema.Literals(HAWDB_TARGETS)) });
 function parseArgs(argv: readonly string[]): Schema.Schema.Type<typeof ArgsSchema> {
-  const result: { output?: string; prebuilt?: string; requirePortable: boolean; testHooks: boolean; allModes: boolean; target?: HawdbTarget } = { requirePortable: false, testHooks: false, allModes: false };
+  const result: { output?: string; prebuilt?: string; requirePortable: boolean; target?: HawdbTarget } = { requirePortable: false };
   for (let i = 0; i < argv.length; i++) {
     const value = argv[i];
     if (value === '--output' && argv[i + 1]) result.output = argv[++i]!;
     else if (value === '--prebuilt' && argv[i + 1]) result.prebuilt = argv[++i]!;
     else if (value === '--target' && argv[i + 1]) result.target = Schema.decodeUnknownSync(Schema.Literals(HAWDB_TARGETS))(argv[++i]);
     else if (value === '--require-portable') result.requirePortable = true;
-    else if (value === '--test-hooks') result.testHooks = true;
-    else if (value === '--all-modes') result.allModes = true;
     else throw new Error(`unknown or incomplete native preparation argument: ${value}`);
   }
-  if (result.allModes && (result.testHooks || result.prebuilt || result.requirePortable)) throw new Error('--all-modes cannot combine with --test-hooks, --prebuilt or --require-portable');
   return Schema.decodeUnknownSync(ArgsSchema, { onExcessProperty: 'error' })(result);
 }
-const validateArtifact = Effect.fn('native.validateArtifact')(function*(folder: string, target: HawdbTarget, requirePortable: boolean, testHooks: boolean) {
-  const fs = yield* FileSystem.FileSystem;
-  for (const name of ['artifact.json', 'hawdb.node', 'THIRD-PARTY-NOTICES.txt', 'HAWDB-LICENSE.txt', 'UPSTREAM.txt']) {
-    if (!(yield* inspectEntry(join(folder, name))).isFile()) return yield* new NativePreparationFailed({ detail: `native artifact must be a regular file: ${name}` });
-  }
-  const metadata = yield* fs.readFileString(join(folder, 'artifact.json'));
-  const artifact = yield* Effect.try({ try: () => decodeNativeArtifact(JSON.parse(metadata)), catch: preparationFailure });
-  if (artifact.target !== target || artifact.abi !== HAWDB_ABI || artifact.revision !== HAWDB_REVISION) return yield* new NativePreparationFailed({ detail: `native identity mismatch: ${folder}` });
-  if (artifact.sourceDigest !== release.sourceDigest || artifact.cargoLockDigest !== release.cargoLockDigest) return yield* new NativePreparationFailed({ detail: `native source/lock mismatch: ${folder}` });
-  const expected = nativeReleaseAsset(release, target, testHooks);
-  if (artifact.testHooks !== testHooks || artifact.binarySha256 !== expected.binarySha256 || artifact.noticesSha256 !== expected.noticesSha256) return yield* new NativePreparationFailed({ detail: `native release/mode mismatch: ${folder}` });
-  if (artifact.binarySha256 !== (yield* shaFile(join(folder, 'hawdb.node')))) return yield* new NativePreparationFailed({ detail: `native binary digest mismatch: ${folder}` });
-  if (artifact.noticesSha256 !== (yield* shaFile(join(folder, 'THIRD-PARTY-NOTICES.txt')))) return yield* new NativePreparationFailed({ detail: `native dependency notices mismatch: ${folder}` });
-  const noticeLines = (yield* fs.readFileString(join(folder, 'THIRD-PARTY-NOTICES.txt'))).trimEnd().split('\n');
-  if (noticeLines.at(-2) !== licenseMarker) return yield* new NativePreparationFailed({ detail: `native license digests missing: ${folder}` });
-  const expectedLicenses = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LicenseDigests), { onExcessProperty: 'error' })(noticeLines.at(-1));
-  if (JSON.stringify(expectedLicenses) !== JSON.stringify(yield* licenseDigests(folder))) return yield* new NativePreparationFailed({ detail: `native license digest mismatch: ${folder}` });
-  if (target === 'darwin-arm64' && artifact.deploymentTarget !== HAWDB_MACOS_DEPLOYMENT_TARGET) return yield* new NativePreparationFailed({ detail: `native deployment target mismatch: ${folder}` });
-  if (requirePortable && artifact.testHooks) return yield* new NativePreparationFailed({ detail: `test-hook native artifact cannot ship: ${folder}` });
-  if (requirePortable && !artifact.portable) return yield* new NativePreparationFailed({ detail: `native artifact is not portable: ${folder}` });
-  return artifact;
+const validateArtifact = Effect.fn('native.validateArtifact')(function*(folder: string, target: HawdbTarget, _requirePortable: boolean) {
+  return yield* Effect.try({ try: () => verifyNativeArtifactDirectory(folder, target), catch: preparationFailure });
 });
 class NativeReuseFailed extends Schema.TaggedError<NativeReuseFailed>()('NativeReuseFailed', { detail: Schema.String }) {}
 const reuseFailure = (cause: unknown) => new NativeReuseFailed({ detail: cause instanceof NativePreparationFailed || cause instanceof NativeReuseFailed ? cause.detail : cause instanceof Error ? cause.message : String(cause) });
@@ -107,33 +61,33 @@ const installArtifact = Effect.fn('native.installArtifact')(function*(source: st
   const staging = yield* fs.makeTempDirectoryScoped({ directory: dirname(destination), prefix: '.native-copy-' });
   const staged = join(staging, 'artifact');
   yield* fs.copy(source, staged);
-  yield* fs.makeDirectory(destination, { recursive: true });
-  // Never truncate a native image which another process may have mapped.
-  yield* fs.rename(join(staged, 'hawdb.node'), join(destination, 'hawdb.node'));
-  for (const name of yield* fs.readDirectory(staged)) yield* fs.copy(join(staged, name), join(destination, name), { overwrite: true });
+  // Replace the private directory by rename; never follow a corrupt destination
+  // directory link or truncate an image another process may have mapped.
+  yield* fs.remove(destination, { recursive: true, force: true });
+  yield* fs.rename(staged, destination);
 }, Effect.scoped);
 
-const copyArtifact = Effect.fn('native.copyArtifact')(function*(input: string, output: string, target: HawdbTarget, testHooks: boolean) {
-  yield* validateArtifact(join(input, target), target, false, testHooks);
+const copyArtifact = Effect.fn('native.copyArtifact')(function*(input: string, output: string, target: HawdbTarget) {
+  yield* validateArtifact(join(input, target), target, false);
   const dest = join(output, target);
   yield* installArtifact(join(input, target), dest);
-  yield* validateArtifact(dest, target, false, testHooks);
+  yield* validateArtifact(dest, target, false);
 });
 
-const cacheArtifact = Effect.fn('native.cacheArtifact')(function*(input: string, cache: string, target: HawdbTarget, testHooks: boolean) {
+const cacheArtifact = Effect.fn('native.cacheArtifact')(function*(input: string, cache: string, target: HawdbTarget) {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(cache, { recursive: true });
   const staging = yield* fs.makeTempDirectoryScoped({ directory: cache, prefix: '.publish-' });
-  yield* copyArtifact(input, staging, target, testHooks);
+  yield* copyArtifact(input, staging, target);
   const dest = join(cache, target);
-  const valid = yield* validateArtifact(dest, target, false, testHooks).pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)));
+  const valid = yield* validateArtifact(dest, target, false).pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)));
   if (valid) return;
   yield* fs.remove(dest, { recursive: true, force: true });
   yield* fs.rename(join(staging, target), dest);
 }, Effect.scoped);
 
-const reuseNative = Effect.fn('native.reuse')(function* (cache: string, output: string, target: HawdbTarget, testHooks: boolean) {
-  const local = yield* copyArtifact(cache, output, target, testHooks).pipe(
+const reuseNative = Effect.fn('native.reuse')(function* (cache: string, output: string, target: HawdbTarget) {
+  const local = yield* copyArtifact(cache, output, target).pipe(
     Effect.matchEffect({ onFailure: cause => reason('cache', reuseFailure(cause)).pipe(Effect.as(false)), onSuccess: () => Effect.succeed(true) }),
   );
   if (local) { yield* Console.error(`# Native cache hit: ${join(cache, target)}`); return true; }
@@ -143,8 +97,8 @@ const reuseNative = Effect.fn('native.reuse')(function* (cache: string, output: 
   return yield* Effect.scoped(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-native-download-' });
-    const base = process.env.CONCORD_NATIVE_RELEASE_BASE_URL ?? 'https://github.com/CorrectRoadH/hawdb/releases/download';
-    const expected = nativeReleaseAsset(release, target, testHooks);
+    const base = process.env.CONCORD_NATIVE_RELEASE_BASE_URL ?? 'https://github.com/nowledge-co/hawdb/releases/download';
+    const expected = nativeReleaseAsset(release, target);
     const url = `${base.replace(/\/$/u, '')}/${release.tag}/${expected.name}`;
     const bytes = yield* Effect.gen(function*() {
       const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
@@ -160,14 +114,19 @@ const reuseNative = Effect.fn('native.reuse')(function* (cache: string, output: 
     if (hash(bytes) !== expected.archiveSha256) return yield* new NativePreparationFailed({ detail: `native archive checksum mismatch: ${url}` });
     const archive = join(scratch, 'native.tar.gz');
     yield* fs.writeFile(archive, bytes);
+    const prefix = expected.name.replace(/\.tar\.gz$/u, '');
     const names = (yield* commandOutput('tar', ['-tzf', archive], 4 * 1024 * 1024)).trim().split('\n');
-    if (!names.length || names.some(name => !name.startsWith(`${target}/`) || name.includes('\\') || name.split('/').some(part => part === '..' || part === '.'))) return yield* new NativeReuseFailed({ detail: 'unsafe native archive paths' });
+    const members = [prefix + '/', ...['LICENSE', 'include/', 'include/hawdb_ffi.h', 'lib/', 'lib/libhawdb_ffi.a', hawdbLibraryName(target), 'manifest.json'].map(name => `${prefix}/${name}`)].sort();
+    if (JSON.stringify([...names].sort()) !== JSON.stringify(members)) return yield* new NativeReuseFailed({ detail: 'unsafe, duplicate or unknown native archive paths' });
     const entries = (yield* commandOutput('tar', ['-tvzf', archive], 4 * 1024 * 1024)).trim().split('\n');
-    if (entries.some(entry => !/^[-d]/u.test(entry))) return yield* new NativeReuseFailed({ detail: 'native archive contains links or special files' });
+    if (entries.length !== members.length || entries.some(entry => !/^[-d]/u.test(entry))) return yield* new NativeReuseFailed({ detail: 'native archive contains links or special files' });
     yield* commandOutput('tar', ['-xzf', archive, '-C', scratch, '--no-same-owner', '--no-same-permissions']);
-    yield* copyArtifact(scratch, output, target, testHooks);
-    yield* cacheArtifact(scratch, cache, target, testHooks);
-    yield* Console.error(`# Native release hit: ${release.tag} / ${target} / ${testHooks ? 'test-hooks' : 'production'}`);
+    const extracted = join(scratch, prefix);
+    yield* fs.writeFileString(join(extracted, 'artifact.json'), JSON.stringify({ format: 'concord.native-artifact/v2', target, upstreamManifestSha256: expected.manifestSha256, binarySha256: expected.binarySha256 }) + '\n');
+    yield* fs.rename(extracted, join(scratch, target));
+    yield* copyArtifact(scratch, output, target);
+    yield* cacheArtifact(scratch, cache, target);
+    yield* Console.error(`# Native release hit: ${release.tag} / ${target}`);
     return true;
   })).pipe(Effect.mapError(cause => new NativePreparationFailed({ detail: `Cannot prepare ${release.tag} for ${target}: ${reuseFailure(cause).detail}` })));
 });
@@ -175,22 +134,18 @@ const reuseNative = Effect.fn('native.reuse')(function* (cache: string, output: 
 const program = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const args = yield* Effect.try({ try: () => parseArgs(process.argv.slice(2)), catch: preparationFailure });
-  if (args.requirePortable && args.testHooks) return yield* new NativePreparationFailed({ detail: 'test hooks cannot ship' });
-  const modes = args.allModes ? [false, true] : [args.testHooks];
-  for (const testHooks of modes) {
-    const cache = nativeCacheRoot(runtime, testHooks);
-    const output = args.output ? resolve(root, args.output, ...(args.allModes && testHooks ? ['test-hooks'] : [])) : cache;
-    if (args.prebuilt) {
-      const input = resolve(root, args.prebuilt);
-      const targets = (yield* fs.readDirectory(input)).filter((value): value is HawdbTarget => (HAWDB_TARGETS as readonly string[]).includes(value));
-      if (targets.length === 0) return yield* new NativePreparationFailed({ detail: 'no native artifacts supplied' });
-      yield* Effect.all(targets.map(target => validateArtifact(join(input, target), target, args.requirePortable, testHooks)));
-      for (const target of targets) yield* installArtifact(join(input, target), join(output, target));
-    } else {
-      const target = args.target ?? (yield* Effect.sync(hawdbTarget));
-      yield* reuseNative(cache, output, target, testHooks);
-      yield* validateArtifact(join(output, target), target, args.requirePortable, testHooks);
-    }
+  const cache = nativeCacheRoot(runtime);
+  const output = args.output ? resolve(root, args.output) : cache;
+  if (args.prebuilt) {
+    const input = resolve(root, args.prebuilt);
+    const targets = (yield* fs.readDirectory(input)).filter((value): value is HawdbTarget => (HAWDB_TARGETS as readonly string[]).includes(value) && (args.target === undefined || value === args.target));
+    if (targets.length === 0) return yield* new NativePreparationFailed({ detail: 'no native artifacts supplied' });
+    for (const target of targets) yield* validateArtifact(join(input, target), target, args.requirePortable);
+    for (const target of targets) yield* installArtifact(join(input, target), join(output, target));
+  } else {
+    const target = args.target ?? (yield* Effect.sync(hawdbTarget));
+    yield* reuseNative(cache, output, target);
+    yield* validateArtifact(join(output, target), target, args.requirePortable);
   }
 }).pipe(Effect.scoped);
 program.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);

@@ -3,7 +3,7 @@
 import { Schema } from 'effect';
 
 export const CacheSnapshotUnavailable = Schema.Struct({
-  code: Schema.Literals(['HawdbBusy', 'HawdbUnavailable', 'HawdbIncompatible', 'HawdbLimit', 'HawdbClosed', 'UnsafePath']), message: Schema.String,
+  code: Schema.Literals(['HawdbBusy', 'HawdbUnavailable', 'HawdbIncompatible', 'HawdbLimit', 'HawdbClosed', 'HawdbCommitUnknown', 'HawdbCancelled', 'UnsafePath']), message: Schema.String,
 }).annotate({ parseOptions: { onExcessProperty: 'error' } });
 export const CacheDerivationBatch = Schema.Struct({
   namespace: Schema.Literals(['annotation_cache', 'code_cache', 'config_cache', 'query_cache']),

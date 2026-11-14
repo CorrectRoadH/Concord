@@ -8,7 +8,7 @@ import { ConcordError } from '../../src/model/index.ts';
 import { ports, stateLayer } from '../support/workspace-service-fixture.ts';
 
 // @feature docs/feature/local-data-engine/README.md
-test('draining waits for accepted operations and queues later writes until maintenance releases', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+test('explicit clear waits for accepted operations and queues later writes until draining finishes', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   let closes = 0, queuedRuns = 0;
   const service = yield* makeWorkspaceService(ports({ close: Effect.sync(() => { closes++; }) }));
   yield* TestClock.adjust(0);

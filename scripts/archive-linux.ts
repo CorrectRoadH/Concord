@@ -172,8 +172,8 @@ export const closeLinuxRuntime = Effect.fn('archive.linuxClosure')(function*(roo
     }
   }
   // Relocation changes bytes. Preserve every source identity field, rebind only the digest.
-  for (const file of files.filter(file => file.endsWith('/hawdb.node'))) {
-    const manifest = join(dirname(file), 'artifact.json');
+  for (const file of files.filter(file => file.endsWith('/lib/libhawdb_ffi.so'))) {
+    const manifest = join(dirname(file), '..', 'artifact.json');
     const { NativeArtifactSchema } = yield* Effect.promise(() => import('../src/base/installation/hawdb-native-contract.ts'));
     const artifact = yield* readJson(manifest, NativeArtifactSchema);
     yield* fs.writeFileString(manifest, JSON.stringify({ ...artifact, binarySha256: sha256(yield* fs.readFile(file)) }) + '\n');

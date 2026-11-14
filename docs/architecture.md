@@ -206,7 +206,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner。源码测试通过官方 Bun test 执行 Effect，直接运行 TypeScript，并纳入 typecheck。
 
-每个目标的发版归档携带该目标的原生产物，绑定源码、ABI、提交标识和摘要。平台构建完成后统一组装候选归档，在每个目标的真实系统上运行同一份候选，通过后才发版，见[跨平台标签发版](feature/cross-platform-release/README.md)。
+每个目标的发版归档携带该目标的官方 HawDB 动态库，由官方清单与安装收据绑定发行版本、引擎提交、C ABI 与摘要。平台构建完成后统一组装候选归档，在每个目标的真实系统上运行同一份候选，通过后才发版，见[跨平台标签发版](feature/cross-platform-release/README.md)。
 
 交付分别通过测试与静态工具，检查流程由[构建与检查入口](engineering/testing/README.md#检查入口)定义。性能测量由 `bun run bench` 执行，交付者按[性能验收](engineering/performance/README.md)的测量路径单独对照预算，不进入 `bun run test`。
 

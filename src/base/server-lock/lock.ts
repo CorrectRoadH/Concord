@@ -1,92 +1,34 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#启动与裁决
-import { createHash } from 'node:crypto';
-import { readFileSync, realpathSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
-import { HAWDB_ABI, HAWDB_REVISION, decodeNativeArtifact, hawdbTarget, nativeArtifactRoot, nativeFileDigest, nativeFileIdentity, sourceInstallation, verifySourceNativeArtifact } from '../installation/index.ts';
-import { RuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
-import type { NativeServerLock, ServerLockBinding } from './native.ts';
+import { acquireFileLock, FileLockFailure } from '../file-lock/index.ts';
 
 const Reason = Schema.Literals(['permission', 'io', 'type', 'identity', 'closed', 'native']);
 export class ServerLockUnavailable extends Schema.TaggedError<ServerLockUnavailable>()('ServerLockUnavailable', {
   reason: Reason, message: Schema.String,
 }) {}
 export class ServerLockHeld extends Schema.TaggedError<ServerLockHeld>()('ServerLockHeld', { message: Schema.String }) {}
-const Identity = Schema.Struct({ device: Schema.String.check(Schema.isPattern(/^\d+$/u)), inode: Schema.String.check(Schema.isPattern(/^\d+$/u)) });
-export type ServerLockIdentity = typeof Identity.Type;
+export interface ServerLockIdentity { readonly device: string; readonly inode: string }
 export interface ServerLockHandle {
   readonly identity: ServerLockIdentity;
   readonly verify: Effect.Effect<void, ServerLockUnavailable>;
   readonly close: Effect.Effect<void>;
 }
-const NativeIdentity = Schema.Struct({ revision: Schema.Literal(HAWDB_REVISION), abi: Schema.Literal(HAWDB_ABI) });
-const bindings = new Map<string, ServerLockBinding>();
-const rejected = new Map<string, { readonly cause: unknown; readonly retryAt: number }>();
-function load(runtime: RuntimeEnvironmentSnapshot): ServerLockBinding {
-  const directory = join(nativeArtifactRoot(runtime), hawdbTarget());
-  let binary = join(directory, 'hawdb.node'), manifest = '', binaryDigest: string | undefined;
-  try { binary = realpathSync(binary); } catch { /* Verification reports missing binaries. */ }
-  try { manifest = readFileSync(join(directory, 'artifact.json'), 'utf8'); binaryDigest = decodeNativeArtifact(JSON.parse(manifest)).binarySha256; } catch { /* Verification reports missing metadata. */ }
-  const identities = ['hawdb.node', 'artifact.json', 'THIRD-PARTY-NOTICES.txt'].map(name => { try { return nativeFileIdentity(join(directory, name)); } catch { return null; } });
-  const selection = JSON.stringify([binary, binaryDigest ?? createHash('sha256').update(manifest).digest('hex'), sourceInstallation && runtime.env.CONCORD_NATIVE_TEST_HOOKS === '1', identities]);
-  const rejection = rejected.get(selection);
-  if (rejection && performance.now() < rejection.retryAt) throw rejection.cause;
-  try { const binding = loadVerified(runtime); rejected.delete(selection); return binding; }
-  catch (cause) { rejected.set(selection, { cause, retryAt: performance.now() + 1000 }); throw cause; }
-}
-function loadVerified(runtime: RuntimeEnvironmentSnapshot): ServerLockBinding {
-  if (sourceInstallation) verifySourceNativeArtifact(runtime);
-  const target = hawdbTarget(), directory = join(nativeArtifactRoot(runtime), target);
-  const artifact = decodeNativeArtifact(JSON.parse(readFileSync(join(directory, 'artifact.json'), 'utf8')));
-  const binary = realpathSync(join(directory, 'hawdb.node'));
-  if (!sourceInstallation && artifact.testHooks) throw new Error('Test-hook native artifact cannot be installed');
-  const hash = nativeFileDigest;
-  const binaryDigest = hash(binary);
-  if (artifact.target !== target || artifact.binarySha256 !== binaryDigest || artifact.noticesSha256 !== hash(join(directory, 'THIRD-PARTY-NOTICES.txt'))) {
-    throw new Error('Native server lock artifact digest differs');
-  }
-  const key = JSON.stringify([binary, binaryDigest, artifact.testHooks ?? false]);
-  const prior = bindings.get(key);
-  if (prior) return prior;
-  const require = createRequire(import.meta.url);
-  delete require.cache[binary];
-  const loaded = require(binary) as ServerLockBinding;
-  Schema.decodeUnknownSync(NativeIdentity, { onExcessProperty: 'error' })(loaded.nativeIdentity());
-  if (typeof loaded.ServerLock !== 'function') throw new Error('Native artifact has no server lock binding');
-  bindings.set(key, loaded);
-  return loaded;
-}
-const nativeReasons = { ServerLockPermission: 'permission', ServerLockIo: 'io', ServerLockType: 'type', ServerLockIdentity: 'identity', ServerLockClosed: 'closed' } as const;
 function failure(cause: unknown): ServerLockUnavailable | ServerLockHeld {
-  const message = cause instanceof Error ? cause.message : String(cause);
-  const prefix = message.split(':', 1)[0]!;
-  if (prefix === 'ServerLockBusy') return new ServerLockHeld({ message });
-  const reason = Object.hasOwn(nativeReasons, prefix) ? nativeReasons[prefix as keyof typeof nativeReasons] : 'native';
-  return new ServerLockUnavailable({ reason, message });
+  if (cause instanceof FileLockFailure) return cause.reason === 'busy'
+    ? new ServerLockHeld({ message: cause.message })
+    : new ServerLockUnavailable({ reason: cause.reason, message: cause.message });
+  return new ServerLockUnavailable({ reason: 'native', message: cause instanceof Error ? cause.message : String(cause) });
 }
 /** The caller creates the canonical server directory before admission. */
 export const acquireServerLock = Effect.fn('acquireServerLock')(function*(serverDirectory: string) {
-  const runtime = yield* RuntimeEnvironment;
-  return yield* Effect.try({
-    try: (): ServerLockHandle => {
-      const directory = Schema.decodeUnknownSync(Schema.String)(serverDirectory);
-      const native: NativeServerLock = new (load(runtime).ServerLock)(directory);
-      try {
-        const identity = Schema.decodeUnknownSync(Identity, { onExcessProperty: 'error' })(native.identity());
-        return {
-          identity,
-          verify: Effect.try({ try: () => native.verify(), catch: cause => {
-            const error = failure(cause);
-            return error._tag === 'ServerLockHeld' ? new ServerLockUnavailable({ reason: 'native', message: error.message }) : error;
-          } }),
-          close: Effect.sync(() => native.close()),
-        };
-      } catch (cause) { native.close(); throw cause; }
-    },
-    catch: failure,
-  });
+  return yield* Effect.try({ try: (): ServerLockHandle => {
+    const lock = acquireFileLock(join(serverDirectory, 'lock'));
+    return { identity: lock.identity, verify: Effect.try({ try: lock.verify, catch: cause => {
+      const error = failure(cause);
+      return error._tag === 'ServerLockHeld' ? new ServerLockUnavailable({ reason: 'native', message: error.message }) : error;
+    } }), close: Effect.sync(lock.close) };
+  }, catch: failure });
 });
-/** Scoped callers cannot leak the OS lock on failure, interruption or exit. */
 export const scopedServerLock = (serverDirectory: string) => Effect.acquireRelease(acquireServerLock(serverDirectory), handle => handle.close);

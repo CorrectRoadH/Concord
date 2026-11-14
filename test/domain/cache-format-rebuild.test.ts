@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, Layer } from 'effect';
-import { PersistentCache, openHawdb, acquireHawdbClearGuard } from '../../src/base/cache/index.ts';
+import { PersistentCache, openHawdb, acquireHawdbClearGuard, HawdbFailure } from '../../src/base/cache/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { Workspace, WorkspaceContext } from '../../src/base/workspace/index.ts';
 import { Sources } from '../../src/base/sources/index.ts';
+import { verifiedHawdbLibrary } from '../../src/base/installation/index.ts';
+import { loadHawDB } from '@nowledge/hawdb-bun';
 import { createConsumer } from '../support/consumer.ts';
 
 const live = Layer.mergeAll(PersistentCache.layer, Workspace.layer, Sources.layer).pipe(Layer.provide(NodeServices.layer));
@@ -15,31 +17,56 @@ const prepare = (root: string, missing: boolean) => {
   const privateDir = join(root, '.git/concord'), path = join(privateDir, 'cache.hawdb');
   const runtime = makeRuntimeEnvironment(root, process.env);
   const database = openHawdb(path, { create: true, readOnly: false }, runtime);
-  try { database.put('config_cache', [{ key: 'obsolete', payload: 'discard me' }]); } finally { database.close(); }
-  const identity = readFileSync(join(path, 'concord.identity'), 'utf8');
-  if (missing) unlinkSync(join(path, 'concord.identity'));
-  else writeFileSync(join(path, 'concord.identity'), 'incompatible format');
-  return { privateDir, path, runtime, identity };
+  try {
+    database.put('config_cache', [{ key: 'retained', payload: 'preserve until explicit clear' }]);
+    database.atomic(() => {
+      database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v2']);
+      if (!missing) database.sql('INSERT INTO concord_cache_schema (version) VALUES ($1)', ['incompatible format']);
+    });
+  } finally { database.close(); }
+  const evidence = join(path, 'preserve-evidence');
+  writeFileSync(evidence, 'preserve until explicit clear');
+  return { privateDir, path, runtime, evidence };
+};
+const assertPreserved = (fixture: ReturnType<typeof prepare>) => {
+  assert.equal(readFileSync(fixture.evidence, 'utf8'), 'preserve until explicit clear');
+  const library = loadHawDB(verifiedHawdbLibrary(fixture.runtime).binary);
+  try {
+    const database = library.open(fixture.path, { readOnly: true });
+    try {
+      const rows = database.querySQL('SELECT payload FROM concord_cache_entries WHERE namespace = $1 AND cache_key = $2', ['config_cache', 'retained']).dicts();
+      assert.equal(rows.length, 1);
+      const payload = rows[0]?.payload;
+      assert.ok(payload instanceof Uint8Array);
+      assert.equal(new TextDecoder('utf-8', { fatal: true }).decode(payload), 'preserve until explicit clear');
+    } finally { database.close(); }
+  } finally { library.close(); }
 };
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#hit
-test('the workspace persistent owner rebuilds missing and incompatible cache identities', async () => {
+test('the workspace owner preserves missing or incompatible schemas until explicit clear', async () => {
   for (const missing of [true, false]) {
     const root = (await createConsumer());
     try {
       const f = prepare(root, missing);
       await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
         const owner = yield* PersistentCache.owner(f.privateDir);
-        yield* owner.open;
+        const opened = yield* Effect.result(owner.open);
+        assert.equal(opened._tag, 'Failure');
+        if (opened._tag === 'Failure') assert.equal(opened.failure.code, 'HawdbIncompatible');
+        const snapshot = yield* Effect.result(owner.snapshot);
+        assert.equal(snapshot._tag, 'Failure', 'an incompatible database cannot supply a valid empty observation');
+        assertPreserved(f);
+        yield* owner.clear;
         assert.deepEqual((yield* owner.snapshot).config_cache, []);
-        assert.equal(readFileSync(join(f.path, 'concord.identity'), 'utf8'), f.identity);
+        assert.equal(existsSync(f.evidence), false, 'only explicit clear discards the preserved database');
       })).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, f.runtime)));
     } finally { rmSync(root, { recursive: true, force: true }); }
   }
 });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#hit
-test('source snapshot writes rebuild incompatible cache identities while readonly opens preserve them', async () => {
+test('source snapshot reads and writes reject incompatible schemas without deleting data', async () => {
   for (const missing of [true, false]) {
     const root = (await createConsumer());
     try {
@@ -50,18 +77,19 @@ test('source snapshot writes rebuild incompatible cache identities while readonl
         const read = yield* sources.snapshot(cache.read(f.privateDir, 'config_cache')).pipe(Effect.provideService(WorkspaceContext, context), Effect.result);
         assert.equal(read._tag, 'Failure');
         if (read._tag === 'Failure') assert.equal(read.failure.code, 'HawdbIncompatible');
-        assert.equal(existsSync(join(f.path, 'concord.identity')), !missing);
-        yield* sources.snapshot(cache.update(f.privateDir, 'config_cache', 'current', () => 'rebuilt')).pipe(Effect.provideService(WorkspaceContext, context));
-        const rows = yield* sources.snapshot(cache.read(f.privateDir, 'config_cache')).pipe(Effect.provideService(WorkspaceContext, context));
-        assert.deepEqual(rows.map(row => ({ key: row.key, payload: row.payload })), [{ key: 'current', payload: 'rebuilt' }]);
-        assert.equal(readFileSync(join(f.path, 'concord.identity'), 'utf8'), f.identity);
+        let computed = false;
+        const write = yield* sources.snapshot(cache.update(f.privateDir, 'config_cache', 'current', () => { computed = true; return 'rebuilt'; })).pipe(Effect.provideService(WorkspaceContext, context), Effect.result);
+        assert.equal(write._tag, 'Failure');
+        if (write._tag === 'Failure') assert.equal(write.failure.code, 'HawdbIncompatible');
+        assert.equal(computed, false, 'an inadmissible persistent write cannot run its update callback');
+        assertPreserved(f);
       }).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, f.runtime)));
     } finally { rmSync(root, { recursive: true, force: true }); }
   }
 });
 
 // @feature docs/feature/local-data-engine/architecture.md#句柄与打开模式
-test('cache rebuild refuses another clear owner and preserves the incompatible directory', async () => {
+test('explicit clear refuses another clear owner and preserves the incompatible directory', async () => {
   const root = (await createConsumer());
   try {
     const f = prepare(root, false);
@@ -72,7 +100,13 @@ test('cache rebuild refuses another clear owner and preserves the incompatible d
         const result = yield* Effect.result(owner.open);
         assert.equal(result._tag, 'Failure');
         if (result._tag === 'Failure') assert.equal(result.failure.code, 'HawdbBusy');
-        assert.equal(readFileSync(join(f.path, 'concord.identity'), 'utf8'), 'incompatible format');
+        const clearing = yield* Effect.result(owner.clear);
+        assert.equal(clearing._tag, 'Failure');
+        if (clearing._tag === 'Failure') {
+          assert.ok(clearing.failure instanceof HawdbFailure);
+          assert.equal(clearing.failure.code, 'HawdbBusy');
+        }
+        assert.equal(readFileSync(f.evidence, 'utf8'), 'preserve until explicit clear');
       })).pipe(Effect.provide(live), Effect.provideService(RuntimeEnvironment, f.runtime)));
     } finally { guard.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }

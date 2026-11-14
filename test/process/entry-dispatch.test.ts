@@ -25,10 +25,10 @@ test('importing every CLI and worker entry leaves the host and lifecycle listene
   const paths = [
     'cli/entry.ts', 'cli/run.ts', 'cli/entry-full.ts', 'compiled/run.ts',
     'server/compute-worker.ts', 'server/editor-worker.ts', 'server/query-refresh-worker.ts',
-    'server/query-scan-worker.ts', 'server/view-scan-worker.ts', 'server/cache-maintenance-worker.ts',
+    'server/query-scan-worker.ts', 'server/view-scan-worker.ts',
     'server/test-adapter-vitest.ts', 'server/operation/main.ts',
     'server/compute-worker-main.ts', 'server/editor-worker-main.ts', 'server/query-refresh-worker-main.ts',
-    'server/query-scan-worker-main.ts', 'server/view-scan-worker-main.ts', 'server/cache-maintenance-worker-main.ts',
+    'server/query-scan-worker-main.ts', 'server/view-scan-worker-main.ts',
     'server/test-adapter-vitest-main.ts', 'server/operation/run.ts',
   ].map(path => new URL(`../../src/entry/${path}`, import.meta.url).href);
   const probe = `

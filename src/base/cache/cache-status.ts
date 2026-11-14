@@ -5,14 +5,13 @@ import { hawdbIdentity, type HawdbDatabase } from './hawdb-native.ts';
 import { decodeEnvelope } from '../../model/index.ts';
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { packageRoot } from '../installation/index.ts';
-import { CACHE_MAINTENANCE_THRESHOLD_BYTES } from '../installation/index.ts';
 
-export interface CacheStatus { readonly status: string; readonly path: string; readonly detail?: string; readonly sourceDigest?: string; readonly physicalBytes: number | null; readonly reclaimThresholdBytes: number }
+export interface CacheStatus { readonly status: string; readonly path: string; readonly detail?: string; readonly sourceDigest?: string; readonly physicalBytes: number | null }
 
 /** The owner supplies access; inspecting status never acquires a second handle. */
 export function inspectCacheStatus(privateDir: string, enabled: boolean, access: () => Pick<HawdbDatabase, 'namespaces' | 'scan'>, release: () => void = () => {}, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})): CacheStatus {
   const path = cacheDatabasePath(privateDir);
-  const inspect = (): Omit<CacheStatus, 'physicalBytes' | 'reclaimThresholdBytes'> => {
+  const inspect = (): Omit<CacheStatus, 'physicalBytes'> => {
     try {
       const inventory = inspectCacheClear(privateDir);
       hawdbIdentity(runtime);
@@ -28,6 +27,6 @@ export function inspectCacheStatus(privateDir: string, enabled: boolean, access:
   };
   let report: ReturnType<typeof inspect>;
   try { report = inspect(); } finally { release(); }
-  try { return { ...report, physicalBytes: cachePhysicalBytes(privateDir), reclaimThresholdBytes: CACHE_MAINTENANCE_THRESHOLD_BYTES }; }
-  catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause), physicalBytes: null, reclaimThresholdBytes: CACHE_MAINTENANCE_THRESHOLD_BYTES }; }
+  try { return { ...report, physicalBytes: cachePhysicalBytes(privateDir) }; }
+  catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause), physicalBytes: null }; }
 }

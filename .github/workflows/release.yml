@@ -34,8 +34,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
-    env:
-      MACOSX_DEPLOYMENT_TARGET: '15.0'
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -46,8 +44,8 @@ jobs:
       - run: bun install --frozen-lockfile --ignore-scripts
       - name: Verify native ownership, clear and recovery on the target host
         run: |
-          bun scripts/prepare-native.ts --test-hooks
-          CONCORD_NATIVE_TEST_HOOKS=1 bun test --no-env-file --config=/dev/null --timeout=300000 ./test/process/hawdb-native.test.ts
+          bun scripts/prepare-native.ts
+          bun test --no-env-file --config=/dev/null --timeout=300000 ./test/process/hawdb-native.test.ts
       - name: Download the pinned host engine
         run: bun scripts/prepare-native.ts --output native-artifacts --require-portable
       - name: Verify Darwin native signature and sign official ripgrep

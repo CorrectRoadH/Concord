@@ -1,33 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, type HawdbTarget } from './hawdb-native-contract.ts';
+import { NativeArtifactInvalid, HAWDB_REVISION, HAWDB_VERSION, HAWDB_TARGETS, NativeDigest, type HawdbTarget } from './hawdb-native-contract.ts';
 import { packageRoot } from './location.ts';
 
-const Digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
-const Commit = Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u));
-// Unlike $, the end boundary also rejects a final line terminator.
-const EngineVersion = Schema.String.check(Schema.isPattern(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?![\s\S])/u));
-const ReleaseVersion = Schema.String.check(Schema.isPattern(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-concord\.[1-9]\d*)?(?![\s\S])/u));
+const Version = Schema.String.check(Schema.isPattern(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?![\s\S])/u));
 const Asset = Schema.Struct({
-  target: Schema.Literals(HAWDB_TARGETS), testHooks: Schema.Boolean, name: Schema.String,
-  archiveSha256: Digest, binarySha256: Digest, noticesSha256: Digest,
+  target: Schema.Literals(HAWDB_TARGETS), upstreamTarget: Schema.Literals(['aarch64-apple-darwin', 'x86_64-unknown-linux-gnu']), name: Schema.String,
+  archiveSha256: NativeDigest, manifestSha256: NativeDigest, binarySha256: NativeDigest, headerSha256: NativeDigest, licenseSha256: NativeDigest,
 });
 export const NativeReleaseSchema = Schema.Struct({
-  format: Schema.Literal('concord.native-release/v1'), repository: Schema.Literal('CorrectRoadH/hawdb'),
-  version: ReleaseVersion, tag: Schema.String, producerCommit: Commit, engineVersion: EngineVersion,
-  revision: Commit, abi: Schema.Literal(HAWDB_ABI),
-  sourceDigest: Digest, cargoLockDigest: Digest, assets: Schema.Array(Asset),
+  format: Schema.Literal('concord.native-release/v2'), repository: Schema.Literal('nowledge-co/hawdb'),
+  version: Version, tag: Schema.String, revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}(?![\s\S])/u)), assets: Schema.Array(Asset),
 });
-export type NativeRelease = Schema.Schema.Type<typeof NativeReleaseSchema>;
+export type NativeRelease = typeof NativeReleaseSchema.Type;
 export function decodeNativeRelease(value: unknown): NativeRelease {
   const release = Schema.decodeUnknownSync(NativeReleaseSchema, { onExcessProperty: 'error' })(value);
-  if (release.revision !== HAWDB_REVISION || release.version.split('-')[0] !== release.engineVersion || release.tag !== `hawdb-${release.version}` || release.assets.length !== 4) throw new Error('HawdbIncompatible: invalid native release version or assets');
-  for (const target of HAWDB_TARGETS) for (const testHooks of [false, true]) {
-    const assets = release.assets.filter(asset => asset.target === target && asset.testHooks === testHooks);
-    if (assets.length !== 1 || assets[0]!.name !== `hawdb-${target}${testHooks ? '-test-hooks' : ''}.tar.gz`) throw new Error('HawdbIncompatible: invalid native release target/mode');
+  if (release.revision !== HAWDB_REVISION || release.version !== HAWDB_VERSION || release.tag !== `v${release.version}` || release.assets.length !== 2) throw new NativeArtifactInvalid({ message: 'HawdbIncompatible: invalid native release version or assets' });
+  for (const target of HAWDB_TARGETS) {
+    const assets = release.assets.filter(asset => asset.target === target);
+    const upstream = target === 'darwin-arm64' ? 'aarch64-apple-darwin' : 'x86_64-unknown-linux-gnu';
+    if (assets.length !== 1 || assets[0]!.upstreamTarget !== upstream || assets[0]!.name !== `hawdb-ffi-${release.version}-${upstream}.tar.gz`) throw new NativeArtifactInvalid({ message: 'HawdbIncompatible: invalid native release target' });
   }
   return release;
 }
 export const readNativeRelease = (checkout = packageRoot): NativeRelease => decodeNativeRelease(JSON.parse(readFileSync(join(checkout, 'native-release.json'), 'utf8')));
-export const nativeReleaseAsset = (release: NativeRelease, target: HawdbTarget, testHooks: boolean): NativeRelease['assets'][number] => release.assets.find(asset => asset.target === target && asset.testHooks === testHooks)!;
+export const nativeReleaseAsset = (release: NativeRelease, target: HawdbTarget): NativeRelease['assets'][number] => release.assets.find(asset => asset.target === target)!;

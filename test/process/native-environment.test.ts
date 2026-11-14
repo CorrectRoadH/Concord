@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { createMemoryHawdb, verifyHawdbArtifact } from '../../src/base/cache/index.ts';
-import { hawdbTarget, nativeArtifactRoot } from '../../src/base/installation/index.ts';
+import { hawdbLibraryName, hawdbTarget, nativeArtifactRoot } from '../../src/base/installation/index.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
@@ -31,7 +31,7 @@ test('native selection preserves caller cwd and isolates A, damaged B, repaired 
       assert.throws(() => database.get('document_parse', ['caller']), { code: 'HawdbClosed' });
     };
     memory(a); memory(b);
-    const binary = join(nativeArtifactRoot(b), hawdbTarget(), 'hawdb.node');
+    const binary = join(nativeArtifactRoot(b), hawdbTarget(), hawdbLibraryName(hawdbTarget()));
     const bytes = readFileSync(binary), before = statSync(binary);
     const damaged = Buffer.from(bytes);
     damaged[damaged.length - 1] = damaged[damaged.length - 1]! ^ 1;
@@ -39,8 +39,8 @@ test('native selection preserves caller cwd and isolates A, damaged B, repaired 
     writeFileSync(binary + '.next', damaged);
     utimesSync(binary + '.next', before.atime, before.mtime);
     renameSync(binary + '.next', binary);
-    assert.throws(() => verifyHawdbArtifact(b), { code: 'HawdbIncompatible' });
-    assert.throws(() => createMemoryHawdb(b), { code: 'HawdbIncompatible' });
+    assert.throws(() => verifyHawdbArtifact(b), { code: 'HawdbUnavailable' });
+    assert.throws(() => createMemoryHawdb(b), { code: 'HawdbUnavailable' });
     memory(a);
     writeFileSync(binary + '.next', bytes); renameSync(binary + '.next', binary);
     verifyHawdbArtifact(b); memory(b); memory(a);

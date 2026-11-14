@@ -1,24 +1,13 @@
-# Legacy cache fixture
+# Official HawDB lifecycle fixtures
 
-`v0.3.0-cache.tar.gz` contains a closed database created by Concord's public
-bridge pinned to HawDB revision `1e9f76428be6649a18a6f99d75b0ccfef16bf545`.
-It contains table schema 1 and two rows:
+`test/process/hawdb-native.test.ts` is self-contained: its child roles run the
+same TypeScript file through the pinned Bun executable. They use the official
+C ABI to hold an active or lazy database, acquire a real clear guard, or block
+inside a synchronous transaction until the parent terminates the process.
 
-| Namespace | Key | Payload |
-| --- | --- | --- |
-| config_cache | legacy-config | retained Ω config |
-| feedback_cache | legacy-feedback | retained remote observation |
+Every database is created with the current verified official library in a
+private temporary directory. No archived database, fork, compiler or test-hook
+binary is needed. The release workflow can run the file directly on each host.
 
-The archive has no native executable or legacy runtime. Upgrade tests extract it
-into an isolated temporary directory and open it through the current public
-bridge. The fixture tests existing storage adoption, not source-format compatibility.
-
-SHA-256: `a02d9e04ed6ca29d15491535e0806166ac37286638e012abf3d40cecc92454d5`.
-
-`v0.13.0-cache.tar.gz` is a closed schema-1 cache from the bridge pinned to
-HawDB revision `91aec4960ed27516962cf1dc918307f57faef15d`. It contains one
-`code_cache` row: key `v013`, payload `old disposable data`. It verifies
-read-only rejection and guarded replacement when upgrading to v0.28.0.
-It contains data only, with no compiler or executable.
-
-SHA-256: `9ad5fd3c66b9218bfbea2af3211299129480f429770965c32198d52476cfc4b3`.
+`test/fixtures/hawdb-interrupted.ts` writes a committed row and terminates without
+closing its handle, for workspace recovery tests.

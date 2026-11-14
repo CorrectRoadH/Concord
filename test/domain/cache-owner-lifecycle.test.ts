@@ -8,7 +8,6 @@ import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/envir
 import { tmpdir } from '../support/temporary.ts';
 
 // @feature docs/feature/local-data-engine/architecture.md#状态
-// @issue docs/issues/native-open-blocks-service.md
 test('persistent owner opening and closing allow the service event loop to run', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'concord-owner-lifecycle-'));
   const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
@@ -31,8 +30,8 @@ test('persistent owner opening and closing allow the service event loop to run',
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-// @feature docs/feature/local-data-engine/architecture.md#协调锁
-test('interrupting persistent owner acquisition releases the late native handle', async () => {
+// @feature docs/feature/local-data-engine/architecture.md#锁
+test('interrupting persistent owner acquisition releases ownership before returning', async () => {
   const { Fiber } = await import('effect');
   const { acquireHawdbClearGuard } = await import('../../src/base/cache/index.ts');
   const directory = mkdtempSync(join(tmpdir(), 'concord-owner-interrupt-'));
@@ -40,6 +39,8 @@ test('interrupting persistent owner acquisition releases the late native handle'
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const owner = yield* makePersistentCacheOwner(directory);
+      yield* owner.open;
+      yield* owner.close;
       const opening = yield* Effect.forkChild(owner.open);
       yield* Effect.yieldNow;
       yield* Fiber.interrupt(opening);
@@ -51,7 +52,7 @@ test('interrupting persistent owner acquisition releases the late native handle'
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-// @feature docs/feature/local-data-engine/architecture.md#协调锁
+// @feature docs/feature/local-data-engine/architecture.md#锁
 test('concurrent persistent owner closes both wait for native lock release', async () => {
   const { acquireHawdbClearGuard } = await import('../../src/base/cache/index.ts');
   const directory = mkdtempSync(join(tmpdir(), 'concord-owner-closing-'));

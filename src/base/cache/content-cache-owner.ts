@@ -3,7 +3,7 @@
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { RuntimeEnvironment, makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
-import { nativeArtifactRoot, nativeFileIdentity, hawdbTarget } from '../installation/index.ts';
+import { nativeArtifactRoot, nativeFileIdentity, hawdbTarget, hawdbLibraryName } from '../installation/index.ts';
 import { createMemoryHawdb, verifyHawdbArtifact, HawdbFailure, type HawdbDatabase } from './hawdb-native.ts';
 
 const bindings = new WeakMap<RuntimeEnvironmentSnapshot, { readonly owner: ContentCacheOwner; readonly project: string }>();
@@ -12,6 +12,8 @@ const bindings = new WeakMap<RuntimeEnvironmentSnapshot, { readonly owner: Conte
 export class ContentCacheOwner {
   private readonly databases = new Map<string, { readonly selection: string; readonly identity: string; readonly project: string; readonly database: HawdbDatabase }>();
   private closed = false;
+  private readonly native: boolean;
+  constructor(native = true) { this.native = native; }
 
   bind(runtime: RuntimeEnvironmentSnapshot, project = runtime.cwd): RuntimeEnvironmentSnapshot {
     const bound = makeRuntimeEnvironment(runtime.cwd, runtime.env);
@@ -20,9 +22,9 @@ export class ContentCacheOwner {
   }
 
   database(runtime: RuntimeEnvironmentSnapshot, project: string, partition: string): HawdbDatabase | undefined {
-    if (this.closed) return undefined;
+    if (this.closed || !this.native) return undefined;
     const selection = join(nativeArtifactRoot(runtime), hawdbTarget());
-    const fingerprint = () => JSON.stringify([runtime.env.CONCORD_NATIVE_TEST_HOOKS === '1', ...['hawdb.node', 'artifact.json', 'THIRD-PARTY-NOTICES.txt'].map(name => nativeFileIdentity(join(selection, name)))]);
+    const fingerprint = () => JSON.stringify([hawdbLibraryName(hawdbTarget()), 'artifact.json', 'manifest.json', 'include/hawdb_ffi.h', 'LICENSE'].map(name => nativeFileIdentity(join(selection, name))));
     try {
       // Reuse byte/Schema evidence only while every guarded input has the same identity.
       const identity = fingerprint();
@@ -87,8 +89,8 @@ export function ownedContentCache(runtime: RuntimeEnvironmentSnapshot, partition
 }
 
 /** CLI invocations and process roots establish independent scopes, never a global first caller. */
-export const withContentCacheOwner = <A, E, R>(operation: Effect.Effect<A, E, R>) => Effect.scoped(Effect.gen(function*() {
+export const withContentCacheOwner = <A, E, R>(operation: Effect.Effect<A, E, R>, native = true) => Effect.scoped(Effect.gen(function*() {
   const runtime = yield* RuntimeEnvironment;
-  const owner = yield* Effect.acquireRelease(Effect.sync(() => new ContentCacheOwner()), value => Effect.sync(() => value.close()));
+  const owner = yield* Effect.acquireRelease(Effect.sync(() => new ContentCacheOwner(native)), value => Effect.sync(() => value.close()));
   return yield* operation.pipe(Effect.provideService(RuntimeEnvironment, owner.bind(runtime)));
 }));

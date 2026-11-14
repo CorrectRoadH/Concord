@@ -9,9 +9,8 @@ const transitions: Readonly<Record<ServerState, readonly ServerState[]>> = {
   opening: ['opening', 'running', 'degraded', 'draining', 'blocked', 'stopping'],
   running: ['running', 'degraded', 'draining', 'blocked', 'stopping'],
   degraded: ['degraded', 'opening', 'running', 'draining', 'blocked', 'stopping'],
-  draining: ['draining', 'running', 'clearing', 'maintaining', 'blocked', 'stopping'],
+  draining: ['draining', 'opening', 'running', 'clearing', 'blocked', 'stopping'],
   clearing: ['clearing', 'opening', 'blocked', 'stopping'],
-  maintaining: ['maintaining', 'opening', 'blocked', 'stopping'],
   blocked: ['blocked', 'stopping'], stopping: ['stopping'],
 };
 

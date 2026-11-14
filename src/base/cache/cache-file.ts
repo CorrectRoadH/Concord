@@ -22,22 +22,17 @@ export function assertCacheDatabaseSafe(path: string): boolean {
 }
 
 export function cacheRootOwnerOnly(path: string): boolean {
-  if (!assertCacheDatabaseSafe(path)) return false;
-  const names = readdirSync(path);
-  if (names.length !== 1 || names[0] !== 'owner.hawdb.lock') return false;
-  const lock = cacheStat(join(path, 'owner.hawdb.lock'));
-  if (lock === undefined || !lock.isFile() || lock.isSymbolicLink() || lock.nlink !== 1) throw new ConcordError('UnsafePath', 'Cache owner lock must be an unlinked regular file');
-  return true;
+  return assertCacheDatabaseSafe(path) && inspectCacheClear(dirname(path)).empty;
 }
 
 export interface CacheClearInventory { readonly path: string; readonly existing: boolean; readonly empty: boolean; readonly entries: readonly string[] }
 
-interface CacheTreeEntry { readonly dev: bigint; readonly ino: bigint; readonly links: bigint; readonly directory: boolean; readonly bytes: bigint }
+export interface CacheTreeEntry { readonly dev: bigint; readonly ino: bigint; readonly links: bigint; readonly directory: boolean; readonly bytes: bigint }
 const inodeKey = (entry: CacheTreeEntry): string => `${entry.dev}:${entry.ino}`;
 const lockPath = (path: string): boolean => basename(path).endsWith('.lock');
 
 /** Every alias of a regular inode must be inside this cache; lock inodes stay unique. */
-function inspectTree(path: string): Map<string, CacheTreeEntry> {
+export function inspectCacheTree(path: string): Map<string, CacheTreeEntry> {
   const entries = new Map<string, CacheTreeEntry>();
   const links = new Map<string, { reported: bigint; found: bigint }>();
   const pending = [path];
@@ -68,7 +63,7 @@ export function cachePhysicalBytes(privateDir: string): number {
   if (!assertCacheDatabaseSafe(path)) return 0;
   const seen = new Set<string>();
   let bytes = 0n;
-  for (const entry of inspectTree(path).values()) {
+  for (const entry of inspectCacheTree(path).values()) {
     const key = inodeKey(entry);
     if (entry.directory || seen.has(key)) continue;
     seen.add(key); bytes += entry.bytes;
@@ -84,9 +79,9 @@ export function inspectCacheClear(privateDir: string): CacheClearInventory {
   let entries: string[] = [];
   let empty = true;
   if (existing) {
-    const tree = inspectTree(path);
+    const tree = inspectCacheTree(path);
     entries = [...tree.keys()].filter(target => dirname(target) === path && basename(target) !== 'owner.hawdb.lock').sort();
-    empty = entries.length === 0;
+    empty = [...tree].every(([target, entry]) => entry.directory || lockPath(target));
     const lock = cacheStat(join(path, 'owner.hawdb.lock'));
     if (lock !== undefined && (!lock.isFile() || lock.nlink !== 1)) throw new ConcordError('UnsafePath', 'Cache owner lock must be an unlinked regular file');
   }
@@ -101,7 +96,11 @@ export function deleteInspectedCache(inventory: CacheClearInventory, verifyOwner
   verifyOwnership();
   if (!inventory.existing) return;
   safePath(inventory.path);
-  const remaining = inspectTree(inventory.path);
+  const remaining = inspectCacheTree(inventory.path);
+  const retained = new Set<string>();
+  for (const [path, entry] of remaining) if (!entry.directory && lockPath(path)) {
+    for (let ancestor = path; ancestor !== inventory.path; ancestor = dirname(ancestor)) retained.add(ancestor);
+  }
   const links = new Map<string, bigint>();
   for (const entry of remaining.values()) if (!entry.directory) links.set(inodeKey(entry), entry.links);
   const unchanged = (path: string, expected: CacheTreeEntry): void => {
@@ -112,26 +111,24 @@ export function deleteInspectedCache(inventory: CacheClearInventory, verifyOwner
   };
   const verifyRemaining = (): void => {
     verifyOwnership();
-    const current = inspectTree(inventory.path);
+    const current = inspectCacheTree(inventory.path);
     if (current.size !== remaining.size || [...current].some(([path, entry]) => {
       const expected = remaining.get(path);
       return expected === undefined || expected.dev !== entry.dev || expected.ino !== entry.ino || expected.directory !== entry.directory || !entry.directory && entry.links !== links.get(inodeKey(entry));
     })) throw new ConcordError('UnsafePath', 'Cache membership changed during clear');
   };
-  const files = [...remaining].filter(([path, entry]) => !entry.directory && path !== join(inventory.path, 'owner.hawdb.lock')).sort(([a], [b]) => a.localeCompare(b));
-  // Keep every engine lease pathname until all selectors, catalogs and branch heads are gone.
-  for (const locks of [false, true]) {
-    for (const [path, entry] of files) {
-      if (lockPath(path) !== locks) continue;
+  const files = [...remaining].filter(([path, entry]) => !entry.directory && !retained.has(path)).sort(([a], [b]) => a.localeCompare(b));
+  // An external process may have opened a lock inode before attempting flock.
+  // Preserve every lock and its parents even after the data is gone.
+  for (const [path, entry] of files) {
       unchanged(path, entry);
       unlinkSync(path);
       remaining.delete(path);
       const key = inodeKey(entry);
       links.set(key, links.get(key)! - 1n);
-    }
-    verifyRemaining();
   }
-  const directories = [...remaining].filter(([path, entry]) => entry.directory && path !== inventory.path).sort(([a], [b]) => b.split('/').length - a.split('/').length || b.localeCompare(a));
+  verifyRemaining();
+  const directories = [...remaining].filter(([path, entry]) => entry.directory && path !== inventory.path && !retained.has(path)).sort(([a], [b]) => b.split('/').length - a.split('/').length || b.localeCompare(a));
   for (const [path, entry] of directories) {
     unchanged(path, entry);
     if (readdirSync(path).length > 0) throw new ConcordError('UnsafePath', `Cache directory changed during clear: ${path}`);

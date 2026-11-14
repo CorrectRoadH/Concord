@@ -30,7 +30,7 @@ git push origin v0.9.0
 | `runtime/rg` | 固定版本的 ripgrep |
 | `runtime/lib/` | 仅 Linux：归档内 ELF 需要的 glibc 之外的运行库（libatomic、libstdc++） |
 | `licenses/` | Bun 及其嵌入组件、ripgrep、Linux 运行库与运行依赖的许可证文本 |
-| `app/` | 外置工具（TypeScript、esbuild）、该目标的 HawDB 原生绑定与随附资源（Web、Preview、skills、templates） |
+| `app/` | 外置工具（TypeScript、esbuild）、该目标的官方 HawDB 动态库及其清单与安装收据、随附资源（Web、Preview、skills、templates） |
 
 tap 随后包含同版本的 Formula 与 Linux Nix 表达式，引用相同归档与 SHA-256。从任一渠道安装后，`concord --version` 输出标签中的版本。
 

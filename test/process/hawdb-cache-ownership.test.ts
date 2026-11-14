@@ -1,6 +1,6 @@
 // 跨进程保证：原生模块与句柄——native写入进程被SIGKILL后的WAL恢复保留已提交数据并维护ownership inode。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
-import { initialize, runApplication, installedConcordCli, assert, createHash, execFileSync, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, resolve, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, ScanReport, freshConsumer, cli, cacheDiskSnapshot } from './hawdb-cache-fixture.ts';
+import { initialize, runApplication, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, freshConsumer, cli, cacheDiskSnapshot } from './hawdb-cache-fixture.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
@@ -118,6 +118,7 @@ test('clear rejects an ownership inode replacement and a link introduced after i
   for (const mutation of ['owner', 'link']) {
     const root = mkdtempSync(join(tmpdir(), 'concord-clear-race-'));
     const path = join(root, 'cache.hawdb');
+    mkdirSync(path);
     const guard = acquireHawdbClearGuard(path, nativeRuntime);
     try {
       const sentinel = join(root, 'sentinel');
@@ -135,21 +136,20 @@ test('clear rejects an ownership inode replacement and a link introduced after i
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('failed native close still releases the outer repository lease', async () => {
+test('failed repository operation still releases native handles and the outer repository lease', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-hawdb-close-'));
   try {
     execFileSync('git', ['init', '-q', root]);
     const initial = (await LocalRepository.open(root, { initialize: true }));
     try { (await initialize(initial)); } finally { initial.close(); }
     const repo = (await LocalRepository.open(root));
-    const unsafe = join(repo.privateDir, 'cache.hawdb', 'unexpected-link');
+    const failure = new Error('operation failed after native cache write');
     try {
       (await assert.rejects(async () => (await repo.snapshot(async () => {
         PersistentCache.repository(repo).prepareWrite({ create: true });
         (await scanAnnotations(repo));
-        symlinkSync(join(root, 'absent'), unsafe);
-      })), /UnsafePath|symlink/u));
-      rmSync(unsafe);
+        throw failure;
+      })), error => error === failure));
       const reopened = (await LocalRepository.open(root));
       try { assert.equal((await scanAnnotations(reopened)).cache.status, 'hit'); }
       finally { reopened.close(); }
@@ -159,26 +159,28 @@ test('failed native close still releases the outer repository lease', async () =
 
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('identity mismatch is unavailable for reads and the next writable rebuild discards and recreates under the same owner lock', () => runApplication(Effect.tryPromise(async () => {
-  const root = (await freshConsumer());
+test('current schema mismatch preserves cache data until explicit clear and rebuild', () => runApplication(Effect.tryPromise(async () => {
+  const root = await freshConsumer();
   try {
-    const directory = join(root, '.git/concord');
-    mkdirSync(directory, { recursive: true });
-    execFileSync('tar', ['-xzf', resolve('test/fixtures/hawdb/v0.3.0-cache.tar.gz'), '-C', directory]);
+    const directory = join(root, '.git/concord'); mkdirSync(directory, { recursive: true });
     const path = join(directory, 'cache.hawdb');
+    const database = openHawdb(path, { readOnly: false, create: true }, nativeRuntime);
+    database.put('config_cache', [{ key: 'sentinel', payload: 'retain until explicit clear' }]);
+    database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v2']);
+    database.sql('INSERT INTO concord_cache_schema (version) VALUES ($1)', ['incompatible-schema']); database.close();
     const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
-    const manifest = readFileSync(join(path, 'manifest.hawdb'));
     const status = cli(root, 'cache', 'status');
     assert.equal(status.status, 0, status.stdout + status.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CacheReport), { onExcessProperty: 'ignore' })(status.stdout).status, 'unavailable');
-    assert.deepEqual(readFileSync(join(path, 'manifest.hawdb')), manifest);
-    const scan = cli(root, 'cache', 'rebuild');
-    assert.equal(scan.status, 0, scan.stdout + scan.stderr);
+    const rebuild = cli(root, 'cache', 'rebuild');
+    assert.equal(rebuild.status, 1, rebuild.stdout + rebuild.stderr);
+    assert.match(rebuild.stderr, /CacheRebuildUnavailable/u);
+    assert.throws(() => openHawdb(path, { readOnly: true, create: false }, nativeRuntime), { code: 'HawdbIncompatible' });
+    const cleared = cli(root, 'cache', 'clear');
+    assert.equal(cleared.status, 0, cleared.stdout + cleared.stderr);
+    const rebuilt = cli(root, 'cache', 'rebuild'); assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     const current = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
-    try {
-      assert.equal(current.scan('config_cache').some(entry => entry.key === 'legacy-config'), false);
-      assert.deepEqual(current.scan('feedback_cache'), []);
-    }
+    try { assert.deepEqual(current.get('config_cache', ['sentinel']), []); assert.deepEqual(current.scan('feedback_cache'), []); }
     finally { current.close(); }
     assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
   } finally { rmSync(root, { recursive: true, force: true }); }

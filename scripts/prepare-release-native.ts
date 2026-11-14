@@ -5,7 +5,7 @@ import { Effect, FileSystem, Schema } from 'effect';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { decodeNativeArtifact } from '../src/base/installation/index.ts';
+import { verifyNativeArtifactDirectory } from '../src/base/installation/index.ts';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 const Digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
@@ -23,6 +23,7 @@ const runNativeTool = Effect.fn('release.nativeTool')(function*(argv: readonly [
 export const signDarwinReleaseNative = Effect.fn('release.signDarwinNative')(function*(artifacts: string, repository = process.cwd()) {
   if (process.platform !== 'darwin' || process.arch !== 'arm64') return yield* new NativeReleaseInvalid({ message: 'Darwin release signing requires an Apple Silicon host' });
   const fs = yield* FileSystem.FileSystem;
+  const metadataTarget = 'darwin-arm64';
   const root = resolve(artifacts, 'darwin-arm64');
   const deps = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(RuntimeDependencies), { onExcessProperty: 'error' })(yield* fs.readFileString(join(repository, 'runtime-deps.json')));
   const config = deps.ripgrep.targets['darwin-arm64'];
@@ -32,20 +33,17 @@ export const signDarwinReleaseNative = Effect.fn('release.signDarwinNative')(fun
   if (createHash('sha256').update(yield* fs.readFile(archive)).digest('hex') !== config.sha256) return yield* new NativeReleaseInvalid({ message: 'Official ripgrep archive checksum differs' });
   yield* runNativeTool(['tar', '-xzf', archive, '-C', scratch], scratch);
   const extracted = join(scratch, config.asset.replace(/\.tar\.gz$/u, ''));
-  const metadataPath = join(root, 'artifact.json');
-  const metadataText = yield* fs.readFileString(metadataPath);
-  const metadata = yield* Effect.try({ try: () => decodeNativeArtifact(JSON.parse(metadataText)), catch: cause => new NativeReleaseInvalid({ message: `Invalid native identity: ${String(cause)}` }) });
-  if (metadata.target !== 'darwin-arm64' || !metadata.portable || metadata.testHooks) return yield* new NativeReleaseInvalid({ message: 'Only a portable production Darwin native artifact can be signed' });
-  const binary = join(root, 'hawdb.node');
-  if (createHash('sha256').update(yield* fs.readFile(binary)).digest('hex') !== metadata.binarySha256) return yield* new NativeReleaseInvalid({ message: 'Native binary checksum differs before signing' });
-  yield* fs.copyFile(join(extracted, 'rg'), join(root, 'rg'));
-  for (const name of ['LICENSE-MIT', 'COPYING']) yield* fs.copyFile(join(extracted, name), join(root, name));
+  const { binary } = yield* Effect.try({ try: () => verifyNativeArtifactDirectory(root, 'darwin-arm64'), catch: cause => new NativeReleaseInvalid({ message: String(cause) }) });
+  const runtimeRoot = resolve(artifacts, 'runtime', metadataTarget);
+  yield* fs.makeDirectory(runtimeRoot, { recursive: true });
+  yield* fs.copyFile(join(extracted, 'rg'), join(runtimeRoot, 'rg'));
+  for (const name of ['LICENSE-MIT', 'COPYING']) yield* fs.copyFile(join(extracted, name), join(runtimeRoot, name));
   yield* runNativeTool(['codesign', '--verify', '--strict', binary], scratch);
-  for (const file of [join(root, 'rg')]) {
+  for (const file of [join(runtimeRoot, 'rg')]) {
     yield* runNativeTool(['codesign', '--force', '--sign', '-', file], scratch);
     yield* runNativeTool(['codesign', '--verify', '--strict', file], scratch);
   }
-  yield* fs.writeFileString(join(root, 'rg-runtime.json'), `${JSON.stringify({ format: 'concord.signed-rg/v1', target: 'darwin-arm64', version: deps.ripgrep.version, asset: config.asset, upstreamSha256: config.sha256, binarySha256: createHash('sha256').update(yield* fs.readFile(join(root, 'rg'))).digest('hex') }, null, 2)}\n`);
+  yield* fs.writeFileString(join(runtimeRoot, 'rg-runtime.json'), `${JSON.stringify({ format: 'concord.signed-rg/v1', target: 'darwin-arm64', version: deps.ripgrep.version, asset: config.asset, upstreamSha256: config.sha256, binarySha256: createHash('sha256').update(yield* fs.readFile(join(runtimeRoot, 'rg'))).digest('hex') }, null, 2)}\n`);
 }, Effect.scoped);
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

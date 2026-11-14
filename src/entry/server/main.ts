@@ -13,7 +13,7 @@ import { Publication } from "../../base/publication/index.ts";
 import { PublicationValidationLive } from "../../app/index.ts";
 import { Workspace } from '../../base/workspace/index.ts';
 import { Sources, type SourceWatch } from '../../base/sources/index.ts';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../base/cache/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, ContentCacheOwner } from '../../base/cache/index.ts';
 import type { ReadonlyCacheSnapshot } from '../../base/cache/index.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
 import type { ChildProcessSpawner } from 'effect/process';
@@ -47,7 +47,7 @@ import { startHostedViewServer, type HostedViewPorts } from '../http/index.ts';
 import { FeedbackCacheWriter } from '../../base/cache/index.ts';
 import { mergeLocalFeedbackObservation } from '../../domain/feedback/index.ts';
 import type { RemoteFeedback } from '../../model/index.ts';
-import { clearWorkspaceCache, decodeViewAction, maintainCache, cacheMaintenanceNeeded } from '../../app/index.ts';
+import { clearWorkspaceCache, decodeViewAction, KnowledgeSearch, makeKnowledgeSearchOwner } from '../../app/index.ts';
 import { Snapshot } from './computation.ts';
 import { assertWorkspacePublicationReady } from '../../app/index.ts';
 import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.ts';
@@ -331,52 +331,63 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     yield* runtime.publish('opening');
     const persistent = yield* PersistentCache;
     const cache = yield* PersistentCache.owner(privateDir);
-    const cacheSnapshot = cache.snapshot.pipe(Effect.catch(cause => {
+    const runCache = async <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal): Promise<A> => {
+      const outcome = await Effect.runPromise(Effect.result(operation), { signal });
+      if (outcome._tag === 'Failure') throw outcome.failure;
+      return outcome.success;
+    };
+    const searchOwner = makeKnowledgeSearchOwner({
+      search: (input, signal) => runCache(cache.search(input), signal),
+      discard: (kind, memory, signal) => runCache(cache.discardSearch(kind, memory), signal),
+    });
+    const sourceParsers = new ContentCacheOwner(false);
+    yield* Effect.addFinalizer(() => Effect.sync(() => sourceParsers.close()));
+    const searchQuery = (request: AppTypes.QueryRequest, mode: 'use' | 'off', environment: RuntimeEnvironmentSnapshot) => Effect.scoped(Effect.gen(function*() {
+      const requestRuntime = sourceParsers.bind(environment, root);
+      const services = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Git.layer).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
+      const context = yield* Layer.build(services).pipe(Effect.provideService(RuntimeEnvironment, requestRuntime));
+      return yield* executeQuery(root, request, mode).pipe(Effect.provideContext(context), Effect.provideService(RuntimeEnvironment, requestRuntime), Effect.provideService(PersistentCache, persistent), Effect.provideService(KnowledgeSearch, searchOwner), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }));
+    }));
+    const snapshot = (background = false) => (background ? cache.backgroundSnapshot : cache.snapshot).pipe(Effect.catch(cause => {
       const error = workspaceServerFailure(cause);
       const code = Schema.decodeUnknownExit(CacheSnapshotUnavailable.fields.code)(error.code);
       return Effect.succeed<ReadonlyCacheSnapshot>({ unavailable: { code: code._tag === 'Success' ? code.value : 'HawdbUnavailable', message: error.message } });
     }));
+    const cacheSnapshot = snapshot();
     const protocolReady = yield* Deferred.make<void>();
-    const owned = <A, E, R>(operation: Effect.Effect<A, E, R | PersistentCache>) => operation.pipe(Effect.provideService(PersistentCache, cache.service));
+    const owned = <A, E, R>(operation: Effect.Effect<A, E, R | PersistentCache>, background = false) => operation.pipe(Effect.provideService(PersistentCache, background ? cache.backgroundService : cache.service));
     const context = workspaceProjectionContext(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(RuntimeEnvironment, execution));
     const sources = yield* Sources;
     let watch: SourceWatch | undefined;
     const stateContext = yield* Layer.build(WorkspaceState.layer(runtime.token));
-    const acceptDerived = (rows: readonly CacheDerivationBatch[]) => cache.mergeDerived(rows).pipe(Effect.catch(cause => {
+    const acceptDerived = (rows: readonly CacheDerivationBatch[], background = false) => cache.mergeDerived(rows, background).pipe(Effect.catch(cause => {
       const error = workspaceServerFailure(cause);
       return Context.get(stateContext, WorkspaceState).transition('degraded', { code: error.code, message: error.message });
     }));
     const operations = yield* makeOperationOwner(root, cacheSnapshot, acceptDerived);
     const computation = yield* makeComputationOwner(root, acceptDerived, 'foreground', pid => cleaning('foreground-computation', pid));
     const cachePermit = yield* Semaphore.make(1);
-    const backgroundComputation = yield* makeComputationOwner(root, batches => cachePermit.withPermit(acceptDerived(batches)), 'background', pid => cleaning('background-computation', pid));
+    const backgroundComputation = yield* makeComputationOwner(root, batches => cachePermit.withPermit(acceptDerived(batches, true)), 'background', pid => cleaning('background-computation', pid));
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
       health: cache.verify,
       context,
       sourceDigest: backgroundComputation.run({ kind: 'source-digest' }).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(Schema.String)(value)), Effect.mapError(failure)),
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources), Effect.provideService(RuntimeEnvironment, execution)),
-      restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } })), Effect.provideService(RuntimeEnvironment, execution)),
-      persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt)).pipe(Effect.provideService(RuntimeEnvironment, execution)),
-      compute: operation => (operation.kind === 'scan' ? cachePermit.withPermit(cacheSnapshot) : cacheSnapshot).pipe(Effect.flatMap(snapshot => (operation.kind === 'scan' ? backgroundComputation : computation).run(operation, snapshot))),
+      restore: ctx => owned(readWorkspaceProjection(ctx), true).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } })), Effect.provideService(RuntimeEnvironment, execution)),
+      persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt), true).pipe(Effect.provideService(RuntimeEnvironment, execution)),
+      compute: operation => (operation.kind === 'scan' ? cachePermit.withPermit(snapshot(true)) : cacheSnapshot).pipe(Effect.flatMap(snapshot => (operation.kind === 'scan' ? backgroundComputation : computation).run(operation, snapshot))),
       open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open), Effect.andThen(computation.open), Effect.andThen(backgroundComputation.open)),
+      beforeClear: operations.pause.pipe(Effect.andThen(operations.drain), Effect.andThen(computation.close), Effect.andThen(backgroundComputation.close)),
       close: SubscriptionRef.get(Context.get(stateContext, WorkspaceState).value).pipe(Effect.flatMap(value => value.state === 'stopping'
-        ? cleaning('operations').pipe(Effect.andThen(operations.close)) : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(backgroundComputation.close), Effect.andThen(cleaning('cache')), Effect.andThen(cache.close), Effect.andThen(cleaning('resources'))),
-      clear: clearWorkspaceCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))), Effect.provideService(RuntimeEnvironment, execution)),
+        ? cleaning('operations').pipe(Effect.andThen(operations.close)) : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(backgroundComputation.close), Effect.andThen(cleaning('cache')), Effect.andThen(cache.close), Effect.ensuring(Effect.sync(() => searchOwner.invalidate())), Effect.andThen(cleaning('resources'))),
+      clear: clearWorkspaceCache(root, () => runCache(cache.clear)).pipe(Effect.ensuring(Effect.sync(() => searchOwner.invalidate())), Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))), Effect.provideService(RuntimeEnvironment, execution)),
       foregroundPending: admission.pending,
       cachePermit,
-      maintenance: {
-        needed: cacheMaintenanceNeeded(privateDir).pipe(Effect.provideService(RuntimeEnvironment, execution)),
-        run: Effect.uninterruptibleMask(restore => Effect.gen(function*() {
-          yield* cache.close;
-          const outcome = yield* Effect.exit(restore(maintainCache(root)));
-          yield* cache.open;
-          if (outcome._tag === 'Failure') return yield* Effect.failCause(outcome.cause);
-        })).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(PersistentCache, persistent), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))), Effect.provideService(RuntimeEnvironment, execution)),
-      },
       exists: Effect.sync(() => existsSync(root) && existsSync(privateDir)),
       reconcile: candidate => watch ? watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources) : Effect.succeed(false),
     }).pipe(Effect.provideContext(stateContext));
+    yield* Effect.forkScoped(cache.failed.pipe(Effect.andThen(service.stop)));
     if (commandScope) {
       const disconnected = yield* Deferred.make<void>();
       yield* Effect.acquireRelease(Effect.sync(() => {
@@ -424,7 +435,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
           const action = decodeViewAction(input);
           const maintenance: Effect.Effect<unknown, unknown> | undefined = action.action === 'cache.status' ? service.maintain(cache.status)
             : action.action === 'cache.rebuild' ? rebuildOwnedCache : undefined;
-          const value = action.action === 'cache.clear' && !action.dryRun ? await runAdmitted(service.clear, signal) : maintenance ? await runAdmitted(maintenance, signal) : await runOperation({ kind: 'action', input: action }, signal);
+          const value = action.action === 'memory.search' || action.action === 'issue.search'
+            ? (await runAdmitted(service.operate(searchQuery({ name: action.action, input: { query: action.query } }, 'use', execution)), signal)).value
+            : action.action === 'cache.clear' && !action.dryRun ? await runAdmitted(service.clear, signal) : maintenance ? await runAdmitted(maintenance, signal) : await runOperation({ kind: 'action', input: action }, signal);
           await run(service.request); return value;
         },
         sse,
@@ -467,7 +480,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       let requeue = false;
       // A scan owns a subprocess, not the foreground computation permit. Track
       // its lifetime so clear waits for publication and shutdown reaps it.
-      const scan = service.operate(owned(refreshDiagnosticQuery(root, query, Date.now(), 120_000, runtime.verify.pipe(Effect.mapError(failure))))).pipe(
+      const scan = service.operate(owned(refreshDiagnosticQuery(root, query, Date.now(), 120_000, runtime.verify.pipe(Effect.mapError(failure))), true)).pipe(
         Effect.provide(Workspace.layer), Effect.provideService(RuntimeEnvironment, requestRuntime),
         Effect.provideService(QueryRefreshRequest, { request: () => Effect.sync(() => { requeue = true; }) }),
         Effect.scoped,
@@ -486,6 +499,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       query: request => result(request, Effect.gen(function*() {
         if (Buffer.byteLength(JSON.stringify(request.environment)) > 256 * 1024) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Query environment exceeds 256 KiB'));
         const input = yield* Schema.decodeUnknownEffect(importedQueryRequest, { onExcessProperty: 'error' })({ name: request.name, input: request.input });
+        if (input.name === 'memory.search' || input.name === 'issue.search') return yield* service.operate(searchQuery(input, request.cache, makeRuntimeEnvironment(request.cwd, request.environment)));
         return yield* service.execute({ kind: 'query', request: input, cwd: request.cwd, environment: request.environment, cache: request.cache }).pipe(Effect.ensuring(input.name === 'historical' && request.cache !== 'off' ? refreshQuery(input.input.query, makeRuntimeEnvironment(request.cwd, request.environment)) : Effect.void));
       })),
       read: request => Stream.unwrap(authorize(request).pipe(Effect.andThen(service.execute({ kind: 'read-bytes', path: request.path })), Effect.map(value => output.bytes(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT)), Effect.mapError(asServerError))),
@@ -528,7 +542,7 @@ export const serveWorkspaceFromEnvironment = Effect.fn('serveWorkspaceFromEnviro
   const scope = environment.CONCORD_SERVER_SCOPE === undefined ? undefined : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CommandScope), { onExcessProperty: 'error' })(environment.CONCORD_SERVER_SCOPE).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid command service scope')));
   return yield* serveWorkspace(root, Effect.void, scope);
 });
-export const runWorkspaceMain = (root: string) => NodeRuntime.runMain(Cache.withParseCache(serveWorkspaceFromEnvironment(root).pipe(Effect.provide(serverServices))).pipe(Effect.provide(startupEnvironment()), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause))));
+export const runWorkspaceMain = (root: string) => NodeRuntime.runMain(Cache.withParseCache(serveWorkspaceFromEnvironment(root).pipe(Effect.provide(serverServices)), false).pipe(Effect.provide(startupEnvironment()), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause))));
 
 export const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: string) {
   const platform = yield* ServerRuntime;

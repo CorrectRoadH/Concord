@@ -1,184 +1,257 @@
-import { createHash } from "node:crypto";
-import { readFileSync, realpathSync } from "node:fs";
-import { createRequire } from "node:module";
-import { join } from "node:path";
-import { nativeArtifactRoot, nativeFileDigest, nativeFileIdentity, sourceInstallation, verifySourceNativeArtifact } from "../installation/index.ts";
+// @concord-file
+// @concord-implements docs/feature/local-data-engine/architecture.md#原生边界
+import { loadHawDB, HawDBError, type Database as OfficialDatabase, type HawDBLibrary, type Transaction, type HawDBParameter } from '@nowledge/hawdb-bun';
+import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { Schema } from 'effect';
+import { ConcordError } from '../../model/index.ts';
+import { HAWDB_REVISION, HAWDB_VERSION, hawdbTarget, nativeFileIdentity, packageRoot, verifiedHawdbLibrary } from '../installation/index.ts';
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
-import { packageRoot } from '../installation/index.ts';
-import { Effect, Schema } from "effect";
-import { HAWDB_ABI, HAWDB_REVISION, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget } from "../installation/index.ts";
+import { acquireFileLock, FileLockFailure, type FileLock } from '../file-lock/index.ts';
+import { assertCacheDatabaseSafe, inspectCacheClear } from './cache-file.ts';
+import { initializeKnowledgeSchema } from './hawdb-search.ts';
+import { HawdbEntry, HawdbFailure, HawdbLimits, HawdbNamespace, MIB, entryBytes, memoryNamespaces, persistentNamespaces, quotas } from './hawdb-types.ts';
+export { HawdbFailure, HawdbEntry, HawdbLimits, HawdbNamespace } from './hawdb-types.ts';
+export type { HawdbFailureCode } from './hawdb-types.ts';
+export { HAWDB_REVISION, HAWDB_VERSION };
+export { acquireHawdbClearGuard } from './hawdb-lock.ts';
 
-export { HAWDB_ABI, HAWDB_REVISION };
-export type HawdbNamespace = 'document_parse' | 'code_parse' | 'git_baseline' | 'annotation_cache' | 'code_cache' | 'config_cache' | 'feedback_cache' | 'query_cache' | 'workspace_projection';
-export interface HawdbEntry { readonly key: string; readonly payload: string; }
-export interface HawdbLimits { readonly maxEntries: number; readonly maxBytes: number; }
-export interface HawdbReclamation { readonly reclaimedObjects: number; readonly reclaimedBytes: number; readonly deferredForActiveLeases: boolean }
+const defaultRuntime = makeRuntimeEnvironment(packageRoot, {});
+const cacheSchema = 'concord.cache/v2';
+const decodeEntries = Schema.decodeUnknownSync(Schema.Array(HawdbEntry), { onExcessProperty: 'error' });
+const decodeNamespace = Schema.decodeUnknownSync(HawdbNamespace);
+const schemaVersion = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ version: Schema.Literal(cacheSchema) })), { onExcessProperty: 'error' });
+const utf8 = new TextDecoder('utf-8', { fatal: true });
+export function hawdbFailure(cause: unknown): HawdbFailure {
+  if (cause instanceof HawdbFailure) return cause;
+  if (cause instanceof ConcordError && cause.code === 'UnsafePath') return new HawdbFailure('UnsafePath', cause.message, { cause });
+  if (cause instanceof FileLockFailure) return new HawdbFailure(cause.reason === 'busy' ? 'HawdbBusy' : ['type', 'identity'].includes(cause.reason) ? 'UnsafePath' : 'HawdbUnavailable', cause.message, { cause });
+  if (cause instanceof HawDBError) return new HawdbFailure(cause.kind === 'branch_busy' ? 'HawdbBusy' : ['resource_budget_exceeded', 'admission'].includes(cause.kind) ? 'HawdbLimit' : 'HawdbUnavailable', `${cause.kind}: ${cause.message}`, { cause });
+  return new HawdbFailure('HawdbUnavailable', cause instanceof Error ? cause.message : String(cause), { cause });
+}
+export function acquireHawdbOwnerGate(path: string): FileLock {
+  try { return acquireFileLock(join(dirname(path), 'cache.hawdb.concord.lock')); }
+  catch (cause) { throw hawdbFailure(cause); }
+}
+export function verifyHawdbArtifact(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): void {
+  try { verifiedHawdbLibrary(runtime); } catch (cause) { throw hawdbFailure(cause); }
+}
+export const validateHawdbArtifact = verifyHawdbArtifact;
+export function hawdbIdentity(runtime: RuntimeEnvironmentSnapshot = defaultRuntime) {
+  verifyHawdbArtifact(runtime);
+  return { engine: 'hawdb' as const, revision: HAWDB_REVISION, version: HAWDB_VERSION, target: hawdbTarget() };
+}
 export interface HawdbDatabase {
   get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[];
   scan(namespace: HawdbNamespace): readonly HawdbEntry[];
   put(namespace: HawdbNamespace, entries: readonly HawdbEntry[], limits?: HawdbLimits): void;
   clearNamespace(namespace: HawdbNamespace): void;
   namespaces(): readonly HawdbNamespace[];
-  reclaim(): HawdbReclamation;
+  atomic<A>(run: () => A, check?: () => void): A;
   close(): void;
   closeAsync(): Promise<void>;
 }
-export type HawdbFailureCode = 'HawdbBusy' | 'HawdbUnavailable' | 'HawdbIncompatible' | 'HawdbLimit' | 'HawdbClosed' | 'UnsafePath';
-export class HawdbFailure extends Error {
-  readonly code: HawdbFailureCode;
-  constructor(code: HawdbFailureCode, message: string, options?: ErrorOptions) {
-    super(message, options); this.code = code; this.name = code;
+interface CacheRow extends HawdbEntry { readonly sequence: number; readonly namespace: HawdbNamespace }
+function safeInteger(value: unknown): number {
+  const result = typeof value === 'bigint' ? Number(value) : value;
+  if (typeof result !== 'number' || !Number.isSafeInteger(result)) throw new HawdbFailure('HawdbIncompatible', 'Invalid cache integer');
+  return result;
+}
+/** The official library and every database belong to this explicit owner. */
+export class NativeDatabase implements HawdbDatabase {
+  private transaction: Transaction | undefined;
+  private check: (() => void) | undefined;
+  private closed = false;
+  private poisoned = false;
+  private churn = 0;
+  private database: OfficialDatabase;
+  private readonly library: HawDBLibrary;
+  readonly memory: boolean;
+  private readonly readOnly: boolean;
+  private readonly gate: FileLock | undefined;
+  private readonly ownsGate: boolean;
+  constructor(database: OfficialDatabase, library: HawDBLibrary, memory: boolean, readOnly: boolean, gate?: FileLock, ownsGate = true) {
+    this.database = database; this.library = library; this.memory = memory; this.readOnly = readOnly; this.gate = gate; this.ownsGate = ownsGate;
   }
-}
-const EntrySchema = Schema.Struct({ key: Schema.String, payload: Schema.String });
-const NamespaceSchema = Schema.Literals(['document_parse', 'code_parse', 'git_baseline', 'annotation_cache', 'code_cache', 'config_cache', 'feedback_cache', 'query_cache', 'workspace_projection']);
-const OptionsSchema = Schema.Struct({ readOnly: Schema.Boolean, create: Schema.Boolean });
-const KeysSchema = Schema.Array(Schema.String);
-const decodeNamespace = Schema.decodeUnknownSync(NamespaceSchema, { errors: 'all' });
-const decodeOptions = Schema.decodeUnknownSync(OptionsSchema, { onExcessProperty: 'error', errors: 'all' });
-const decodePath = Schema.decodeUnknownSync(Schema.String, { errors: 'all' });
-const decodeKeys = Schema.decodeUnknownSync(KeysSchema, { errors: 'all' });
-const EntriesSchema = Schema.Array(EntrySchema);
-const NamespacesSchema = Schema.Array(NamespaceSchema);
-const IdentitySchema = Schema.Struct({ revision: Schema.Literal(HAWDB_REVISION), abi: Schema.Literal(HAWDB_ABI) });
-const readEntries = Schema.decodeUnknownSync(EntriesSchema, { onExcessProperty: 'error', errors: 'all' });
-const readNamespaces = Schema.decodeUnknownSync(NamespacesSchema, { errors: 'all' });
-const readIdentity = Schema.decodeUnknownSync(IdentitySchema, { onExcessProperty: 'error', errors: 'all' });
-const failureCodes = new Set<HawdbFailureCode>(['HawdbBusy', 'HawdbUnavailable', 'HawdbIncompatible', 'HawdbLimit', 'HawdbClosed', 'UnsafePath']);
-function asFailure(error: unknown): HawdbFailure {
-  if (error instanceof HawdbFailure) return error;
-  const message = error instanceof Error ? error.message : String(error);
-  const prefix = message.slice(0, message.indexOf(':')) as HawdbFailureCode;
-  const code = failureCodes.has(prefix) ? prefix : 'HawdbUnavailable';
-  return new HawdbFailure(code, code === 'HawdbUnavailable' ? `${message}; run bun run build:native to prepare native artifacts.` : message, { cause: error });
-}
-function boundary<T>(operation: () => T): T {
-  try { return Effect.runSync(Effect.sync(operation)); }
-  catch (error) { throw asFailure(error); }
-}
-interface NativeBridge {
-  get(namespace: string, keys: string[]): unknown;
-  scan(namespace: string): unknown;
-  put(namespace: string, entries: HawdbEntry[], quota?: { maxEntries: number; maxBytes: number }): void;
-  clearNamespace(namespace: string): void;
-  namespaces(): unknown;
-  reclaim(): unknown;
-  close(): void;
-  closeAsync(): Promise<void>;
-}
-interface NativeModule {
-  nativeIdentity(): unknown;
-  openCache(path: string, readOnly: boolean, create: boolean): Promise<NativeBridge>;
-  CacheBridge: { new(path: string, readOnly: boolean, create: boolean): NativeBridge; memory(): NativeBridge };
-  OwnerGuard: new(path: string) => { verify(): void; close(): void };
-}
-const defaultRuntime = makeRuntimeEnvironment(packageRoot, {});
-const loaded = new Map<string, NativeModule>();
-const rejected = new Map<string, { readonly error: HawdbFailure; readonly retryAt: number }>();
-function load(runtime: RuntimeEnvironmentSnapshot, revalidate = false): NativeModule {
-  const base = join(nativeArtifactRoot(runtime), hawdbTarget());
-  let binary = join(base, 'hawdb.node'), manifest = '', binaryDigest: string | undefined;
-  try { binary = realpathSync(binary); } catch { /* Missing artifacts still get bounded failure retry. */ }
-  try { manifest = readFileSync(join(base, 'artifact.json'), 'utf8'); binaryDigest = decodeNativeArtifact(JSON.parse(manifest)).binarySha256; } catch { /* Verification reports the authoritative error. */ }
-  // Only failures are indexed before byte verification. No candidate identity
-  // authorizes a loaded binding; successful lookup uses verified binary bytes.
-  const identities = ['hawdb.node', 'artifact.json', 'THIRD-PARTY-NOTICES.txt'].map(name => { try { return nativeFileIdentity(join(base, name)); } catch { return null; } });
-  const selection = JSON.stringify([binary, binaryDigest ?? createHash('sha256').update(manifest).digest('hex'), sourceInstallation && runtime.env.CONCORD_NATIVE_TEST_HOOKS === '1', identities]);
-  const rejection = rejected.get(selection);
-  if (!revalidate && rejection !== undefined && performance.now() < rejection.retryAt) throw rejection.error;
-  try {
-    const artifact = verifiedArtifact(runtime);
-    const prior = loaded.get(artifact.key);
-    if (prior) { rejected.delete(selection); return prior; }
-    const require = createRequire(import.meta.url);
-    // Node caches require by path; our verified identity additionally owns bytes.
-    delete require.cache[artifact.binary];
-    const native = require(artifact.binary) as NativeModule;
-    readIdentity(native.nativeIdentity());
-    loaded.set(artifact.key, native);
-    rejected.delete(selection);
-    return native;
-  } catch (cause) {
-    const error = asFailure(cause);
-    rejected.set(selection, { error, retryAt: performance.now() + 1000 });
-    throw error;
+  private ready(): void {
+    this.check?.();
+    if (this.closed) throw new HawdbFailure('HawdbClosed', 'Database is closed');
+    if (this.poisoned) throw new HawdbFailure('HawdbCommitUnknown', 'Close and reopen the database before reusing it');
+    try { this.gate?.verify(); } catch (cause) { throw hawdbFailure(cause); }
   }
-}
-function verifiedArtifact(runtime: RuntimeEnvironmentSnapshot): { readonly binary: string; readonly key: string } {
-  const target = hawdbTarget();
-  if (sourceInstallation) verifySourceNativeArtifact(runtime);
-  const base = join(nativeArtifactRoot(runtime), target);
-  const metadata = decodeNativeArtifact(JSON.parse(readFileSync(join(base, 'artifact.json'), 'utf8')));
-  if (!sourceInstallation && metadata.testHooks) throw new HawdbFailure('HawdbIncompatible', 'test-hook native artifact cannot be installed');
-  if (metadata.target !== target || metadata.sourceDigest.length !== 64 || metadata.cargoLockDigest.length !== 64 || metadata.binarySha256.length !== 64 || metadata.noticesSha256.length !== 64) {
-    throw new HawdbFailure('HawdbIncompatible', 'native artifact identity is incomplete');
+  query(cypher: string, parameters: Record<string, HawDBParameter> = {}) {
+    this.ready();
+    try { return (this.transaction ?? this.database).query(cypher, parameters).dicts(); }
+    catch (cause) { throw hawdbFailure(cause); }
   }
-  if (target === 'darwin-arm64' && metadata.deploymentTarget !== HAWDB_MACOS_DEPLOYMENT_TARGET) {
-    throw new HawdbFailure('HawdbIncompatible', 'macOS deployment target differs');
+  exec(cypher: string, parameters: Record<string, HawDBParameter> = {}): void { this.query(cypher, parameters); }
+  sql(sql: string, parameters: HawDBParameter[] = []) {
+    this.ready();
+    try { return (this.transaction ?? this.database).querySQL(sql, parameters).dicts(); }
+    catch (cause) { throw hawdbFailure(cause); }
   }
-  const noticesDigest = nativeFileDigest(join(base, 'THIRD-PARTY-NOTICES.txt'));
-  if (noticesDigest !== metadata.noticesSha256) throw new HawdbFailure('HawdbIncompatible', 'native notices digest differs');
-  const binary = realpathSync(join(base, 'hawdb.node'));
-  const digest = nativeFileDigest(binary);
-  if (digest !== metadata.binarySha256) throw new HawdbFailure('HawdbIncompatible', `native binary digest differs: ${binary}; expected ${metadata.binarySha256} from ${join(base, 'artifact.json')}; actual ${digest}. Reinstall a verified Concord package; cache clear cannot repair installation artifacts.`);
-  return { binary, key: JSON.stringify([binary, digest, metadata.testHooks ?? false]) };
-}
-/** Revalidate the installation even when an already loaded binding remains usable. */
-export function validateHawdbArtifact(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): void { boundary(() => { load(runtime, true); }); }
-/** A remote client verifies installation bytes without loading an engine it does not own. */
-export function verifyHawdbArtifact(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): void { boundary(() => { verifiedArtifact(runtime); }); }
-class Database implements HawdbDatabase {
-  private readonly native: NativeBridge;
-  private closing: Promise<void> | undefined;
-  constructor(native: NativeBridge) { this.native = native; }
-  get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[] {
-    return boundary(() => readEntries(this.native.get(decodeNamespace(namespace), [...decodeKeys(keys)])));
+  atomic<A>(run: () => A, check?: () => void): A {
+    this.ready();
+    if (this.readOnly) throw new HawdbFailure('HawdbIncompatible', 'A readonly database cannot start a write transaction');
+    if (this.transaction) return run();
+    let completed = false;
+    try {
+      return this.database.transaction(transaction => {
+        this.transaction = transaction;
+        this.check = check;
+        try {
+          const value = run();
+          if (value instanceof Promise) throw new HawdbFailure('HawdbIncompatible', 'Native transaction callbacks must be synchronous');
+          completed = true;
+          return value;
+        } finally { this.transaction = undefined; this.check = undefined; }
+      });
+    } catch (cause) {
+      if (!completed) throw cause;
+      this.poisoned = true;
+      throw new HawdbFailure('HawdbCommitUnknown', 'Commit outcome is unknown; discard observations and reopen before reconciliation', { cause });
+    }
   }
-  scan(namespace: HawdbNamespace): readonly HawdbEntry[] {
-    return boundary(() => readEntries(this.native.scan(decodeNamespace(namespace))));
-  }
-  put(namespace: HawdbNamespace, entries: readonly HawdbEntry[], limits?: HawdbLimits): void {
-    boundary(() => {
-      const decoded = readEntries(entries);
-      if (limits && (!Number.isSafeInteger(limits.maxEntries) || !Number.isSafeInteger(limits.maxBytes) || limits.maxEntries < 1 || limits.maxBytes < 1 || limits.maxEntries > 0xffffffff || limits.maxBytes > 0xffffffff)) {
-        throw new HawdbFailure('HawdbLimit', 'invalid quota');
-      }
-      this.native.put(decodeNamespace(namespace), [...decoded], limits ? { maxEntries: limits.maxEntries, maxBytes: limits.maxBytes } : undefined);
+  initialize(): void {
+    this.atomic(() => {
+      this.sql('CREATE TABLE concord_cache_entries (namespace TEXT NOT NULL, cache_key TEXT NOT NULL, payload BYTEA NOT NULL, sequence BIGINT NOT NULL, PRIMARY KEY (namespace, cache_key))');
+      this.sql('CREATE TABLE concord_cache_schema (version TEXT NOT NULL PRIMARY KEY)');
+      this.sql('INSERT INTO concord_cache_schema (version) VALUES ($1)', [cacheSchema]);
+      initializeKnowledgeSchema(this);
     });
   }
-  clearNamespace(namespace: HawdbNamespace): void { boundary(() => this.native.clearNamespace(decodeNamespace(namespace))); }
-  namespaces(): readonly HawdbNamespace[] { return boundary(() => readNamespaces(this.native.namespaces())); }
-  reclaim(): HawdbReclamation {
-    return boundary(() => Schema.decodeUnknownSync(Schema.Struct({ reclaimedObjects: Schema.Int, reclaimedBytes: Schema.Int, deferredForActiveLeases: Schema.Boolean }), { onExcessProperty: 'error' })(this.native.reclaim()));
+  verifySchema(): void {
+    try {
+      if (schemaVersion(this.sql('SELECT version FROM concord_cache_schema LIMIT 2')).length !== 1) throw new HawdbFailure('HawdbIncompatible', 'Cache schema identity is missing');
+    } catch (cause) {
+      if (cause instanceof HawdbFailure && ['HawdbBusy', 'HawdbLimit'].includes(cause.code)) throw cause;
+      throw new HawdbFailure('HawdbIncompatible', 'Cache schema differs; use cache clear to discard it explicitly', { cause });
+    }
   }
-  close(): void { boundary(() => this.native.close()); }
-  closeAsync(): Promise<void> {
-    if (this.closing) return this.closing;
-    try { this.closing = this.native.closeAsync().catch(cause => { throw asFailure(cause); }); }
-    catch (cause) { this.closing = Promise.reject(asFailure(cause)); }
-    return this.closing;
+  namespaces(): readonly HawdbNamespace[] { this.ready(); return this.memory ? memoryNamespaces : persistentNamespaces; }
+  private quota(namespace: HawdbNamespace): HawdbLimits {
+    decodeNamespace(namespace);
+    if (!this.namespaces().includes(namespace)) throw new HawdbFailure('HawdbIncompatible', `Namespace ${namespace} is unavailable in this database`);
+    return quotas[namespace];
   }
+  private rows(namespace: HawdbNamespace): CacheRow[] {
+    const quota = this.quota(namespace), rows: CacheRow[] = [];
+    let bytes = 0, after = -1;
+    while (true) {
+      const page = this.sql('SELECT cache_key, payload, sequence FROM concord_cache_entries WHERE namespace = $1 AND sequence > $2 ORDER BY sequence LIMIT 1000', [namespace, after]);
+      for (const row of page) {
+        if (typeof row.cache_key !== 'string' || !(row.payload instanceof Uint8Array)) throw new HawdbFailure('HawdbIncompatible', 'Invalid cache row shape');
+        const value = { namespace, key: row.cache_key, payload: utf8.decode(row.payload), sequence: safeInteger(row.sequence) };
+        if (value.sequence <= after) throw new HawdbFailure('HawdbIncompatible', 'Cache sequence is not strictly increasing');
+        after = value.sequence; bytes += entryBytes(namespace, value); rows.push(value);
+        if (rows.length > quota.maxEntries || bytes > quota.maxBytes) throw new HawdbFailure('HawdbLimit', 'Cache namespace exceeds its read budget');
+      }
+      if (page.length < 1000) return rows;
+    }
+  }
+  scan(namespace: HawdbNamespace): readonly HawdbEntry[] { return this.rows(namespace).map(({ key, payload }) => ({ key, payload })); }
+  get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[] {
+    this.quota(namespace);
+    if (keys.length > 1000 || keys.some(key => typeof key !== 'string' || !key.length || Buffer.byteLength(key) > 8 * MIB)) throw new HawdbFailure('HawdbLimit', 'Invalid cache key batch');
+    if (!keys.length) return [];
+    const rows = this.sql(`SELECT cache_key, payload FROM concord_cache_entries WHERE namespace = $1 AND cache_key IN (${keys.map((_, index) => `$${index + 2}`).join(',')})`, [namespace, ...keys]);
+    const found = new Map<string, string>();
+    let bytes = 0;
+    for (const row of rows) {
+      if (typeof row.cache_key !== 'string' || !(row.payload instanceof Uint8Array) || found.has(row.cache_key)) throw new HawdbFailure('HawdbIncompatible', 'Invalid cache read result');
+      bytes += row.payload.byteLength;
+      if (bytes > 64 * MIB) throw new HawdbFailure('HawdbLimit', 'Cache read exceeds 64 MiB');
+      found.set(row.cache_key, utf8.decode(row.payload));
+    }
+    return keys.flatMap(key => { const payload = found.get(key); return payload === undefined ? [] : [{ key, payload }]; });
+  }
+  cacheBytes(): number { return this.namespaces().flatMap(namespace => this.rows(namespace)).reduce((total, row) => total + entryBytes(row.namespace, row), 0); }
+  put(namespace: HawdbNamespace, input: readonly HawdbEntry[], limits?: HawdbLimits): void {
+    const quota = this.quota(namespace), entries = decodeEntries(input);
+    if (limits) Schema.decodeUnknownSync(HawdbLimits, { onExcessProperty: 'error' })(limits);
+    const maxEntries = Math.min(quota.maxEntries, limits?.maxEntries ?? quota.maxEntries), maxBytes = Math.min(quota.maxBytes, limits?.maxBytes ?? quota.maxBytes);
+    if (maxEntries < 1 || maxBytes < 1 || entries.length > 1000 || entries.some(row => !row.key.length || entryBytes(namespace, row) > 8 * MIB) || entries.reduce((n, row) => n + entryBytes(namespace, row), 0) > 16 * MIB) throw new HawdbFailure('HawdbLimit', 'Cache input exceeds its batch budget');
+    const incoming = new Map<string, HawdbEntry>();
+    for (const row of entries) { incoming.delete(row.key); incoming.set(row.key, row); }
+    const additions = [...incoming.values()], inputBytes = additions.reduce((n, row) => n + entryBytes(namespace, row), 0);
+    if (incoming.size > maxEntries || inputBytes > maxBytes) throw new HawdbFailure('HawdbLimit', 'Incoming batch exceeds namespace quota');
+    if (!incoming.size) return;
+    this.atomic(() => {
+      const all = this.namespaces().flatMap(name => this.rows(name));
+      let sequence = all.reduce((n, row) => Math.max(n, row.sequence), 0);
+      const remaining = all.filter(row => row.namespace === namespace && !incoming.has(row.key));
+      const deletes = new Set(incoming.keys());
+      let bytes = remaining.reduce((n, row) => n + entryBytes(namespace, row), inputBytes), count = remaining.length + additions.length;
+      for (const row of remaining) {
+        if (bytes <= maxBytes && count <= maxEntries) break;
+        deletes.add(row.key); bytes -= entryBytes(namespace, row); count--;
+      }
+      const otherBytes = all.filter(row => row.namespace !== namespace).reduce((n, row) => n + entryBytes(row.namespace, row), 0);
+      const searchBytes = this.memory ? 0 : this.searchLogicalBytes();
+      if (otherBytes + bytes + searchBytes > (this.memory ? 36 : 96) * MIB) throw new HawdbFailure('HawdbLimit', 'Shared cache budget exceeded');
+      for (const key of deletes) this.sql('DELETE FROM concord_cache_entries WHERE namespace = $1 AND cache_key = $2', [namespace, key]);
+      const parameters: HawDBParameter[] = [];
+      const values = additions.map(row => {
+        sequence++;
+        if (!Number.isSafeInteger(sequence)) throw new HawdbFailure('HawdbLimit', 'Cache sequence exhausted');
+        const start = parameters.length;
+        parameters.push(namespace, row.key, new TextEncoder().encode(row.payload), sequence);
+        return `($${start + 1}, $${start + 2}, $${start + 3}, $${start + 4})`;
+      });
+      this.sql(`INSERT INTO concord_cache_entries (namespace, cache_key, payload, sequence) VALUES ${values.join(',')}`, parameters);
+    });
+    this.churn += inputBytes;
+    if (this.memory && this.transaction === undefined && this.churn > 72 * MIB) this.rebuildMemory();
+  }
+  searchLogicalBytes(): number {
+    return this.query('MATCH (g:KnowledgeSearchGeneration) RETURN g.logicalBytes AS bytes').reduce((n, row) => n + safeInteger(row.bytes), 0);
+  }
+  clearNamespace(namespace: HawdbNamespace): void { this.quota(namespace); this.atomic(() => { this.sql('DELETE FROM concord_cache_entries WHERE namespace = $1', [namespace]); }); }
+  private rebuildMemory(): void {
+    const rows = this.namespaces().map(namespace => ({ namespace, rows: this.rows(namespace) }));
+    const old = this.database;
+    this.churn = 0;
+    this.database = this.library.openInMemory();
+    try {
+      this.initialize();
+      for (const group of rows) for (let start = 0; start < group.rows.length; start += 1000) this.put(group.namespace, group.rows.slice(start, start + 1000));
+      old.close(); this.churn = 0;
+    } catch (cause) { this.database.close(); this.database = old; throw cause; }
+  }
+  close(): void {
+    if (this.closed) return;
+    this.database.close(); this.library.close();
+    this.closed = true;
+    if (this.ownsGate) this.gate?.close();
+  }
+  async closeAsync(): Promise<void> { this.close(); }
 }
-export function openHawdb(path: string, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot = defaultRuntime): HawdbDatabase {
-  return boundary(() => { const mode = decodeOptions(options); return new Database(new (load(runtime).CacheBridge)(decodePath(path), mode.readOnly, mode.create)); });
-}
-/** Service owners await native work without blocking their socket event loop. */
-export async function openHawdbAsync(path: string, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot = defaultRuntime): Promise<HawdbDatabase> {
+function open(path: string | undefined, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot, borrowedGate?: FileLock): NativeDatabase {
+  let library: HawDBLibrary | undefined, database: OfficialDatabase | undefined, gate: FileLock | undefined;
   try {
-    const mode = decodeOptions(options), native = load(runtime);
-    // Missing lifecycle APIs are installation failures, never permission to
-    // clear an otherwise compatible database or fall back to a blocking open.
-    if (typeof native.openCache !== 'function') throw new HawdbFailure('HawdbUnavailable', 'Native artifact does not support asynchronous cache ownership');
-    return new Database(await native.openCache(decodePath(path), mode.readOnly, mode.create));
-  } catch (cause) { throw asFailure(cause); }
+    if (options.readOnly && options.create) throw new HawdbFailure('HawdbIncompatible', 'Readonly create is invalid');
+    let initialize = path === undefined;
+    if (path !== undefined) {
+      const existing = assertCacheDatabaseSafe(path);
+      if (!existing && !options.create) throw new HawdbFailure('HawdbUnavailable', 'Cache directory is absent');
+      gate = borrowedGate ?? acquireHawdbOwnerGate(path);
+      initialize = !existing || inspectCacheClear(dirname(path)).empty;
+      if (initialize && !options.create) throw new HawdbFailure('HawdbUnavailable', 'Cache is empty');
+      if (!existing) mkdirSync(path);
+      inspectCacheClear(dirname(path));
+    }
+    const artifact = verifiedHawdbLibrary(runtime);
+    library = loadHawDB(artifact.binary);
+    if (nativeFileIdentity(artifact.binary) !== artifact.identity || library.version() !== `hawdb ${artifact.version}`) throw new HawdbFailure('HawdbIncompatible', 'Loaded HawDB library identity differs');
+    database = path === undefined ? library.openInMemory() : library.open(path, { readOnly: options.readOnly, durability: 'sync_on_every_write', maxReadResultRows: 20000, maxReadResultPayloadBytes: 64 * MIB });
+    const owner = new NativeDatabase(database, library, path === undefined, options.readOnly, gate, borrowedGate === undefined);
+    if (initialize) owner.initialize(); else owner.verifySchema();
+    gate?.verify();
+    return owner;
+  } catch (cause) {
+    try { database?.close(); library?.close(); } finally { if (borrowedGate === undefined) gate?.close(); }
+    throw hawdbFailure(cause);
+  }
 }
-export function createMemoryHawdb(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): HawdbDatabase { return boundary(() => new Database(load(runtime).CacheBridge.memory())); }
-export function acquireHawdbClearGuard(path: string, runtime: RuntimeEnvironmentSnapshot = defaultRuntime): { verify(): void; close(): void } {
-  return boundary(() => {
-    const guard = new (load(runtime).OwnerGuard)(decodePath(path));
-    return { verify: () => boundary(() => guard.verify()), close: () => boundary(() => guard.close()) };
-  });
-}
-export function hawdbIdentity(runtime: RuntimeEnvironmentSnapshot = defaultRuntime): { readonly engine: 'hawdb'; readonly revision: string; readonly abi: string; readonly target: string } {
-  return boundary(() => { load(runtime); return { engine: 'hawdb', revision: HAWDB_REVISION, abi: HAWDB_ABI, target: hawdbTarget() }; });
-}
+export const openHawdb = (path: string, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot = defaultRuntime, gate?: FileLock): NativeDatabase => open(path, options, runtime, gate);
+export const createMemoryHawdb = (runtime: RuntimeEnvironmentSnapshot = defaultRuntime): NativeDatabase => open(undefined, { readOnly: false, create: true }, runtime);

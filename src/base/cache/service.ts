@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, type Scope } from 'effect';
 import { cacheDatabasePath, assertCacheDatabaseSafe, cacheRootOwnerOnly } from './cache-file.ts';
-import { createMemoryHawdb, openHawdb, verifyHawdbArtifact, HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace, type HawdbReclamation } from './hawdb-native.ts';
+import { createMemoryHawdb, openHawdb, verifyHawdbArtifact, HawdbFailure, type HawdbDatabase, type HawdbEntry, type HawdbNamespace } from './hawdb-native.ts';
 import { bindRepositoryCache, nodeRepositoryCache, repositoryCache, type RepositoryCache } from './cache-store.ts';
 import type { CacheSnapshotUnavailable} from '../../model/index.ts';
 import { ConcordError, digest, type Repository } from '../../model/index.ts';
@@ -11,7 +11,6 @@ import { CacheDerivations } from './derivations.ts';
 import { ContentCacheOwner, withContentCacheOwner } from './content-cache-owner.ts';
 import { WorkspaceContext } from '../workspace/index.ts';
 import { OperationCache } from './operation-cache.ts';
-import { openPersistentHandle } from './persistent-handle.ts';
 
 export type ReadonlyCacheSnapshot = Readonly<Partial<Record<HawdbNamespace, readonly HawdbEntry[]>> & { unavailable?: typeof CacheSnapshotUnavailable.Type }>;
 type ParseNamespace = Extract<HawdbNamespace, 'document_parse' | 'code_parse' | 'git_baseline'>;
@@ -21,7 +20,6 @@ export interface CacheService {
 }
 export interface PersistentCacheService {
   readonly verifyArtifact: Effect.Effect<void, HawdbFailure>;
-  readonly reclaim: (privateDir: string) => Effect.Effect<HawdbReclamation | undefined, HawdbFailure>;
   readonly attach: (repo: Repository) => Effect.Effect<void, HawdbFailure, Scope.Scope>;
   readonly read: (privateDir: string, namespace: HawdbNamespace, keys?: readonly string[]) => Effect.Effect<readonly HawdbEntry[], HawdbFailure>;
   readonly update: (privateDir: string, namespace: HawdbNamespace, key: string, update: (prior: string | undefined) => string) => Effect.Effect<void, HawdbFailure | ConcordError>;
@@ -127,15 +125,6 @@ export class PersistentCache extends Context.Service<PersistentCache, Persistent
         const memory = ownedMemory === undefined ? undefined : yield* ownedMemory.pipe(Effect.catch(() => Effect.succeed(undefined)));
         yield* Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, nodeRepositoryCache(repo, memory, runtime)), catch: cacheFailure }), release => Effect.sync(release));
       }),
-      reclaim: privateDir => Effect.scoped(Effect.gen(function*() {
-        const operation = yield* Effect.serviceOption(OperationCache);
-        if (operation._tag === 'Some') {
-          if (operation.value.privateDir !== privateDir) return yield* Effect.fail(new HawdbFailure('HawdbUnavailable', 'Open a source snapshot for the requested cache workspace'));
-          return yield* Effect.try({ try: operation.value.reclaim, catch: cacheFailure });
-        }
-        const database = yield* openPersistentHandle(privateDir, runtime);
-        return yield* Effect.try({ try: () => database?.reclaim(), catch: cacheFailure });
-      })),
       read: (privateDir, namespace, keys) => Effect.scoped(Effect.gen(function*() {
         const operation = yield* Effect.serviceOption(OperationCache);
         if (operation._tag === 'Some') {

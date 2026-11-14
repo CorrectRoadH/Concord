@@ -1,5 +1,5 @@
 // 跨进程保证：OS 锁与互斥——两个真实构建进程仅启动一次builder，死builder租约可恢复且不发布失败或漂移产物。
-import { assert, createHash, NodeServices, Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream, ChildProcess, ChildProcessSpawner, join, resolve, pathToFileURL, test, buildDigest, nativeSourceFiles, HAWDB_ABI, HAWDB_REVISION, hawdbTarget, tmpdir, cacheTest, hash, Reply, fixture, waitFile, start, build, published, type Scope, type Requirements } from './build-cache-fixture.ts';
+import { assert, createHash, NodeServices, Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream, ChildProcess, ChildProcessSpawner, join, resolve, pathToFileURL, test, buildDigest, nativeSourceFiles, HAWDB_REVISION, hawdbTarget, tmpdir, cacheTest, hash, Reply, fixture, waitFile, start, build, published, type Scope, type Requirements } from './build-cache-fixture.ts';
 
 
 // @feature docs/engineering/build/architecture.md#共享构建缓存

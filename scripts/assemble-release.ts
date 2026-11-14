@@ -1,14 +1,18 @@
 // @concord-file
 // @concord-implements docs/feature/cross-platform-release/use-case/release-from-tag.md
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
-import { Effect, FileSystem, Schema } from 'effect';
+import { Effect, FileSystem, Schema, Stream } from 'effect';
+import { createHash } from 'node:crypto';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import { readNativeRelease, nativeReleaseAsset } from '../src/base/installation/native-release.ts';
+import { verifyNativeArtifactDirectory } from '../src/base/installation/native-artifact.ts';
 import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assembleArchive, nativeTarget } from './archive.ts';
 import { archiveTarget, command, readJson, sha256, Target, type ArchiveTarget } from './archive-support.ts';
 import { assertCompilationHost, compilationTarget } from './compile-application.ts';
 import { BuildIdentity } from './build-identity.ts';
-import { NativeArtifactSchema } from '../src/base/installation/hawdb-native-contract.ts';
+import { NativeArtifactSchema, decodeOfficialHawdbManifest, hawdbLibraryName } from '../src/base/installation/hawdb-native-contract.ts';
 
 class ReleaseAssemblyFailed extends Schema.TaggedError<ReleaseAssemblyFailed>()('ReleaseAssemblyFailed', { message: Schema.String }) {}
 const Digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
@@ -36,8 +40,7 @@ export const assembleRelease = Effect.fn('release.assemble')(function*(destinati
   yield* Effect.try({ try: () => assertCompilationHost(target), catch: cause => cause });
   const fs = yield* FileSystem.FileSystem;
   const output = yield* emptyOutput(destination);
-  const artifact = yield* readJson(resolve(nativeArtifacts, nativeTarget(target), 'artifact.json'), NativeArtifactSchema);
-  if (artifact.target !== nativeTarget(target) || !artifact.portable || artifact.testHooks) return yield* new ReleaseAssemblyFailed({ message: `Release requires a portable production artifact for ${target}` });
+  yield* Effect.try({ try: () => verifyNativeArtifactDirectory(resolve(nativeArtifacts, nativeTarget(target)), nativeTarget(target)), catch: cause => new ReleaseAssemblyFailed({ message: String(cause) }) });
   const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-release-target-' });
   const archive = yield* assembleArchive({ target, applicationRoot: resolve(applicationRoot), nativeArtifacts: resolve(nativeArtifacts), outputRoot: join(scratch, target) });
   const name = basename(archive.filename);
@@ -49,6 +52,16 @@ export const assembleRelease = Effect.fn('release.assemble')(function*(destinati
 const archiveJson = <S extends Schema.Top>(archive: string, member: string, schema: S) => command('tar', ['-xOzf', archive, member]).pipe(
   Effect.flatMap(text => Schema.decodeUnknownEffect(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(text)),
 );
+
+const archiveMemberIdentity = Effect.fn('release.archiveMemberIdentity')(function*(archive: string, member: string) {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const child = yield* spawner.spawn(ChildProcess.make('tar', ['-xOzf', archive, member], { stderr: 'inherit' }));
+  const hash = createHash('sha256');
+  let size = 0;
+  yield* Stream.runForEach(child.stdout, bytes => Effect.sync(() => { hash.update(bytes); size += bytes.byteLength; }));
+  if (Number(yield* child.exitCode) !== 0) return yield* new ReleaseAssemblyFailed({ message: `Cannot read candidate member: ${member}` });
+  return { sha256: hash.digest('hex'), size };
+}, Effect.scoped);
 
 /** Read metadata without extracting or executing candidate code on this host. */
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md#package
@@ -68,14 +81,27 @@ export const collectRelease = Effect.fn('release.collect')(function*(destination
     const identity = yield* archiveJson(path, 'app/dist/build-identity.json', BuildIdentity);
     const compiler = yield* archiveJson(path, 'app/dist/compiler.json', Compiler);
     const native = yield* archiveJson(path, `app/dist/native/${nativeTarget(target)}/artifact.json`, NativeArtifactSchema);
+    const expectedNative = nativeReleaseAsset(readNativeRelease(repository), nativeTarget(target));
+    const nativeRoot = `app/dist/native/${nativeTarget(target)}`;
+    const manifestText = yield* command('tar', ['-xOzf', path, `${nativeRoot}/manifest.json`]);
+    if (sha256(manifestText) !== expectedNative.manifestSha256 || native.upstreamManifestSha256 !== expectedNative.manifestSha256) return yield* new ReleaseAssemblyFailed({ message: `Candidate official native manifest differs: ${name}` });
+    const manifest = yield* Effect.try({ try: () => decodeOfficialHawdbManifest(JSON.parse(manifestText)), catch: cause => new ReleaseAssemblyFailed({ message: String(cause) }) });
+    if (manifest.target !== expectedNative.upstreamTarget) return yield* new ReleaseAssemblyFailed({ message: `Candidate native target differs: ${name}` });
+    for (const [member, recorded] of Object.entries(manifest.files)) {
+      const actual = yield* archiveMemberIdentity(path, `${nativeRoot}/${member}`);
+      const relocated = target === 'linux-x64' && member === hawdbLibraryName(nativeTarget(target));
+      if (actual.sha256 !== (relocated ? native.binarySha256 : recorded.sha256) || !relocated && actual.size !== recorded.size) return yield* new ReleaseAssemblyFailed({ message: `Candidate native member differs: ${name}: ${member}` });
+    }
+    if (target !== 'linux-x64' && native.binarySha256 !== expectedNative.binarySha256) return yield* new ReleaseAssemblyFailed({ message: `Candidate native receipt differs: ${name}` });
+
     if (name !== `concord-${pkg.version}-${target}.tar.gz` || pkg.gitHead !== identity.commit
       || process.env.RELEASE_COMMIT !== undefined && pkg.gitHead !== process.env.RELEASE_COMMIT
       || compiler.target !== target || compiler.cpu !== compilationTarget(target) || compiler.version !== pinned
-      || native.target !== nativeTarget(target) || !native.portable || native.testHooks) {
+      || native.target !== nativeTarget(target)) {
       return yield* new ReleaseAssemblyFailed({ message: `Candidate identity differs: ${name}` });
     }
     inputs.push({ path, name, target, version: pkg.version, commit: pkg.gitHead, bun: compiler.revision,
-      native: [native.abi, native.revision, native.sourceDigest, native.cargoLockDigest].join(':') });
+      native: [manifest.version, manifest.engine_revision].join(':') });
   }
   if (inputs.length !== 2 || new Set(inputs.map(input => input.target)).size !== 2) return yield* new ReleaseAssemblyFailed({ message: 'Release requires exactly one candidate for each supported target' });
   if (new Set(inputs.map(input => [input.version, input.commit, input.bun, input.native].join(':'))).size !== 1) return yield* new ReleaseAssemblyFailed({ message: 'Candidate source identities disagree' });

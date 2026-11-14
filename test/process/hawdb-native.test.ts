@@ -1,382 +1,268 @@
-// 跨进程保证：原生模块与句柄——真实native引擎与clear guard双向跨进程互斥，SIGKILL事务无半批提交且加载失败可修复重试。
-import { nativeArtifactRoot, nativeCacheRoot } from "../../src/base/installation/index.ts";
+// Cross-process guarantees: official C ABI ownership, lazy admission, clear and crash recovery.
+import { loadHawDB, HawDBError } from '@nowledge/hawdb-bun';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { cpSync, mkdtempSync, realpathSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, linkSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.ts';
-import { join } from 'node:path';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
+import { cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, relative } from 'node:path';
+import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { hawdbTarget } from "../../src/base/installation/index.ts";
-import { acquireHawdbClearGuard, createMemoryHawdb, hawdbIdentity, openHawdb, type HawdbFailureCode } from "../../src/base/cache/index.ts";
-import { deleteInspectedCache, inspectCacheClear } from "../../src/base/cache/index.ts";
+import { nativeArtifactRoot, nativeCacheRoot, hawdbTarget, verifiedHawdbLibrary } from '../../src/base/installation/index.ts';
+import { acquireHawdbClearGuard, createMemoryHawdb, deleteInspectedCache, hawdbIdentity, inspectCacheClear, openHawdb, type HawdbFailureCode } from '../../src/base/cache/index.ts';
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
+import { tmpdir } from '../support/temporary.ts';
 
 const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
-
-interface RawDatabase { get(namespace: string, keys: string[]): unknown; close(): void }
-function rawEngine(path: string, admit = true): RawDatabase {
-  const native = createRequire(import.meta.url)(join(nativeArtifactRoot(runtime), hawdbTarget(), 'hawdb.node')) as {
-    CacheBridge: { uncoordinatedForTest(path: string, readOnly: boolean, admit: boolean): RawDatabase };
-  };
-  return native.CacheBridge.uncoordinatedForTest(path, true, admit);
-}
-
 const childRole = process.env.CONCORD_HAWDB_CHILD_ROLE;
 if (childRole) {
   const path = process.env.CONCORD_HAWDB_CHILD_PATH!;
-  if (childRole === 'fail-batch') {
-    const db = openHawdb(path, { readOnly: false, create: false }, runtime);
-    try {
-      assert.throws(() => db.put('code_cache', [{ key: 'first', payload: '1' }, { key: 'second', payload: '2' }]), (error: unknown) => error instanceof Error && 'code' in error && error.code === 'HawdbUnavailable');
-      assert.deepEqual(db.scan('code_cache'), []);
-    } finally { db.close(); }
+  if (childRole === 'repair') {
+    const binary = process.env.CONCORD_HAWDB_CHILD_BINARY!, original = process.env.CONCORD_HAWDB_CHILD_ORIGINAL!;
+    for (let index = 0; index < 3; index++) assert.throws(() => hawdbIdentity(runtime), /native member bytes differ/u);
+    writeFileSync(`${binary}.repair`, readFileSync(original)); renameSync(`${binary}.repair`, binary);
+    assert.equal(hawdbIdentity(runtime).engine, 'hawdb');
     process.exit(0);
   }
-  if (childRole === 'kill-batch') {
-    const db = openHawdb(path, { readOnly: false, create: false }, runtime);
-    db.put('code_cache', [{ key: 'precommit', payload: 'not-visible' }]);
-    process.exit(0);
+  if (childRole === 'transaction') {
+    const database = openHawdb(path, { readOnly: false, create: false }, runtime);
+    database.atomic(() => {
+      database.put('code_cache', [{ key: 'first', payload: 'uncommitted' }, { key: 'second', payload: 'uncommitted' }]);
+      process.stdout.write('READY\n');
+      // Block the real synchronous callback at a parent-controlled OS boundary.
+      readSync(0, Buffer.alloc(1), 0, 1, null);
+    });
+    database.close(); process.exit(0);
   }
-  const handle = childRole === 'guard' ? acquireHawdbClearGuard(path, runtime) : childRole === 'raw-database' ? rawEngine(path) : openHawdb(path, { readOnly: false, create: false }, runtime);
+  const library = childRole.startsWith('official-') ? loadHawDB(verifiedHawdbLibrary(runtime).binary) : undefined;
+  const database = library?.open(path, { durability: 'sync_on_every_write' });
+  if (childRole === 'official-active') database!.querySQL('SELECT version FROM concord_cache_schema');
+  const handle = database ?? (childRole === 'guard' ? acquireHawdbClearGuard(path, runtime) : openHawdb(path, { readOnly: false, create: false }, runtime));
+  const lines = createInterface({ input: process.stdin });
+  lines.on('line', command => {
+    if (command === 'query') {
+      try {
+        const rows = database!.querySQL('SELECT cache_key FROM concord_cache_entries WHERE namespace = $1', ['config_cache']).dicts();
+        process.stdout.write(JSON.stringify({ rows }) + '\n');
+      } catch (cause) {
+        process.stdout.write(JSON.stringify({ error: cause instanceof HawDBError ? cause.kind : String(cause) }) + '\n');
+      }
+    }
+  });
   process.stdout.write('READY\n');
-  process.on('SIGTERM', () => { handle.close(); process.exit(0); });
-  setInterval(() => {}, 1_000);
+  process.on('SIGTERM', () => { handle.close(); library?.close(); lines.close(); process.exit(0); });
 } else {
-  const artifact = JSON.parse(readFileSync(join(nativeArtifactRoot(runtime), hawdbTarget(), 'artifact.json'), 'utf8')) as { testHooks?: boolean };
-  const hooks = artifact.testHooks === true;
-  function fixture(): { dir: string; db: string; cleanup(): void } {
-    // macOS exposes its temporary directory through /var -> /private/var.
+  function fixture() {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'concord-native-')));
-    return { dir, db: join(dir, 'cache'), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+    return { dir, path: join(dir, 'cache.hawdb'), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
   }
   function code(operation: () => unknown, expected: HawdbFailureCode): void {
-    assert.throws(operation, (error: unknown) => error instanceof Error && 'code' in error && error.code === expected);
+    assert.throws(operation, { code: expected });
   }
-  function diskSnapshot(path: string): readonly unknown[] {
-    return readdirSync(path, { recursive: true }).map(String).sort().map(name => {
-      const entry = join(path, name);
-      const stat = statSync(entry, { bigint: true });
-      return {
-        name, inode: stat.ino, modified: stat.mtimeNs,
-        digest: stat.isFile() ? createHash('sha256').update(readFileSync(entry)).digest('hex') : null,
-      };
+  function snapshot(path: string) {
+    return [path, ...readdirSync(path, { recursive: true }).map(name => join(path, String(name)))].sort().map(file => {
+      const stat = statSync(file, { bigint: true });
+      return { file, inode: stat.ino, modified: stat.mtimeNs, digest: stat.isFile() ? createHash('sha256').update(readFileSync(file)).digest('hex') : null };
     });
   }
-  async function child(role: 'guard' | 'database' | 'raw-database', path: string): Promise<ChildProcess> {
-    const proc = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
-      cwd: process.cwd(), env: { ...process.env, CONCORD_HAWDB_CHILD_ROLE: role, CONCORD_HAWDB_CHILD_PATH: path }, stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    await new Promise<void>((resolve, reject) => {
-      let output = '';
-      let errors = '';
-      proc.stdout!.on('data', (chunk: Buffer) => { output += chunk.toString(); if (output.includes('READY\n')) resolve(); });
-      proc.stderr!.on('data', (chunk: Buffer) => { errors += chunk.toString(); });
-      proc.once('exit', (status) => reject(new Error(`child exited ${status}: ${errors}`)));
-      setTimeout(() => reject(new Error(`child did not become ready: ${errors}`)), 15_000).unref();
-    });
-    return proc;
+  function locks(path: string) {
+    return readdirSync(path, { recursive: true }).map(String).filter(name => basename(name).endsWith('.lock')).sort().map(name => ({ name, inode: statSync(join(path, name)).ino, parent: statSync(dirname(join(path, name))).ino }));
   }
-  async function stop(proc: ChildProcess): Promise<void> {
-    if (proc.exitCode !== null) return;
-    await new Promise<void>((resolve) => { proc.once('exit', () => resolve()); proc.kill('SIGTERM'); });
+  function line(proc: ChildProcess): Promise<string> {
+    return new Promise((resolve, reject) => {
+      let text = '', errors = '';
+      const timeout = setTimeout(() => { cleanup(); reject(new Error(`child did not reply: ${errors}`)); }, 15000);
+      const onData = (chunk: Buffer) => { text += chunk.toString(); if (text.includes('\n')) { cleanup(); resolve(text.slice(0, text.indexOf('\n'))); } };
+      const onErrorData = (chunk: Buffer) => { errors += chunk.toString(); };
+      const onExit = (status: number | null) => { cleanup(); reject(new Error(`child exited ${status}: ${errors}`)); };
+      const cleanup = () => { clearTimeout(timeout); proc.stdout!.off('data', onData); proc.stderr!.off('data', onErrorData); proc.off('exit', onExit); };
+      proc.stdout!.on('data', onData); proc.stderr!.on('data', onErrorData); proc.once('exit', onExit);
+    });
+  }
+  async function stop(proc: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+    const exited = once(proc, 'exit'); proc.kill(signal); await exited;
+  }
+  async function child(role: string, path: string): Promise<ChildProcess> {
+    const proc = spawn(process.execPath, [fileURLToPath(import.meta.url)], { cwd: process.cwd(), env: { ...process.env, CONCORD_HAWDB_CHILD_ROLE: role, CONCORD_HAWDB_CHILD_PATH: path }, stdio: ['pipe', 'pipe', 'pipe'] });
+    try { assert.equal(await line(proc), 'READY'); return proc; }
+    catch (cause) { await stop(proc, 'SIGKILL'); throw cause; }
   }
 
-  test('real native identity, durable reopen, parameterized special key, rollback, and close', () => {
+  // @feature docs/feature/local-data-engine/architecture.md#原生边界
+  test('official native identity, parameterized SQL roundtrip, callback rollback and durable close', () => {
     const f = fixture();
     try {
-      assert.equal(hawdbIdentity(runtime).engine, 'hawdb');
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime);
+      assert.equal(hawdbIdentity(runtime).version, '0.31.0');
+      const database = openHawdb(f.path, { readOnly: false, create: true }, runtime);
       const key = `quote'\"; DROP TABLE x; -- \n Ω`;
-      db.put('code_cache', [{ key, payload: 'value Ω' }]);
-      assert.deepEqual(db.get('code_cache', [key]), [{ key, payload: 'value Ω' }]);
-      code(() => db.put('code_cache', [{ key: 'good', payload: 'first' }, { key: '', payload: 'bad' }]), 'HawdbLimit');
-      assert.deepEqual(db.get('code_cache', ['good']), []);
-      assert.deepEqual(db.namespaces(), ['code_cache']);
-      db.close(); db.close();
-      code(() => db.get('code_cache', [key]), 'HawdbClosed');
-      const reopened = openHawdb(f.db, { readOnly: true, create: false }, runtime);
-      assert.deepEqual(reopened.get('code_cache', [key]), [{ key, payload: 'value Ω' }]);
-      reopened.close();
-    } finally { f.cleanup(); }
-  });
-  test('atomic FIFO budget and mode restrictions', () => {
-    const db = createMemoryHawdb(runtime);
-    try {
-      db.put('document_parse', [{ key: 'a', payload: '1' }, { key: 'b', payload: '2' }], { maxEntries: 2, maxBytes: 100 });
-      db.put('document_parse', [{ key: 'c', payload: '3' }], { maxEntries: 2, maxBytes: 100 });
-      assert.deepEqual(db.scan('document_parse').map(entry => entry.key), ['b', 'c']);
-      code(() => db.put('document_parse', [{ key: 'x', payload: '123456789' }], { maxEntries: 1, maxBytes: 5 }), 'HawdbLimit');
-      assert.deepEqual(db.scan('document_parse').map(entry => entry.key), ['b', 'c']);
-      code(() => db.put('code_cache', [{ key: 'x', payload: 'y' }]), 'HawdbIncompatible');
-      code(() => db.get('document_parse', Array.from({ length: 1001 }, (_, i) => String(i))), 'HawdbLimit');
-    } finally { db.close(); }
-  });
-  test('bounded in-memory generations rebuild after repeated eviction; durable checkpoint reopens', () => {
-    const memory = createMemoryHawdb(runtime);
-    try {
-      for (let i = 0; i < 2050; i++) memory.put('git_baseline', [{ key: String(i), payload: 'v' }], { maxEntries: 1, maxBytes: 100 });
-      assert.deepEqual(memory.scan('git_baseline'), [{ key: '2049', payload: 'v' }]);
-    } finally { memory.close(); }
-    const f = fixture();
-    try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime);
-      for (let i = 0; i < 34; i++) db.put('config_cache', [{ key: String(i), payload: 'value' }]);
-      db.close();
-      const reopened = openHawdb(f.db, { readOnly: true, create: false }, runtime);
-      assert.equal(reopened.scan('config_cache').length, 34); reopened.close();
-    } finally { f.cleanup(); }
-  });
-  test('read-only existing-only preserves logical rows and source files without initializing missing storage', () => {
-    const f = fixture();
-    try {
-      code(() => openHawdb(f.db, { readOnly: true, create: false }, runtime), 'HawdbUnavailable');
-      assert.equal(existsSync(f.db), false);
-      assert.equal(existsSync(`${f.db}.concord.lock`), false);
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime);
-      db.put('config_cache', [{ key: 'k', payload: 'v' }]); db.close();
-      const sources = join(f.dir, 'sources'); mkdirSync(sources);
-      for (const name of ['owner.md', 'evidence.json', 'journal.json']) writeFileSync(join(sources, name), 'source-owned bytes');
-      const before = diskSnapshot(sources);
-      const owner = statSync(join(f.db, 'owner.hawdb.lock')).ino;
-      const coordination = statSync(`${f.db}.concord.lock`).ino;
-      const ro = openHawdb(f.db, { readOnly: true, create: false }, runtime);
-      code(() => ro.put('config_cache', [{ key: 'x', payload: 'y' }]), 'HawdbIncompatible');
-      assert.deepEqual(ro.scan('config_cache'), [{ key: 'k', payload: 'v' }]);
-      ro.close();
-      assert.deepEqual(diskSnapshot(sources), before);
-      assert.equal(statSync(join(f.db, 'owner.hawdb.lock')).ino, owner);
-      assert.equal(statSync(`${f.db}.concord.lock`).ino, coordination);
-      const again = openHawdb(f.db, { readOnly: true, create: false }, runtime);
-      assert.deepEqual(again.scan('config_cache'), [{ key: 'k', payload: 'v' }]); again.close();
-      rmSync(join(f.db, 'owner.hawdb.lock'));
-      code(() => openHawdb(f.db, { readOnly: true, create: false }, runtime), 'HawdbUnavailable');
-      assert.equal(existsSync(join(f.db, 'owner.hawdb.lock')), false);
-    } finally { f.cleanup(); }
-  });
-  test('a cache with a different identity is unavailable without reading or converting its entries', () => {
-    const f = fixture();
-    const path = join(f.dir, 'cache.hawdb');
-    try {
-      execFileSync('tar', ['-xzf', fileURLToPath(new URL('../fixtures/hawdb/v0.3.0-cache.tar.gz', import.meta.url)), '-C', f.dir]);
-      const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
-      const before = diskSnapshot(path);
-      for (const readOnly of [true, false]) code(() => openHawdb(path, { readOnly, create: false }, runtime), 'HawdbIncompatible');
-      assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
-      assert.deepEqual(diskSnapshot(path), before);
-    } finally { f.cleanup(); }
-  });
-  test('engine, bridge and table identities are checked before the engine touches persistent files', () => {
-    const f = fixture();
-    try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime);
-      db.put('config_cache', [{ key: 'current', payload: 'retained' }]); db.close();
-      const identity = join(f.db, 'concord.identity');
-      const current = readFileSync(identity, 'utf8');
-      const parts = current.split('/');
-      for (let index = 0; index < parts.length; index++) {
-        const invalid = [...parts]; invalid[index] = 'unavailable';
-        writeFileSync(identity, invalid.join('/'));
-        const before = diskSnapshot(f.db);
-        for (const readOnly of [true, false]) code(() => openHawdb(f.db, { readOnly, create: false }, runtime), 'HawdbIncompatible');
-        assert.deepEqual(diskSnapshot(f.db), before);
-      }
-      writeFileSync(identity, current);
-      const reopened = openHawdb(f.db, { readOnly: true, create: false }, runtime);
-      try { assert.deepEqual(reopened.scan('config_cache'), [{ key: 'current', payload: 'retained' }]); }
+      try {
+        database.put('code_cache', [{ key, payload: 'value Ω\u0000' }]);
+        assert.deepEqual(database.get('code_cache', [key]), [{ key, payload: 'value Ω\u0000' }]);
+        const sentinel = new Error('rollback after real SQL writes');
+        assert.throws(() => database.atomic(() => {
+          database.put('code_cache', [{ key: 'first', payload: '1' }]);
+          database.put('config_cache', [{ key: 'second', payload: '2' }]);
+          throw sentinel;
+        }), error => error === sentinel);
+        assert.deepEqual(database.get('code_cache', ['first']), []);
+        assert.deepEqual(database.get('config_cache', ['second']), []);
+        assert.deepEqual(database.namespaces(), ['annotation_cache', 'code_cache', 'config_cache', 'feedback_cache', 'query_cache', 'workspace_projection']);
+      } finally { database.close(); database.close(); }
+      code(() => database.get('code_cache', [key]), 'HawdbClosed');
+      const reopened = openHawdb(f.path, { readOnly: true, create: false }, runtime);
+      try { assert.deepEqual(reopened.get('code_cache', [key]), [{ key, payload: 'value Ω\u0000' }]); }
       finally { reopened.close(); }
     } finally { f.cleanup(); }
   });
-  // @feature docs/feature/local-data-engine/architecture.md#原生边界
-  test('the real v0.13 cache is rejected unchanged and rebuilt only under the clear guard', () => {
-    const f = fixture(), path = join(f.dir, 'cache.hawdb');
-    try {
-      execFileSync('tar', ['-xzf', fileURLToPath(new URL('../fixtures/hawdb/v0.13.0-cache.tar.gz', import.meta.url)), '-C', f.dir]);
-      writeFileSync(join(f.dir, 'source.md'), 'authoritative source');
-      writeFileSync(join(f.dir, 'journal.json'), 'publication evidence');
-      const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
-      const before = diskSnapshot(path);
-      for (const readOnly of [true, false]) code(() => openHawdb(path, { readOnly, create: false }, runtime), 'HawdbIncompatible');
-      assert.deepEqual(diskSnapshot(path), before);
-      const guard = acquireHawdbClearGuard(path, runtime);
-      try { deleteInspectedCache(inspectCacheClear(f.dir), () => guard.verify()); }
-      finally { guard.close(); }
-      assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
-      const current = openHawdb(path, { readOnly: false, create: true }, runtime);
-      try { assert.deepEqual(current.scan('code_cache'), []); }
-      finally { current.close(); }
-      assert.equal(readFileSync(join(f.dir, 'source.md'), 'utf8'), 'authoritative source');
-      assert.equal(readFileSync(join(f.dir, 'journal.json'), 'utf8'), 'publication evidence');
-    } finally { f.cleanup(); }
-  });
-  test('cross-process database and guard exclude both directions, preserve inode, and release', async () => {
-    const f = fixture();
-    let proc: ChildProcess | undefined;
-    try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime); db.close();
-      const lock = join(f.db, 'owner.hawdb.lock');
-      const inode = statSync(lock).ino;
-      const coordination = statSync(`${f.db}.concord.lock`).ino;
-      proc = await child('database', f.db);
-      code(() => acquireHawdbClearGuard(f.db, runtime), 'HawdbBusy');
-      await stop(proc); proc = undefined;
-      assert.equal(statSync(lock).ino, inode);
-      proc = await child('guard', f.db);
-      code(() => openHawdb(f.db, { readOnly: false, create: false }, runtime), 'HawdbBusy');
-      await stop(proc); proc = undefined;
-      const reopened = openHawdb(f.db, { readOnly: false, create: false }, runtime); reopened.close();
-      assert.equal(statSync(lock).ino, inode);
-      assert.equal(statSync(`${f.db}.concord.lock`).ino, coordination);
-    } finally { if (proc) await stop(proc); f.cleanup(); }
-  });
-  test('clear excludes an unwrapped real branch engine across processes and preserves deferred admission fences', { skip: !hooks }, async () => {
-    const f = fixture(); let proc: ChildProcess | undefined;
-    const path = join(f.dir, 'cache.hawdb');
-    try {
-      const db = openHawdb(path, { readOnly: false, create: true }, runtime);
-      db.put('config_cache', [{ key: 'k', payload: 'v' }]); db.close();
-      proc = await child('raw-database', path);
-      code(() => acquireHawdbClearGuard(path, runtime), 'HawdbBusy');
-      await stop(proc); proc = undefined;
-      const deferred = rawEngine(path, false);
-      const guard = acquireHawdbClearGuard(path, runtime);
-      let beforeLockRemoval = false;
-      let afterLockRemoval = false;
-      try {
-        assert.throws(() => rawEngine(path), /HawdbBusy/u);
-        assert.throws(() => deferred.get('config_cache', ['k']), /HawdbBusy/u);
-        const branchHead = readdirSync(path, { recursive: true }).map(String).find(name => name.endsWith('/branch.head'))!;
-        assert.ok(branchHead);
-        const branchLock = join(path, branchHead.replace(/branch\.head$/u, 'owner.hawdb.lock'));
-        const inventory = inspectCacheClear(f.dir);
-        deleteInspectedCache(inventory, () => {
-          guard.verify();
-          if (!existsSync(join(path, branchHead))) {
-            if (existsSync(branchLock)) beforeLockRemoval = true;
-            else afterLockRemoval = true;
-            assert.throws(() => deferred.get('config_cache', ['k']), /HawdbBusy|HawdbUnavailable/u);
-          }
-        });
-        assert.ok(beforeLockRemoval && afterLockRemoval, 'real deferred admission must be refused on both sides of lock unlink');
-        assert.deepEqual(readdirSync(path), ['owner.hawdb.lock']);
-      } finally { guard.close(); deferred.close(); }
-      const reopened = openHawdb(path, { readOnly: false, create: true }, runtime); reopened.close();
-    } finally { if (proc) await stop(proc); f.cleanup(); }
-  });
-  test('internal data aliases are safe but external aliases and linked ownership files are refused', () => {
-    const f = fixture();
-    try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime); db.close();
-      mkdirSync(join(f.db, 'left')); mkdirSync(join(f.db, 'right'));
-      const inside = join(f.db, 'left/data'); const alias = join(f.db, 'right/alias'); const outside = join(f.dir, 'outside');
-      writeFileSync(inside, 'shared internal bytes'); linkSync(inside, alias);
-      const guard = acquireHawdbClearGuard(f.db, runtime); guard.close();
-      linkSync(inside, outside);
-      code(() => acquireHawdbClearGuard(f.db, runtime), 'UnsafePath');
-      code(() => openHawdb(f.db, { readOnly: true, create: false }, runtime), 'UnsafePath');
-      rmSync(outside);
-      const ownerAlias = join(f.db, 'owner-alias'); linkSync(join(f.db, 'owner.hawdb.lock'), ownerAlias);
-      code(() => acquireHawdbClearGuard(f.db, runtime), 'UnsafePath'); rmSync(ownerAlias);
-      const coordinated = `${f.db}.concord.lock`; linkSync(coordinated, outside);
-      code(() => openHawdb(f.db, { readOnly: true, create: false }, runtime), 'UnsafePath'); rmSync(outside);
-      const safe = acquireHawdbClearGuard(f.db, runtime); safe.close();
-    } finally { f.cleanup(); }
-  });
-  test('corrupt manifest cannot authorize clear and still obeys lock', async () => {
-    const f = fixture(); let proc: ChildProcess | undefined;
-    try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime); db.close();
-      writeFileSync(join(f.db, 'manifest.hawdb'), 'corrupt manifest');
-      proc = await child('guard', f.db);
-      code(() => openHawdb(f.db, { readOnly: false, create: false }, runtime), 'HawdbBusy');
-      await stop(proc); proc = undefined;
-      code(() => openHawdb(f.db, { readOnly: false, create: false }, runtime), 'HawdbIncompatible');
-      const guard = acquireHawdbClearGuard(f.db, runtime); guard.close();
-    } finally { if (proc) await stop(proc); f.cleanup(); }
-  });
-  test('unsafe symlink, hardlink, nonregular and unknown lock errors', () => {
-    const f = fixture();
-    try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime); db.close();
-      const alias = join(f.dir, 'alias'); symlinkSync(f.db, alias);
-      code(() => acquireHawdbClearGuard(alias, runtime), 'UnsafePath');
-      const lock = join(f.db, 'owner.hawdb.lock'); const extra = join(f.dir, 'extra'); linkSync(lock, extra);
-      code(() => acquireHawdbClearGuard(f.db, runtime), 'UnsafePath'); rmSync(extra);
-      rmSync(lock); mkdirSync(lock);
-      code(() => acquireHawdbClearGuard(f.db, runtime), 'UnsafePath');
-      rmSync(lock, { recursive: true });
-      // Missing manifest has no deletion authority; guard remains independently safe to acquire.
-      const guard = acquireHawdbClearGuard(f.db, runtime); guard.close();
-    } finally { f.cleanup(); }
-  });
-  test('test-hook failure inside real transaction rolls back all SQL mutations', { skip: !hooks }, () => {
-    const f = fixture();
-    try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime); db.close();
-      const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], {
-        env: { ...process.env, CONCORD_HAWDB_CHILD_ROLE: 'fail-batch', CONCORD_HAWDB_CHILD_PATH: f.db, CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST: '1' },
-        encoding: 'utf8', timeout: 30_000,
-      });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      const reopened = openHawdb(f.db, { readOnly: true, create: false }, runtime);
-      assert.deepEqual(reopened.scan('code_cache'), []); reopened.close();
-    } finally { f.cleanup(); }
-  });
-  test('SIGKILL before native transaction commit has no half-visible batch', { skip: !hooks }, async () => {
-    const f = fixture(); let proc: ChildProcess | undefined;
-    try {
-      const db = openHawdb(f.db, { readOnly: false, create: true }, runtime); db.close();
-      const ready = join(f.dir, 'before-commit.ready');
-      const release = join(f.dir, 'never-release');
-      proc = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
-        cwd: process.cwd(),
-        env: { ...process.env, CONCORD_HAWDB_CHILD_ROLE: 'kill-batch', CONCORD_HAWDB_CHILD_PATH: f.db, CONCORD_HAWDB_TEST_READY: ready, CONCORD_HAWDB_TEST_RELEASE: release },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      const deadline = Date.now() + 15_000;
-      while (!existsSync(ready)) {
-        if (proc.exitCode !== null) throw new Error(`writer exited before transaction hook: ${proc.exitCode}`);
-        if (Date.now() > deadline) throw new Error('writer never reached transaction hook');
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
-      await new Promise<void>(resolve => { proc!.once('exit', () => resolve()); proc!.kill('SIGKILL'); });
-      proc = undefined;
-      const reopened = openHawdb(f.db, { readOnly: true, create: false }, runtime);
-      assert.deepEqual(reopened.scan('code_cache'), []); reopened.close();
-    } finally { if (proc) proc.kill('SIGKILL'); f.cleanup(); }
-  });
-
   // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-  test('native binding bounds repeated installation failures and retries a repaired private cache image', () => {
-    const root = mkdtempSync(join(tmpdir(), 'concord-native-retry-'));
+  test('memory instances isolate rows, enforce namespaces and atomically evict by recent insertion', () => {
+    const left = createMemoryHawdb(runtime), right = createMemoryHawdb(runtime);
     try {
-      const cache = join(root, 'cache');
-      const folder = join(nativeCacheRoot(makeRuntimeEnvironment(process.cwd(), { ...process.env, XDG_CACHE_HOME: cache })), hawdbTarget());
-      cpSync(join(nativeArtifactRoot(runtime), hawdbTarget()), folder, { recursive: true });
-      const binary = join(folder, 'hawdb.node'), original = join(root, 'original.node');
-      writeFileSync(original, readFileSync(binary));
-      writeFileSync(binary, Buffer.concat([readFileSync(binary), Buffer.from('digest mismatch')]));
-      const script = `
-        import fs from 'node:fs';
-        import { mock as bunMock } from 'bun:test';
-        const [module, binary, original] = process.argv.slice(1);
-        const { hawdbIdentity } = await import(module);
-        const runtime = { cwd: process.cwd(), env: { ...process.env } };
-        const read = fs.readFileSync;
-        let reads = 0, failures = 0;
-        fs.readFileSync = function(path, ...args) { if (path === binary) reads++; return read.call(this, path, ...args); };
-        bunMock.module('node:fs', () => ({ ...fs, default: fs }));
-        for (let i = 0; i < 100; i++) { try { hawdbIdentity(runtime); } catch (error) { if (error.code !== 'HawdbIncompatible') throw error; failures++; } }
-        const failedReads = reads;
-        fs.writeFileSync(binary + '.repair', read(original)); fs.renameSync(binary + '.repair', binary);
-        console.log(JSON.stringify({ failedReads, failures, engine: hawdbIdentity(runtime).engine }));
-      `;
-      const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, new URL('../../src/base/cache/index.ts', import.meta.url).href, binary, original], { env: { ...process.env, XDG_CACHE_HOME: cache }, encoding: 'utf8', timeout: 30_000 });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.deepEqual(JSON.parse(result.stdout), { failedReads: 1, failures: 100, engine: 'hawdb' });
-    } finally { rmSync(root, { recursive: true, force: true }); }
+      assert.deepEqual(left.namespaces(), ['document_parse', 'code_parse', 'git_baseline']);
+      left.put('document_parse', [{ key: 'a', payload: '1' }, { key: 'b', payload: '2' }], { maxEntries: 2, maxBytes: 100 });
+      left.put('document_parse', [{ key: 'a', payload: 'new' }], { maxEntries: 2, maxBytes: 100 });
+      left.put('document_parse', [{ key: 'c', payload: '3' }], { maxEntries: 2, maxBytes: 100 });
+      assert.deepEqual(left.scan('document_parse'), [{ key: 'a', payload: 'new' }, { key: 'c', payload: '3' }]);
+      assert.deepEqual(right.scan('document_parse'), []);
+      code(() => left.put('document_parse', [{ key: 'too-large', payload: 'x' }], { maxEntries: 1, maxBytes: 1 }), 'HawdbLimit');
+      assert.deepEqual(left.scan('document_parse').map(row => row.key), ['a', 'c']);
+      code(() => left.put('code_cache', [{ key: 'x', payload: 'y' }]), 'HawdbIncompatible');
+      code(() => left.get('document_parse', Array.from({ length: 1001 }, (_, index) => String(index))), 'HawdbLimit');
+      left.clearNamespace('document_parse'); assert.deepEqual(left.scan('document_parse'), []);
+    } finally { left.close(); right.close(); }
   });
-
+  // @feature docs/feature/local-data-engine/architecture.md#句柄与打开模式
+  test('existing-only readonly preserves source files and rejects writes without creating absent storage', () => {
+    const f = fixture();
+    try {
+      code(() => openHawdb(f.path, { readOnly: true, create: false }, runtime), 'HawdbUnavailable');
+      assert.equal(existsSync(f.path), false); assert.equal(existsSync(`${f.path}.concord.lock`), false);
+      const database = openHawdb(f.path, { readOnly: false, create: true }, runtime);
+      database.put('config_cache', [{ key: 'k', payload: 'v' }]); database.close();
+      const sources = join(f.dir, 'sources'); mkdirSync(sources);
+      for (const name of ['owner.md', 'evidence.json', 'journal.json']) writeFileSync(join(sources, name), 'source-owned bytes');
+      const before = snapshot(sources), owner = statSync(join(f.path, 'owner.hawdb.lock')).ino, gate = statSync(`${f.path}.concord.lock`).ino;
+      const readonly = openHawdb(f.path, { readOnly: true, create: false }, runtime);
+      try {
+        code(() => readonly.put('config_cache', [{ key: 'x', payload: 'y' }]), 'HawdbIncompatible');
+        assert.deepEqual(readonly.scan('config_cache'), [{ key: 'k', payload: 'v' }]);
+      } finally { readonly.close(); }
+      assert.deepEqual(snapshot(sources), before); assert.equal(statSync(join(f.path, 'owner.hawdb.lock')).ino, owner); assert.equal(statSync(`${f.path}.concord.lock`).ino, gate);
+    } finally { f.cleanup(); }
+  });
+  // @feature docs/feature/local-data-engine/architecture.md#打开与恢复模式
+  test('current SQL schema mismatch preserves files and requires explicit guarded clear', () => {
+    const f = fixture();
+    try {
+      const database = openHawdb(f.path, { readOnly: false, create: true }, runtime);
+      database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v2']); database.sql('INSERT INTO concord_cache_schema (version) VALUES ($1)', ['not-concord']); database.close();
+      for (const readOnly of [true, false]) code(() => openHawdb(f.path, { readOnly, create: false }, runtime), 'HawdbIncompatible');
+      const beforeLocks = locks(f.path);
+      const guard = acquireHawdbClearGuard(f.path, runtime);
+      try { deleteInspectedCache(inspectCacheClear(f.dir), guard.verify); assert.deepEqual(locks(f.path), beforeLocks); }
+      finally { guard.close(); }
+      assert.equal(inspectCacheClear(f.dir).empty, true);
+      const rebuilt = openHawdb(f.path, { readOnly: false, create: true }, runtime);
+      try { assert.deepEqual(rebuilt.scan('config_cache'), []); }
+      finally { rebuilt.close(); }
+    } finally { f.cleanup(); }
+  });
+  // @feature docs/feature/local-data-engine/architecture.md#锁
+  test('cross-process owner and clear guard exclude both directions and preserve ownership lock inodes', async () => {
+    const f = fixture(); let proc: ChildProcess | undefined;
+    try {
+      openHawdb(f.path, { readOnly: false, create: true }, runtime).close();
+      const owner = statSync(join(f.path, 'owner.hawdb.lock')).ino, gate = statSync(`${f.path}.concord.lock`).ino;
+      proc = await child('database', f.path); code(() => acquireHawdbClearGuard(f.path, runtime), 'HawdbBusy');
+      await stop(proc); proc = undefined;
+      proc = await child('guard', f.path); code(() => openHawdb(f.path, { readOnly: false, create: false }, runtime), 'HawdbBusy');
+      await stop(proc); proc = undefined;
+      openHawdb(f.path, { readOnly: false, create: false }, runtime).close();
+      assert.equal(statSync(join(f.path, 'owner.hawdb.lock')).ino, owner); assert.equal(statSync(`${f.path}.concord.lock`).ino, gate);
+    } finally { if (proc) await stop(proc, 'SIGKILL'); f.cleanup(); }
+  });
+  // @feature docs/feature/local-data-engine/architecture.md#清理
+  test('clear refuses active official external branches and fences a lazy handle before and after deletion', async () => {
+    const f = fixture(); let proc: ChildProcess | undefined, deferred: ChildProcess | undefined;
+    try {
+      const database = openHawdb(f.path, { readOnly: false, create: true }, runtime);
+      database.put('config_cache', [{ key: 'old-generation', payload: 'retained until clear' }]); database.close();
+      const before = snapshot(f.path);
+      proc = await child('official-active', f.path);
+      code(() => acquireHawdbClearGuard(f.path, runtime), 'HawdbBusy');
+      await stop(proc); proc = undefined;
+      // External admission may rebuild runtime files, but the committed row must survive a refused clear.
+      const retained = openHawdb(f.path, { readOnly: true, create: false }, runtime);
+      try { assert.deepEqual(retained.get('config_cache', ['old-generation']), [{ key: 'old-generation', payload: 'retained until clear' }]); }
+      finally { retained.close(); }
+      assert.ok(before.length > 1);
+      proc = await child('official-lazy', f.path);
+      deferred = await child('official-lazy', f.path);
+      const beforeLocks = locks(f.path), guard = acquireHawdbClearGuard(f.path, runtime);
+      try {
+        const reply = line(proc); proc.stdin!.write('query\n');
+        assert.ok('error' in JSON.parse(await reply), 'lazy external admission must fail while clear holds engine leases');
+        deleteInspectedCache(inspectCacheClear(f.dir), guard.verify);
+        assert.deepEqual(locks(f.path), beforeLocks); assert.equal(inspectCacheClear(f.dir).empty, true);
+      } finally { guard.close(); }
+      const rebuilt = openHawdb(f.path, { readOnly: false, create: true }, runtime);
+      try {
+        rebuilt.put('config_cache', [{ key: 'new-generation', payload: 'current' }]);
+        const reply = line(proc); proc.stdin!.write('query\n');
+        assert.ok('error' in JSON.parse(await reply), 'a lazy stale selector must not read a deleted generation while a new owner is active');
+        assert.deepEqual(rebuilt.scan('config_cache'), [{ key: 'new-generation', payload: 'current' }]);
+      } finally { rebuilt.close(); }
+      const reply = line(deferred); deferred.stdin!.write('query\n');
+      const observation = JSON.parse(await reply) as { rows?: readonly { cache_key: string }[]; error?: string };
+      if (observation.rows) assert.deepEqual(observation.rows, [{ cache_key: 'new-generation' }], 'an untouched lazy handle may only re-admit into the new generation');
+      else assert.ok(observation.error, 'a stale selector must fail explicitly');
+      await stop(deferred); deferred = undefined;
+      await stop(proc); proc = undefined;
+    } finally { if (proc) await stop(proc, 'SIGKILL'); if (deferred) await stop(deferred, 'SIGKILL'); f.cleanup(); }
+  });
+  // @feature docs/feature/local-data-engine/architecture.md#清理
+  test('clear preserves nested lock inodes and refuses external aliases, linked locks and symlinks', () => {
+    const f = fixture();
+    try {
+      openHawdb(f.path, { readOnly: false, create: true }, runtime).close();
+      mkdirSync(join(f.path, 'left')); mkdirSync(join(f.path, 'right'));
+      const inside = join(f.path, 'left/data'), alias = join(f.path, 'right/alias'), outside = join(f.dir, 'outside');
+      writeFileSync(inside, 'shared internal bytes'); linkSync(inside, alias);
+      acquireHawdbClearGuard(f.path, runtime).close();
+      linkSync(inside, outside); code(() => acquireHawdbClearGuard(f.path, runtime), 'UnsafePath'); rmSync(outside);
+      linkSync(join(f.path, 'owner.hawdb.lock'), outside); code(() => acquireHawdbClearGuard(f.path, runtime), 'UnsafePath'); rmSync(outside);
+      symlinkSync(inside, outside); code(() => acquireHawdbClearGuard(outside, runtime), 'UnsafePath'); rmSync(outside);
+      const beforeLocks = locks(f.path), guard = acquireHawdbClearGuard(f.path, runtime);
+      try { deleteInspectedCache(inspectCacheClear(f.dir), guard.verify); assert.deepEqual(locks(f.path), beforeLocks); }
+      finally { guard.close(); }
+      assert.equal(existsSync(inside), false); assert.equal(existsSync(alias), false);
+    } finally { f.cleanup(); }
+  });
+  // @feature docs/feature/local-data-engine/architecture.md#事务与提交结果
+  test('SIGKILL inside an official synchronous transaction never publishes a partial batch', async () => {
+    const f = fixture(); let proc: ChildProcess | undefined;
+    try {
+      const database = openHawdb(f.path, { readOnly: false, create: true }, runtime);
+      database.put('config_cache', [{ key: 'committed', payload: 'survives' }]); database.close();
+      proc = await child('transaction', f.path); await stop(proc, 'SIGKILL'); proc = undefined;
+      const reopened = openHawdb(f.path, { readOnly: false, create: false }, runtime);
+      try { assert.deepEqual(reopened.scan('code_cache'), []); assert.deepEqual(reopened.scan('config_cache'), [{ key: 'committed', payload: 'survives' }]); }
+      finally { reopened.close(); }
+    } finally { if (proc) await stop(proc, 'SIGKILL'); f.cleanup(); }
+  });
+  // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+  test('verified official artifact rejects private corruption and retries an atomically repaired image', () => {
+    const f = fixture();
+    try {
+      const cache = join(f.dir, 'cache'), privateRuntime = makeRuntimeEnvironment(process.cwd(), { ...process.env, XDG_CACHE_HOME: cache });
+      const folder = join(nativeCacheRoot(privateRuntime), hawdbTarget());
+      cpSync(join(nativeArtifactRoot(runtime), hawdbTarget()), folder, { recursive: true });
+      const binary = join(folder, relative(join(nativeArtifactRoot(runtime), hawdbTarget()), verifiedHawdbLibrary(runtime).binary)), original = join(f.dir, 'original');
+      writeFileSync(original, readFileSync(binary)); writeFileSync(binary, Buffer.concat([readFileSync(binary), Buffer.from('digest mismatch')]));
+      const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], { env: { ...process.env, XDG_CACHE_HOME: cache, CONCORD_HAWDB_CHILD_ROLE: 'repair', CONCORD_HAWDB_CHILD_BINARY: binary, CONCORD_HAWDB_CHILD_ORIGINAL: original }, encoding: 'utf8', timeout: 30000 });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    } finally { f.cleanup(); }
+  });
 }

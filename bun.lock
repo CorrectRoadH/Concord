@@ -19,6 +19,7 @@
         "@lezer/highlight": "1.2.5",
         "@lezer/xml": "1.0.6",
         "@mdxeditor/editor": "4.5.0",
+        "@nowledge/hawdb-bun": "0.31.0",
         "@stylexjs/stylex": "0.19.1",
         "@stylexjs/unplugin": "0.19.1",
         "@tailwindcss/vite": "4.3.5",
@@ -71,6 +72,7 @@
     "esbuild",
   ],
   "patchedDependencies": {
+    "@nowledge/hawdb-bun@0.31.0": "patches/@nowledge%2Fhawdb-bun@0.31.0.patch",
     "typescript@7.1.0-beta": "patches/typescript@7.1.0-beta.patch",
   },
   "overrides": {
@@ -362,6 +364,10 @@
     "@mdxeditor/gurx": ["@mdxeditor/gurx@1.2.4", "", { "peerDependencies": { "react": ">= 18 || >= 19", "react-dom": ">= 18 || >= 19" } }, "sha512-9ZykIFYhKaXaaSPCs1cuI+FvYDegJjbKwmA4ASE/zY+hJY6EYqvoye4esiO85CjhOw9aoD/izD/CU78/egVqmg=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.2.6", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^1.7.1 || 2.0.0-beta.2", "@emnapi/runtime": "^1.7.1 || 2.0.0-beta.2" } }, "sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw=="],
+
+    "@nowledge/hawdb-bun": ["@nowledge/hawdb-bun@0.31.0", "", { "optionalDependencies": { "@nowledge/hawdb-ffi-darwin-arm64": "0.31.0" } }, "sha512-WMK6xtNgCUVtA6lQqmlYdbOh5WTj96tox3YkDaQHdgU2XWze+1qWBx94NNlhrCOAbWCznp9rMIWbRHYPDaIslQ=="],
+
+    "@nowledge/hawdb-ffi-darwin-arm64": ["@nowledge/hawdb-ffi-darwin-arm64@0.31.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-eTEfAP8F+AGl9lcCi8pvDQ46SSV2PAEd5cPEZbBKtr1pVp1mEekN5spnFolEHA/Ozered2Kmssm/eIaw99nOjw=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.157.0", "", {}, "sha512-95iTox1qdt6WGWce3xwNOVayByOfLaYAq+qGPpub6NWbBh9sv0GG3+zyfh9ZBCO/jVu5A0EWI+qQI7g6fevjxg=="],
 

@@ -98,7 +98,7 @@ export const buildApplication = (output: string): Promise<void> => Effect.runPro
   yield* fs.remove(destination, { recursive: true, force: true });
   yield* fs.makeDirectory(destination, { recursive: true });
   for (const part of [resources, web]) yield* copyPart(part, destination);
-  for (const name of ['package.json', 'bun.lock']) yield* fs.copyFile(join(repository, name), join(destination, name));
+  for (const name of ['package.json', 'bun.lock', 'native-release.json']) yield* fs.copyFile(join(repository, name), join(destination, name));
   if (yield* fs.exists(join(repository, 'patches'))) yield* fs.copy(join(repository, 'patches'), join(destination, 'patches'));
   const identity = yield* captureBuildSource();
   const manifest = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(yield* fs.readFileString(join(destination, 'package.json')));

@@ -77,7 +77,7 @@ export const WorkspaceProjectionSchema = Schema.Struct({ snapshot: WorkspaceProj
   lastAttempt: Schema.optional(Attempt), lastError: Schema.optional(RefreshError),
 }) });
 export const WorkspaceServerEvent = Schema.Struct({ token: Schema.String, sourceDigest: Schema.NullOr(Schema.String),
-  state: Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']),
+  state: Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'blocked', 'stopping']),
   lastAttempt: Schema.optional(Attempt), workspace: Schema.optional(WorkspaceProjectionSchema), projection: Schema.optional(WorkspaceProjectionSchema.fields.projection), error: Schema.optional(Schema.Struct(ErrorFields)),
 }).annotate({ parseOptions: { onExcessProperty: 'error' } });
 export type WorkspaceProjectionRecord = typeof WorkspaceProjectionRecordSchema.Type;

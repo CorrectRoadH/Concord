@@ -76,6 +76,9 @@ export interface Repository {
   read(path: string): string | undefined;
   readBytes?(path: string): Uint8Array | undefined;
   inspect?(path: string): { readonly file: boolean; readonly directory: boolean; readonly symbolicLink: boolean; readonly size: number; readonly mode: number; readonly identity: string } | undefined;
+  /** Search-only observations in an existing read snapshot, verified before returning. */
+  fileIdentities?(prefix: string): readonly { readonly path: string; readonly identity: string }[];
+  readIdentified?(path: string, identity: string): string;
   rootFiles?(): readonly string[];
   runtimeInputs?(command: string, envNames: readonly string[]): { readonly executable: { readonly path: string; readonly digest: string }; readonly env: Readonly<Record<string, string | undefined>>; readonly implementation: string; readonly version: string };
   environment?(names?: readonly string[]): Readonly<Record<string, string | undefined>>;

@@ -1,89 +1,78 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
-import { Clock, Effect, Exit, Scope, Semaphore } from 'effect';
+import { Clock, Deferred, Effect, Semaphore, Schema } from 'effect';
 import { ConcordError } from '../../model/index.ts';
-import { PersistentCache, type PersistentCacheService, type ReadonlyCacheSnapshot } from './service.ts';
-import { HawdbFailure, validateHawdbArtifact, type HawdbDatabase, type HawdbNamespace, type HawdbEntry } from './hawdb-native.ts';
-import { CacheDerivationBatch } from '../../model/index.ts';
-import { Schema } from 'effect';
-import { writeCachePayloads } from './cache-query.ts';
-import { mergeFeedbackRows } from './feedback-cache.ts';
-import type { RemoteFeedback } from '../../model/index.ts';
+import { PersistentCache, type PersistentCacheService } from './service.ts';
+import { HawdbFailure, validateHawdbArtifact } from './hawdb-native.ts';
+import { HawdbEntry } from './hawdb-types.ts';
+import type { CacheDerivationBatch, RemoteFeedback } from '../../model/index.ts';
 import { RuntimeEnvironment } from '../environment/index.ts';
-import { openPersistentHandle } from './persistent-handle.ts';
-import { inspectCacheStatus } from './cache-status.ts';
+import { DatabaseWorker } from './worker-client.ts';
+import { DatabaseClear, DatabaseSnapshot, DatabaseStatus, type DatabaseOperation } from './worker-protocol.ts';
+import { KnowledgeResult } from './knowledge-search-model.ts';
 
-/** One scoped owner, with an explicit close/reopen boundary for maintenance. */
+/** The service owns one Worker; only that Worker owns the native database. */
 export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(function*(privateDir: string) {
-  const backend = yield* PersistentCache;
-  const runtime = yield* RuntimeEnvironment;
-  let scope: Scope.Closeable | undefined;
-  let database: HawdbDatabase | undefined;
-  let openError: HawdbFailure | undefined;
-  const snapshots = new Map<HawdbNamespace, readonly HawdbEntry[]>();
+  const backend = yield* PersistentCache, runtime = yield* RuntimeEnvironment;
+  let database: DatabaseWorker | undefined, openError: HawdbFailure | undefined, fatal: HawdbFailure | undefined;
+  const failed = yield* Deferred.make<HawdbFailure>();
   let validatedAt = -Infinity, validationError: HawdbFailure | undefined;
   const verify = Effect.gen(function*() {
+    if (fatal) return yield* Effect.fail(fatal);
     const now = yield* Clock.currentTimeMillis;
     if (now - validatedAt >= 1000) {
       validatedAt = now;
-      const outcome = yield* Effect.result(Effect.try({ try: () => validateHawdbArtifact(runtime), catch: cause => new HawdbFailure('HawdbUnavailable', `Native artifact validation failed: ${cause instanceof Error ? cause.message : String(cause)}`) }));
+      const outcome = yield* Effect.result(Effect.try({ try: () => validateHawdbArtifact(runtime), catch: cause => new HawdbFailure('HawdbUnavailable', `Native artifact validation failed: ${String(cause)}`) }));
       validationError = outcome._tag === 'Failure' ? outcome.failure : undefined;
     }
     if (validationError) return yield* Effect.fail(validationError);
   });
   const lifecycle = yield* Semaphore.make(1);
-  const closeUnlocked = Effect.suspend(() => {
-    snapshots.clear();
-    const prior = scope; scope = undefined; database = undefined;
-    return prior ? Scope.close(prior, Exit.void) : Effect.void;
-  });
+  const closeUnlocked = Effect.promise(async () => { const previous = database; database = undefined; await previous?.close(); });
   const close = Effect.uninterruptible(lifecycle.withPermit(closeUnlocked));
-  const open = lifecycle.withPermit(Effect.uninterruptibleMask(restore => Effect.gen(function*() {
-    yield* closeUnlocked;
-    openError = undefined;
-    yield* verify;
-    const nextScope = yield* Scope.make();
-    const acquired = yield* Effect.exit(restore(openPersistentHandle(privateDir, runtime).pipe(
-      Effect.provideService(Scope.Scope, nextScope),
-      Effect.flatMap(value => value ? Effect.succeed(value) : Effect.fail(new HawdbFailure('HawdbBusy', 'Persistent cache is owned by another command'))),
-    )));
-    if (Exit.isFailure(acquired)) {
-      yield* Scope.close(nextScope, acquired);
-      return yield* Effect.failCause(acquired.cause);
-    }
-    scope = nextScope;
-    database = acquired.value;
-  }))).pipe(Effect.tapError(error => Effect.sync(() => { openError = error; })));
-  yield* Effect.addFinalizer(() => close);
-  const use = <A>(run: (database: HawdbDatabase) => A) => verify.pipe(Effect.andThen(Effect.try({ try: () => {
-    if (!database) throw openError ?? new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');
-    return run(database);
-  }, catch: cause => cause instanceof HawdbFailure || cause instanceof ConcordError ? cause : new HawdbFailure('HawdbUnavailable', String(cause)) })));
-  const service: PersistentCacheService = {
-    verifyArtifact: backend.verifyArtifact,
-    reclaim: () => use(db => db.reclaim()).pipe(Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', cause.message))),
-    attach: () => Effect.fail(new HawdbFailure('HawdbUnavailable', 'The persistent owner cannot execute repository operations')),
-    read: (_directory, namespace, keys) => use(db => keys === undefined ? db.scan(namespace) : db.get(namespace, keys)).pipe(Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', cause.message))),
-    update: (_directory, namespace, key, update) => use(db => { db.put(namespace, [{ key, payload: update(db.get(namespace, [key])[0]?.payload) }]); snapshots.delete(namespace); }),
-  };
-  const snapshot = use(db => Object.fromEntries((['annotation_cache', 'code_cache', 'config_cache', 'feedback_cache', 'query_cache'] as const).map(namespace => {
-    let rows = snapshots.get(namespace);
-    if (!rows) { rows = Object.freeze(db.scan(namespace).map(row => Object.freeze({ ...row }))); snapshots.set(namespace, rows); }
-    return [namespace, rows];
-  })) as ReadonlyCacheSnapshot);
-  const mergeDerived = (input: readonly CacheDerivationBatch[]) => use(db => {
-    const batches = Schema.decodeUnknownSync(Schema.Array(CacheDerivationBatch), { onExcessProperty: 'error' })(input);
-    for (const batch of batches) {
-      if (batch.namespace === 'query_cache' && batch.entries.some(row => !row.key.startsWith('writing:'))) throw new HawdbFailure('HawdbUnavailable', 'A computation cannot replace historical query observations');
-      try { writeCachePayloads(db, batch.namespace, batch.entries); }
-      finally { snapshots.delete(batch.namespace); }
-    }
+  const use = (operation: DatabaseOperation, background = false) => Effect.suspend(() => {
+    let pending: Promise<unknown> | undefined;
+    return Effect.tryPromise({ try: signal => {
+      if (!database) throw openError ?? new HawdbFailure('HawdbUnavailable', 'Workspace database Worker is unavailable');
+      const request = database.request(operation, { signal, background });
+      pending = request;
+      return request;
+    }, catch: cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', String(cause)) }).pipe(Effect.ensuring(Effect.promise(async () => { await pending?.then(() => undefined, () => undefined); })));
   });
-  const status = Effect.sync(() => inspectCacheStatus(privateDir, true, () => {
-    if (!database) throw openError ?? new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');
-    return database;
-  }, undefined, runtime));
-  return { open, close, verify, service, snapshot, mergeDerived, status,
-    mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use(db => { const warnings = mergeFeedbackRows(db, connectionId, items); snapshots.delete('feedback_cache'); return warnings; }),
+  const open = lifecycle.withPermit(Effect.gen(function*() {
+    yield* verify;
+    if (database && !openError) return;
+    yield* closeUnlocked;
+    database = new DatabaseWorker(error => { fatal = error; Deferred.doneUnsafe(failed, Effect.succeed(error)); });
+    const result = yield* Effect.result(use({ op: 'open', privateDir, runtime }));
+    openError = result._tag === 'Failure' ? result.failure : undefined;
+    if (openError) return yield* Effect.fail(openError);
+  }).pipe(Effect.onInterrupt(() => closeUnlocked)));
+  yield* Effect.addFinalizer(() => close);
+  const makeService = (background: boolean): PersistentCacheService => {
+    const service: PersistentCacheService = {
+      verifyArtifact: backend.verifyArtifact,
+      attach: () => Effect.fail(new HawdbFailure('HawdbUnavailable', 'The persistent owner cannot execute repository operations')),
+      read: (_directory, namespace, keys) => use({ op: 'read', namespace, ...(keys === undefined ? {} : { keys }) }, background).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(HawdbEntry))), Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbIncompatible', String(cause)))),
+      update: (_directory, namespace, key, update) => Effect.gen(function*() {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const prior = (yield* service.read(privateDir, namespace, [key]))[0]?.payload;
+          const candidate = yield* Effect.try({ try: () => update(prior), catch: cause => cause instanceof ConcordError ? cause : new HawdbFailure('HawdbUnavailable', String(cause)) });
+          if ((yield* use({ op: 'compare', namespace, key, expected: prior ?? null, payload: candidate }, background)) === true) return;
+        }
+        return yield* Effect.fail(new HawdbFailure('HawdbBusy', 'Cache observation changed during comparison'));
+      }),
+    };
+    return service;
+  };
+  const snapshot = (background: boolean) => use({ op: 'snapshot' }, background).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseSnapshot)));
+  return { open, close, verify, service: makeService(false), backgroundService: makeService(true), failed: Deferred.await(failed),
+    snapshot: snapshot(false), backgroundSnapshot: snapshot(true),
+    mergeDerived: (batches: readonly CacheDerivationBatch[], background = false) => use({ op: 'derived', batches }, background).pipe(Effect.asVoid),
+    status: use({ op: 'status' }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseStatus))),
+    clear: use({ op: 'clear' }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseClear)), Effect.tap(() => Effect.sync(() => { openError = undefined; })), Effect.tapError(cause => Effect.sync(() => { openError = cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', String(cause)); }))),
+    mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use({ op: 'feedback', connectionId, items }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.String)))),
+    search: (input: Extract<DatabaseOperation, { readonly op: 'search' }>) => use(input).pipe(Effect.flatMap(Schema.decodeUnknownEffect(KnowledgeResult)), Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbIncompatible', String(cause)))),
+    discardSearch: (kind: 'memory' | 'issue', memory: boolean) => use({ op: 'discard-search', kind, memory }).pipe(Effect.asVoid),
   };
 });

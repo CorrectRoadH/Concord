@@ -216,7 +216,7 @@ advisory 是不使检查失败的提示，不算 finding。原生诊断与缓存
 
 ## 原生绑定 {#native-binding}
 
-随归档发版的、目标平台专用的 HawDB N-API 引擎文件；加载前与 native manifest 核对身份。
+随归档发版的、目标平台专用的 HawDB 普通 C ABI 动态库；官方 Bun 适配器加载前，按固定发行清单与安装收据核对文件身份。
 
 旧写法：`原生 addon`
 

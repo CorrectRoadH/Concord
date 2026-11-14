@@ -22,7 +22,6 @@ export async function run(): Promise<void> {
     case 'query-refresh-worker': await (await import('../server/query-refresh-worker-main.ts')).run(); return;
     case 'query-scan-worker': await (await import('../server/query-scan-worker-main.ts')).run(); return;
     case 'view-scan-worker': await (await import('../server/view-scan-worker-main.ts')).run(); return;
-    case 'cache-maintenance-worker': await (await import('../server/cache-maintenance-worker-main.ts')).run(); return;
     case 'test-adapter-vitest': await (await import('../server/test-adapter-vitest-main.ts')).run(); return;
     case 'operation-worker': await (await import('../server/operation/run.ts')).run(); return;
     default:

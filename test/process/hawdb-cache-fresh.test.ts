@@ -1,6 +1,6 @@
 // 跨进程保证：原生模块与句柄——新CLI的cache rebuild在另一真实native handle占用时报告busy且可恢复。
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
-import { initialize, runApplication, installedConcordCli, assert, createHash, execFileSync, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, resolve, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, ScanReport, freshConsumer, cli, cacheDiskSnapshot } from './hawdb-cache-fixture.ts';
+import { runApplication, assert, existsSync, rmSync, statSync, join, test, Effect, Schema, openHawdb, CacheReport, ScanReport, freshConsumer, cli } from './hawdb-cache-fixture.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
@@ -10,6 +10,7 @@ test('fresh Git consumers start a cache owner for checks and explicit rebuild ke
   const root = (await freshConsumer());
   try {
     const cold = cli(root, 'check');
+    assert.ok(cold.stdout.trim(), cold.stdout + cold.stderr);
     const first = Schema.decodeUnknownSync(Schema.fromJsonString(ScanReport))(cold.stdout);
     assert.ok(['hit', 'miss'].includes(first.cache.status), cold.stdout + cold.stderr);
     assert.ok(['hit', 'miss'].includes(first.codeCache.status));

@@ -1,12 +1,13 @@
-// 跨进程保证：运行环境——真实--no-addons客户端只验证artifact而不加载引擎，hook工件需显式身份并保持摘要校验。
+// 跨进程保证：运行环境——真实客户端校验官方产物时不加载动态库，损坏的清单、收据和库字节不能绕过校验。
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { nativeArtifactRoot, nativeCacheRoot, hawdbTarget } from '../../src/base/installation/index.ts';
+import { Schema } from 'effect';
+import { NativeArtifactSchema, nativeArtifactRoot, hawdbLibraryName, hawdbTarget } from '../../src/base/installation/index.ts';
+import { verifyHawdbArtifact } from '../../src/base/cache/index.ts';
 import { tmpdir } from '../support/temporary.ts';
-import { Effect } from 'effect';
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 
 const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
@@ -14,63 +15,65 @@ const runtime = makeRuntimeEnvironment(process.cwd(), process.env);
 // @feature docs/feature/local-data-engine/architecture.md#cli-查询
 test('client artifact verification does not load a native engine owned by the service', () => {
   const module = new URL('../../src/base/cache/hawdb-native.ts', import.meta.url).href;
-  const result = spawnSync(process.execPath, ['--no-addons', '--input-type=module', '-e', `
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
     import assert from 'node:assert/strict';
-    import { verifyHawdbArtifact, validateHawdbArtifact } from ${JSON.stringify(module)};
+    import * as ffi from 'bun:ffi';
+    import { mock } from 'bun:test';
+    let loads = 0;
+    mock.module('bun:ffi', () => ({ ...ffi, dlopen() { loads++; throw new Error('observed FFI boundary'); } }));
+    const { verifyHawdbArtifact, validateHawdbArtifact, createMemoryHawdb } = await import(${JSON.stringify(module)});
     const runtime = { cwd: process.cwd(), env: { ...process.env } };
     verifyHawdbArtifact(runtime);
-    assert.throws(() => validateHawdbArtifact(runtime), error => error.code === 'HawdbUnavailable');
+    validateHawdbArtifact(runtime);
+    assert.equal(loads, 0);
+    assert.throws(() => createMemoryHawdb(runtime), error => error.code === 'HawdbUnavailable');
+    assert.equal(loads, 1, 'the same external boundary observes an actual engine load');
   `], { encoding: 'utf8', timeout: 20_000, env: { ...process.env, NODE_OPTIONS: '' } });
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
-// @feature docs/engineering/build/architecture.md#故障注入产物
-test('source native hooks require explicit matching identity and preserve digest verification', () => Effect.runPromise(Effect.sync(() => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-native-hooks-'));
-  const cache = join(root, 'cache');
-  const privateRuntime = makeRuntimeEnvironment(process.cwd(), { ...process.env, XDG_CACHE_HOME: cache });
-  const artifact = join(nativeCacheRoot(privateRuntime, true), hawdbTarget());
+// @feature docs/engineering/build/architecture.md#原生绑定复用
+test('official native receipts, manifests and library bytes all participate in client verification', () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-native-verification-'));
+  const isolated = makeRuntimeEnvironment(process.cwd(), { ...process.env, XDG_CACHE_HOME: join(root, 'cache') });
+  const artifact = join(nativeArtifactRoot(isolated), hawdbTarget());
   const module = new URL('../../src/base/cache/index.ts', import.meta.url).href;
-  const env = { ...process.env, XDG_CACHE_HOME: cache, CONCORD_NATIVE_TEST_HOOKS: undefined };
-  const invoke = (hooks: string | undefined, body: string, failAfterFirst = false) => spawnSync(process.execPath, ['--input-type=module', '-e', `
-    import assert from 'node:assert/strict';
-    import { hawdbIdentity, createMemoryHawdb } from ${JSON.stringify(module)};
-    const runtime = { cwd: process.cwd(), env: { ...process.env } };
-    ${body}
-  `], { encoding: 'utf8', env: { ...env, CONCORD_NATIVE_TEST_HOOKS: hooks, CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST: failAfterFirst ? '1' : undefined } });
-  const rejects = (hooks: string | undefined) => {
-    const result = invoke(hooks, "assert.throws(() => hawdbIdentity(runtime), error => error.code === 'HawdbIncompatible');");
+  const replace = (path: string, bytes: string | Buffer) => {
+    writeFileSync(`${path}.next`, bytes);
+    renameSync(`${path}.next`, path);
+  };
+  const rejects = () => {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import assert from 'node:assert/strict';
+      import { verifyHawdbArtifact, createMemoryHawdb } from ${JSON.stringify(module)};
+      const runtime = { cwd: process.cwd(), env: { ...process.env } };
+      for (const operation of [() => verifyHawdbArtifact(runtime), () => createMemoryHawdb(runtime)]) {
+        assert.throws(operation, error => {
+          assert.equal(error.code, 'HawdbUnavailable');
+          assert.match(String(error), /HawdbIncompatible/u);
+          return true;
+        });
+      }
+    `], { encoding: 'utf8', timeout: 20_000, env: { ...isolated.env, NODE_OPTIONS: '' } });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
   try {
-    const prepared = join(nativeCacheRoot(runtime, true), hawdbTarget());
-    cpSync(prepared, artifact, { recursive: true });
-    cpSync(prepared, join(nativeCacheRoot(privateRuntime, false), hawdbTarget()), { recursive: true });
-    const manifestPath = join(artifact, 'artifact.json');
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
-    assert.equal(manifest.testHooks, true);
-    rejects(undefined);
-    const accepted = invoke('1', `
-      const db = createMemoryHawdb(runtime);
-      try {
-        assert.throws(() => db.put('document_parse', [{ key: 'first', payload: '1' }, { key: 'second', payload: '2' }]), error => error.code === 'HawdbUnavailable');
-        assert.deepEqual(db.scan('document_parse'), []);
-      } finally { db.close(); }
-    `, true);
-    assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
-    const writable = invoke('1', `
-      const db = createMemoryHawdb(runtime);
-      try {
-        db.put('document_parse', [{ key: 'committed', payload: 'value' }]);
-        assert.deepEqual(db.scan('document_parse'), [{ key: 'committed', payload: 'value' }]);
-      } finally { db.close(); }
-    `);
-    assert.equal(writable.status, 0, writable.stdout + writable.stderr);
-    for (const field of ['sourceDigest', 'cargoLockDigest', 'binarySha256', 'noticesSha256']) {
-      writeFileSync(manifestPath, JSON.stringify({ ...manifest, [field]: '0'.repeat(64) }));
-      rejects('1');
-    }
     cpSync(join(nativeArtifactRoot(runtime), hawdbTarget()), artifact, { recursive: true });
-    rejects('1');
+    verifyHawdbArtifact(isolated);
+    const receiptPath = join(artifact, 'artifact.json');
+    const receipt = Schema.decodeUnknownSync(Schema.fromJsonString(NativeArtifactSchema), { onExcessProperty: 'error' })(readFileSync(receiptPath, 'utf8'));
+    assert.equal(receipt.format, 'concord.native-artifact/v2');
+    for (const field of ['upstreamManifestSha256', 'binarySha256'] as const) {
+      replace(receiptPath, JSON.stringify({ ...receipt, [field]: '0'.repeat(64) }));
+      rejects();
+    }
+    replace(receiptPath, JSON.stringify(receipt));
+    for (const path of [join(artifact, 'manifest.json'), join(artifact, hawdbLibraryName(hawdbTarget()))]) {
+      const bytes = readFileSync(path);
+      replace(path, Buffer.concat([bytes, Buffer.from('\ninvalid bytes')]));
+      rejects();
+      replace(path, bytes);
+      verifyHawdbArtifact(isolated);
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
-})));
+});

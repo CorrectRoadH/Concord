@@ -2,7 +2,7 @@ import { makeRuntimeEnvironment, RuntimeEnvironment } from '../../src/base/envir
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect, Layer } from 'effect';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../src/base/cache/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, type ReadonlyCacheSnapshot } from '../../src/base/cache/index.ts';
 import { Workspace } from '../../src/base/workspace/index.ts';
 import { NodeServices } from '@effect/platform-node';
 import { createConsumer } from '../support/consumer.ts';
@@ -13,7 +13,7 @@ const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 // @feature docs/feature/local-data-engine/README.md
 test('an unavailable owner snapshot reports persistent data unavailable while collecting detached derivations', async () => {
   const root = (await createConsumer());
-  const snapshot = { feedback_cache: [], unavailable: { code: 'HawdbUnavailable' as const, message: 'owner cannot open the persistent database' } };
+  const snapshot = { feedback_cache: [], unavailable: { code: 'HawdbUnavailable', message: 'owner cannot open the persistent database' } } satisfies ReadonlyCacheSnapshot;
   const live = Layer.merge(Workspace.layer, CacheSnapshot.layer(snapshot).pipe(Layer.provideMerge(Cache.layer))).pipe(Layer.provide(NodeServices.layer));
   const derived = CacheDerivations.make();
   try {

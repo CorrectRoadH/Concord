@@ -8,9 +8,9 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { buildDigest } from '../../scripts/build-cache.ts';
-import { nativeSourceFiles } from '../../src/base/installation/native-artifact.ts';
-import { readNativeRelease } from '../../src/base/installation/native-release.ts';
-import { HAWDB_ABI, HAWDB_REVISION, hawdbTarget } from '../../src/base/installation/hawdb-native-contract.ts';
+import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
+import { nativeArtifactRoot, nativeSourceFiles } from '../../src/base/installation/native-artifact.ts';
+import { HAWDB_REVISION, hawdbTarget } from '../../src/base/installation/hawdb-native-contract.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 type Requirements = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
@@ -26,12 +26,13 @@ const fixture = Effect.fn('test.cache.fixture')(function*(root: string) {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const checkout = join(root, 'checkout'), seedRoot = join(root, 'compiled-package'), seed = join(seedRoot, 'app'), cache = join(root, 'cache');
+  const archiveName = `concord-1.0.0-${process.env.CONCORD_TARGET ?? `${process.platform}-${process.arch}`}.tar.gz`;
   yield* fs.makeDirectory(seed, { recursive: true });
-  for (const path of ['bin/concord', 'runtime/rg', 'licenses/BUN-LICENSE.md', 'concord-1.0.0-linux-x64.tar.gz']) {
+  for (const path of ['bin/concord', 'runtime/rg', 'licenses/BUN-LICENSE.md', archiveName]) {
     yield* fs.makeDirectory(resolve(seedRoot, path, '..'), { recursive: true });
     yield* fs.writeFileString(join(seedRoot, path), 'compiled archive fixture');
   }
-  yield* fs.writeFileString(join(seedRoot, 'concord-1.0.0-linux-x64.tar.gz.sha256'), hash('compiled archive fixture') + '  concord-1.0.0-linux-x64.tar.gz\n');
+  yield* fs.writeFileString(join(seedRoot, archiveName + '.sha256'), hash('compiled archive fixture') + `  ${archiveName}\n`);
   yield* fs.makeDirectory(checkout);
   for (const path of nativeSourceFiles) {
     const bytes = yield* fs.readFile(resolve(path));
@@ -50,13 +51,7 @@ const fixture = Effect.fn('test.cache.fixture')(function*(root: string) {
   }
   yield* fs.writeFileString(join(seed, 'dist/build-identity.json'), JSON.stringify({ format: 'concord.build-source/v1', commit: '0'.repeat(40), dirty: true }));
   const native = join(seed, 'dist/native', hawdbTarget());
-  yield* fs.makeDirectory(native, { recursive: true });
-  const binary = 'external compiler fixture binary', notices = 'external compiler fixture notices';
-  yield* fs.writeFileString(join(native, 'hawdb.node'), binary);
-  yield* fs.writeFileString(join(native, 'THIRD-PARTY-NOTICES.txt'), notices);
-  yield* fs.writeFileString(join(native, 'artifact.json'), JSON.stringify({ target: hawdbTarget(), abi: HAWDB_ABI, revision: HAWDB_REVISION,
-    sourceDigest: readNativeRelease(checkout).sourceDigest, cargoLockDigest: readNativeRelease(checkout).cargoLockDigest,
-    binarySha256: hash(binary), noticesSha256: hash(notices), portable: false, testHooks: false }));
+  yield* fs.copy(join(nativeArtifactRoot(makeRuntimeEnvironment(process.cwd(), process.env)), hawdbTarget()), native);
   yield* fs.writeFileString(join(checkout, 'package.json'), JSON.stringify(pkg));
   yield* fs.makeDirectory(join(checkout, 'src'), { recursive: true });
   yield* fs.writeFileString(join(checkout, 'src/input.ts'), 'export const value = 1;\n');
@@ -118,5 +113,5 @@ const published = (cache: string) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   return (yield* fs.readDirectory(cache)).filter(name => /^[a-f0-9]{64}$/u.test(name)).sort();
 });
-export { assert, createHash, NodeServices, Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream, ChildProcess, ChildProcessSpawner, join, resolve, pathToFileURL, test, buildDigest, nativeSourceFiles, HAWDB_ABI, HAWDB_REVISION, hawdbTarget, tmpdir, cacheTest, hash, Reply, fixture, waitFile, start, build, published };
+export { assert, createHash, NodeServices, Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream, ChildProcess, ChildProcessSpawner, join, resolve, pathToFileURL, test, buildDigest, nativeSourceFiles, HAWDB_REVISION, hawdbTarget, tmpdir, cacheTest, hash, Reply, fixture, waitFile, start, build, published };
 export type { Scope, Requirements };

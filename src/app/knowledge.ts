@@ -1,8 +1,9 @@
 import type * as WorkspaceTypes from '../base/workspace/index.ts';
 import { closeIssue } from '../domain/issues/index.ts';
-import { diagnoseDocuments, findDocument, loadDocuments, readDocumentSelector, setAuthor } from "../domain/documents/index.ts";
+import { diagnoseDocuments, findDocument, readDocumentSelector, setAuthor } from "../domain/documents/index.ts";
 import { buildTrace, requireValidTrace } from "../domain/trace/index.ts";
-import { ConcordError, digest, inRepositorySnapshot, type DocumentKind, type DocumentRecord, type MutationReceipt, type Repository } from "../model/index.ts";
+import { ConcordError, inRepositorySnapshot, type DocumentKind, type DocumentRecord, type MutationReceipt, type Repository } from "../model/index.ts";
+import { searchKnowledgeRecords, type KnowledgeSearchOwner } from './knowledge-search.ts';
 
 
 type KnowledgeKind = Extract<DocumentKind, 'memory' | 'issue'>;
@@ -10,11 +11,6 @@ type KnowledgeKind = Extract<DocumentKind, 'memory' | 'issue'>;
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
-function ownerRecords(repo: Repository, kind: KnowledgeKind): readonly DocumentRecord[] {
-  return loadDocuments(repo, [kind]).sort((left, right) => left.path.localeCompare(right.path));
-}
-
-
 function summary(record: DocumentRecord) {
   return { path: record.path, id: record.metadata.id, title: record.metadata.title, digest: record.digest,
     ...(record.metadata.kind === 'issue' ? { provider: record.metadata.source?.provider ?? 'local' as const } : {}) };
@@ -34,44 +30,12 @@ export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
 }
 
 
-// @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
-function queryTerms(query: string): readonly string[] {
-  const terms = query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-  if (terms.length === 0) throw new ConcordError('InvalidInput', 'recall/search query must be non-empty');
-  return terms;
-}
-
-
-function matchingRecords(records: readonly DocumentRecord[], terms: readonly string[]): readonly DocumentRecord[] {
-  return records.filter(record => {
-    const text = `${record.metadata.title}\n${record.body}`.toLocaleLowerCase();
-    return terms.every(term => text.includes(term));
-  });
-}
-
-// @concord-end
-
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 // @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
-export function knowledgeSearchRecords(repo: Repository, kind: KnowledgeKind, query: string) {
-  return inRepositorySnapshot(repo, () => {
-    const terms = queryTerms(query);
-    const documents = matchingRecords(ownerRecords(repo, kind), terms);
-    return { operation: `${kind}-search`, query, documents: documents.map(record => ({ ...summary(record), body: record.body })) };
-  });
-}
-
-
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
-export function knowledgeSearch(repo: Repository, query: string) {
-  return inRepositorySnapshot(repo, () => {
-    const terms = queryTerms(query);
-    return { operation: 'memory-search', query, memories: matchingRecords(ownerRecords(repo, 'memory'), terms) };
-  });
+export function knowledgeSearchRecords(repo: Repository, kind: KnowledgeKind, query: string, owner?: KnowledgeSearchOwner, signal?: AbortSignal) {
+  return searchKnowledgeRecords(repo, kind, query, owner, signal);
 }
 
 

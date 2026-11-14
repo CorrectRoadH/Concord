@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.ts";
@@ -35,7 +35,7 @@ async function freshConsumer(): Promise<string> {
 }
 
 function cli(root: string, ...args: string[]) {
-  return spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 30_000 });
+  return spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--server=command', '--json', ...args], { encoding: 'utf8', timeout: 30_000 });
 }
 
 function cacheDiskSnapshot(path: string) {
@@ -45,4 +45,4 @@ function cacheDiskSnapshot(path: string) {
     return { file, ino: stat.ino, modified: stat.mtimeNs, hash: stat.isFile() ? createHash('sha256').update(readFileSync(file)).digest('hex') : null };
   });
 }
-export { initialize, runApplication, installedConcordCli, assert, createHash, execFileSync, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, resolve, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, ScanReport, freshConsumer, cli, cacheDiskSnapshot };
+export { initialize, runApplication, assert, execFileSync, spawnSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync, tmpdir, join, test, Effect, Schema, cacheStatus, clearCache, scanAnnotations, acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache, getWorkspaceSnapshot, deleteInspectedCache, inspectCacheClear, LocalRepository, ensureGenericPrivateDirectorySync, CacheReport, ScanReport, freshConsumer, cli, cacheDiskSnapshot };

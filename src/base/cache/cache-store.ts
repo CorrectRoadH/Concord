@@ -7,7 +7,6 @@ import type { Repository } from "../../model/index.ts";
 import { ensureGenericPrivateDirectorySync } from "../publication/index.ts";
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { packageRoot } from '../installation/index.ts';
-import { requestCacheMaintenance } from "./cache-maintenance.ts";
 import { openCurrentPersistentCache } from './persistent-handle.ts';
 
 const scopes = new WeakMap<Repository, { database: HawdbDatabase; writable: boolean; runtime: RuntimeEnvironmentSnapshot }>();
@@ -16,7 +15,6 @@ export function closeRepositoryCache(repo: Repository): void {
   scopes.delete(repo);
   if (scope !== undefined) {
     scope.database.close();
-    if (scope.writable) requestCacheMaintenance(repo, scope.runtime);
   }
 }
 

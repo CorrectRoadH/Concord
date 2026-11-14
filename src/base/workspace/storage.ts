@@ -267,11 +267,13 @@ export class LocalRepository implements Repository {
   private readonly optimistic: boolean;
   private readonly observedFiles = new Map<string, string | undefined>();
   private readonly observedBytes = new Map<string, Buffer | undefined>();
+  private readonly observedIdentities = new Map<string, string | undefined>();
   private observedRootFiles: string | undefined;
   private readonly observedDirectories = new Map<string, { path: string; scope: 'source' | undefined; observation: string; files: readonly string[] }>();
   private readonly rootAnchor: readonly RootAnchor[];
   private rootFd: number | undefined;
   private readonly listings = new Map<string, Buffer[]>();
+  private readonly spellingIndexes = new WeakMap<readonly Buffer[], { readonly exact: ReadonlySet<string>; readonly collisions: ReadonlyMap<string, ReadonlySet<string>> }>();
   private readonly checkedSegments = new Set<string>();
   private verifyListings: Map<string, Buffer[]> | undefined;
   private readonly validation?: PublicationValidation['Service'];
@@ -410,9 +412,22 @@ export class LocalRepository implements Repository {
   private checkSpelling(parent: string, segment: string, path: string): void {
     if (process.platform !== 'darwin') return;
     const entries = this.directoryListing(parent);
+    let index = this.spellingIndexes.get(entries);
+    if (index === undefined) {
+      const exact = new Set<string>(), collisions = new Map<string, Set<string>>();
+      for (const entry of entries) {
+        const bytes = entry.toString('hex'), key = darwinPathCollisionKey(entry.toString('utf8'));
+        exact.add(bytes);
+        let spellings = collisions.get(key);
+        if (spellings === undefined) { spellings = new Set(); collisions.set(key, spellings); }
+        spellings.add(bytes);
+      }
+      index = { exact, collisions }; this.spellingIndexes.set(entries, index);
+    }
+    const bytes = Buffer.from(segment).toString('hex');
     const key = darwinPathCollisionKey(segment);
-    const exact = hasExactDarwinEntry(entries, segment);
-    const alias = entries.some(entry => !entry.equals(Buffer.from(segment)) && darwinPathCollisionKey(entry.toString('utf8')) === key);
+    const exact = index.exact.has(bytes), spellings = index.collisions.get(key);
+    const alias = spellings !== undefined && (spellings.size > 1 || !spellings.has(bytes));
     if (alias || !exact && present(join(parent, segment))) this.changedPath(path);
     // Missing inputs are tracked by file/directory observations, not as existing spellings.
     if (exact && this.verifyListings === undefined) this.checkedSegments.add(path);
@@ -623,6 +638,7 @@ export class LocalRepository implements Repository {
     if (this.snapshotDepth === 0) return;
     this.snapshotDepth--;
     if (this.snapshotDepth === 0) {
+      this.observedIdentities.clear();
       try { closeRepositoryCache(this); }
       finally {
         try { if (this.rootFd !== undefined) { const fd = this.rootFd; this.rootFd = undefined; closeSync(fd); } }
@@ -698,6 +714,65 @@ export class LocalRepository implements Repository {
     visit(prefix, stat);
     return { observation: canonical(entries), files };
   }
+  private sourceIdentity(stat: BigIntStats | undefined): string | undefined {
+    return stat === undefined ? undefined : `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${stat.mode}`;
+  }
+  private rememberIdentity(path: string, stat: BigIntStats | undefined): void {
+    const identity = this.sourceIdentity(stat);
+    if (this.observedIdentities.has(path) && this.observedIdentities.get(path) !== identity) this.changedPath(path);
+    this.observedIdentities.set(path, identity);
+  }
+  private requireIdentitySnapshot(): void {
+    if (this.access !== 'read' || this.snapshotDepth === 0) throw new ConcordError('InvalidSourceSnapshot', 'Search identities require an active read snapshot');
+  }
+  // @concord-code
+  // @concord-implements docs/feature/local-data-engine/architecture.md#knowledge-search
+  fileIdentities(prefix: string): readonly { readonly path: string; readonly identity: string }[] {
+    this.requireIdentitySnapshot();
+    canonicalPath(prefix);
+    this.checkRoot();
+    // Capture parents before inspecting their members, including an absent search root.
+    this.clearPathObservations();
+    this.rememberIdentity('.', lstatSync(this.root, { bigint: true }));
+    let name = '';
+    let rootStat: BigIntStats | undefined;
+    for (const segment of prefix.split('/')) {
+      name = name === '' ? segment : `${name}/${segment}`;
+      rootStat = this.inspectComponents(name).stat;
+      this.rememberIdentity(name, rootStat);
+    }
+    if (rootStat === undefined) return [];
+    const files: { path: string; identity: string }[] = [];
+    const visit = (path: string, stat: BigIntStats): void => {
+      this.rememberIdentity(path, stat);
+      if (stat.isFile()) { files.push({ path, identity: this.sourceIdentity(stat)! }); return; }
+      if (!stat.isDirectory()) throw new ConcordError('InvalidFile', `Unsupported file type: ${path}`);
+      const directory = join(this.root, path);
+      const members = readdirSync(directory, { encoding: 'buffer' });
+      this.listings.set(directory, members);
+      for (const entry of members) {
+        const child = entry.toString('utf8');
+        if (child === '.git' || child === 'node_modules') continue;
+        const childPath = `${path}/${child}`;
+        const childStat = this.inspectComponents(childPath).stat;
+        if (childStat === undefined) this.changedPath(childPath);
+        visit(childPath, childStat!);
+      }
+    };
+    visit(prefix, rootStat);
+    return files.sort((a, b) => a.path.localeCompare(b.path));
+  }
+  // @concord-code
+  // @concord-implements docs/feature/local-data-engine/architecture.md#knowledge-search
+  readIdentified(path: string, identity: string): string {
+    this.requireIdentitySnapshot();
+    if (!this.observedIdentities.has(path) || this.observedIdentities.get(path) !== identity) this.changedPath(path);
+    const { target, stat } = this.inspectComponents(path);
+    if (stat === undefined || this.sourceIdentity(stat) !== identity) this.changedPath(path);
+    const source = readCheckedFile(target, path, stat!);
+    if (this.sourceIdentity(this.inspectComponents(path).stat) !== identity) this.changedPath(path);
+    return source;
+  }
   private validateObservations(): void {
     this.verifyObservations(false);
   }
@@ -722,7 +797,15 @@ export class LocalRepository implements Repository {
       verify('.', files, () => this.checkRoot());
       // An invalid anchor makes all path-based comparisons unreliable.
       if (files.has('.')) return { files: ['.'], directories: [] };
+      for (const [path, identity] of this.observedIdentities) verify(path, files, () => {
+        let stat: BigIntStats | undefined;
+        try { stat = lstatSync(join(this.root, path), { bigint: true }); }
+        catch (cause) { if (!errno(cause, 'ENOENT')) throw cause; }
+        if (stat?.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
+        if (this.sourceIdentity(stat) !== identity) throw new ObservationChanged(path);
+      });
       for (const path of this.checkedSegments) verify(path, files, () => {
+        if (this.observedIdentities.has(path) && this.observedIdentities.has(dirname(path))) return;
         const { stat } = this.inspectComponents(path);
         const entries = this.directoryListing(join(this.root, dirname(path)));
         if (stat === undefined || !hasExactDarwinEntry(entries, path.split('/').at(-1)!)) throw new ObservationChanged(path);

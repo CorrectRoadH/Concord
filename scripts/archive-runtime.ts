@@ -23,7 +23,7 @@ export const prepareRuntime = Effect.fn('archive.runtime')(function*(root: strin
   const rg = ripgrep.targets[target];
   if (target === 'darwin-arm64') {
     if (!nativeArtifacts) return yield* new ArchiveFailed({ message: 'Darwin requires signed rg from the native job' });
-    const folder = join(nativeArtifacts, target);
+    const folder = join(nativeArtifacts, 'runtime', target);
     const signed = yield* readJson(join(folder, 'rg-runtime.json'), SignedRipgrep);
     if (signed.version !== ripgrep.version || signed.asset !== rg.asset || signed.upstreamSha256 !== rg.sha256 || signed.binarySha256 !== sha256(yield* fs.readFile(join(folder, 'rg')))) {
       return yield* new ArchiveFailed({ message: 'Signed ripgrep identity mismatch' });

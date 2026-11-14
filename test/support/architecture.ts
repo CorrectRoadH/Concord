@@ -220,7 +220,7 @@ export function dependencyViolations(audit: Audit): Violation[] {
       const compiledRole = edge.from === 'src/entry/compiled/run.ts' && edge.kind === 'dynamic' && [
         'src/entry/cli/run.ts', 'src/entry/server/compute-worker-main.ts', 'src/entry/server/editor-worker-main.ts',
         'src/entry/server/query-refresh-worker-main.ts', 'src/entry/server/query-scan-worker-main.ts',
-        'src/entry/server/view-scan-worker-main.ts', 'src/entry/server/cache-maintenance-worker-main.ts',
+        'src/entry/server/view-scan-worker-main.ts',
         'src/entry/server/test-adapter-vitest-main.ts', 'src/entry/server/operation/run.ts',
       ].includes(edge.to);
       const compilerSupervisor = edge.from === 'src/entry/compiler/main.ts' && edge.kind === 'import' && edge.to === 'src/base/process/typescript-supervisor.ts'

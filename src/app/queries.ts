@@ -18,6 +18,7 @@ import { nativeBindings, readNativeObservations } from '../domain/tests/index.ts
 import { scanCode } from '../domain/code/index.ts';
 import { checkCurrentProject } from './check-current.ts';
 import { knowledgeIndex, knowledgeSearchRecords } from './knowledge.ts';
+import { KnowledgeSearch, type KnowledgeSearchOwner } from './knowledge-search.ts';
 import { listCode } from './code-commands.ts';
 import { showConfig } from './editing.ts';
 import { documentShow, traceShow, traceGaps, renderReview } from './trace-queries.ts';
@@ -48,7 +49,7 @@ export const QueryRequest = Schema.Union([
 ]);
 export type QueryRequest = typeof QueryRequest.Type;
 
-const queryValue = async (repo: WorkspaceTypes.LocalRepository, request: QueryRequest, cache: 'use' | 'off'): Promise<unknown> => {
+const queryValue = async (repo: WorkspaceTypes.LocalRepository, request: QueryRequest, cache: 'use' | 'off', searchOwner?: KnowledgeSearchOwner, signal?: AbortSignal): Promise<unknown> => {
   switch (request.name) {
     case 'trace.check': { const t = (await buildTrace(repo, cache)); return { operation: 'trace-check', ok: t.complete, complete: t.complete, findings: t.findings, edges: t.edges }; }
     case 'trace.show': return (await traceShow(repo, request.input.reference, cache));
@@ -69,8 +70,8 @@ const queryValue = async (repo: WorkspaceTypes.LocalRepository, request: QueryRe
       return { ...(await documentShow(repo, id, kind ?? selected.metadata.kind, cache)), operation: 'show' };
     }
     case 'memory.index': return knowledgeIndex(repo, 'memory');
-    case 'memory.search': return knowledgeSearchRecords(repo, 'memory', request.input.query);
-    case 'issue.search': return knowledgeSearchRecords(repo, 'issue', request.input.query);
+    case 'memory.search': return knowledgeSearchRecords(repo, 'memory', request.input.query, searchOwner, signal);
+    case 'issue.search': return knowledgeSearchRecords(repo, 'issue', request.input.query, searchOwner, signal);
     case 'code.list': return (await listCode(repo));
     case 'test.list': { const t = (await buildTrace(repo, cache, { includeCode: false })); requireValidTrace(t); const observations = readNativeObservations(repo); return { operation: 'test-list', cases: t.annotations.cases, cache: t.annotations.cache, observations, bindings: nativeBindings(repo, t.annotations.cases, observations) }; }
     case 'test.show': {
@@ -110,7 +111,14 @@ export const executeQuery = Effect.fn('Queries.Local.execute')(function*(root: s
       const workspace = yield* Workspace;
       const sources = yield* Sources;
       const repo = yield* waitForPublication(reclaimPublication => workspace.openRead(root, { access: 'read', optimistic: true, persistentCache: cache, reclaimPublication }));
-      return yield* sources.snapshot(repo, Effect.tryPromise({ try: async () => (await queryValue(repo, request, cache)), catch: failure }).pipe(Effect.uninterruptible));
+      const owner = yield* Effect.serviceOption(KnowledgeSearch);
+      const searchOwner = owner._tag === 'Some' ? owner.value : undefined;
+      let pending: Promise<unknown> | undefined;
+      const operation = Effect.tryPromise({ try: signal => pending = queryValue(repo, request, cache, searchOwner, signal), catch: failure });
+      const search = request.name === 'memory.search' || request.name === 'issue.search';
+      // Abort reaches the Worker immediately; retain the source scope until it drains.
+      const evaluate = search ? operation.pipe(Effect.ensuring(Effect.promise(async () => { await pending?.then(() => undefined, () => undefined); }))) : operation.pipe(Effect.uninterruptible);
+      return yield* sources.snapshot(repo, evaluate);
     })).pipe(Effect.retry({ times: 2, schedule: Schedule.spaced('50 millis'), while: error => error.code === 'SourceChanged' || error.code === 'FileChangedSinceRead' && error.details === 'source-observation' }));
   return yield* Effect.try({ try: () => {
     const json = Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));

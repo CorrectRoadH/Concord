@@ -10,7 +10,6 @@ import { genericPrivateDirectorySync } from "../base/publication/index.ts";
 import { ownerIsAlive, readLeaseOwner, PUBLICATION_LEASE } from "../base/publication/index.ts";
 import { HawdbFailure, hawdbIdentity, PersistentCache } from "../base/cache/index.ts";
 import { workspaceInstallationIdentity } from "../base/installation/index.ts";
-import { requestCacheMaintenance } from "../base/cache/index.ts";
 import { ConcordError, digest, failure } from "../model/index.ts";
 
 
@@ -104,7 +103,6 @@ export const readWorkspaceProjection = Effect.fn('readWorkspaceProjection')(func
 /** Called only by the refresh lease owner after candidate and identity validation. */
 export const storeWorkspaceProjection = Effect.fn('storeWorkspaceProjection')(function*(context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionCandidate, error?: ConcordError, attempt?: WorkspaceProjection['projection']['lastAttempt']) {
   const cache = yield* PersistentCache;
-  const runtime = yield* RuntimeEnvironment;
   yield* cache.update(context.privateDir, 'workspace_projection', key, payload => {
     let prior: typeof Envelope.Type | undefined;
     if (payload) { try { const parsed = decodeEnvelope(JSON.parse(payload)); if (parsed.identity === context.identity) prior = parsed; } catch { /* Invalid payload is replaced, never served. */ } }
@@ -120,5 +118,5 @@ export const storeWorkspaceProjection = Effect.fn('storeWorkspaceProjection')(fu
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) + Buffer.byteLength(key) + Buffer.byteLength('workspace_projection') > WORKSPACE_PROJECTION_LIMIT) throw new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds its 8 MiB budget');
     return serialized;
-  }).pipe(Effect.ensuring(Effect.sync(() => requestCacheMaintenance(context, runtime))));
+  });
 });

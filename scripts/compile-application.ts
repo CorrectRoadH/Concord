@@ -27,8 +27,8 @@ export const bunCompilerIdentity = Effect.fn('build.bunIdentity')(function*(repo
 });
 
 export const compilationArguments = (target: ArchiveTarget, output: string) => [
-  '--no-env-file', '--config=/dev/null', 'build', 'src/entry/compiled/main.ts',
-  '--compile', '--bytecode', '--format=esm', `--target=${compilationTarget(target)}`,
+  '--no-env-file', '--config=/dev/null', 'build', 'src/entry/compiled/main.ts', 'src/base/cache/worker-entry.ts',
+  '--compile', '--bytecode', '--format=esm', '--root', 'src', `--target=${compilationTarget(target)}`,
   '--define', 'CONCORD_COMPILED=true', '--no-compile-autoload-dotenv', '--no-compile-autoload-bunfig',
   '--no-compile-autoload-tsconfig', '--compile-autoload-package-json', '--outfile', output,
 ];

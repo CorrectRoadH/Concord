@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { hawdbTarget } from '../../src/base/installation/index.ts';
+import { hawdbLibraryName, hawdbTarget } from '../../src/base/installation/index.ts';
 import { installationResources } from '../support/source-resources.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';
 import { sourceCliCommand } from '../support/source-consumer.ts';
@@ -22,7 +22,7 @@ test('broken source native artifacts keep current queries local and reject serve
     const invoke = (...args: string[]) => spawnSync(command, [...prefix, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20_000, env: { ...process.env, NODE_OPTIONS: '' } });
     const initialized = invoke('init', '--docs-only');
     assert.equal(initialized.status, 0, initialized.stdout + initialized.stderr);
-    const binary = join(installationResources(installed).native, hawdbTarget(), 'hawdb.node');
+    const binary = join(installationResources(installed).native, hawdbTarget(), hawdbLibraryName(hawdbTarget()));
     const bytes = readFileSync(binary);
     for (const damage of ['digest', 'missing']) {
       if (damage === 'digest') { writeFileSync(`${binary}.next`, Buffer.concat([bytes, Buffer.from('invalid digest')])); renameSync(`${binary}.next`, binary); }

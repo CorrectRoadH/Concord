@@ -1,9 +1,8 @@
 // @concord-file
 // @concord-implements docs/engineering/build/architecture.md#从源码运行
-import { lstatSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { packageRoot } from "./location.ts";
-import { hawdbTarget } from "./hawdb-native-contract.ts";
 import { ConcordError } from "../../model/index.ts";
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { installationIdentity } from './identity-cache.ts';
@@ -14,10 +13,10 @@ import { sourceInstallation, runtimeDirectory, runtimeLoader } from './runtime.t
 const directory = runtimeDirectory;
 const defaultRuntime = makeRuntimeEnvironment(packageRoot, {});
 const distribution = join(packageRoot, 'dist');
-import { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.ts";
+import { nativeArtifactRoot, verifiedHawdbLibrary } from "./native-artifact.ts";
 
 /** Resolve the loader at the installation, independently of a consumer's cwd. */
-export function workerEntryArgv(name: 'test-adapter-vitest' | 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'cache-maintenance-worker' | 'compute-worker' | 'workspace-server' | 'operation-worker' | 'web-build', runtimeOptions: readonly string[] = []): string[] {
+export function workerEntryArgv(name: 'test-adapter-vitest' | 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'compute-worker' | 'workspace-server' | 'operation-worker' | 'web-build', runtimeOptions: readonly string[] = []): string[] {
   if (!sourceInstallation) {
     if (runtimeOptions.length > 0) throw new ConcordError('InvalidOption', 'Compiled workers do not accept interpreter options');
     if (name === 'web-build') throw new ConcordError('InvalidOption', 'Web building is available only in a source checkout');
@@ -40,12 +39,8 @@ export function requireBuiltAssets(): void {
 
 type InstallationFiles = string[][];
 function requireNativeArtifacts(runtime: RuntimeEnvironmentSnapshot): void {
-  for (const name of ['artifact.json', 'hawdb.node', 'THIRD-PARTY-NOTICES.txt']) {
-    if (lstatSync(join(nativeArtifactRoot(runtime), hawdbTarget(), name), { throwIfNoEntry: false }) === undefined) {
-      throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; run bun run build:native.');
-    }
-  }
-  if (sourceInstallation) verifySourceNativeArtifact(runtime);
+  try { verifiedHawdbLibrary(runtime); }
+  catch (cause) { throw new ConcordError('HawdbUnavailable', 'Required official HawDB artifact is unavailable; run bun run build:native.', cause); }
 }
 
 /** Query and workspace caches share the complete implementation identity. */

@@ -11,7 +11,6 @@ import { TraceGapsValue, TraceShowValue, ReviewRenderValue, queryValueSchema } f
 import type { QueryScanMessage } from "../model/index.ts";
 import { ConcordError, digest, failure } from "../model/index.ts";
 import { queryInstallationIdentity, workerEntryArgv } from "../base/installation/index.ts";
-import { requestCacheMaintenance } from "../base/cache/index.ts";
 
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
@@ -104,7 +103,6 @@ export const readQuery = Effect.fn('readQuery')(function*(context: QueryContext)
 });
 export const storeQuery = Effect.fn('storeQuery')(function*(context: QueryContext, update: QueryUpdate) {
   const cache = yield* PersistentCache;
-  const runtime = yield* RuntimeEnvironment;
   yield* cache.update(context.privateDir, 'query_cache', context.key, payload => {
     let prior: QueryCacheEnvelope | undefined;
     if (payload !== undefined) { try { prior = decodeForQuery(context, payload); } catch { /* Rebuild corrupt disposable data. */ } }
@@ -113,7 +111,7 @@ export const storeQuery = Effect.fn('storeQuery')(function*(context: QueryContex
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) > 4 * 1024 * 1024) throw new ConcordError('QueryRefreshOutputLimit', 'Query envelope exceeds 4 MiB');
     return serialized;
-  }).pipe(Effect.ensuring(Effect.sync(() => requestCacheMaintenance(context, runtime))));
+  });
 });
 // @concord-end
 /** The detached supervisor owns the bounded scan, never a source publication. */

@@ -22,7 +22,7 @@ bun run test --reporter=junit --reporter-outfile=.test-results/junit.xml --timin
 
 使用独立输出路径区分不同运行，保留原始报告与退出码。`--timings` 可读取官方耗时供调度使用，`--update-timings` 写回本次观测，不是独立的执行完成证明。零匹配与报告生成遵循上游行为。
 
-CI 在 `ubuntu-24.04` 上运行十六个官方分片。故障注入单独运行 `CONCORD_NATIVE_TEST_HOOKS=1 bun run test test/process/hawdb-native.test.ts`，依赖的生产与测试绑定由准备任务下载和校验。
+CI 在 `ubuntu-24.04` 上运行十六个官方分片，准备任务下载和校验固定的官方原生产物；源码测试与发行使用相同的库字节。macOS 任务验证对应宿主的原生事务、恢复与锁互操作，任务分工见 [CI 任务](architecture.md#ci-任务)。
 
 ## 并发
 

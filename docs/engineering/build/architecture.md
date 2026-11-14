@@ -22,6 +22,10 @@
 
 `src/entry/compiled/main.ts` 是 Bun 编译根，使用 ESM 与 bytecode。归档入口通过字面量惰性 import 选择角色的显式 `run` 函数；导入角色实现不启动进程、不安装 listener，源码薄入口调用同一函数一次。CLI 在 `run` 内捕获 argv、cwd 和环境，完整命令 fallback 使用可静态打包的字面量 import。
 
+`src/base/cache/worker-entry.ts` 作为同次编译的数据库 Worker 入口嵌入可执行文件；编译根固定为 `src`，安装模式从相对编译主入口的 `base/cache/worker-entry.js` 启动。安装后的 Worker 不依赖源码路径或外置 JavaScript 文件；编译产物验收须执行真实数据库查询与关闭。
+
+归档组装在压缩前使用目标可执行文件初始化临时 Git 项目，查询 Memory 与 Issue，并核验持久缓存为 `ready`；每次命令退出均完成 Worker 关闭，失败直接终止组装。
+
 构建从同一源码的正式 CLI 捕获 `--help`、`-h`、`--version` 和 `-v` 的 stdout、stderr 与退出码，作为编译常量嵌入可执行文件。只有完全匹配的参数、非 TTY、`NO_COLOR=1`、`TERM=dumb` 且无 FORCE_COLOR 时使用这些结果；其余调用仍走正式解析器。结果随源码、包版本和编译缓存输入一起失效，不执行外置 startup JavaScript。
 
 内部角色沿用 `workerEntryArgv` 的名称；安装模式参数为 `--concord-internal <name> ...`，选择器只在第一位有效，分派后移除选择器与名称，角色看到的 argv 与源码入口相同。未知角色非零退出。`workspace-server` 使用公开 `server run --root` 命令；`web-build`、Web 构建器和 Herdr mod 的 tsdown 打包器只属于源码工具图，不出现在产品编译图。内部分派不接受任意 JS/TS 路径，不改变进程组、IPC、信号或父进程退出时的资源责任。
@@ -30,21 +34,21 @@
 
 ## 原生绑定复用
 
-Concord 只使用 [HawDB fork](https://github.com/CorrectRoadH/hawdb) 发布的二进制。本仓库不保留 Rust 源码、Cargo 清单或工具链配置，本机开发、测试、CI 与产品发版均不编译 HawDB，也不回退到 Cargo（[复用已有计算](../../taste.md#t-7)）。
+Concord 使用 [HawDB 官方发行](https://github.com/nowledge-co/hawdb/releases)的普通 C ABI 动态库与同版本 `@nowledge/hawdb-bun`，不维护 Rust 或 N-API fork。本机开发、测试、CI 与产品发版只下载、验证和使用正式产物，不编译 HawDB 或回退到 Cargo（[用现成的能力](../../taste.md#t-10)）。
 
-fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。引擎版本是上游正式版本；桥接发行版本可以等于引擎版本，也可以追加 `-concord.<正整数>`。桥接修订不改变引擎版本或提交标识；修订号不含前导零，不能用其它预发布或 build metadata 后缀。fork 拥有桥接、引擎编译、许可证收集与 macOS 签名；发布 Linux x64 glibc 和 macOS arm64 的生产与故障注入包。构建与真实绑定测试成功后才发布；已有版本只验证和复用，不覆盖。
+`@nowledge/hawdb-bun` 是精确锁定的构建依赖，随 TypeScript 打入 CLI；不增加安装后的外置 npm 依赖。编译同时包含数据库 Worker 入口。运行时只向 `loadHawDB` 传经验证的显式库路径，不自动寻找库，也不读取环境变量选择引擎。
 
-`native-release.json` 的 `version` 固定桥接发行版本，`engineVersion` 固定上游版本，去掉可选桥接修订后的 `version` 必须等于 `engineVersion`；`tag` 必须严格等于 `hawdb-<version>`。清单同时固定下载仓库、四份资产和 SHA-256。准备入口先校验本机共享缓存，未命中时下载固定版本；归档先校验 SHA-256，再安全解包并核对 target、ABI、引擎提交标识、来源与锁摘要、二进制及完整许可证。缺失、离线、下载失败或身份不符均具名失败，不编译替代品。普通 TypeScript 修改不改变该二进制依赖。
+`native-release.json` 使用 `concord.native-release/v2`，固定 `repository: nowledge-co/hawdb`、正式 `version`、`tag: v<version>` 与引擎 `revision`。`assets` 每目标只有一项，包含 Concord `target`、官方 `upstreamTarget`、`name`，以及 `archiveSha256`、`manifestSha256`、`binarySha256`、`headerSha256`、`licenseSha256`。两个目标是 `darwin-arm64` 对应 `aarch64-apple-darwin`，`linux-x64-glibc` 对应 `x86_64-unknown-linux-gnu`；文件名为 `hawdb-ffi-<version>-<upstreamTarget>.tar.gz`。
 
-缓存为 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<发行标签>/`，版本间隔离。生产产物在 `<target>/`；故障注入产物在 `test-hooks/<target>/`。替换文件通过 rename，不能截断其它进程已映射的绑定。
+准备入口先验证共享缓存，未命中时下载固定资产；先核对受信任 pin 中的归档摘要，再解包。拒绝路径穿越、链接、特殊文件、重复及未知成员。官方 `manifest.json` 必须匹配固定摘要、版本、提交、目标、普通 C ABI、特性、宿主要求与全部成员的字节大小和摘要。接受官方 default profile 的 background-maintenance、full-text-search、graph-analytics、tokio-runtime、vector-search，不声称使用最小特性构建。当前产物最低要求为 macOS 11.0 或 glibc 2.34。
 
-`--prebuilt` 校验并安装显式给定的资产；`--test-hooks` 选择测试模式；`--require-portable` 只接受生产可移植产物。准备任务同时取得本机两种模式，测试任务消费已校验的产物，见[CI 任务](../testing/architecture.md#ci-任务)。
+缓存为 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<发行标签>/<target>/`，保留官方目录中的 `manifest.json`、`LICENSE`、`include/hawdb_ffi.h` 与 `lib/`。另生成 `artifact.json` 安装收据，字段为 `format: concord.native-artifact/v2`、`target`、`upstreamManifestSha256`、`binarySha256`；后两项分别记录原始官方清单和实际加载库的字节身份。替换映射中的库使用 rename，不原地截断。
 
-### 故障注入产物
+`--prebuilt` 验证显式目录；`--require-portable` 验证目标宿主要求。所有测试与发行使用同一份官方库，不提供故障注入绑定或运行时测试开关。缺失、离线、下载失败或身份不符均具名失败；`CONCORD_NATIVE_OFFLINE=1` 禁止下载。普通 TypeScript 修改不改变该二进制依赖。
 
-测试产物必须显式记录 `testHooks: true`，生产必须记录 `false`；两者不能交叉使用。源码运行只有 `CONCORD_NATIVE_TEST_HOOKS=1` 才选择测试目录。事务失败、崩溃恢复和身份测试使用真实预编译测试绑定，不在测试中编译。
+加载前验证官方清单、头文件、许可证与动态库，核对实际 `dlopen` 文件在验证和加载前后的身份，并核对 `library.version()`。普通 C ABI 随发行版本变化，没有 Concord 自定义桥接 ABI。`verifiedHawdbLibrary(runtime)` 返回经验证的 `binary` 绝对路径、文件 `identity` 与 `version`，资源所有者负责加载、使用及关闭。
 
-安装模式始终拒绝测试产物。源码缓存按固定发行清单核验原始字节；Linux 归档和 Nix 渠道的既有重定位在私有副本完成，核验并生成最终安装身份，不改写源缓存。安装运行按归档或渠道的最终身份校验；macOS 绑定保留 fork 已签名的字节。
+源码缓存要求原始官方库摘要；Linux 归档与 Nix 渠道的重定位只在私有副本完成，更新安装收据的 `binarySha256`。官方 `manifest.json` 及其摘要保持不变，保留来源证据；归档携带 `app/native-release.json`，安装运行按该固定来源校验所在安装的最终字节身份。macOS 保留官方已签名的库字节。真实产品验收分别覆盖源码、编译后 Worker 和两个目标平台的加载、资源关闭与锁互操作。
 
 ## 归档组装
 
@@ -75,7 +79,7 @@ fork 的 CI 每小时检查上游最新正式 Release，并支持手动触发。
 | 运行时文件与许可证 | `.bun-version`、`runtime-deps.json`、目标，以及 Linux `runtime/lib/` 的来源身份 |
 | 原生产物 | 自身的身份 |
 
-版本、Git 提交、`bin/concord` 与 Linux 的 RPATH 变换和 ELF 检查在组装时完成：先把各部分从只读缓存复制到私有的组装目录，再做变换，不写回缓存中的部分。macOS 原生绑定与 ripgrep 的已签名字节是部件的输入身份，组装只核验签名，不重签、不改写。新编译的 Concord 可执行文件在目标宿主完成最终签名。最终归档由唯一的组装入口产出；编译、资源构建或组装失败直接使构建命令非零退出。
+版本、Git 提交、`bin/concord` 与 Linux 的 RPATH 变换和 ELF 检查在组装时完成：先把各部分从只读缓存复制到私有的组装目录，再做变换，不写回缓存中的部分。macOS 官方 HawDB 动态库与 ripgrep 的已签名字节是部件的输入身份，组装只核验签名，不重签、不改写。新编译的 Concord 可执行文件在目标宿主完成最终签名。最终归档由唯一的组装入口产出；编译、资源构建或组装失败直接使构建命令非零退出。
 
 只改 CLI 源码或文档时只重建对应部分，其余部分命中缓存；这时在参照机门禁负载下，归档准备不超过 60 秒。各部分都未命中（首次构建或清空缓存后）不受这一上限约束，耗时单独报告。各部分的缓存遵守下面同样的发布、并发与清理规则。
 
@@ -91,7 +95,7 @@ Concord 有两种运行模式：源码模式直接运行 worktree 中的 `.ts`�
 1. **源码约束**：相对导入写 `.ts` 扩展名，只使用可擦除的 TypeScript 语法，类型检查开启 `erasableSyntaxOnly`。Bun 从这些源码入口构建归档可执行文件。
 2. **子进程**：源码模式用固定 Bun 运行 `.ts`，关闭 cwd dotenv 与 bunfig。安装模式通过同一 `bin/concord` 的内部角色分派启动。
 3. **编译缓存**：源码执行使用 Bun 自身加载机制；安装模式使用随可执行文件生成的 bytecode，不设置 Node/V8 编译缓存。
-4. **原生绑定**：源码运行取自经身份校验的本机共享缓存，构建产物取自安装目录根，两者的校验规则相同。
+4. **原生库**：源码运行取自经身份校验的本机共享缓存，构建产物取自安装目录根，两者的校验规则相同；源码与安装模式都经同一数据库 Worker 入口加载。
 5. **安装身份**：源码模式的安装身份是 worktree 位置，安装模式使用产物摘要。
 6. **服务复用**：源码模式与安装模式一样，协议相同就复用正在运行的服务，不因源码改变而重启，见[启动与裁决](../../feature/local-data-engine/architecture.md#启动与裁决)。改了服务端代码后要看到新行为，先运行 `bun run concord server stop`。
 7. **缓存身份**：缓存身份包含源码摘要，源码变化后不复用旧缓存。

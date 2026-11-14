@@ -1,5 +1,5 @@
 // 跨进程保证：OS 锁与互斥——旧构建被真实构建进程持有时prune保留，最后持有者退出后只留最新四份。
-import { assert, createHash, NodeServices, Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream, ChildProcess, ChildProcessSpawner, join, resolve, pathToFileURL, test, buildDigest, nativeSourceFiles, HAWDB_ABI, HAWDB_REVISION, hawdbTarget, tmpdir, cacheTest, hash, Reply, fixture, waitFile, start, build, published, type Scope, type Requirements } from './build-cache-fixture.ts';
+import { assert, createHash, NodeServices, Duration, Effect, Exit, Fiber, FileSystem, Schema, Stream, ChildProcess, ChildProcessSpawner, join, resolve, pathToFileURL, test, buildDigest, nativeSourceFiles, HAWDB_REVISION, hawdbTarget, tmpdir, cacheTest, hash, Reply, fixture, waitFile, start, build, published, type Scope, type Requirements } from './build-cache-fixture.ts';
 
 
 // @feature docs/engineering/build/architecture.md#共享构建缓存
@@ -29,7 +29,7 @@ cacheTest('digest includes untracked resources and build configuration while exc
   const fs = yield* FileSystem.FileSystem;
   const { checkout } = yield* fixture(root);
   const original = yield* buildDigest(checkout);
-  for (const path of ['test/new.test.ts', 'concord/main.js', 'native/hawdb/target/release/lib.node', '.git/config']) {
+  for (const path of ['test/new.test.ts', 'concord/main.js', '.artifacts/lib/libhawdb_ffi.so', '.git/config']) {
     yield* fs.makeDirectory(resolve(checkout, path, '..'), { recursive: true });
     yield* fs.writeFileString(join(checkout, path), 'ignored');
   }

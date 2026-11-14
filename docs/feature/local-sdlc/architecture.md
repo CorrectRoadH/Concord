@@ -108,6 +108,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 - 拒绝绝对路径、`..` 穿越以及超出仓库根的路径。
 - 对 Concord 受管路径（docs、memory、配置声明的源码与测试根、Concord 写入的配置与 skill 目录）检查 `lstat` 并拒绝 symlink 组件与非普通文件；Darwin 上核对目录条目的字节拼写，防止大小写与 Unicode 规范化碰撞。
+- 同一份目录列表的字节拼写与规范化碰撞集合只建立一次，逐项路径核验使用这些集合；重新枚举目录时重建集合，返回前的来源核验仍检查当前文件与目录身份。
 - 目录扫描在受管路径之外遇到 symlink（例如使用者自己链接的 `CLAUDE.md` 或 `.claude/skills/<名称>`）时，不跟随、不读取，也不使检查失败；Concord 写入的 skill 目录内出现 symlink 仍报 `UnsafePath`。
 - 文件读取按 `(mtime, size, inode)` 判断缓存命中；发生变化或写入提交前，读取最新字节并计算内容摘要，不再对每次读取执行从 `/` 到仓库根的逐级 `dev`/`ino` 巡检或 `/proc/self/fd` 反查。
 - 写入提交前若目标文件摘要与读取时的期望摘要不一致，报 `FileChangedSinceRead`。

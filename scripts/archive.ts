@@ -10,6 +10,7 @@ import { decodeNativeArtifact } from '../src/base/installation/hawdb-native-cont
 import { archivePartInput, cachedArchivePart } from './application-cache.ts';
 import { closeLinuxRuntime } from './archive-linux.ts';
 import { assertCompilationHost, compileApplication } from './compile-application.ts';
+import { validateArchiveDatabase } from './archive-database.ts';
 
 export interface ArchiveOptions {
   readonly target?: unknown;
@@ -119,14 +120,14 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
   if (!(yield* fs.exists(folder))) return yield* new ArchiveFailed({ message: `Missing prebuilt native target ${target}; cross compilation is not implicit` });
   const metadata = yield* fs.readFileString(join(folder, 'artifact.json'));
   const artifact = yield* Effect.try({ try: () => decodeNativeArtifact(JSON.parse(metadata)), catch: cause => cause });
-  if (!artifact.portable || artifact.testHooks) return yield* new ArchiveFailed({ message: `Native artifact is not portable: ${target}; provide the Ubuntu 24.04/macOS native job artifact` });
-  // The prepare-native entry verifies source/lock/license identity before copying.
+  if (artifact.target !== nativeTarget(target)) return yield* new ArchiveFailed({ message: `Native artifact is not portable: ${target}; provide the Ubuntu 24.04/macOS native job artifact` });
+  // The prepare-native entry verifies official manifest and member identity before copying.
   yield* fs.makeDirectory(native, { recursive: true });
   yield* fs.copy(folder, join(native, nativeTarget(target)));
   yield* phase('native');
   const runtimeInput = () => Effect.gen(function*() {
     const signed = target === 'darwin-arm64' && sources !== undefined
-      ? yield* archivePartInput(resolve(sources), [target]) : null;
+      ? yield* archivePartInput(resolve(sources), [target, 'runtime']) : null;
     return yield* archivePartInput(repository, ['.bun-version', 'runtime-deps.json', 'scripts/archive-runtime.ts', 'scripts/bun-licenses.ts', 'scripts/bun-license-sources.json', 'scripts/archive-support.ts', 'scripts/application-cache.ts', 'scripts/build-cache.ts'], { target, signed });
   });
   const runtime = yield* cachedArchivePart('runtime', yield* runtimeInput(), directory => prepareRuntime(directory, repository, target, sources), runtimeInput);
@@ -142,13 +143,15 @@ export const assembleArchive = Effect.fn('archive.assemble')(function*(options: 
   else {
     // Bun's executable requires its entitlements after final byte changes.
     yield* run('codesign', ['--force', '--sign', '-', '--preserve-metadata=entitlements', join(root, 'bin/concord')]);
-    for (const name of ['bin/concord', 'runtime/rg', `app/dist/native/${nativeTarget(target)}/hawdb.node`]) {
+    for (const name of ['bin/concord', 'runtime/rg', `app/dist/native/${nativeTarget(target)}/lib/libhawdb_ffi.dylib`]) {
       yield* run('codesign', ['--verify', '--strict', join(root, name)]);
     }
   }
   yield* phase('target-closure');
   yield* validateArchiveLinks(root);
   yield* phase('link-validation');
+  yield* validateArchiveDatabase(root);
+  yield* phase('database-validation');
   const pkg = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ name: Schema.Literal('concord-sdlc'), version: Schema.String })), { onExcessProperty: 'ignore' })(yield* fs.readFileString(join(app, 'package.json')));
   const filename = `concord-${pkg.version}-${target}.tar.gz`;
   const archive = join(staging, filename);

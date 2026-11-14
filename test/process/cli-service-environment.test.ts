@@ -56,20 +56,21 @@ else process.exitCode = result.status ?? 1;
   chmodSync(auditedGit, 0o755);
   const loader = join(directory, 'native-audit.ts');
   writeFileSync(loader, `import fs from 'node:fs';
+import * as ffi from 'bun:ffi';
 import { mock as bunMock } from 'bun:test';
 const syncBuiltinESMExports = () => bunMock.module('node:fs', () => ({ ...fs, default: fs }));
 const append = fs.appendFileSync;
 const record = (binary: string, operation: string) => append(${JSON.stringify(audit)}, JSON.stringify({ kind: 'native', pid: process.pid, ppid: process.ppid, cwd: process.cwd(), entry: process.argv[1], args: process.argv.slice(2), binary, operation }) + '\\n');
 fs.statSync = new Proxy(fs.statSync, { apply(target, receiver, args) {
   const result = Reflect.apply(target, receiver, args);
-  if (String(args[0]).endsWith('/hawdb.node')) record(String(args[0]), 'stat');
+  if (String(args[0]).endsWith('/libhawdb_ffi.dylib') || String(args[0]).endsWith('/libhawdb_ffi.so')) record(String(args[0]), 'stat');
   return result;
 } });
-process.dlopen = new Proxy(process.dlopen, { apply(target, receiver, args) {
+bunMock.module('bun:ffi', () => ({ ...ffi, dlopen: new Proxy(ffi.dlopen, { apply(target, receiver, args) {
   const result = Reflect.apply(target, receiver, args);
-  if (String(args[1]).endsWith('/hawdb.node')) record(String(args[1]), 'load');
+  if (String(args[0]).endsWith('/libhawdb_ffi.dylib') || String(args[0]).endsWith('/libhawdb_ffi.so')) record(String(args[0]), 'load');
   return result;
-} });
+} }) }));
 syncBuiltinESMExports();
 `);
   const source = nativeArtifactRoot(makeRuntimeEnvironment(process.cwd(), process.env));
