@@ -84,7 +84,7 @@ test('a corrupt absent envelope cannot bypass a required cache value schema', ()
     const row = db.scan('document_parse')[0]!;
     const envelope = JSON.parse(row.payload) as { parser: string; sourceDigest: string };
     db.put('document_parse', [{ key: row.key, payload: JSON.stringify({ parser: envelope.parser, sourceDigest: envelope.sourceDigest, present: false }) }]);
-    assert.equal(cache.get('config', 'source', parse), 'valid');
-    assert.equal(parses, 2);
+    assert.throws(() => cache.get('config', 'source', parse), { code: 'InvalidData' });
+    assert.equal(parses, 1, 'a damaged hit cannot authorize another parse');
   } finally { cache.close(); }
 });

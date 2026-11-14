@@ -8,7 +8,7 @@ import { ConcordError } from '../../model/index.ts';
 import { HAWDB_REVISION, HAWDB_VERSION, hawdbTarget, nativeFileIdentity, packageRoot, sourceInstallation, verifiedHawdbLibrary } from '../installation/index.ts';
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { acquireFileLock, FileLockFailure, type FileLock } from '../file-lock/index.ts';
-import { assertCacheDatabaseSafe, inspectCacheClear } from './cache-file.ts';
+import { assertCacheDatabaseSafe, inspectCacheClear, cacheSchemaIdentity } from './cache-file.ts';
 import { initializeKnowledgeSchema } from './hawdb-search.ts';
 import { HawdbEntry, HawdbFailure, HawdbLimits, HawdbNamespace, MIB, entryBytes, memoryNamespaces, persistentNamespaces, quotas } from './hawdb-types.ts';
 export { HawdbFailure, HawdbEntry, HawdbLimits, HawdbNamespace } from './hawdb-types.ts';
@@ -20,7 +20,6 @@ const defaultRuntime = makeRuntimeEnvironment(packageRoot, {});
 const cacheSchema = 'concord.cache/v2';
 const decodeEntries = Schema.decodeUnknownSync(Schema.Array(HawdbEntry), { onExcessProperty: 'error' });
 const decodeNamespace = Schema.decodeUnknownSync(HawdbNamespace);
-const schemaVersion = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ version: Schema.Literal(cacheSchema) })), { onExcessProperty: 'error' });
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 export function hawdbFailure(cause: unknown): HawdbFailure {
   if (cause instanceof HawdbFailure) return cause;
@@ -128,12 +127,10 @@ export class NativeDatabase implements HawdbDatabase {
     });
   }
   verifySchema(): void {
-    try {
-      if (schemaVersion(this.sql('SELECT version FROM concord_cache_schema LIMIT 2')).length !== 1) throw new HawdbFailure('HawdbIncompatible', 'Cache schema identity is missing');
-    } catch (cause) {
-      if (cause instanceof HawdbFailure && ['HawdbBusy', 'HawdbLimit'].includes(cause.code)) throw cause;
-      throw new HawdbFailure('HawdbIncompatible', 'Cache schema differs; use cache clear to discard it explicitly', { cause });
-    }
+    const rows = this.sql('SELECT version FROM concord_cache_schema LIMIT 2');
+    const decoded = Schema.decodeUnknownExit(Schema.Array(Schema.Struct({ version: Schema.String.check(Schema.isPattern(/^concord\.cache\/v[0-9]+$/u)) })), { onExcessProperty: 'error' })(rows);
+    if (decoded._tag === 'Failure' || decoded.value.length !== 1) throw new HawdbFailure('HawdbIncompatible', 'Cache schema identity is missing or invalid; inspect it before explicit clear');
+    if (decoded.value[0]!.version !== cacheSchema) throw new HawdbFailure('HawdbCacheSchemaMismatch', `Cache schema ${decoded.value[0]!.version} differs from ${cacheSchema}`);
   }
   namespaces(): readonly HawdbNamespace[] { this.ready(); return this.memory ? memoryNamespaces : persistentNamespaces; }
   private quota(namespace: HawdbNamespace): HawdbLimits {
@@ -233,6 +230,11 @@ export class NativeDatabase implements HawdbDatabase {
   }
   async closeAsync(): Promise<void> { this.close(); }
 }
+/** This evidence stays inside the database Worker; a serialized code alone cannot authorize deletion. */
+export class CacheSchemaMismatch extends HawdbFailure {
+  readonly observation: string;
+  constructor(message: string, observation: string) { super('HawdbCacheSchemaMismatch', message); this.observation = observation; }
+}
 function open(path: string | undefined, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot, borrowedGate?: FileLock): NativeDatabase {
   let library: HawDBLibrary | undefined, database: OfficialDatabase | undefined, gate: FileLock | undefined;
   try {
@@ -256,8 +258,12 @@ function open(path: string | undefined, options: { readonly readOnly: boolean; r
     gate?.verify();
     return owner;
   } catch (cause) {
+    let error = hawdbFailure(cause);
+    try {
+      if (path !== undefined && !options.readOnly && error.code === 'HawdbCacheSchemaMismatch') error = new CacheSchemaMismatch(error.message, cacheSchemaIdentity(path));
+    } catch (observationFailure) { error = hawdbFailure(observationFailure); }
     try { database?.close(); library?.close(); } finally { if (borrowedGate === undefined) gate?.close(); }
-    throw hawdbFailure(cause);
+    throw error;
   }
 }
 export const openHawdb = (path: string, options: { readonly readOnly: boolean; readonly create: boolean }, runtime: RuntimeEnvironmentSnapshot = defaultRuntime, gate?: FileLock): NativeDatabase => open(path, options, runtime, gate);

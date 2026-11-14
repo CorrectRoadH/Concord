@@ -70,19 +70,19 @@ test('entry-owned parse caches partition projects, parsers and verified installa
     const manifest = join(nativeArtifactRoot(a), hawdbTarget(), 'artifact.json');
     const original = readFileSync(manifest);
     writeFileSync(`${manifest}.replacement`, '{}'); renameSync(`${manifest}.replacement`, manifest);
-    read(a);
-    assert.equal(parses, 5, 'invalid artifact cannot authorize a warm parse hit');
+    assert.throws(() => read(a), /HawdbIncompatible|HawdbUnavailable/u);
+    assert.equal(parses, 4, 'invalid artifact cannot authorize a warm parse hit or another parse');
     assert.throws(() => database.scan('document_parse'), /closed/iu, 'invalid selection releases its former handles');
     writeFileSync(`${manifest}.replacement`, original); renameSync(`${manifest}.replacement`, manifest);
     read(a);
-    assert.equal(parses, 6, 'repaired identity starts from a verified empty handle');
+    assert.equal(parses, 5, 'repaired identity starts from a verified empty handle');
     read(b);
-    assert.equal(parses, 6, 'invalidating A preserves B');
+    assert.equal(parses, 5, 'invalidating A preserves B');
     const live = owner.database(b, root, 'close-probe')!;
     owner.close();
     assert.throws(() => live.scan('document_parse'), /closed/iu);
-    read(b);
-    assert.equal(parses, 7, 'a closed owner never reopens handles');
+    assert.throws(() => read(b), { code: 'HawdbClosed' });
+    assert.equal(parses, 5, 'a closed owner never reopens handles or reparses');
   } finally { owner.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

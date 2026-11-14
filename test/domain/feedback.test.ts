@@ -211,14 +211,18 @@ test('dry-run and failed or stale fetches write neither documents nor cache', as
     assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
 
     writeFileSync(join(root, '.git/concord/cache.hawdb'), 'not a HawDB directory');
-    const cacheFailed = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
-    assert.equal(cacheFailed.imported, 1);
-    assert.ok(cacheFailed.warnings.some(warning => warning.includes('cache could not be updated')));
-    assert.match(humanOutput(cacheFailed), /Fetched: 1; imported: 1/u);
-    assert.match(humanOutput(cacheFailed), /Warnings:/u);
-    const retried = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
-    assert.equal(retried.imported, 0);
-    assert.ok(retried.warnings.some(warning => warning.includes('cache could not be updated')));
+    for (const imported of [1, 0]) {
+      await assert.rejects(runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' })), error => {
+        assert.ok(error instanceof ConcordError);
+        assert.equal(error.code, 'CacheUpdateFailed');
+        const details = error.details as { operationCompleted: boolean; receipt: { imported: number }; reason: { code: string } };
+        assert.equal(details.operationCompleted, true);
+        assert.equal(details.receipt.imported, imported);
+        assert.equal(details.reason.code, 'UnsafePath');
+        assert.match(error.message, /do not replay/u);
+        return true;
+      });
+    }
     (await open(root, repo => assert.equal(loadDocuments(repo).filter(document => document.metadata.kind === 'issue' && document.metadata.source !== undefined).length, 1)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -1,4 +1,4 @@
-// 跨进程保证：原生模块与句柄——私有安装真实native工件损坏或丢失时降级读取，写入与服务启动拒绝且不残留运行记录。
+// 跨进程保证：原生模块与句柄——私有安装真实native工件损坏或丢失时直接失败，写入与服务启动拒绝且不残留运行记录。
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { tmpdir } from '../support/temporary.ts';
 import { Schema } from 'effect';
 
 // @feature docs/feature/local-data-engine/architecture.md#cli-查询
-test('broken source native artifacts keep current queries local and reject server startup', () => {
+test('broken native artifacts fail current queries and server startup without fallback', () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-native-fallback-'));
   try {
     const installed = join(scratch, 'source');
@@ -29,12 +29,12 @@ test('broken source native artifacts keep current queries local and reject serve
       else rmSync(binary);
       const status = invoke('cache', 'status');
       assert.equal(status.status, 0, status.stdout + status.stderr);
-      const diagnostic = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.Literal('unavailable'), detail: Schema.String })))(status.stdout);
+      Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.Literal('unavailable'), detail: Schema.String })))(status.stdout);
       for (const mode of ['command', 'shared']) {
         const scan = invoke(`--server=${mode}`, 'test', 'list');
-        assert.equal(scan.status, 0, scan.stdout + scan.stderr);
-        const value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ cache: Schema.Struct({ status: Schema.Literal('unavailable'), detail: Schema.String }), cases: Schema.Array(Schema.Unknown) })))(scan.stdout);
-        assert.equal(value.cache.detail, diagnostic.detail);
+        assert.equal(scan.status, 1, scan.stdout + scan.stderr);
+        const error = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ error: Schema.Literal('HawdbUnavailable') })))(scan.stderr);
+        assert.equal(error.error, 'HawdbUnavailable');
       }
       for (const args of [['trace', 'gaps'], ['server', 'start'], ['server', 'run']]) {
         const result = invoke(...args);
@@ -42,7 +42,7 @@ test('broken source native artifacts keep current queries local and reject serve
         const error = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ error: Schema.Literal('HawdbUnavailable') })))(result.stderr);
         assert.equal(error.error, 'HawdbUnavailable');
       }
-      assert.equal(existsSync(join(root, '.git/concord/server/current.json')), false, 'fallback must not launch a service');
+      assert.equal(existsSync(join(root, '.git/concord/server/current.json')), false, 'failed validation must not launch a service');
       if (damage === 'digest') { writeFileSync(`${binary}.next`, bytes); renameSync(`${binary}.next`, binary); }
     }
   } finally { rmSync(scratch, { recursive: true, force: true }); }

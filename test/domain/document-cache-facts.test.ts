@@ -7,10 +7,11 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import {} from '../../src/domain/writing/index.ts';
 import {} from '../../src/domain/concepts/index.ts';
-import { digest } from '../../src/model/index.ts';
+import { ConcordError, digest } from '../../src/model/index.ts';
 import { checkProject, knowledgeIndex } from '../../src/app/index.ts';
 import { checkWriting } from '../../src/domain/writing/index.ts';
-import { openHawdb, PersistentCache } from '../../src/base/cache/index.ts';
+import { openHawdb, PersistentCache, type HawdbDatabase } from '../../src/base/cache/index.ts';
+import { documentMarkdown, documentMarkdownProjection, documentProjection, makeDocumentProjectionCache } from '../../src/domain/documents/index.ts';
 import { LocalRepository } from '../support/repository.ts';
 import { writeProjectConfig, readProjectConfig } from '../support/support.ts';
 import { fixture, useCasePath, engineeringPath } from '../support/document-cache-fixture.ts';
@@ -67,7 +68,7 @@ test('volatile document projections preserve current CLI facts across edits, pat
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('damaged persistent auxiliary caches do not change authoritative document facts', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('damaged annotation caches fail document checks while cache off preserves source facts', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = (await existingCacheFixture());
   try {
     const expected = (await cli(root, false));
@@ -82,7 +83,43 @@ test('damaged persistent auxiliary caches do not change authoritative document f
       }
     } finally { db.close(); }
     assert.ok(damaged > 0);
-    assert.deepEqual((await cli(root, false)), expected);
-    (await parity(root));
+    await assert.rejects(cli(root, false), error => error instanceof ConcordError && error.code === 'InvalidData' && error.message.includes('annotation cache'));
+    assert.deepEqual(await cli(root, true), expected);
+    const preserved = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false }, nativeRuntime);
+    try { assert.ok(preserved.scan('annotation_cache').every(row => row.payload === '{invalid json')); }
+    finally { preserved.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('document tree corruption fails both Markdown enrichment and node reads without replacing the row', () => {
+  const path = 'docs/feature/sample/README.md', source = '# Sample\n\nCurrent source.\n';
+  for (const markdown of [false, true]) {
+    const cache = makeDocumentProjectionCache(nativeRuntime);
+    try {
+      if (markdown) documentMarkdownProjection(path, source, nativeRuntime, cache);
+      else documentProjection(path, source, nativeRuntime, cache);
+      const database = Reflect.get(cache, 'database') as HawdbDatabase;
+      const row = database.scan('document_parse')[0]!;
+      const envelope = JSON.parse(row.payload) as { value: { tree: string } };
+      envelope.value.tree = 'damaged serialized syntax tree';
+      const damaged = JSON.stringify(envelope);
+      database.put('document_parse', [{ key: row.key, payload: damaged }]);
+      assert.throws(() => documentMarkdown(path, source, nativeRuntime, cache), error => error instanceof ConcordError && error.code === 'InvalidData' && error.message.includes('document syntax tree'));
+      assert.equal(database.get('document_parse', [row.key])[0]?.payload, damaged);
+    } finally { cache.close(); }
+  }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('metadata-only document projections still enrich Markdown for unchanged sources', () => {
+  const cache = makeDocumentProjectionCache(nativeRuntime);
+  const path = 'docs/feature/sample/README.md', source = '# Sample\n\n[Link](./architecture.md)\n';
+  try {
+    assert.equal(documentProjection(path, source, nativeRuntime, cache).markdown, undefined);
+    const enriched = documentMarkdownProjection(path, source, nativeRuntime, cache);
+    assert.ok(enriched.anchors.includes('sample'));
+    assert.equal(enriched.links[0]?.url, './architecture.md');
+    assert.equal(documentMarkdown(path, source, nativeRuntime, cache).type, 'root');
+  } finally { cache.close(); }
+});

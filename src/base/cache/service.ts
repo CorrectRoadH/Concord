@@ -83,6 +83,7 @@ export class CacheSnapshot extends Context.Service<CacheSnapshot, {
           const derivations = yield* Effect.serviceOption(CacheDerivations);
           const access: RepositoryCache = {
             prepareWrite: () => {
+              persistent(() => undefined);
               if (derivations._tag === 'Some') return;
               throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access');
             },
@@ -90,6 +91,7 @@ export class CacheSnapshot extends Context.Service<CacheSnapshot, {
             scan: namespace => persistent(() => copy[namespace] ?? []),
             namespaces: () => persistent(() => Object.keys(rows) as HawdbNamespace[]),
             put: (namespace, entries) => {
+              persistent(() => undefined);
               if (derivations._tag === 'Some') { derivations.value.record(namespace, entries); return; }
               throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access');
             },
@@ -100,7 +102,7 @@ export class CacheSnapshot extends Context.Service<CacheSnapshot, {
   }
 }
 
-/** Native ownership is authoritative. Contention falls back to memory at callers. */
+/** Native ownership and its failures remain authoritative. */
 export class PersistentCache extends Context.Service<PersistentCache, PersistentCacheService>()('concord/base/cache/PersistentCache') {
   static owner(privateDir: string) { return makePersistentCacheOwner(privateDir); }
   static readonly repository = repositoryCache;
@@ -122,7 +124,7 @@ export class PersistentCache extends Context.Service<PersistentCache, Persistent
       attach: repo => Effect.gen(function*() {
         const cache = yield* Effect.serviceOption(Cache);
         const ownedMemory = cache._tag === 'Some' ? memoryOwners.get(cache.value) : undefined;
-        const memory = ownedMemory === undefined ? undefined : yield* ownedMemory.pipe(Effect.catch(() => Effect.succeed(undefined)));
+        const memory = ownedMemory === undefined ? undefined : yield* ownedMemory;
         yield* Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, nodeRepositoryCache(repo, memory, runtime)), catch: cacheFailure }), release => Effect.sync(release));
       }),
       read: (privateDir, namespace, keys) => Effect.scoped(Effect.gen(function*() {

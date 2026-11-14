@@ -274,7 +274,7 @@ test('pending projection waits share preparation but a failed write never re-pre
 });
 
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-test('pending projections wait without after before reading again, and unavailable services scan once', async () => {
+test('pending projections wait without after, while unavailable services preserve their error', async () => {
   for (const unavailable of [false, true]) {
     const b = boundary(); const execute = b.host.exec;
     let first = true;
@@ -295,9 +295,14 @@ test('pending projections wait without after before reading again, and unavailab
       }
       return execute(command, args, options);
     };
-    await Effect.runPromise(b.session.refresh());
-    assert.equal(b.session.initialized, true);
-    assert.deepEqual(b.calls, unavailable ? [['workspace', 'projection'], ['workspace', 'show']] : [['workspace', 'projection'], ['workspace', 'wait'], ['workspace', 'projection']]);
+    if (unavailable) {
+      await assert.rejects(Effect.runPromise(b.session.refresh()), error => error instanceof ModFailure && error.code === 'WorkspaceProjectionUnavailable');
+      assert.deepEqual(b.calls, [['workspace', 'projection']]);
+    } else {
+      await Effect.runPromise(b.session.refresh());
+      assert.equal(b.session.initialized, true);
+      assert.deepEqual(b.calls, [['workspace', 'projection'], ['workspace', 'wait'], ['workspace', 'projection']]);
+    }
   }
 });
 

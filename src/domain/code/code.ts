@@ -5,7 +5,7 @@ import type { language_server_config_LanguageServer as LanguageServer } from "..
 import { cacheDatabasePath } from "../../base/cache/index.ts";
 import { readCodePayloads, writeCodePayloads } from "../../base/cache/index.ts";
 import { persistNotedConfig, repositoryRuntime } from "../../base/workspace/index.ts";
-import { decode, canonical, digest, objectDigest, Text, type Finding, type Repository } from "../../model/index.ts";
+import { ConcordError, decode, canonical, digest, objectDigest, Text, type Finding, type Repository } from "../../model/index.ts";
 import { parseReference } from "../../model/index.ts";
 import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
 import { ContentCache } from "../../base/cache/index.ts";
@@ -56,7 +56,6 @@ interface CompiledFiles {
   readonly hits: number;
   readonly misses: number;
   readonly rows: readonly { readonly key: string; readonly payload: string }[];
-  readonly readFailure?: string;
 }
 
 interface Source { readonly path: string; readonly text: string; readonly digest: string; readonly server?: LanguageServer }
@@ -477,12 +476,11 @@ function fileKey(repo: Repository, source: Source): string {
 function encodeParse(parsed: ParsedFile): string {
   return canonical({ codes: parsed.codes, findings: parsed.findings, digest: objectDigest({ codes: parsed.codes, findings: parsed.findings }) });
 }
-function decodeParse(payload: string): ParsedFile | undefined {
-  try {
-    const value = decode(CodeParseSchema, JSON.parse(payload), 'code cache');
-    if (value.digest !== objectDigest({ codes: value.codes, findings: value.findings })) return undefined;
-    return { codes: value.codes, findings: value.findings };
-  } catch { return undefined; }
+function decodeParse(payload: string, path: string): ParsedFile {
+  const value = decode(Schema.fromJsonString(CodeParseSchema), payload, 'code cache');
+  if (value.digest !== objectDigest({ codes: value.codes, findings: value.findings })) throw new ConcordError('InvalidData', 'code cache digest does not match its payload');
+  if (value.codes.some(code => code.file !== path) || value.findings.some(finding => finding.path !== path)) throw new ConcordError('InvalidData', 'code cache source does not match its cache key');
+  return { codes: value.codes, findings: value.findings };
 }
 function mergeParsed(parsed: readonly ParsedFile[]): { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] } {
   const codes = parsed.flatMap(item => item.codes).sort((left, right) => left.id.localeCompare(right.id) || left.file.localeCompare(right.file) || left.line - right.line);
@@ -503,12 +501,7 @@ async function compileAstCachedInScope(repo: Repository, current: readonly Sourc
     const inputs = current.map(source => ({ path: source.path, source: source.text }));
     return { ...mergeParsed((await codeContentCache.getManyResultsAsync(inputs, async input => input.source.includes('@concord-') ? (await parseSource({ path: input.path, text: input.source, digest: digest(input.source) })) : { codes: [], findings: [] })).map(result => { if (!result.ok) throw result.cause; return result.value; })), hits: 0, misses: current.length, rows: [] };
   }
-  let stored = new Map<string, string>();
-  let readFailure: string | undefined;
-  if (mode === 'use') {
-    try { stored = new Map(readCodePayloads(repo, current.map(source => fileKey(repo, source)))); }
-    catch (cause) { readFailure = cause instanceof Error ? cause.message : String(cause); }
-  }
+  const stored = mode === 'use' ? readCodePayloads(repo, current.map(source => fileKey(repo, source))) : new Map<string, string>();
   const parsed: ParsedFile[] = [];
   const rows: { key: string; payload: string }[] = [];
   let hits = 0;
@@ -517,9 +510,10 @@ async function compileAstCachedInScope(repo: Repository, current: readonly Sourc
   const pending: { index: number; key: string }[] = [];
   for (const source of current) {
     const key = fileKey(repo, source);
-    if (mode === 'use' && readFailure === undefined && stored.has(key)) {
-      const decoded = decodeParse(stored.get(key)!);
-      if (decoded !== undefined) { hits += 1; parsed.push(decoded); continue; }
+    if (mode === 'use' && stored.has(key)) {
+      parsed.push(decodeParse(stored.get(key)!, source.path));
+      hits += 1;
+      continue;
     }
     misses += 1;
     pending.push({ index: parsed.length, key });
@@ -531,9 +525,9 @@ async function compileAstCachedInScope(repo: Repository, current: readonly Sourc
     const item = pending[index]!;
     const fresh = freshValues[index]!;
     parsed[item.index] = fresh;
-    if (readFailure === undefined) rows.push({ key: item.key, payload: encodeParse(fresh) });
+    rows.push({ key: item.key, payload: encodeParse(fresh) });
   }
-  return { ...mergeParsed(parsed), hits, misses, rows, ...(readFailure === undefined ? {} : { readFailure }) };
+  return { ...mergeParsed(parsed), hits, misses, rows };
 }
 
 /** Text markers own foreign-language relations even when no analyzer is available. */
@@ -603,13 +597,8 @@ function finish(repo: Repository, compiled: CompiledFiles, current: readonly Sou
   const body = { ...result(compiled, current, changed), relationsUnknown };
   if (changed) return withCache(body, { status: 'source-changed', hits: 0, misses: compiled.misses, path: cachePath });
   if (mode === 'off') return withCache(body, { status: 'off', hits: 0, misses: compiled.misses, path: cachePath });
-  if (compiled.readFailure !== undefined) return withCache(body, { status: 'unavailable', hits: 0, misses: compiled.misses, path: cachePath, detail: compiled.readFailure });
-  try {
-    persistNotedConfig(repo);
-    if (compiled.rows.length > 0) writeCodePayloads(repo, compiled.rows);
-  } catch (cause) {
-    return withCache(body, { status: 'unavailable', hits: compiled.hits, misses: compiled.misses, path: cachePath, detail: cause instanceof Error ? cause.message : String(cause) });
-  }
+  persistNotedConfig(repo);
+  if (compiled.rows.length > 0) writeCodePayloads(repo, compiled.rows);
   const status = compiled.misses === 0 ? 'hit' : compiled.hits === 0 ? 'miss' : 'partial';
   return withCache(body, { status, hits: compiled.hits, misses: compiled.misses, path: cachePath });
 }

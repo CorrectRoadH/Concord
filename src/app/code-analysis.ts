@@ -1,6 +1,6 @@
 import type { RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
 import { snapshotBytes } from '../base/sources/index.ts';
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { buildTrace, requireValidTrace } from "../domain/trace/index.ts";
 import { worktreeIdentity } from "../base/git/index.ts";
 import { openReadRepository, repositoryRuntime, type LocalRepository } from "../base/workspace/index.ts";
@@ -113,7 +113,7 @@ const readCapture = Effect.fn('analysis.capture')(function*(root: string) {
 function publishObservations(repo: Repository, values: readonly AnalysisObservation[]): void {
   try {
     writeCachePayloads(PersistentCache.repository(repo), 'code_cache', values.map(value => ({ key: unitKey(repo, value.value.analyzer), payload: JSON.stringify(value) })));
-  } catch { throw new ConcordError('LanguageServerFailed', 'Could not publish the analysis observation cache'); }
+  }
   finally { closeRepositoryCache(repo); }
 }
 
@@ -188,27 +188,24 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 function readStoredAnalysisObservations(repo: Repository): readonly AnalysisObservation[] {
   const analyzers = ['typescript', ...(repo.config.languageServers ?? []).map(server => server.id)];
-  let stored: ReadonlyMap<string, string>;
-  try { stored = readCachePayloads(PersistentCache.repository(repo), 'code_cache', analyzers.map(analyzer => unitKey(repo, analyzer))); }
-  catch { return []; }
+  const stored = readCachePayloads(PersistentCache.repository(repo), 'code_cache', analyzers.map(analyzer => unitKey(repo, analyzer)));
   const observations: AnalysisObservation[] = [];
   for (const analyzer of analyzers) {
     const payload = stored.get(unitKey(repo, analyzer));
     if (payload === undefined) continue;
-    try {
-      const value = decode(AnalysisObservationSchema, JSON.parse(payload), 'analysis observation');
-      if (value.value.analyzer === analyzer && (!value.complete || value.gaps.length === 0) && (value.complete || value.gaps.length > 0)) observations.push(value);
-    } catch { /* Disposable observation unavailable. */ }
+    const value = decode(Schema.fromJsonString(AnalysisObservationSchema), payload, 'analysis observation');
+    if (value.value.analyzer !== analyzer) throw new ConcordError('InvalidData', 'analysis observation analyzer does not match its cache key');
+    if (value.complete !== (value.gaps.length === 0)) throw new ConcordError('InvalidData', 'analysis observation completeness does not match its gaps');
+    observations.push(value);
   }
   return observations;
 }
 
 
-/** Missing, damaged and stale observations do not affect the authoritative trace. */
+/** Missing observations are absent; valid stale observations remain explicitly non-current. */
 export async function readAnalysisObservations(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)): Promise<readonly AnalysisObservation[]> {
   const observations = readStoredAnalysisObservations(repo);
   if (observations.length === 0) return [];
-  let inputs: string | undefined;
-  try { inputs = (await captureAnalysisInputs(repo, runtime)).inputs; } catch { /* History remains explicitly non-current. */ }
+  const { inputs } = await captureAnalysisInputs(repo, runtime);
   return observations.map(value => ({ ...value, current: value.current && value.inputs === inputs, complete: value.complete && value.inputs === inputs, gaps: value.inputs === inputs ? value.gaps : [...new Set([...value.gaps, 'SnapshotNotCurrent'])] }));
 }

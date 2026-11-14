@@ -5,7 +5,6 @@ import { createDocument } from '../support/operations.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +12,7 @@ import { Effect } from 'effect';
 import { cacheStatus, clearCache } from "../../src/domain/tests/index.ts";
 import { scanCode } from "../../src/domain/code/index.ts";
 import { openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
+import { ConcordError, objectDigest } from '../../src/model/index.ts';
 
 import { LocalRepository } from "../support/repository.ts";
 
@@ -48,7 +48,7 @@ async function open<A>(root: string, use: (repo: LocalRepository) => A): Promise
 }
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
-test('caches code declaration parses per file and repairs a corrupt row', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('caches code declaration parses per file and rejects a corrupt row without overwriting it', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = (await consumer());
   try {
     write(root, 'src/alpha.ts', marked('alpha'));
@@ -74,21 +74,21 @@ test('caches code declaration parses per file and repairs a corrupt row', () => 
     assert.equal(partial.codes.find(item => item.file === 'src/beta.ts')?.symbol, 'beta');
     const cache = join(root, '.git/concord/cache.hawdb');
     const db = openHawdb(cache, { readOnly: false, create: false }, nativeRuntime);
+    let damaged: readonly { key: string; payload: string }[];
     try {
       const rows = db.scan('code_cache');
       assert.ok(rows.length > 0);
-      for (const row of rows) {
+      damaged = rows.map(row => {
         const payload = JSON.parse(row.payload) as { codes: { symbol?: string }[]; digest: string };
-        payload.codes[0] = { ...(payload.codes[0] ?? {}), symbol: 'stale-cache-symbol' };
-        db.put('code_cache', [{ key: row.key, payload: JSON.stringify(payload) }]);
-      }
+        payload.digest = 'sha256:wrong';
+        return { key: row.key, payload: JSON.stringify(payload) };
+      });
+      db.put('code_cache', damaged);
     } finally { db.close(); }
-    const repaired = (await scan(root));
-    assert.equal(repaired.codes.some(item => item.symbol === 'stale-cache-symbol'), false);
-    assert.equal(repaired.cache.status === 'miss' || repaired.cache.status === 'partial', true);
-    const afterRepair = (await scan(root));
-    assert.equal(afterRepair.cache.status, 'hit');
-    assert.equal(afterRepair.codes.find(item => item.file === 'src/alpha.ts')?.symbol, 'alphaEdited');
+    await assert.rejects(scan(root), error => error instanceof ConcordError && error.code === 'InvalidData' && error.message.includes('code cache digest'));
+    const preserved = openHawdb(cache, { readOnly: true, create: false }, nativeRuntime);
+    try { assert.deepEqual(preserved.scan('code_cache'), damaged); }
+    finally { preserved.close(); }
     (await open(root, repo => assert.match(cacheStatus(repo, nativeRuntime).detail ?? '', /code_cache/u)));
     (await open(root, repo => clearCache(repo, undefined, nativeRuntime)));
     assert.equal(existsSync(cache), true);
@@ -138,32 +138,33 @@ test('a docs-only change still changes gaps while the code parse cache hits', ()
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
-test('a warm code and config cache hit does not load the TypeScript compiler', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('a warm code cache ignores persistent config rows while bootstrap parses its source', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = (await consumer());
   try {
     write(root, 'src/alpha.ts', marked('alpha'));
     assert.equal((await scan(root)).cache.status, 'miss');
     const cache = join(root, '.git/concord/cache.hawdb');
-    const db = openHawdb(cache, { readOnly: true, create: false }, nativeRuntime);
+    const db = openHawdb(cache, { readOnly: false, create: false }, nativeRuntime);
     try {
       assert.ok(db.scan('code_cache').length > 0);
-      assert.ok(db.scan('config_cache').length > 0);
+      const rows = db.scan('config_cache');
+      assert.ok(rows.length > 0);
+      const config = { testRoots: [], sourceRoots: [] };
+      db.put('config_cache', rows.map(row => ({ key: row.key, payload: JSON.stringify({ config, digest: objectDigest(config) }) })));
     } finally { db.close(); }
     const script = `
       const nativeRuntime = { cwd: process.cwd(), env: { ...process.env } };
-      import { createRequire } from 'node:module';
       import { LocalRepository } from ${JSON.stringify(fileURLToPath(new URL('../support/repository.ts', import.meta.url)))};
       import { scanCode } from ${JSON.stringify(fileURLToPath(new URL('../../src/domain/code/index.ts', import.meta.url)))};
       const repo = await LocalRepository.open(${JSON.stringify(root)});
       try {
+        if (JSON.stringify(repo.config.sourceRoots) !== '["src"]') process.exit(3);
         const result = await scanCode(repo, undefined, nativeRuntime);
         if (result.cache.status !== 'hit') { console.error(JSON.stringify(result.cache)); process.exit(2); }
+        if (result.codes[0]?.symbol !== 'alpha') process.exit(4);
       } finally { repo.close(); }
-      const loaded = Object.keys(createRequire(import.meta.url).cache).some(key => key.replaceAll('\\\\', '/').endsWith('/typescript/dist/api/sync/api.js'));
-      if (loaded) process.exit(3);
     `;
     const child = spawnSync(process.execPath, [ '--input-type=module', '-e', script], { encoding: 'utf8', timeout: 30_000 });
     assert.equal(child.status, 0, `${child.stdout}\n${child.stderr}`);
-    assert.equal(createRequire(import.meta.url).resolve('typescript/package.json').endsWith('package.json'), true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

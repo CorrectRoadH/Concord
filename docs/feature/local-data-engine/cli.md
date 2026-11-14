@@ -14,8 +14,10 @@
 | `physicalBytes` | 缓存按 inode 去重的物理体积（[目录体积与维护](architecture.md#目录体积与维护)）；体积不设上限，不自动回收 |
 | `owner` | `service`：由工作区服务持有；`process`：没有服务，由当前 CLI 进程持有 |
 | `pid` | 持有者的进程号（整数） |
-| `installation` | 持有者的[安装身份](../../concepts.md#installation-identity)，与 `concord server status` 的 `installation` 相同 |
+| `installation` | 持有者的[安装身份](../../concepts.md#installation-identity)，与 `concord server status` 的 `installation` 相同；本地安装无法核验时省略 |
 | `sourceDigest` | 服务持有时是服务当前结果的摘要 |
+
+本地状态诊断不初始化解析缓存或创建数据库。安装无法核验时仍报告 `unavailable` 和原始原因，不伪造安装身份。
 
 ## 清理缓存
 

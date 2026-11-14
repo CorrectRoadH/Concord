@@ -59,33 +59,15 @@ export function bindRepositoryCache(repo: Repository, access: RepositoryCache): 
   return () => { if (owners.get(repo) === access) { closeRepositoryCache(repo); owners.delete(repo); } };
 }
 export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {})): RepositoryCache {
-  let diagnostic: string | undefined;
   const missing = () => new HawdbFailure('HawdbUnavailable', 'Persistent cache is absent; start the workspace service or run cache rebuild');
   const parseNamespace = (namespace: HawdbNativeTypes.HawdbNamespace) => ['document_parse', 'code_parse', 'git_baseline'].includes(namespace);
-  const rebuildable = (namespace: HawdbNativeTypes.HawdbNamespace, keys?: readonly string[]) => !['feedback_cache', 'query_cache', 'workspace_projection'].includes(namespace) || namespace === 'query_cache' && keys !== undefined && keys.every(key => key.startsWith('writing:'));
-  const use = <A>(namespace: HawdbNativeTypes.HawdbNamespace, keys: readonly string[] | undefined, writable: boolean, operation: (database: HawdbDatabase | undefined) => A): A => {
-    try { return withPersistentCache(repo, writable, database => operation(database ?? (parseNamespace(namespace) ? memory : undefined)), false, runtime); }
-    catch (cause) {
-      if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || !rebuildable(namespace, keys)) throw cause;
-      diagnostic = `HawdbBusy: ${cause.message}`;
-      if (memory && parseNamespace(namespace)) return operation(memory);
-      // Derived rows have no memory table. Their existing unavailable-cache
-      // path recomputes from source while retaining the busy diagnostic.
-      throw cause;
-    }
-  };
+  const use = <A>(namespace: HawdbNativeTypes.HawdbNamespace, writable: boolean, operation: (database: HawdbDatabase | undefined) => A): A =>
+    withPersistentCache(repo, writable, database => operation(database ?? (parseNamespace(namespace) ? memory : undefined)), false, runtime);
   return {
-    diagnostic: () => diagnostic,
-    prepareWrite: options => {
-      try { withPersistentCache(repo, true, database => { if (!database) throw missing(); }, options?.create, runtime); }
-      catch (cause) {
-        if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy') throw cause;
-        diagnostic = `HawdbBusy: ${cause.message}`;
-      }
-    },
-    get: (namespace, keys) => use(namespace, keys, false, database => database?.get(namespace, keys) ?? []),
-    scan: namespace => use(namespace, undefined, false, database => database?.scan(namespace) ?? []),
-    put: (namespace, rows) => use(namespace, rows.map(row => row.key), true, database => { if (!database) throw missing(); database.put(namespace, rows); }),
+    prepareWrite: options => withPersistentCache(repo, true, database => { if (!database) throw missing(); }, options?.create, runtime),
+    get: (namespace, keys) => use(namespace, false, database => database?.get(namespace, keys) ?? []),
+    scan: namespace => use(namespace, false, database => database?.scan(namespace) ?? []),
+    put: (namespace, rows) => use(namespace, true, database => { if (!database) throw missing(); database.put(namespace, rows); }),
     namespaces: () => withPersistentCache(repo, false, database => database?.namespaces() ?? [], false, runtime),
   };
 }

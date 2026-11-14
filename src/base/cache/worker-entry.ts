@@ -3,9 +3,9 @@
 import { parentPort } from 'node:worker_threads';
 import { Schema } from 'effect';
 import { DatabaseRequest, DatabaseReply, DatabaseValue } from './worker-protocol.ts';
-import { createMemoryHawdb, openHawdb, acquireHawdbOwnerGate, acquireHawdbClearGuard, hawdbFailure, type NativeDatabase } from './hawdb-native.ts';
+import { createMemoryHawdb, openHawdb, CacheSchemaMismatch, acquireHawdbOwnerGate, acquireHawdbClearGuard, hawdbFailure, type NativeDatabase } from './hawdb-native.ts';
 import { HawdbFailure } from './hawdb-types.ts';
-import { cacheDatabasePath, deleteInspectedCache, inspectCacheClear } from './cache-file.ts';
+import { cacheDatabasePath, deleteInspectedCache, inspectCacheClear, verifyCacheSchemaIdentity } from './cache-file.ts';
 import type { FileLock } from '../file-lock/index.ts';
 import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { writeCachePayloads } from './cache-query.ts';
@@ -38,7 +38,23 @@ function execute(request: DatabaseRequest, check: () => void): DatabaseValue {
     if (runtime) throw new HawdbFailure('HawdbIncompatible', 'Worker is already initialized');
     runtime = input.runtime; privateDir = input.privateDir;
     if (privateDir === null) transient();
-    else { gate = acquireHawdbOwnerGate(cacheDatabasePath(privateDir)); database = openHawdb(cacheDatabasePath(privateDir), { readOnly: false, create: true }, runtime, gate); }
+    else {
+      const path = cacheDatabasePath(privateDir);
+      gate = acquireHawdbOwnerGate(path);
+      try { database = openHawdb(path, { readOnly: false, create: true }, runtime, gate); }
+      catch (cause) {
+        if (!(cause instanceof CacheSchemaMismatch)) throw cause;
+        check();
+        const guard = acquireHawdbClearGuard(path, runtime, gate);
+        try {
+          check();
+          verifyCacheSchemaIdentity(path, cause.observation);
+          deleteInspectedCache(inspectCacheClear(privateDir), guard.verify);
+        } finally { guard.close(); }
+        check();
+        database = openHawdb(path, { readOnly: false, create: true }, runtime, gate);
+      }
+    }
     return null;
   }
   if (input.op === 'status') {

@@ -7,7 +7,7 @@ Spec、Memory、Issue 和证据仍是仓库里的普通文件，删除缓存不�
 ## 你可以做什么
 
 - 连续运行检查和检索，第二次起复用缓存；改过的文件每次都重新核验。
-- 在不断增长的 Memory 与 Issue 中重复搜索，复用未变化的正文，返回全部当前命中；首次构建与缓存降级的边界见[检索路径](use-case/query-current-projections.md)。
+- 在不断增长的 Memory 与 Issue 中重复搜索，复用未变化的正文，返回全部当前命中；首次构建与失败传播的边界见[检索路径](use-case/query-current-projections.md)。
 - 用 `concord cache status` 查看缓存是否可用、占多少空间；用 `concord cache clear` 删除缓存，下一次命令自动重建，结果不变。
 - 用 `trace gaps`、`trace show` 和 `review` 立即读取后台最近算好的诊断结果；需要当前结果时加 `--fresh`。
 - 在项目的任意子目录运行命令：Concord 自动启动或复用该项目的[工作区服务](../../concepts.md#workspace-server)，多个命令共享热的解析结果。

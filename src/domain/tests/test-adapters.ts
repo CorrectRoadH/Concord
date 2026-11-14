@@ -219,16 +219,14 @@ const collectOne = Effect.fn('testAdapter.collect')(function* (repo: LocalReposi
 export function readNativeObservations(repo: Repository): readonly { adapterId: string; observation: Observation<NativeManifest>; inputScope?: typeof InputScopeSchema.Type }[] {
   const results: { adapterId: string; observation: Observation<NativeManifest>; inputScope?: typeof InputScopeSchema.Type }[] = [];
   for (const adapter of repo.config.testAdapters ?? []) {
-    try {
-      const item = PersistentCache.repository(repo).get('annotation_cache', [`${CACHE_PREFIX}${adapter.id}`])[0];
-      if (!item) continue;
-      const value = decode(ObservationSchema, protocolJson(item.payload), 'native manifest observation');
-      const current = adapterInputSnapshot(repo, adapter).inputs === value.inputs;
-      const scope = PersistentCache.repository(repo).get('annotation_cache', [`${INPUT_PREFIX}${adapter.id}`])[0];
-      const inputScope = scope ? decode(InputScopeSchema, protocolJson(scope.payload), 'native input scope') : undefined;
-      if (inputScope && inputScope.inputs !== value.inputs) continue;
-      results.push({ adapterId: adapter.id, observation: { ...value, current }, ...(inputScope ? { inputScope } : {}) });
-    } catch { /* Disposable observations never affect static command success. */ }
+    const item = PersistentCache.repository(repo).get('annotation_cache', [`${CACHE_PREFIX}${adapter.id}`])[0];
+    if (!item) continue;
+    const value = decode(ObservationSchema, protocolJson(item.payload), 'native manifest observation');
+    const current = adapterInputSnapshot(repo, adapter).inputs === value.inputs;
+    const scope = PersistentCache.repository(repo).get('annotation_cache', [`${INPUT_PREFIX}${adapter.id}`])[0];
+    const inputScope = scope ? decode(InputScopeSchema, protocolJson(scope.payload), 'native input scope') : undefined;
+    if (inputScope && inputScope.inputs !== value.inputs) throw new ConcordError('InvalidData', 'native input scope does not match its observation inputs');
+    results.push({ adapterId: adapter.id, observation: { ...value, current }, ...(inputScope ? { inputScope } : {}) });
   }
   return results;
 }

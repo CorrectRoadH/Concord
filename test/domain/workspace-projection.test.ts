@@ -56,19 +56,16 @@ test('a completed workspace scan survives brief contention at publication', asyn
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('a recovery failure preserves the exact previously accepted persistent generation', async () => {
+test('a recovery failure is reported instead of returning the previous persistent generation', async () => {
   const root = (await fixture());
   try {
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
     const candidate = makeWorkspaceProjectionCandidate(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
     const context = (await workspaceProjectionContext(root));
     storeWorkspaceProjection(context, candidate);
-    const previous = readWorkspaceProjection(context);
+    readWorkspaceProjection(context);
     storeWorkspaceProjection(context, undefined, new ConcordError('RecoveryRequired', 'An interrupted publication exists'));
-    const blocked = readWorkspaceProjection(context);
-    assert.equal(blocked.projection.builtAt, previous.projection.builtAt);
-    assert.equal(blocked.projection.status, 'blocked');
-    assert.deepEqual(blocked.snapshot, previous.snapshot);
+    assert.throws(() => readWorkspaceProjection(context), { code: 'RecoveryRequired' });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

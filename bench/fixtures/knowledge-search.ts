@@ -139,7 +139,7 @@ async function makeSession(parent: Scope.Scope, corpus: Corpus, kind: KnowledgeK
       discard: async (kind, memory, signal) => { await worker!.request({ op: 'discard-search', kind, memory }, { signal }); },
     });
     const open = async () => {
-      repo = observe(await LocalRepository.open(corpus.root, { access: 'read', runtime }), reads);
+      repo = observe(await LocalRepository.open(corpus.root, { access: 'read', persistentCache: storage === 'memory' ? 'off' : 'use', runtime }), reads);
       worker = new DatabaseWorker();
       await worker.request({ op: 'open', privateDir: storage === 'persistent' ? privateDir : null, runtime });
     };
@@ -149,8 +149,7 @@ async function makeSession(parent: Scope.Scope, corpus: Corpus, kind: KnowledgeK
       const before = nativeResponses;
       const result = await knowledgeSearchRecords(repo!, kind, query, owner);
       strictEqual(nativeResponses, before + 1, 'native benchmark must not silently degrade to a JavaScript scan');
-      if (storage === 'persistent') strictEqual(owner.diagnostic, undefined, 'persistent benchmark must use its persistent database');
-      else strictEqual(owner.diagnostic?.startsWith('HawdbUnavailable:'), true, 'memory benchmark must exercise the unavailable persistent database fallback');
+      strictEqual(owner.diagnostic, undefined, 'the selected native storage must succeed without fallback');
       if (bodies === 'cold') ok(reads.bodies >= corpus.size, 'cold owner must verify every source body');
       else if (bodies !== undefined) strictEqual(reads.bodies, bodies, `${kind}/${storage}: source body reads`);
       strictEqual(reads.discoveries, 1, 'each query must discover current source identities');

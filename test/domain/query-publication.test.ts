@@ -7,7 +7,7 @@ import { Effect } from 'effect';
 import { queryContext, readQuery, storeQuery } from '../../src/app/index.ts';
 import { PersistentCache } from '../../src/base/cache/index.ts';
 import { setAuthor } from '../../src/domain/documents/index.ts';
-import { digest } from '../../src/model/index.ts';
+import { ConcordError, digest } from '../../src/model/index.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 import { createDocument } from '../support/operations.ts';
 import { createConsumer } from '../support/consumer.ts';
@@ -76,3 +76,21 @@ test('a complete A-B-A publication preserves the same source result', () => Effe
     assert.ok(existsSync(join(root, '.git/concord/trace/publication.lease')));
   } finally { reader.close(); writer.close(); rmSync(root, { recursive: true, force: true }); }
 }).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime))));
+
+// @feature docs/feature/local-data-engine/architecture.md#failure-propagation
+test('a projection writer preserves a corrupt existing query row and reports its failure', async () => {
+  const root = await consumer();
+  try {
+    const context = await runApplication(queryContext(root, ['trace', 'gaps']));
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const owner = yield* PersistentCache.owner(context.privateDir);
+      yield* owner.open;
+      yield* owner.service.update(context.privateDir, 'query_cache', context.key, () => '{broken');
+      const result = yield* Effect.result(storeQuery(context, candidate()).pipe(Effect.provideService(PersistentCache, owner.service)));
+      assert.equal(result._tag, 'Failure');
+      if (result._tag === 'Failure') { assert.ok(result.failure instanceof ConcordError); assert.equal(result.failure.code, 'QueryCacheInvalid'); }
+      const rows = yield* owner.service.read(context.privateDir, 'query_cache', [context.key]);
+      assert.equal(rows[0]?.payload, '{broken');
+    })).pipe(Effect.provide(PersistentCache.layer), Effect.provideService(RuntimeEnvironment, nativeRuntime)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

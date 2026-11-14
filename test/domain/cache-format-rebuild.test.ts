@@ -113,7 +113,7 @@ test('explicit clear refuses another clear owner and preserves the incompatible 
 });
 
 // @feature docs/feature/local-data-engine/architecture.md#句柄与打开模式
-test('source snapshot aggregate caches fall back on contention without pretending historical observations exist', async () => {
+test('source snapshot aggregate and historical caches fail on contention without running update callbacks', async () => {
   const root = (await createConsumer());
   try {
     const privateDir = join(root, '.git/concord');
@@ -125,8 +125,13 @@ test('source snapshot aggregate caches fall back on contention without pretendin
         const sources = yield* Sources, cache = yield* PersistentCache;
         const context = yield* (yield* Workspace).open(root, { access: 'read', cache: 'use' });
         yield* sources.snapshot(Effect.gen(function*() {
-          assert.deepEqual(yield* cache.read(privateDir, 'config_cache'), []);
-          yield* cache.update(privateDir, 'config_cache', 'local', () => 'recomputed');
+          let computed = false;
+          for (const operation of [cache.read(privateDir, 'config_cache'), cache.update(privateDir, 'config_cache', 'local', () => { computed = true; return 'recomputed'; })]) {
+            const failed = yield* Effect.result(operation);
+            assert.equal(failed._tag, 'Failure');
+            if (failed._tag === 'Failure') assert.equal(failed.failure.code, 'HawdbBusy');
+          }
+          assert.equal(computed, false);
           const historical = yield* Effect.result(cache.read(privateDir, 'feedback_cache'));
           assert.equal(historical._tag, 'Failure');
           if (historical._tag === 'Failure') assert.equal(historical.failure.code, 'HawdbBusy');

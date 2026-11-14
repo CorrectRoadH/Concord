@@ -46,14 +46,19 @@ function parseMetadata(input: { readonly path: string; readonly source: string }
 }
 function serializeTree(tree: Root): string { return deflateRawSync(JSON.stringify(tree), { level: 1 }).toString('base64'); }
 function decodeTree(tree: string): Root {
-  return decode(MarkdownRoot, JSON.parse(inflateRawSync(Buffer.from(tree, 'base64'), { maxOutputLength: 64 * 1024 * 1024 }).toString('utf8')), 'document syntax tree');
+  try {
+    return decode(Schema.fromJsonString(MarkdownRoot), inflateRawSync(Buffer.from(tree, 'base64'), { maxOutputLength: 64 * 1024 * 1024 }).toString('utf8'), 'document syntax tree');
+  } catch (cause) {
+    if (cause instanceof ConcordError) throw cause;
+    throw new ConcordError('InvalidData', `document syntax tree: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
 }
 function currentTree(input: { readonly source: string }, previous: Projection): Root {
   return projectionTree(input.source, previous);
 }
 /** Decode detached syntax bytes without retaining the cache that produced them. */
 export function projectionTree(source: string, previous: Projection): Root {
-  if (previous.tree !== undefined) try { return decodeTree(previous.tree); } catch { /* Rebuild a damaged disposable tree. */ }
+  if (previous.tree !== undefined) return decodeTree(previous.tree);
   return fromMarkdown(markdownBody(source));
 }
 function withMarkdown(input: { readonly path: string; readonly source: string }, previous = parseMetadata(input), tree = currentTree(input, previous)): Projection {
@@ -75,14 +80,8 @@ export function documentMarkdownProjection(path: string, source: string, runtime
 export function documentMarkdown(path: string, source: string, runtime: RuntimeEnvironmentSnapshot, contentCache?: DocumentProjectionCache): Root {
   return withProjectionCache(runtime, contentCache, cache => {
     const projection = documentMarkdownProjection(path, source, runtime, cache);
-    try {
-      // Decode the serialized tree only for consumers that need nodes and offsets.
-      return decodeTree(projection.tree!);
-    } catch {
-      const tree = fromMarkdown(markdownBody(source));
-      cache.get(path, source, () => withMarkdown({ path, source }, projection, tree), true);
-      return tree;
-    }
+    // Decode the serialized tree only for consumers that need nodes and offsets.
+    return decodeTree(projection.tree!);
   });
 }
 export function projectionRecord(path: string, projection: Projection) {

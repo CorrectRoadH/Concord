@@ -54,7 +54,7 @@ flowchart LR
 各阶段的补充规则：
 
 - 启动服务的入口是 CLI 命令、`concord view`、`concord lsp` 与 `concord server start`。
-- 准备服务时缓存打开失败，服务报告降级原因并用内存图继续服务。
+- 准备服务时缓存打开失败，服务报告具名原因，业务请求失败；诊断与显式维护保持可达。
 - 持续运行时，来源监听与内部写入直接按变更文件增量更新工作区图，不启动独立的后台全量扫描子进程。
 - 维护缓存前等待在途操作完成；服务锁全程保留。
 - 服务在显式停止、项目目录消失，或无客户端且十分钟无请求时停止。最后释放的是句柄、socket、运行记录与服务锁。
@@ -120,7 +120,7 @@ init 生成布局、`docs/concord.md`、`docs/_template/` 参考模板，以及�
 
 测试关联是测试源码中的 Concord 标记：`@feature <path>` 或 `@use-case <path>`，可附 `@issue <path>`、`@status retired` 与 `@name`。测试身份由文件和标记派生为 `neref_...`，反向关系由当前源码派生，不写回 Spec。标记语法与发现范围见[发现测试](feature/local-sdlc/use-case/discover-annotated-tests.md)。
 
-HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。文件读取按 `(mtime, size, inode)` 与内容摘要做增量核对，命中仍严格解码。损坏、schema 不符或写入失败时回源编译，不返回陈旧结果。
+HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。文件读取按 `(mtime, size, inode)` 与内容摘要做增量核对，命中仍严格解码。损坏或写入失败时直接报错；确认的 schema 版本失效按[受锁清理](feature/local-data-engine/architecture.md#cache-schema-invalidation)重建一次，不返回替代成功结果。
 
 缓存只保存解析结果和投影，不缓存授权的判定。工作区服务在内存中维护唯一一份增量工作区图，并异步刷入 `cache.hawdb` 作为冷启动持久层。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有，句柄的所有权与打开模式见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。
 

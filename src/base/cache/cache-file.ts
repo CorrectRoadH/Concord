@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { lstatSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { ConcordError } from "../../model/index.ts";
 import { assertLeasePath } from "../publication/index.ts";
 
@@ -28,6 +28,24 @@ export function cacheRootOwnerOnly(path: string): boolean {
 export interface CacheClearInventory { readonly path: string; readonly existing: boolean; readonly empty: boolean; readonly entries: readonly string[] }
 
 export interface CacheTreeEntry { readonly dev: bigint; readonly ino: bigint; readonly links: bigint; readonly directory: boolean; readonly bytes: bigint }
+
+/** Bind a schema observation to the tree before releasing the native owner's locks. */
+export function cacheSchemaIdentity(path: string): string {
+  return JSON.stringify([...inspectCacheTree(path)].sort(([a], [b]) => a.localeCompare(b)).map(([name, entry]) => {
+    const stat = lstatSync(name, { bigint: true });
+    if ((!stat.isFile() && !stat.isDirectory()) || stat.isSymbolicLink() || stat.dev !== entry.dev || stat.ino !== entry.ino || stat.size !== entry.bytes || stat.nlink !== entry.links || stat.isDirectory() !== entry.directory) throw new ConcordError('UnsafePath', `Cache changed during schema observation: ${name}`);
+    // With all clear leases held, inactive root pins have no persistent authority.
+    // Native close replaces this exact record; all other paths remain exact.
+    const pin = /^branches\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/root-pins(\/roots\.hawdb)?$/.exec(relative(path, name));
+    const record = pin?.[1] !== undefined && !entry.directory;
+    const directory = pin !== null && pin[1] === undefined && entry.directory;
+    return [name, entry.directory, stat.dev.toString(), record ? null : stat.ino.toString(), stat.nlink.toString(), record || directory ? null : stat.size.toString(), record || directory ? null : stat.mtimeNs.toString(), record || directory ? null : stat.ctimeNs.toString()];
+  }));
+}
+
+export function verifyCacheSchemaIdentity(path: string, expected: string): void {
+  if (cacheSchemaIdentity(path) !== expected) throw new ConcordError('UnsafePath', 'Cache changed after its schema was inspected; preserve it and retry');
+}
 const inodeKey = (entry: CacheTreeEntry): string => `${entry.dev}:${entry.ino}`;
 const lockPath = (path: string): boolean => basename(path).endsWith('.lock');
 

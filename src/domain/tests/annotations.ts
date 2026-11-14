@@ -5,7 +5,7 @@ import { Schema } from "effect";
 import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from "../../base/cache/index.ts";
 import { inspectCacheStatus, type CacheStatus } from "../../base/cache/index.ts";
 import { PersistentCache, closeRepositoryCache } from "../../base/cache/index.ts";
-import { acquireHawdbClearGuard, hawdbIdentity, HawdbFailure } from "../../base/cache/index.ts";
+import { acquireHawdbClearGuard, hawdbIdentity } from "../../base/cache/index.ts";
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from "../../model/index.ts";
 import { caseDiscriminator, deriveTestReference } from "../../model/index.ts";
 import * as ts from 'typescript/ast';
@@ -180,15 +180,13 @@ function cachePath(repo: Repository): string { return cacheDatabasePath(repo.pri
 function cacheKey(repo: Repository, current: readonly Source[]): string {
   return objectDigest({ root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: parserVersion(), files: current.map(source => ({ path: source.path, digest: source.digest })) });
 }
-function readCache(repo: Repository, key: string): CachedSnapshot | undefined {
-  return (() => {
-    const db = PersistentCache.repository(repo);
-    const row = db?.get('annotation_cache', [key])[0];
-    if (row === undefined) return undefined;
-    const value = decode(CachedSnapshotSchema, JSON.parse(row.payload), 'annotation cache');
-    if (value.digest !== objectDigest({ cases: value.cases, findings: value.findings, files: value.files })) throw new ConcordError('InvalidData', 'annotation cache digest does not match its payload');
-    return value;
-  })();
+function readCache(repo: Repository, key: string, current: readonly Source[]): CachedSnapshot | undefined {
+  const row = PersistentCache.repository(repo).get('annotation_cache', [key])[0];
+  if (row === undefined) return undefined;
+  const value = decode(Schema.fromJsonString(CachedSnapshotSchema), row.payload, 'annotation cache');
+  if (value.digest !== objectDigest({ cases: value.cases, findings: value.findings, files: value.files })) throw new ConcordError('InvalidData', 'annotation cache digest does not match its payload');
+  if (value.files.length !== current.length || value.files.some((file, index) => file.path !== current[index]?.path || file.digest !== current[index]?.digest)) throw new ConcordError('InvalidData', 'annotation cache sources do not match its cache key');
+  return value;
 }
 function writeCache(repo: Repository, key: string, value: CachedSnapshot): void {
   PersistentCache.repository(repo).put('annotation_cache', [{ key, payload: canonical(value) }]);
@@ -211,9 +209,6 @@ function snapshot(value: CachedSnapshot, cache: AnnotationSnapshot['cache']): An
 function sourceChanged(value: CachedSnapshot, cache: AnnotationSnapshot['cache']): AnnotationSnapshot {
   return snapshot({ ...value, findings: [...value.findings, { code: 'SourceChanged', path: '.', message: 'Source files changed while annotations were scanned' }] }, cache);
 }
-const cacheFailureDetail = (cause: unknown): string => cause instanceof HawdbFailure && cause.code === 'HawdbBusy'
-  ? `${cause.code}: ${cause.message}` : cause instanceof Error ? cause.message : String(cause);
-
 export async function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode } = {}): Promise<AnnotationSnapshot> {
   return repo.snapshot === undefined ? (await scanUnderSnapshot(repo, options)) : (await repo.snapshot(async () => (await scanUnderSnapshot(repo, options))));
 }
@@ -222,14 +217,14 @@ async function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'r
   if (sourceMode === 'overlay' && mode !== 'off') throw new ConcordError('InvalidOption', 'Overlay annotation sources require cache: off');
   const current = sources(repo, sourceMode); const key = cacheKey(repo, current);
   if (mode === 'off') { const value = await compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'off', hits: 0, misses: 1, path }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
-  if (mode === 'use') try {
-    const cached = readCache(repo, key);
+  if (mode === 'use') {
+    const cached = readCache(repo, key, current);
     if (cached) return unchanged(repo, current, sourceMode) ? snapshot(cached, { status: 'hit', hits: 1, misses: 0, path }) : sourceChanged(await compile(current), { status: 'source-changed', hits: 0, misses: 1, path });
-  } catch (cause) { const value = await compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cacheFailureDetail(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
+  }
   const value = await compile(current);
   if (!unchanged(repo, current, sourceMode)) return sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path });
-  try { writeCache(repo, key, value); return snapshot(value, { status: 'miss', hits: 0, misses: 1, path }); }
-  catch (cause) { return snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cacheFailureDetail(cause) }); }
+  writeCache(repo, key, value);
+  return snapshot(value, { status: 'miss', hits: 0, misses: 1, path });
 }
 // @concord-end
 

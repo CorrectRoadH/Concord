@@ -11,6 +11,11 @@ import { PersistentCache } from '../../src/base/cache/index.ts';
 import { query, analyze, codeList, projectCheck } from '../support/lsp-observation-operations.ts';
 import { consumer, server, target, write } from '../support/lsp-analysis-source-fixture.ts';
 
+async function prepareCache(root: string): Promise<void> {
+  const repo = await LocalRepository.open(root);
+  try { PersistentCache.repository(repo).prepareWrite({ create: true }); } finally { repo.close(); }
+}
+
 // These cases validate relevance and invalidation, rather than timeout budgets.
 // Dedicated budget tests retain the short fake-server limits and their failure assertions.
 const semanticServer = (): LanguageServer => ({ ...server(), budgets: { totalMs: 20_000, requestMs: 5000 } });
@@ -22,6 +27,7 @@ test('LSP observations retain marker identity, traverse test helpers, and never 
   const root = (await consumer());
   try {
     writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [semanticServer()] });
+    await prepareCache(root);
     const baseline = await query(root, { name: 'check', input: {} }, projectCheck); assert.equal(baseline.ok, true);
     const before = await query(root, { name: 'code.list', input: {} }, codeList);
     assert.equal(before.codes.length, 1); assert.equal(before.analysis.relevance[0]?.relevance.verdict, 'not-observed');
@@ -67,13 +73,15 @@ test('LSP observations retain marker identity, traverse test helpers, and never 
       database!.put('code_cache', rows.map(row => ({ key: row.key, payload: '{damaged' })));
     }); } finally { cacheRepo.close(); }
     assert.deepEqual(await query(root, { name: 'check', input: {} }, projectCheck), baseline);
-    assert.deepEqual((await query(root, { name: 'code.list', input: {} }, codeList)).codes, before.codes);
-    assert.equal((await query(root, { name: 'code.list', input: {} }, codeList)).analysis.observations.length, 0);
+    await assert.rejects(query(root, { name: 'code.list', input: {} }, codeList));
+    await runApplication(clearWorkspaceCache(root));
+    await prepareCache(root);
     const shallow = semanticServer(); writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [{ ...shallow, budgets: { ...shallow.budgets, depth: 1 } }] });
     const limited = (await analyze(root)).observations.find(value => value.value.analyzer === 'python-fixture')!;
     assert.ok(limited.gaps.includes('DepthLimit')); assert.deepEqual(limited.value.dependencies[0]?.declarations, []);
     writeProjectConfig(root, { ...(await readProjectConfig(root)), languageServers: [semanticServer()] });
     await runApplication(clearWorkspaceCache(root));
+    await prepareCache(root);
     assert.deepEqual(await query(root, { name: 'check', input: {} }, projectCheck), baseline);
     assert.deepEqual((await query(root, { name: 'code.list', input: {} }, codeList)).codes, before.codes);
     assert.equal((await query(root, { name: 'code.list', input: {} }, codeList)).analysis.relevance[0]?.relevance.verdict, 'not-observed');

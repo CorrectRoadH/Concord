@@ -80,13 +80,18 @@ export const queryContext = Effect.fn('queryContext')(function*(input: string | 
   return { root, privateDir, key, query } satisfies QueryContext;
 });
 function decodeForQuery(context: QueryContext, payload: string): QueryCacheEnvelope | undefined {
-  const header = Schema.decodeUnknownSync(Schema.Struct({ format: Schema.String }), { onExcessProperty: 'ignore' })(JSON.parse(payload));
-  if (['concord.query-cache/v1', 'concord.query-cache/v2'].includes(header.format)) return undefined;
-  if (header.format !== 'concord.query-cache/v3') throw new ConcordError('QueryCacheInvalid', 'Unrecognized query cache format');
-  const envelope = decodeEnvelope(JSON.parse(payload));
-  if (envelope.key !== context.key) throw new ConcordError('QueryCacheInvalid', 'Query cache identity mismatch');
-  if (envelope.record) Schema.decodeUnknownSync(queryValueSchema(context.query), { onExcessProperty: 'error' })(envelope.record.value);
-  return envelope;
+  try {
+    const header = Schema.decodeUnknownSync(Schema.Struct({ format: Schema.String }), { onExcessProperty: 'ignore' })(JSON.parse(payload));
+    if (['concord.query-cache/v1', 'concord.query-cache/v2'].includes(header.format)) return undefined;
+    if (header.format !== 'concord.query-cache/v3') throw new ConcordError('QueryCacheInvalid', 'Unrecognized query cache format');
+    const envelope = decodeEnvelope(JSON.parse(payload));
+    if (envelope.key !== context.key) throw new ConcordError('QueryCacheInvalid', 'Query cache identity mismatch');
+    if (envelope.record) Schema.decodeUnknownSync(queryValueSchema(context.query), { onExcessProperty: 'error' })(envelope.record.value);
+    return envelope;
+  } catch (cause) {
+    if (cause instanceof ConcordError) throw cause;
+    throw new ConcordError('QueryCacheInvalid', cause instanceof Error ? cause.message : String(cause));
+  }
 }
 export const readQuery = Effect.fn('readQuery')(function*(context: QueryContext): Effect.fn.Return<{ record?: typeof QueryRecord.Type; lastAttempt?: typeof Attempt.Type; error?: typeof RefreshFailure.Type; unavailable?: string; unavailableCode?: string }, never> {
   const cache = yield* Effect.serviceOption(PersistentCache);
@@ -105,7 +110,7 @@ export const storeQuery = Effect.fn('storeQuery')(function*(context: QueryContex
   const cache = yield* PersistentCache;
   yield* cache.update(context.privateDir, 'query_cache', context.key, payload => {
     let prior: QueryCacheEnvelope | undefined;
-    if (payload !== undefined) { try { prior = decodeForQuery(context, payload); } catch { /* Rebuild corrupt disposable data. */ } }
+    if (payload !== undefined) prior = decodeForQuery(context, payload);
     const envelope = replaceQueryEnvelope(context.key, prior, update);
     if (envelope.record) Schema.decodeUnknownSync(queryValueSchema(context.query), { onExcessProperty: 'error' })(envelope.record.value);
     const serialized = JSON.stringify(envelope);

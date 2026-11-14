@@ -1,7 +1,6 @@
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { packageRoot } from '../installation/index.ts';
 import { Predicate } from "effect";
-import { readCachedProjectConfig } from "./config-cache.ts";
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type shared_ProjectConfig as ProjectConfig } from "../../model/index.ts";
 import * as ts from 'typescript/ast';
 import { withTypeScriptSource, typescriptPackageVersion } from "../process/index.ts";
@@ -73,16 +72,13 @@ export function renderTypeScriptConfig(config: ProjectConfig): string {
 
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-export async function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string, absent = false, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {}), contentCache?: ContentCache<ProjectConfig>): Promise<ConfigSnapshot> {
+export async function snapshot(path: ConfigSnapshot['path'], source: string, _privateDir?: string, absent = false, runtime: RuntimeEnvironmentSnapshot = makeRuntimeEnvironment(packageRoot, {}), contentCache?: ContentCache<ProjectConfig>): Promise<ConfigSnapshot> {
   if (path !== 'concord.config.ts') throw new ConcordError('InvalidData', 'Runtime configuration must be concord.config.ts');
   if (absent && source === '') return { path, source, digest: digest(source), config: {} };
   const sourceDigest = digest(source);
   const cache = contentCache ?? makeConfigContentCache(runtime);
   try {
-    const config = await cache.getAsync(path, source, () => {
-      const cached = privateDir === undefined ? undefined : readCachedProjectConfig(privateDir, sourceDigest, runtime);
-      return cached ?? parseTypeScriptConfig(source, path);
-    });
+    const config = await cache.getAsync(path, source, () => parseTypeScriptConfig(source, path));
     return { path, source, digest: sourceDigest, config };
   } finally { if (contentCache === undefined) cache.close(); }
 }

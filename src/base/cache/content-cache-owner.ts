@@ -22,7 +22,8 @@ export class ContentCacheOwner {
   }
 
   database(runtime: RuntimeEnvironmentSnapshot, project: string, partition: string): HawdbDatabase | undefined {
-    if (this.closed || !this.native) return undefined;
+    if (this.closed) throw new HawdbFailure('HawdbClosed', 'The parse cache owner is closed');
+    if (!this.native) return undefined;
     const selection = join(nativeArtifactRoot(runtime), hawdbTarget());
     const fingerprint = () => JSON.stringify([hawdbLibraryName(hawdbTarget()), 'artifact.json', 'manifest.json', 'include/hawdb_ffi.h', 'LICENSE'].map(name => nativeFileIdentity(join(selection, name))));
     try {

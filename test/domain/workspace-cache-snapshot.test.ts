@@ -11,7 +11,7 @@ import { rmSync } from 'node:fs';
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
 // @feature docs/feature/local-data-engine/README.md
-test('an unavailable owner snapshot reports persistent data unavailable while collecting detached derivations', async () => {
+test('an unavailable owner snapshot rejects reads and detached derivations with the original failure', async () => {
   const root = (await createConsumer());
   const snapshot = { feedback_cache: [], unavailable: { code: 'HawdbUnavailable', message: 'owner cannot open the persistent database' } } satisfies ReadonlyCacheSnapshot;
   const live = Layer.merge(Workspace.layer, CacheSnapshot.layer(snapshot).pipe(Layer.provideMerge(Cache.layer))).pipe(Layer.provide(NodeServices.layer));
@@ -33,8 +33,9 @@ test('an unavailable owner snapshot reports persistent data unavailable while co
       const cache = PersistentCache.repository(repo);
       assert.throws(() => cache.scan('feedback_cache'), { code: 'HawdbUnavailable' });
       assert.throws(() => cache.get('query_cache', ['trace-history']), { code: 'HawdbUnavailable' });
-      cache.put('annotation_cache', [{ key: 'parser', payload: 'rebuilt' }]);
-      assert.deepEqual(yield* derived.batches, [{ namespace: 'annotation_cache', entries: [{ key: 'parser', payload: 'rebuilt' }] }]);
+      assert.throws(() => cache.prepareWrite(), { code: 'HawdbUnavailable', message: snapshot.unavailable.message });
+      assert.throws(() => cache.put('annotation_cache', [{ key: 'parser', payload: 'rebuilt' }]), { code: 'HawdbUnavailable', message: snapshot.unavailable.message });
+      assert.deepEqual(yield* derived.batches, []);
       assert.throws(() => cache.get('annotation_cache', ['parser']), { code: 'HawdbUnavailable' });
     })).pipe(Effect.provideService(CacheDerivations, derived), Effect.provide(live)).pipe(Effect.provideService(RuntimeEnvironment, nativeRuntime)));
   } finally { rmSync(root, { recursive: true, force: true }); }

@@ -292,11 +292,10 @@ const existingCompatibleWorkspace = Effect.fn('existingCompatibleWorkspace')(fun
   return connection;
 });
 
-function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: ServerRuntime['Service'], local: PersistentCache['Service'], root: string | undefined, operation: Effect.Effect<A, E, R>, required: boolean) {
+function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: ServerRuntime['Service'], local: PersistentCache['Service'], root: string | undefined, operation: Effect.Effect<A, E, R>) {
   return Effect.scoped(Effect.gen(function*() {
-    // A damaged source installation cannot authenticate a remote owner. The
-    // repository cache reports the same unavailable diagnostic on the local path.
-    if ((yield* Effect.result(local.verifyArtifact))._tag === 'Failure') return yield* operation;
+    // A damaged installation cannot authenticate a remote owner or execute work.
+    yield* local.verifyArtifact.pipe(Effect.mapError(failure));
     const identified = yield* workspace.locate(root);
     const client = yield* loadClient();
     // Retrying snapshot acquisition is safe even when the local operation writes.
@@ -320,9 +319,9 @@ function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: S
     }).pipe(Effect.catchCause(cause => {
       if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
       const reason = workspaceServerFailure(Cause.squash(cause));
-      const details = { reason: { code: reason.code, message: reason.message, ...(reason.details === undefined ? {} : { details: reason.details }) } };
-      const message = 'The operation completed, but its disposable cache update failed';
-      return required ? Effect.fail(new ConcordError('CacheUpdateFailed', message, details)) : writeStderr(`${JSON.stringify({ warning: 'CacheUpdateFailed', message, reason: reason.code, details })}\n`).pipe(Effect.orDie);
+      const details = { operationCompleted: true, receipt: result, reason: { code: reason.code, message: reason.message, ...(reason.details === undefined ? {} : { details: reason.details }) } };
+      const message = 'The operation completed, but its cache update failed; do not replay the operation';
+      return Effect.fail(new ConcordError('CacheUpdateFailed', message, details));
     }));
     return result;
   }));
@@ -405,17 +404,7 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
   const invocation = yield* Effect.serviceOption(CliInvocation);
   return Queries.Remote((root, request, cache = 'use') => Effect.scoped(Effect.gen(function*() {
     if (cache === 'off' && execution.env.CONCORD_SERVER_SCOPE === undefined) return yield* executeQuery(root, request, cache);
-    const native = yield* Effect.result(nativeAvailable.pipe(Effect.provideService(PersistentCache, persistent)));
-    if (native._tag === 'Failure') {
-      if (request.name === 'historical' || request.name === 'workspace.show') return yield* Effect.fail(native.failure);
-      const reply = yield* executeQuery(root, request, 'off');
-      const object = Schema.decodeUnknownExit(Schema.Record(Schema.String, Schema.Json))(reply.value);
-      if (object._tag === 'Success' && object.value.cache !== undefined) {
-        const observed = Schema.decodeUnknownExit(Schema.Record(Schema.String, Schema.Json))(object.value.cache);
-        if (observed._tag === 'Success') return { ...reply, value: { ...object.value, cache: { ...observed.value, status: 'unavailable', detail: `${native.failure.code}: ${native.failure.message}` } } };
-      }
-      return reply;
-    }
+    yield* nativeAvailable.pipe(Effect.provideService(PersistentCache, persistent));
     const identified = yield* workspace.locate(root);
     const environment = Object.fromEntries(Object.entries(execution.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
     delete environment.CONCORD_SERVER_SCOPE;
@@ -434,7 +423,7 @@ const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*
   const runtime = yield* ServerRuntime;
   const execution = yield* RuntimeEnvironment;
   return FeedbackCacheWriter.of({ merge: (root, connectionId, items) => Effect.scoped(Effect.gen(function*() {
-    const connection = yield* existingWorkspace(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.provideService(RuntimeEnvironment, execution), Effect.catch(() => Effect.succeed(undefined)));
+    const connection = yield* existingWorkspace(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.provideService(RuntimeEnvironment, execution));
     if (!connection) return yield* mergeLocalFeedbackObservation(root, connectionId, items).pipe(Effect.provideService(Workspace, workspace));
     if (connection.hello.protocol !== (yield* loadClient()).PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Feedback owner has another protocol'));
     return yield* (yield* loadClient()).submitFeedback(connection, connectionId, items);
@@ -470,7 +459,7 @@ const launchers = Layer.mergeAll(
         return connection ? yield* requestWorkspace(connection, action, {}).pipe(Effect.mapError(workspaceServerFailure)) : undefined;
         })).pipe(Effect.mapError(workspaceServerFailure)), action === 'cache-status' && (yield* canRetryWorkspaceRead));
       }).pipe(Effect.provideContext(context)),
-      withCache: (root, operation, required = false) => withWorkspaceCache(workspace, runtime, persistent, root, operation, required).pipe(Effect.provideContext(context)),
+      withCache: (root, operation) => withWorkspaceCache(workspace, runtime, persistent, root, operation).pipe(Effect.provideContext(context)),
     });
   })),
   Layer.effect(ViewLauncher, Effect.gen(function*() {

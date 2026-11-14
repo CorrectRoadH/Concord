@@ -48,7 +48,6 @@ const definition = () => objectDigest({ schema: 'concord.search/v1', parser: DOC
 /** The session retains source identities and byte counts, never another corpus of bodies. */
 export function makeKnowledgeSearchOwner(backend: KnowledgeSearchBackend): KnowledgeSearchOwner {
   const observations = new Map<string, SourceObservation>(), semaphore = Semaphore.makeUnsafe(1);
-  const memoryFallbacks = new Set<string>();
   let diagnostic: string | undefined;
   const search = async (repo: Repository, kind: KnowledgeKind, query: string, signal?: AbortSignal): Promise<KnowledgeSearchReply> => {
     const terms = queryTerms(query), deadline = process.hrtime.bigint() + 600_000_000_000n;
@@ -62,18 +61,7 @@ export function makeKnowledgeSearchOwner(backend: KnowledgeSearchBackend): Knowl
       if (Buffer.byteLength(text) > 8 * mib) throw new HawdbFailure('HawdbLimit', 'Search source exceeds 8 MiB');
       return text;
     };
-    const fallback = () => {
-      const documents: KnowledgeDocument[] = [];
-      let bytes = 0;
-      for (const file of files) {
-        const value = parse(file.path, source(file), kind);
-        if (!value || !terms.every(term => value.searchText.includes(term))) continue;
-        bytes += Buffer.byteLength(JSON.stringify(value)); documents.push(value);
-        if (documents.length > 20000 || bytes > 64 * mib) throw new ConcordError('HawdbLimit', 'Complete search result exceeds its budget');
-      }
-      check(); return reply(kind, query, documents);
-    };
-    if (Buffer.byteLength(query) > 64 * 1024 || new Set(terms).size > 256) { diagnostic = 'HawdbLimit: query exceeds native budget'; return fallback(); }
+    if (Buffer.byteLength(query) > 64 * 1024 || new Set(terms).size > 256) throw new HawdbFailure('HawdbLimit', 'Search query exceeds its native budget');
     const attempt = async (memory: boolean): Promise<KnowledgeSearchReply> => {
       const key = `${repo.root}:${memory ? 'memory' : 'persistent'}:${kind}`, currentDefinition = definition();
       const remembered = observations.get(key), prior = discovered && remembered?.definition === currentDefinition ? remembered : undefined;
@@ -107,24 +95,13 @@ export function makeKnowledgeSearchOwner(backend: KnowledgeSearchBackend): Knowl
         return reply(kind, query, result.documents);
       } catch (cause) { observations.delete(key); throw cause; }
     };
-    const fallbackKey = `${repo.root}:${kind}`;
-    for (const memory of repo.persistentCache === 'off' || memoryFallbacks.has(fallbackKey) ? [true] : [false, true]) {
-      try {
-        const value = await attempt(memory);
-        if (memory) memoryFallbacks.add(fallbackKey);
-        return value;
-      }
-      catch (cause) {
-        check();
-        if (!(cause instanceof HawdbFailure)) throw cause;
-        if (cause.code === 'HawdbCancelled') throw new ConcordError(cause.code, cause.message);
-        diagnostic = `${cause.code}: ${cause.message}`;
-        if (cause.code === 'HawdbLimit') { try { await backend.discard(kind, memory, signal); } catch { check(); } }
-      }
+    try { return await attempt(repo.persistentCache === 'off'); }
+    catch (cause) {
+      if (cause instanceof HawdbFailure) diagnostic = `${cause.code}: ${cause.message}`;
+      throw cause;
     }
-    return fallback();
   };
-  return { invalidate: () => { observations.clear(); memoryFallbacks.clear(); }, get diagnostic() { return diagnostic; },
+  return { invalidate: () => { observations.clear(); }, get diagnostic() { return diagnostic; },
     search: async (repo, kind, query, signal) => {
       const result = await Effect.runPromise(Effect.result(semaphore.withPermit(Effect.tryPromise({ try: () => inRepositorySnapshot(repo, () => search(repo, kind, query, signal)), catch: cause => cause }))));
       if (result._tag === 'Failure') { observations.clear(); throw result.failure; }
@@ -136,11 +113,10 @@ export function makeKnowledgeSearchOwner(backend: KnowledgeSearchBackend): Knowl
 /** A standalone or cache-off call owns and drains its temporary memory Worker. */
 export async function searchKnowledgeRecords(repo: Repository, kind: KnowledgeKind, query: string, owner?: KnowledgeSearchOwner, signal?: AbortSignal): Promise<KnowledgeSearchReply> {
   queryTerms(query);
-  if (owner && repo.persistentCache !== 'off') return owner.search(repo, kind, query, signal);
+  if (owner) return owner.search(repo, kind, query, signal);
   const worker = new DatabaseWorker();
   try {
-    try { await worker.request({ op: 'open', privateDir: null, runtime: repositoryRuntime(repo) }, { signal }); }
-    catch (cause) { if (!(cause instanceof HawdbFailure)) throw cause; }
+    await worker.request({ op: 'open', privateDir: null, runtime: repositoryRuntime(repo) }, { signal });
     const temporary = makeKnowledgeSearchOwner({
       search: async (input, signal) => Schema.decodeUnknownSync(KnowledgeResult)(await worker.request({ ...input, memory: true }, { signal })),
       discard: async (kind, _memory, signal) => { await worker.request({ op: 'discard-search', kind, memory: true }, { signal }); },

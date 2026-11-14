@@ -47,3 +47,5 @@ export { DatabaseWorker } from './worker-client.ts';
 export type { DatabaseOperation } from './worker-protocol.ts';
 export { KnowledgeDocument, KnowledgeGeneration, KnowledgeResult, KnowledgeUpdate } from './knowledge-search-model.ts';
 export type { KnowledgeKind } from './knowledge-search-model.ts';
+export { CacheSchemaMismatch } from './hawdb-native.ts';
+export { verifyCacheSchemaIdentity } from './cache-file.ts';

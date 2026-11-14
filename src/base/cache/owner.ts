@@ -10,6 +10,7 @@ import { RuntimeEnvironment } from '../environment/index.ts';
 import { DatabaseWorker } from './worker-client.ts';
 import { DatabaseClear, DatabaseSnapshot, DatabaseStatus, type DatabaseOperation } from './worker-protocol.ts';
 import { KnowledgeResult } from './knowledge-search-model.ts';
+import { cacheDatabasePath } from './cache-file.ts';
 
 /** The service owns one Worker; only that Worker owns the native database. */
 export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(function*(privateDir: string) {
@@ -66,11 +67,29 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     return service;
   };
   const snapshot = (background: boolean) => use({ op: 'snapshot' }, background).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseSnapshot)));
+  const status = Effect.suspend(() => {
+    if (database) return use({ op: 'status' }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseStatus)));
+    const error = fatal ?? validationError ?? openError;
+    return Effect.succeed({ status: 'unavailable', path: cacheDatabasePath(privateDir), physicalBytes: null, detail: error ? `${error.code}: ${error.message}` : 'HawdbUnavailable: Database Worker is not open' });
+  });
+  const clear = lifecycle.withPermit(Effect.gen(function*() {
+    yield* verify;
+    if (!database) {
+      database = new DatabaseWorker(error => { fatal = error; Deferred.doneUnsafe(failed, Effect.succeed(error)); });
+      const opened = yield* Effect.result(use({ op: 'open', privateDir, runtime }));
+      if (opened._tag === 'Failure') {
+        openError = opened.failure;
+        // A status reply proves the Worker initialized its maintenance context.
+        // A broken database can report unavailable without granting business access.
+        yield* use({ op: 'status' }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseStatus)));
+      }
+    }
+    return yield* use({ op: 'clear' }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseClear)));
+  }).pipe(Effect.tap(() => Effect.sync(() => { openError = undefined; })), Effect.tapError(cause => Effect.sync(() => { openError = cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', String(cause)); }))));
   return { open, close, verify, service: makeService(false), backgroundService: makeService(true), failed: Deferred.await(failed),
     snapshot: snapshot(false), backgroundSnapshot: snapshot(true),
     mergeDerived: (batches: readonly CacheDerivationBatch[], background = false) => use({ op: 'derived', batches }, background).pipe(Effect.asVoid),
-    status: use({ op: 'status' }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseStatus))),
-    clear: use({ op: 'clear' }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DatabaseClear)), Effect.tap(() => Effect.sync(() => { openError = undefined; })), Effect.tapError(cause => Effect.sync(() => { openError = cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', String(cause)); }))),
+    status, clear,
     mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use({ op: 'feedback', connectionId, items }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.String)))),
     search: (input: Extract<DatabaseOperation, { readonly op: 'search' }>) => use(input).pipe(Effect.flatMap(Schema.decodeUnknownEffect(KnowledgeResult)), Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbIncompatible', String(cause)))),
     discardSearch: (kind: 'memory' | 'issue', memory: boolean) => use({ op: 'discard-search', kind, memory }).pipe(Effect.asVoid),

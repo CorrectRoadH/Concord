@@ -34,7 +34,7 @@ export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext'
   const runtime = yield* RuntimeEnvironment;
   const installation = yield* Effect.try({ try: () => workspaceInstallationIdentity(runtime), catch: failure });
   return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config ?? 'absent', 'workspace', installation])) } satisfies WorkspaceProjectionContext;
-}, Effect.mapError(cause => new ConcordError('WorkspaceProjectionUnavailable', 'Cannot identify the workspace cache; repair the configuration path or installation and restart View', {
+}, Effect.mapError(cause => cause.code.startsWith('Hawdb') ? cause : new ConcordError('WorkspaceProjectionUnavailable', 'Cannot identify the workspace cache; repair the configuration path or installation and restart View', {
   reason: cause.code, message: cause.message,
 })));
 
@@ -82,19 +82,19 @@ const readEnvelope = Effect.fn('workspaceProjection.readEnvelope')(function*(con
 export const readWorkspaceProjection = Effect.fn('readWorkspaceProjection')(function*(context: WorkspaceProjectionContext) {
   const unavailable = (cause: unknown) => {
     const error = failure(cause);
+    if (error.code.startsWith('Hawdb')) return error;
     return new ConcordError('WorkspaceProjectionUnavailable', 'Workspace cache is unavailable. Retry refresh; repair native installation or clear the cache if indicated, then restart View.', { reason: cause instanceof HawdbFailure ? cause.code : cause instanceof ConcordError ? cause.code : 'WorkspaceProjectionInvalid', message: error.message });
   };
   const envelope = yield* readEnvelope(context).pipe(Effect.mapError(unavailable));
   const refreshOwner = 'none' as const;
   return yield* Effect.try({ try: (): WorkspaceProjection => {
+  if (envelope?.error) throw new ConcordError(envelope.error.code, envelope.error.message);
   if (!envelope?.record) {
-    if (envelope?.error?.code === 'RecoveryRequired') throw new ConcordError('RecoveryRequired', envelope.error.message);
-    throw new ConcordError('WorkspaceProjectionPending', 'No readable workspace projection. Start View and wait for the background build.', { refreshOwner, ...(envelope?.error ? { lastError: envelope.error } : {}) });
+    throw new ConcordError('WorkspaceProjectionPending', 'No readable workspace projection. Start View and wait for the background build.', { refreshOwner });
   }
   const { snapshot, ...record } = envelope.record;
   return { snapshot, projection: { ...record, current: false, refreshOwner,
-    status: envelope.error?.code === 'RecoveryRequired' ? 'blocked' : envelope.error ? 'refresh-failed' : 'ready',
-    ...(envelope.error ? { lastError: envelope.error } : {}), ...(envelope.lastAttempt ? { lastAttempt: envelope.lastAttempt } : {}) } };
+    status: 'ready', ...(envelope.lastAttempt ? { lastAttempt: envelope.lastAttempt } : {}) } };
   }, catch: failure });
 });
 

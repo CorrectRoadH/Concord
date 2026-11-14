@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
+import { CacheSnapshotUnavailable } from './cache-snapshot.ts';
 import { LanguageServersSchema } from "./language-server-config.ts";
 import { TestAdapterSchema, validAdapters } from "./test-adapter-config.ts";
 import { validSourceIgnore } from "./source-discovery.ts";
@@ -17,7 +18,14 @@ export class ConcordError extends Error {
   constructor(code: string, message: string, details?: unknown) { super(message); this.code = code; this.details = details; }
 }
 export function failure(cause: unknown): ConcordError {
-  return cause instanceof ConcordError ? cause : new ConcordError('OperationFailed', cause instanceof Error ? cause.message : String(cause));
+  if (cause instanceof ConcordError) return cause;
+  const cache = Schema.decodeUnknownExit(Schema.Struct(CacheSnapshotUnavailable.fields), { onExcessProperty: 'ignore' })(cause);
+  if (cache._tag === 'Success') {
+    const error = new ConcordError(cache.value.code, cache.value.message);
+    error.cause = cause;
+    return error;
+  }
+  return new ConcordError('OperationFailed', cause instanceof Error ? cause.message : String(cause));
 }
 export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;

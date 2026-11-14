@@ -10,6 +10,7 @@ import { LocalRepository } from "../support/repository.ts";
 
 import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.ts";
 import { openHawdb, PersistentCache } from "../../src/base/cache/index.ts";
+import { ConcordError } from '../../src/model/index.ts';
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
 
@@ -113,22 +114,26 @@ const fake = ` + '`ordinary text: @feature template-fake`' + `;
     const damaged = (await LocalRepository.open(root));
     try { assert.equal(cacheStatus(damaged, nativeRuntime).status, 'unavailable'); }
     finally { damaged.close(); }
-    const recovered = (await scan(root));
-    assert.equal(recovered.cache.status, 'unavailable');
-    assert.equal(recovered.cases.length, 3);
+    await assert.rejects(scan(root), error => error instanceof Error && 'code' in error);
     rmSync(path);
     const rebuild = (await LocalRepository.open(root));
     try { PersistentCache.repository(rebuild).prepareWrite({ create: true }); } finally { rebuild.close(); }
     const source = `import { test } from 'node:test';\n// @feature docs/feature/a/README.md\ntest('valid', () => {});\n`;
     write(root, 'test/findings.test.ts', source);
     const seeded = (await scan(root)); assert.equal(seeded.cases.length, 1);
-    const cache = openHawdb(path, { readOnly: false, create: false }, nativeRuntime); try {
-      const row = cache.scan('annotation_cache')[0];
-      assert.ok(row);
-      cache.put('annotation_cache', [{ key: row.key, payload: JSON.stringify({ cases: [], findings: [], files: [], digest: 'sha256:not-a-real-digest' }) }]);
-    } finally { cache.close(); }
-    const digestRecovered = (await scan(root));
-    assert.equal(digestRecovered.cache.status, 'unavailable');
-    assert.equal(digestRecovered.cases.length, 1);
+    for (const payload of ['{broken', JSON.stringify({ cases: [], findings: [], files: [], digest: 'sha256:not-a-real-digest' })]) {
+      const cache = openHawdb(path, { readOnly: false, create: false }, nativeRuntime);
+      let key: string;
+      try {
+        const row = cache.scan('annotation_cache')[0];
+        assert.ok(row);
+        key = row.key;
+        cache.put('annotation_cache', [{ key, payload }]);
+      } finally { cache.close(); }
+      await assert.rejects(scan(root), error => error instanceof ConcordError && error.code === 'InvalidData' && error.message.includes('annotation cache'));
+      const preserved = openHawdb(path, { readOnly: true, create: false }, nativeRuntime);
+      try { assert.equal(preserved.get('annotation_cache', [key])[0]?.payload, payload); }
+      finally { preserved.close(); }
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

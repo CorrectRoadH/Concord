@@ -139,7 +139,7 @@
      docs/feature/cart/README.md — cart (feature)
    ```
 
-   `--fresh` 使用当前来源并等待扫描结果。`--dry-run` 不启动后台刷新。没有原生产物或数据库不可用时，`--fresh` 仍通过回源执行诊断。
+   `--fresh` 使用当前来源并等待扫描结果。`--dry-run` 不启动后台刷新。没有原生产物或数据库不可用时，`--fresh` 同样具名失败，不转为来源扫描成功。
 
 6. 刷新失败时查看原因。 {#refresh-error}
 

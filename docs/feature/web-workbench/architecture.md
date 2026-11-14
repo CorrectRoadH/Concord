@@ -52,7 +52,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 ### 持久记录
 
-独立 `workspace_projection` 命名空间只有 key 为 `workspace` 的一行，payload 格式为 `concord.workspace-projection/v1`。它含 `identity`、可选 `record`（构建区间、完整性字段与结构 `snapshot`）、`lastAttempt`（不含快照）与 `error`。一次 put 原子替换该行，新身份覆盖旧行；损坏记录不提供给前台，writer 可直接覆盖。身份由 worktree root、Git-private 目录、配置原文摘要（无配置为 absent，非法配置仍取安全读取的字节摘要）、安装目录全部 JS 与 native 产物摘要及类型 `workspace` 组成。读取前先验证原生模块，缺失为不可用而非尚无结果。
+独立 `workspace_projection` 命名空间只有 key 为 `workspace` 的一行，payload 格式为 `concord.workspace-projection/v1`。它含 `identity`、可选 `record`（构建区间、完整性字段与结构 `snapshot`）、`lastAttempt`（不含快照）与 `error`。一次 put 原子替换该行，新身份覆盖旧行；损坏记录使读写失败并保留现场，不允许 writer 覆盖（[失败就报错](../../taste.md#t-17)）。身份由 worktree root、Git-private 目录、配置原文摘要（无配置为 absent，非法配置仍取安全读取的字节摘要）、安装目录全部 JS 与 native 产物摘要及类型 `workspace` 组成。读取前先验证原生模块，缺失为不可用而非尚无结果。
 
 快照由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写都拒绝额外字段。它只含路径、摘要、metadata、单行 derivedTitle、关系、诊断、反馈分诊与概念目录；概念目录列出每个 `concepts.md` 的路径与其中每个概念的写法、锚点与旧写法，定义与解释正文不进入。正文、`source.body`、远端 body、配置原文、证据与发布日志不进入 Schema。搜索只索引标题、ID、路径与 URL。
 
@@ -67,9 +67,9 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 | 状态 | 恢复条件 | 呈现 |
 | --- | --- | --- |
 | building | 首份结果写入 | 每 2 秒自动重试，可手动重试 |
-| refresh-failed | 下次成功刷新 | 上一份结果、失败码与重试 |
+| refresh-failed | 下次成功刷新 | 返回失败码；客户端可保留已有内容并提示重试 |
 | unavailable:native | 修复安装并重启服务 | 原生诊断与重启提示 |
-| unavailable:corrupt | writer 覆盖，或无法打开时清理缓存 | 损坏码、重试，必要时提示 `concord cache clear` |
+| unavailable:corrupt | 显式清理缓存后重新构建 | 损坏码、重试，必要时提示 `concord cache clear` |
 | cleanup-failed | 重启服务，由服务锁回收 | 清理失败码与重启提示 |
 
 关闭依次停止定时器与监听、关闭解析线程池与持久句柄，之后不再发布。

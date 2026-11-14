@@ -2,7 +2,6 @@ export { repositoryImplementationDigest } from './repo-identity.ts';
 export { repositoryRoot } from './repo-root.ts';
 export { RepositoryRootError } from './repo-root.ts';
 export { persistNotedConfig } from './config-cache.ts';
-export { readCachedProjectConfig } from './config-cache.ts';
 export { parseTypeScriptConfig } from './config.ts';
 export { renderTypeScriptConfig } from './config.ts';
 export { snapshot } from './config.ts';

@@ -108,3 +108,35 @@ test('service startup returns the actual winning handshake before its Effect dea
   yield* Deferred.succeed(connected, { token: 'winner' });
   assert.deepEqual(yield* Fiber.join(waiting), { token: 'winner' });
 })).pipe(Effect.provide(TestClock.layer()))));
+
+// @feature docs/feature/local-data-engine/architecture.md#failure-propagation
+test('a failed refresh rejects business work while diagnostics and explicit clear remain available', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  let broken = true, businessCalls = 0;
+  const service = yield* makeWorkspaceService(ports({ compute: () => broken ? Effect.fail(new ConcordError('HawdbLimit', 'cache budget')) : Effect.succeed(record) }));
+  yield* TestClock.adjust(0);
+  assert.equal((yield* service.current).error?.code, 'HawdbLimit');
+  const result = yield* Effect.result(service.operate(Effect.sync(() => { businessCalls++; })));
+  assert.equal(result._tag, 'Failure');
+  if (result._tag === 'Failure') { assert.ok(result.failure instanceof ConcordError); assert.equal(result.failure.code, 'HawdbLimit'); }
+  assert.equal(businessCalls, 0);
+  assert.equal(yield* service.maintain(Effect.succeed('diagnostic')), 'diagnostic');
+  broken = false;
+  yield* service.clear;
+  yield* TestClock.adjust(0);
+  yield* service.operate(Effect.sync(() => { businessCalls++; }));
+  assert.equal(businessCalls, 1);
+  yield* service.stop;
+})).pipe(Effect.provide(stateLayer))));
+
+// @feature docs/feature/local-data-engine/architecture.md#failure-propagation
+test('a failure before physical clear leaves a diagnosable blocked service', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  let deleted = false;
+  const service = yield* makeWorkspaceService(ports({ beforeClear: Effect.fail(new ConcordError('UnsafePath', 'changed directory')), clear: Effect.sync(() => { deleted = true; }) }));
+  yield* TestClock.adjust(0);
+  const result = yield* Effect.result(service.clear);
+  assert.equal(result._tag, 'Failure');
+  assert.equal(deleted, false);
+  assert.equal((yield* service.current).state, 'blocked');
+  assert.equal(yield* service.maintain(Effect.succeed('diagnostic')), 'diagnostic');
+  yield* service.stop;
+})).pipe(Effect.provide(stateLayer))));

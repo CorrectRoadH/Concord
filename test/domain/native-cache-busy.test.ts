@@ -11,7 +11,7 @@ import { LocalRepository, runApplication } from '../support/repository.ts';
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 // @feature docs/feature/local-data-engine/architecture.md#本地操作的缓存快照
-test('native collection reports CacheUpdateFailed on real cache contention', { skip: process.platform !== 'linux' && 'Successful collection requires safe directory-handle report traversal, verified only on Linux' }, async () => {
+test('native collection fails before execution on real cache contention', { skip: process.platform !== 'linux' && 'Successful collection requires safe directory-handle report traversal, verified only on Linux' }, async () => {
   const root = (await createConsumer());
   let repo: LocalRepository | undefined;
   try {
@@ -27,8 +27,7 @@ test('native collection reports CacheUpdateFailed on real cache contention', { s
     const held = openHawdb(join(repo.privateDir, 'cache.hawdb'), { create: true, readOnly: false }, makeRuntimeEnvironment(root, process.env));
     try {
       await assert.rejects(runApplication(collectNativeTests(repo, ['test/sample.ts'])), error => {
-        assert.equal((error as { code: string }).code, 'CacheUpdateFailed');
-        assert.match(JSON.stringify((error as { details: unknown }).details), /HawdbBusy/u);
+        assert.equal((error as { code: string }).code, 'HawdbBusy');
         return true;
       });
     } finally { held.close(); }

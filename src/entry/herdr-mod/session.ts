@@ -4,7 +4,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 // @concord-implements docs/feature/herdr-mod/use-case/use-on-remote-machine.md
 import { Context, Effect, Schema } from 'effect';
-import { ModWorkspaceProjection, ModWorkspaceSnapshot, RenderedPage, WorkspaceWait, pageSource, type PageSource } from '../../model/herdr-mod/index.ts';
+import { ModWorkspaceProjection, type ModWorkspaceSnapshot, RenderedPage, WorkspaceWait, pageSource, type PageSource } from '../../model/herdr-mod/index.ts';
 
 export interface ModHost {
   readonly exec: (command: string, args: string[], options: { cwd?: string; on: string | null }) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -190,8 +190,6 @@ export class ModSession {
       Effect.catch((error): Effect.Effect<Observation, ModFailure | ModDisconnected> => {
         if (!(error instanceof ModFailure)) return Effect.fail(error);
         if (error.code === 'ProjectNotInitialized') return Effect.succeed(undefined);
-        if (error.code === 'WorkspaceProjectionUnavailable' || error.code?.startsWith('Hawdb')) return this.command(['workspace', 'show'], ModWorkspaceSnapshot).pipe(
-          Effect.map(snapshot => ({ snapshot, projection: undefined })));
         return Effect.fail(error);
       }));
     if (!current()) return;

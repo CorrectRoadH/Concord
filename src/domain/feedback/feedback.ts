@@ -214,7 +214,11 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
   const merged = yield* Effect.result(writer._tag === 'Some'
     ? writer.value.merge(root, connectionId, remote.items)
     : mergeLocalFeedbackObservation(root, connectionId, remote.items));
-  return { ...receipt, warnings: [...receipt.warnings, ...(merged._tag === 'Success' ? merged.success : [`Documents were committed but the private feedback cache could not be updated: ${merged.failure instanceof Error ? merged.failure.message : String(merged.failure)}`])] };
+  if (merged._tag === 'Failure') {
+    const reason = failure(merged.failure);
+    return yield* Effect.fail(new ConcordError('CacheUpdateFailed', 'Documents were committed, but the feedback cache update failed; do not replay the operation', { operationCompleted: true, receipt, reason: { code: reason.code, message: reason.message, ...(reason.details === undefined ? {} : { details: reason.details }) } }));
+  }
+  return { ...receipt, warnings: [...receipt.warnings, ...merged.success] };
 });
 // @concord-end
 

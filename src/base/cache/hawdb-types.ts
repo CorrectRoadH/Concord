@@ -7,7 +7,7 @@ export const HawdbEntry = Schema.Struct({ key: Schema.String, payload: Schema.St
 export type HawdbEntry = typeof HawdbEntry.Type;
 export const HawdbLimits = Schema.Struct({ maxEntries: Schema.Int, maxBytes: Schema.Int });
 export type HawdbLimits = typeof HawdbLimits.Type;
-export const HawdbFailureCode = Schema.Literals(['HawdbBusy', 'HawdbUnavailable', 'HawdbIncompatible', 'HawdbLimit', 'HawdbClosed', 'HawdbCommitUnknown', 'HawdbCancelled', 'UnsafePath']);
+export const HawdbFailureCode = Schema.Literals(['HawdbBusy', 'HawdbUnavailable', 'HawdbIncompatible', 'HawdbCacheSchemaMismatch', 'HawdbLimit', 'HawdbClosed', 'HawdbCommitUnknown', 'HawdbCancelled', 'UnsafePath']);
 export type HawdbFailureCode = typeof HawdbFailureCode.Type;
 export class HawdbFailure extends Schema.TaggedError<HawdbFailure>()('HawdbFailure', {
   code: HawdbFailureCode, message: Schema.String,

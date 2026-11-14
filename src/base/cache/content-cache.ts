@@ -4,13 +4,13 @@ import { Schema } from "effect";
 import { createMemoryHawdb, type HawdbDatabase, type HawdbEntry, type HawdbLimits, type HawdbNamespace } from "./hawdb-native.ts";
 import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { packageRoot } from '../installation/index.ts';
-import { canonical, decode, digest, objectDigest } from "../../model/index.ts";
+import { canonical, ConcordError, decode, digest, objectDigest } from "../../model/index.ts";
 import { readCachePayloads, writeCachePayloads } from "./cache-query.ts";
 import { ownedContentCache } from './content-cache-owner.ts';
 
 export type ContentResult<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly cause: unknown };
 
-const EnvelopeSchema = Schema.Struct({ parser: Schema.String, sourceDigest: Schema.String, present: Schema.Boolean, value: Schema.optional(Schema.Unknown) });
+const EnvelopeSchema = Schema.fromJsonString(Schema.Struct({ parser: Schema.String, sourceDigest: Schema.String, present: Schema.Boolean, value: Schema.optional(Schema.Unknown) }));
 
 /** Borrows an entry's parse handle or owns a short-lived one; source bytes and parser version own identity. */
 export class ContentCache<A> {
@@ -30,11 +30,21 @@ export class ContentCache<A> {
   }
 
   private engine(): HawdbDatabase | undefined {
-    try {
-      const borrowed = ownedContentCache(this.runtime, JSON.stringify([this.namespace, this.parser, this.limits]));
-      return borrowed.owned ? borrowed.database : this.database ?? (this.database = createMemoryHawdb(this.runtime));
+    const borrowed = ownedContentCache(this.runtime, JSON.stringify([this.namespace, this.parser, this.limits]));
+    return borrowed.owned ? borrowed.database : this.database ?? (this.database = createMemoryHawdb(this.runtime));
+  }
+
+  private cachedValue(payload: string, sourceDigest: string): A {
+    const envelope = decode(EnvelopeSchema, payload, 'content cache');
+    if (envelope.parser !== this.parser || envelope.sourceDigest !== sourceDigest || envelope.present !== Object.hasOwn(envelope, 'value')) {
+      throw new ConcordError('InvalidData', 'Content cache identity or value presence differs from the requested entry');
     }
-    catch { return undefined; }
+    return decode(this.valueSchema, envelope.present ? envelope.value : undefined, 'content cache value');
+  }
+
+  private payload(value: A, sourceDigest: string): string {
+    decode(this.valueSchema, value, 'content cache value');
+    return canonical({ parser: this.parser, sourceDigest, present: value !== undefined, ...(value === undefined ? {} : { value }) });
   }
 
   close(): void { this.database?.close(); this.database = undefined; }
@@ -66,37 +76,36 @@ export class ContentCache<A> {
       return { input, sourceDigest, key: objectDigest({ parser: this.parser, path: input.path, sourceDigest }) };
     });
     let found = new Map<string, string>();
-    if (!rebuild) try {
+    let caching: boolean;
+    {
       const database = this.engine();
-      if (database !== undefined) found = new Map(readCachePayloads(database, this.namespace, identities.map(item => item.key)));
-    } catch { /* damaged or unavailable cache is a miss */ }
+      caching = database !== undefined;
+      if (!rebuild && database !== undefined) found = new Map(readCachePayloads(database, this.namespace, identities.map(item => item.key)));
+    }
     const writes: HawdbEntry[] = [];
     const values: ContentResult<A>[] = [];
     for (const { input, key, sourceDigest } of identities) {
       const payload = found.get(key);
       let previous: A | undefined;
-      if (payload !== undefined) try {
-        const envelope = decode(EnvelopeSchema, JSON.parse(payload), 'content cache');
-        if (envelope.parser === this.parser && envelope.sourceDigest === sourceDigest && (envelope.present || envelope.value === undefined)) {
-          const value = decode(this.valueSchema, envelope.present ? envelope.value : undefined, 'content cache value');
-          if (accept === undefined || accept(value)) { values.push({ ok: true, value }); continue; }
-          previous = value;
-        }
-      } catch { /* damaged cache is a miss */ }
+      if (payload !== undefined) {
+        const value = this.cachedValue(payload, sourceDigest);
+        if (accept === undefined || accept(value)) { values.push({ ok: true, value }); continue; }
+        previous = value;
+      }
       let value: A;
       try { value = await parse(input, previous); }
       catch (cause) { values.push({ ok: false, cause }); continue; }
-      try {
-        const payload = canonical({ parser: this.parser, sourceDigest, present: value !== undefined, ...(value === undefined ? {} : { value }) });
+      if (caching) {
+        const payload = this.payload(value, sourceDigest);
         writes.push({ key, payload });
         found.set(key, payload);
-      } catch { /* uncacheable parse output is still returned */ }
+      }
       values.push({ ok: true, value });
     }
-    try {
+    if (writes.length > 0) {
       const database = this.engine();
       if (database !== undefined) writeCachePayloads(database, this.namespace, writes, this.limits);
-    } catch { /* parsing remains authoritative */ }
+    }
     return values;
   }
 
@@ -108,36 +117,27 @@ export class ContentCache<A> {
       const sourceDigest = digest(input.source);
       return { input, sourceDigest, key: objectDigest({ parser: this.parser, path: input.path, sourceDigest }) };
     });
-    let found = new Map<string, string>();
-    if (!rebuild && database !== undefined) try {
-      found = new Map(readCachePayloads(database, this.namespace, identities.map(item => item.key)));
-    } catch { found = new Map(); }
+    const found = !rebuild && database !== undefined ? new Map(readCachePayloads(database, this.namespace, identities.map(item => item.key))) : new Map<string, string>();
     const writes: HawdbEntry[] = [];
     const values = identities.map(({ input, key, sourceDigest }): ContentResult<A> => {
       const payload = found.get(key);
       let previous: A | undefined;
-      if (payload !== undefined) try {
-        const envelope = decode(EnvelopeSchema, JSON.parse(payload), 'content cache');
-        if (envelope.parser === this.parser && envelope.sourceDigest === sourceDigest && (envelope.present || envelope.value === undefined)) {
-          const value = decode(this.valueSchema, envelope.present ? envelope.value : undefined, 'content cache value');
-          if (accept === undefined || accept(value)) return { ok: true, value };
-          previous = value;
-        }
-      } catch { /* damaged cache is a miss */ }
+      if (payload !== undefined) {
+        const value = this.cachedValue(payload, sourceDigest);
+        if (accept === undefined || accept(value)) return { ok: true, value };
+        previous = value;
+      }
       let value: A;
       try { value = parse(input, previous); }
       catch (cause) { return { ok: false, cause }; }
-      try {
-        const payload = canonical({ parser: this.parser, sourceDigest, present: value !== undefined, ...(value === undefined ? {} : { value }) });
+      if (database !== undefined) {
+        const payload = this.payload(value, sourceDigest);
         writes.push({ key, payload });
         found.set(key, payload);
       }
-      catch { /* uncacheable parse output is still returned */ }
       return { ok: true, value };
     });
-    if (database !== undefined) try {
-      writeCachePayloads(database, this.namespace, writes, this.limits);
-    } catch { /* parsing remains authoritative */ }
+    if (database !== undefined) writeCachePayloads(database, this.namespace, writes, this.limits);
     return values;
   }
 }

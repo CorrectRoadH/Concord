@@ -73,7 +73,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* synchronizeIdentity(context);
     const attempt = { at: new Date(yield* Clock.currentTimeMillis).toISOString(), complete: false, changedPaths };
     yield* nativeOwnership.withPermit(ports.persist(context, undefined, undefined, attempt));
-    yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.ignore);
+    yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.catch(cause => namedFailure(cause).code === 'WorkspaceProjectionPending' ? Effect.void : Effect.fail(cause)));
     yield* state.attempt(attempt);
     yield* Effect.forkIn(Effect.sleep('1 second').pipe(Effect.andThen(request)), serviceScope);
   });
@@ -97,7 +97,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     if (candidate.sourceDigest !== sourceDigest || (yield* ports.sourceDigest) !== sourceDigest) { yield* discard(context, ['.']); return; }
     yield* nativeOwnership.withPermit(ports.persist(context, candidate));
     yield* state.accept(yield* nativeOwnership.withPermit(ports.restore(context)));
-    if ((yield* SubscriptionRef.get(state.value)).state === 'running') yield* state.transition('running');
+    yield* state.transition('running');
   }).pipe(Effect.catch(cause => Effect.gen(function*() {
     const error = namedFailure(cause);
     if (stopping) return;
@@ -116,7 +116,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     }
     const prior = yield* SubscriptionRef.get(state.value);
     if (error.code === 'CleanupFailed') yield* state.transition('blocked', { code: error.code, message: error.message });
-    else yield* state.transition(prior.state === 'degraded' ? 'degraded' : 'running', prior.state === 'degraded' && prior.error ? prior.error : { code: error.code, message: error.message });
+    else yield* state.transition('degraded', prior.state === 'degraded' && prior.error ? prior.error : { code: error.code, message: error.message });
   })));
   const stop = Effect.suspend(() => {
     if (stopping) return Effect.void;
@@ -128,25 +128,26 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     Effect.sync(() => { foreground++; }),
     () => Effect.sync(() => { foreground--; }),
   ).pipe(Effect.andThen(operation)));
-  const maintain = <A, E, R>(operation: Effect.Effect<A, E, R>) => maintenance.withPermit(Effect.gen(function*() {
+  const maintain = <A, E, R>(operation: Effect.Effect<A, E, R>, business = false) => maintenance.withPermit(Effect.gen(function*() {
     yield* ports.verify;
     const current = yield* SubscriptionRef.get(state.value);
-    if (!['running', 'degraded'].includes(current.state)) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', `Service is ${current.state}`));
+    if (business && current.error) return yield* Effect.fail(new ConcordError(current.error.code, current.error.message));
+    if (!(business ? ['running'] : ['running', 'degraded', 'blocked']).includes(current.state)) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', `Service is ${current.state}`));
     yield* state.touch;
     return yield* operation;
   }));
-  const operate = <A, E, R>(operation: Effect.Effect<A, E, R>) => Effect.scoped(maintain(Effect.acquireRelease(Effect.gen(function*() {
+  const operate = <A, E, R>(operation: Effect.Effect<A, E, R>, business = true) => Effect.scoped(maintain(Effect.acquireRelease(Effect.gen(function*() {
     if (operations === 0) operationIdle = yield* Deferred.make<void>();
     operations++;
   }), () => Effect.suspend(() => {
     operations--;
     return operations === 0 ? Deferred.succeed(operationIdle, undefined).pipe(Effect.asVoid) : Effect.void;
-  }))).pipe(Effect.andThen(operation)));
+  })), business).pipe(Effect.andThen(operation)));
   const startup = Effect.gen(function*() {
     yield* ports.open;
     const context = yield* ports.context;
     yield* synchronizeIdentity(context);
-    yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.ignore);
+    yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.catch(cause => namedFailure(cause).code === 'WorkspaceProjectionPending' ? Effect.void : Effect.fail(cause)));
     yield* state.transition('running');
   }).pipe(Effect.catch(fail), Effect.andThen(request));
   yield* Effect.forkScoped(startup);
@@ -161,7 +162,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     firstInvalidation = -Infinity;
     yield* Queue.clear(invalidations);
     pending = false;
-    yield* operate(refresh);
+    yield* operate(refresh, false);
   })));
   yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() { if (!pending) yield* request; }), compensationRefresh).pipe(Effect.delay('30 seconds')));
   yield* Effect.forkScoped(Effect.repeat(maintenance.withPermit(Effect.gen(function*() {
@@ -174,7 +175,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     if (current.state !== 'degraded' || !current.error || !['HawdbUnavailable', 'HawdbBusy', 'HawdbClosed'].includes(current.error.code)) return;
     yield* ports.verify;
     yield* ports.open;
-    yield* state.transition('running');
+    yield* state.transition('running', current.error);
     yield* request;
   })).pipe(Effect.ignore), Schedule.spaced('1 second')));
   yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() {
@@ -183,6 +184,8 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   }).pipe(Effect.catch(() => stop)), serviceHeartbeat));
   const clear = maintenance.withPermit(Effect.gen(function*() {
     yield* ports.verify;
+    const before = yield* SubscriptionRef.get(state.value);
+    if (before.state === 'blocked') return yield* Effect.fail(new ConcordError(before.error?.code ?? 'CleanupFailed', before.error?.message ?? 'Restart the blocked service before clearing'));
     yield* state.transition('draining');
     yield* operationsDrained;
     yield* ports.beforeClear ?? ports.close;
@@ -191,11 +194,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     const outcome = yield* Effect.result(ports.clear);
     if (outcome._tag === 'Failure') {
       const error = namedFailure(outcome.failure);
-      if (error.code === 'RepositoryBusy') {
-        yield* ports.open;
-        yield* state.transition('running');
-        yield* request;
-      } else yield* state.transition('blocked', { code: error.code, message: error.message });
+      yield* state.transition('blocked', { code: error.code, message: error.message });
       return yield* Effect.fail(error);
     }
     yield* state.reset;
@@ -204,13 +203,13 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* state.transition('running');
     yield* request;
     return outcome.success;
-  }));
+  }).pipe(Effect.tapError(cause => { const error = namedFailure(cause); return state.transition('blocked', { code: error.code, message: error.message }); })));
   yield* Effect.addFinalizer(() => stop.pipe(Effect.andThen(Fiber.interrupt(refreshFiber)), Effect.andThen(ports.close), Effect.orDie));
   return { state, current, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
     maintain: <A, E, R>(operation: Effect.Effect<A, E, R>) => foregroundRequest(maintain(operation)),
     operate: <A, E, R>(operation: Effect.Effect<A, E, R>) => foregroundRequest(operate(operation)),
     drain: maintenance.withPermit(operationsDrained),
     connect: Effect.acquireRelease(Effect.sync(() => { connections++; }), () => Effect.sync(() => { connections--; })),
-    execute: (operation: Computation) => foregroundRequest(maintain(ports.compute(operation))),
+    execute: (operation: Computation) => foregroundRequest(maintain(ports.compute(operation), true)),
   };
 });

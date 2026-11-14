@@ -28,7 +28,7 @@ import { existsSync } from 'node:fs';
 import { channel } from 'node:diagnostics_channel';
 import { join } from 'node:path';
 import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection, type GitBaselineCache, closeGitBaselineCache } from '../../app/index.ts';
-import { CacheSnapshotUnavailable, ConcordError, failure, objectDigest } from '../../model/index.ts';
+import { ConcordError, failure, objectDigest } from '../../model/index.ts';
 import { Computation, ComputationReply, ComputeRpcs } from './computation.ts';
 import { makeComputationProtocol } from './computation-protocol.ts';
 import { watchComputation } from './computation-watchdog.ts';
@@ -145,7 +145,10 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     if (result.exitCode !== 0 || result.cancelled || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('OperationResultUnknown', 'Operation process ended without a confirmed receipt; inspect recovery state', { stderr: result.stderr.slice(-4096) }));
     const reply = yield* Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(OperationReply), { onExcessProperty: 'error' })(result.stdout.slice(worker.header.length)), catch: () => new ConcordError('OperationResultUnknown', 'Operation did not return a valid receipt; inspect recovery state') });
     if (!reply.ok) return yield* Effect.fail(new ConcordError(reply.code, reply.message, reply.details));
-    yield* acceptDerived(reply.derived);
+    yield* acceptDerived(reply.derived).pipe(Effect.mapError(cause => {
+      const reason = workspaceServerFailure(cause);
+      return new ConcordError('CacheUpdateFailed', 'The operation completed, but its cache update failed; do not replay the operation', { operationCompleted: true, receipt: reply.value, reason: { code: reason.code, message: reason.message, ...(reason.details === undefined ? {} : { details: reason.details }) } });
+    }));
     return reply.value;
     }).pipe(Effect.ensuring(stopWorker(worker).pipe(Effect.orDie)), Effect.ensuring(warm.pipe(Effect.orDie)));
   }) };
@@ -348,11 +351,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       const context = yield* Layer.build(services).pipe(Effect.provideService(RuntimeEnvironment, requestRuntime));
       return yield* executeQuery(root, request, mode).pipe(Effect.provideContext(context), Effect.provideService(RuntimeEnvironment, requestRuntime), Effect.provideService(PersistentCache, persistent), Effect.provideService(KnowledgeSearch, searchOwner), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }));
     }));
-    const snapshot = (background = false) => (background ? cache.backgroundSnapshot : cache.snapshot).pipe(Effect.catch(cause => {
-      const error = workspaceServerFailure(cause);
-      const code = Schema.decodeUnknownExit(CacheSnapshotUnavailable.fields.code)(error.code);
-      return Effect.succeed<ReadonlyCacheSnapshot>({ unavailable: { code: code._tag === 'Success' ? code.value : 'HawdbUnavailable', message: error.message } });
-    }));
+    const snapshot = (background = false) => background ? cache.backgroundSnapshot : cache.snapshot;
     const cacheSnapshot = snapshot();
     const protocolReady = yield* Deferred.make<void>();
     const owned = <A, E, R>(operation: Effect.Effect<A, E, R | PersistentCache>, background = false) => operation.pipe(Effect.provideService(PersistentCache, background ? cache.backgroundService : cache.service));
@@ -362,7 +361,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const stateContext = yield* Layer.build(WorkspaceState.layer(runtime.token));
     const acceptDerived = (rows: readonly CacheDerivationBatch[], background = false) => cache.mergeDerived(rows, background).pipe(Effect.catch(cause => {
       const error = workspaceServerFailure(cause);
-      return Context.get(stateContext, WorkspaceState).transition('degraded', { code: error.code, message: error.message });
+      return Context.get(stateContext, WorkspaceState).transition('degraded', { code: error.code, message: error.message }).pipe(Effect.andThen(Effect.fail(error)));
     }));
     const operations = yield* makeOperationOwner(root, cacheSnapshot, acceptDerived);
     const computation = yield* makeComputationOwner(root, acceptDerived, 'foreground', pid => cleaning('foreground-computation', pid));
@@ -417,9 +416,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const run = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(operation, { signal });
     const runAdmitted = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(admission.withSlot(operation).pipe(Effect.mapError(workspaceServerFailure)), { signal });
     const readProjection = service.state.touch.pipe(Effect.andThen(service.current), Effect.flatMap(value => {
-      if (value.workspace) return Effect.succeed(value.workspace);
       if (value.error?.code === 'RecoveryRequired') return Effect.fail(new ConcordError('RecoveryRequired', value.error.message));
-      if (value.state === 'degraded' && value.error) return Effect.fail(new ConcordError('WorkspaceProjectionUnavailable', value.error.message, { reason: value.error.code }));
+      if (value.error) return Effect.fail(new ConcordError(value.error.code, value.error.message));
+      if (value.workspace) return Effect.succeed(value.workspace);
       return Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is building'));
     }));
     const hosted = yield* makeHttpLeases(runtime.token, (host, port, sse) => Effect.tryPromise({ try: () => {
@@ -461,15 +460,16 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const authorizeScope = (scope?: string) => commandScope && scope !== commandScope.key
       ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerScoped', message: 'This service belongs to another command scope' }))
       : !commandScope && scope !== undefined ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerScopeExpired', message: 'The command service has ended' })) : Effect.void;
-    const authorize = (request: { token: string; installation: string; deadline: number; scope?: string }, subscription = false) => runtime.verify.pipe(Effect.andThen(authorizeScope(request.scope)), Effect.andThen(Effect.gen(function*() {
+    const authorize = (request: { token: string; installation: string; deadline: number; scope?: string }, subscription = false, maintenance = false) => runtime.verify.pipe(Effect.andThen(authorizeScope(request.scope)), Effect.andThen(Effect.gen(function*() {
       if (request.token !== runtime.token) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Service identity differs' }));
       if (request.deadline < (yield* Clock.currentTimeMillis)) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerDeadline', message: 'Request deadline has expired' }));
       const state = yield* SubscriptionRef.get(service.state.value);
-      if (!subscription && !['running', 'degraded', 'draining'].includes(state.state)) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerBusy', message: `Service is ${state.state}` }));
+      if (!subscription && !maintenance && state.error) return yield* Effect.fail(new WorkspaceServerError({ code: state.error.code, message: state.error.message }));
+      if (!subscription && !(maintenance ? ['running', 'degraded', 'blocked', 'draining'] : ['running', 'draining']).includes(state.state)) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerBusy', message: `Service is ${state.state}` }));
       yield* service.state.touch;
     })), Effect.mapError(asServerError));
     const output = makeOutputAdmission();
-    const result = <A, E, R>(request: { token: string; installation: string; deadline: number; scope?: string }, operation: Effect.Effect<A, E, R>) => Stream.unwrap(authorize(request).pipe(Effect.andThen(operation), Effect.map(output.json), Effect.mapError(asServerError)));
+    const result = <A, E, R>(request: { token: string; installation: string; deadline: number; scope?: string }, operation: Effect.Effect<A, E, R>, maintenance = false) => Stream.unwrap(authorize(request, false, maintenance).pipe(Effect.andThen(operation), Effect.map(output.json), Effect.mapError(asServerError)));
     const feedback = new FeedbackSessions();
     const derivations = new DerivationSessions();
     const refreshing = new Map<string, { requeue: boolean }>();
@@ -507,8 +507,8 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       'git-status': request => result(request, service.execute({ kind: 'git-status' })),
       'git-diff': request => result(request, service.execute({ kind: 'git-diff', path: request.path, area: request.area })),
       http: (request, options) => result(request, commandScope ? Effect.fail(new ConcordError('WorkspaceServerScoped', 'Command services cannot open HTTP listeners')) : request.action === 'open' ? hosted.open(request.host, request.port, subscribers.has(options.client.id), options.client.id) : request.lease ? hosted.close(request.lease) : Effect.fail(new ConcordError('InvalidInput', 'HTTP close requires a lease'))),
-      'cache-clear': request => result(request, service.clear),
-      'cache-status': request => result(request, service.maintain(cache.status).pipe(Effect.map(status => ({ ...status, owner: 'service', pid: process.pid, installation })))),
+      'cache-clear': request => result(request, service.clear, true),
+      'cache-status': request => result(request, service.maintain(cache.status).pipe(Effect.map(status => ({ ...status, owner: 'service', pid: process.pid, installation }))), true),
       'cache-rebuild': request => result(request, rebuildOwnedCache),
       'cache-snapshot': request => result(request, service.maintain(cacheSnapshot)),
       'cache-derived': (request, options) => result(request, derivations.apply(options.client.id, request, batches => service.maintain(cache.mergeDerived(batches)))),
@@ -559,7 +559,7 @@ export const feedbackWriterLayer = Layer.effect(FeedbackCacheWriter, Effect.gen(
   const execution = yield* RuntimeEnvironment;
   const runtime = yield* ServerRuntime;
   return FeedbackCacheWriter.of({ merge: (root, connectionId, items) => Effect.scoped(Effect.gen(function*() {
-    const connection = yield* existingWorkspace(root).pipe(Effect.provideService(RuntimeEnvironment, execution), Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.catch(() => Effect.succeed(undefined)));
+    const connection = yield* existingWorkspace(root).pipe(Effect.provideService(RuntimeEnvironment, execution), Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime));
     if (!connection) return yield* mergeLocalFeedbackObservation(root, connectionId, items).pipe(Effect.provideService(Workspace, workspace));
     if (connection.hello.protocol !== PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Feedback owner has another protocol'));
     return yield* submitFeedback(connection, connectionId, items);
