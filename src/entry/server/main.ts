@@ -472,22 +472,23 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const result = <A, E, R>(request: { token: string; installation: string; deadline: number; scope?: string }, operation: Effect.Effect<A, E, R>) => Stream.unwrap(authorize(request).pipe(Effect.andThen(operation), Effect.map(output.json), Effect.mapError(asServerError)));
     const feedback = new FeedbackSessions();
     const derivations = new DerivationSessions();
-    const refreshing = new Set<string>();
+    const refreshing = new Map<string, { requeue: boolean }>();
     const refreshQuery: (query: AppTypes.Query, requestRuntime: RuntimeEnvironmentSnapshot) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner> = (query, requestRuntime) => Effect.gen(function*() {
       const key = objectDigest({ query, cwd: requestRuntime.cwd, environment: requestRuntime.env });
-      if (refreshing.has(key)) return;
-      refreshing.add(key);
-      let requeue = false;
+      const running = refreshing.get(key);
+      if (running) { running.requeue = true; return; }
+      const pending = { requeue: false };
+      refreshing.set(key, pending);
       // A scan owns a subprocess, not the foreground computation permit. Track
       // its lifetime so clear waits for publication and shutdown reaps it.
       const scan = service.operate(owned(refreshDiagnosticQuery(root, query, Date.now(), 120_000, runtime.verify.pipe(Effect.mapError(failure))), true)).pipe(
         Effect.provide(Workspace.layer), Effect.provideService(RuntimeEnvironment, requestRuntime),
-        Effect.provideService(QueryRefreshRequest, { request: () => Effect.sync(() => { requeue = true; }) }),
+        Effect.provideService(QueryRefreshRequest, { request: () => Effect.sync(() => { pending.requeue = true; }) }),
         Effect.scoped,
       );
       yield* Effect.forkIn(scan.pipe(Effect.ensuring(Effect.gen(function*() {
         refreshing.delete(key);
-        if (requeue) yield* refreshQuery(query, requestRuntime);
+        if (pending.requeue) yield* refreshQuery(query, requestRuntime);
       })), Effect.ignore), serverScope);
     });
     const handlers = WorkspaceRpcs.toLayer({

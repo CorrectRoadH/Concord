@@ -149,6 +149,8 @@ CLI 的读写与查询操作统一连接工作区服务执行；`--server=comman
 
 ### 启动与裁决
 
+服务原子替换运行记录时，读取者若观察到普通文件链接数为零，重新读取路径元数据，最多三次。符号链接、多重硬链接、特殊文件和超限记录仍立即拒绝；重试不能代替实例 token、socket 与服务锁校验。
+
 CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选定项目目录的服务。`concord server run` 是前台服务入口。`server status` 与 `server stop` 不启动服务。`view --in-process` 需要新服务时，以受当前命令管理的子进程启动；已有服务仍可复用。所有启动方式先取得同一服务锁。
 
 会回收全部命令后代的宿主必须独立托管前台 `server run`，不能只依靠 detached 使服务越过宿主的回收边界。Herdr 的远程托管由 [Concord mod](../herdr-mod/architecture.md#远程服务与读取终止)拥有；服务本身的锁、句柄与退出协议不变，普通 CLI 不依赖 Herdr。

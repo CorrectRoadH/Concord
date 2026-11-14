@@ -51,7 +51,12 @@ const serviceProcessExited = Effect.fn('ServerRuntime.processExited')(function*(
 });
 export function readServerRecord(privateDir: string, requireSocket = true): ServerRecord | undefined {
   const path = join(privateDir, 'server', 'current.json');
-  const stat = lstatSync(path, { throwIfNoEntry: false });
+  let stat = lstatSync(path, { throwIfNoEntry: false });
+  // Linux can observe an unlinked inode when the owner atomically replaces
+  // current.json during stat. Re-observe the path, never accept that inode.
+  for (let attempt = 1; stat?.isFile() && stat.nlink === 0 && attempt < 3; attempt++) {
+    stat = lstatSync(path, { throwIfNoEntry: false });
+  }
   if (!stat) return undefined;
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 16 * 1024) throw new ConcordError('WorkspaceServerUnavailable', 'Server record must be a bounded regular file');
   let contents: string;
