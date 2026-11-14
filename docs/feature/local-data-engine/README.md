@@ -7,6 +7,7 @@ Spec、Memory、Issue 和证据仍是仓库里的普通文件，删除缓存不�
 ## 你可以做什么
 
 - 连续运行检查和检索，第二次起复用缓存；改过的文件每次都重新核验。
+- 在不断增长的 Memory 与 Issue 中重复搜索，复用未变化的正文，返回全部当前命中；首次构建与缓存降级的边界见[检索路径](use-case/query-current-projections.md)。
 - 用 `concord cache status` 查看缓存是否可用、占多少空间；用 `concord cache clear` 删除缓存，下一次命令自动重建，结果不变。
 - 用 `trace gaps`、`trace show` 和 `review` 立即读取后台最近算好的诊断结果；需要当前结果时加 `--fresh`。
 - 在项目的任意子目录运行命令：Concord 自动启动或复用该项目的[工作区服务](../../concepts.md#workspace-server)，多个命令共享热的解析结果。
@@ -78,13 +79,13 @@ state: absent
 
 ## 怎样工作
 
-缓存放在 Git-private 目录的 `cache.hawdb` 中，不进入提交。每次命中前，Concord 都核对当前文件的摘要；文件新增、修改或删除后，对应结果立即失效并重新读取。缓存缺失、损坏或被占用时，命令从源文件重新计算，结论不变。
+缓存放在 Git-private 目录的 `cache.hawdb` 中，不进入提交。复用前核对当前来源身份；Memory 与 Issue 在同一服务内复用未变化文件的已核验正文和摘要，变化文件才重读。文件新增、修改或删除后，对应投影更新；首次构建和服务重启完整核验来源。缓存缺失、损坏或被占用时，命令从源文件重新计算，结论不变。
 
 查询命令自动启动该项目的工作区服务。服务长期持有缓存，CLI 与 Web 经由它读取，遵守同一套入口与生命周期约束。CI 使用 `--server=command`；此时项目已有工作区服务则明确失败，不结束其它客户端正在使用的服务（[适配项目的开发方式](../../taste.md#t-9)）。
 
 `trace gaps`、`trace show` 与 `review` 默认读取后台构建的诊断[投影](../../concepts.md#projection)。它只回答构建时的诊断问题，标明构建时间与一致性，不授权 `check` 成功或证据裁决；`check`、检索和证据裁决总是使用当前来源。
 
-句柄与清理的所有权、资源预算、诊断投影的刷新协议见[架构](architecture.md)，发行产物见[跨平台标签发版架构](../cross-platform-release/architecture.md#身份与复用)。
+句柄与清理的所有权、资源预算、诊断投影的刷新协议见[架构](architecture.md)，Memory 与 Issue 的节点和索引见[检索数据模型](data-model.md)，发行产物见[跨平台标签发版架构](../cross-platform-release/architecture.md#身份与复用)。
 
 ## 用户路径
 

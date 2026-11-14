@@ -6,9 +6,11 @@
 
 Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [技术栈](../../engineering/build/README.md#技术栈)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放；它复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。
 
-引擎版本、提交标识与桥接发行版本由 `native-release.json` 声明，更新与校验遵守[原生绑定复用](../../engineering/build/architecture.md#原生绑定复用)。桥接 ABI 与缓存表 schema 由原生接口定义，加载时必须匹配。引擎默认 features 关闭，不启用后台维护、向量或全文检索。
+引擎版本、提交标识与桥接发行版本由 `native-release.json` 声明，更新与校验遵守[原生绑定复用](../../engineering/build/architecture.md#原生绑定复用)。桥接 ABI 与缓存表 schema 由原生接口定义，加载时必须匹配。引擎关闭默认 features，显式编译 `full-text-search` 并开启 `RuntimeCapability::FullTextSearch`，供[Memory 与 Issue 检索](#knowledge-search)使用；向量、图分析和引擎后台维护不启用。
 
 关系缓存使用参数化 SQL。子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据。
+
+检索投影使用 HawDB 的图属性 `FULLTEXT` 索引与参数化 Cypher。TypeScript 负责来源安全、严格解码、文本归一化、发布协调和输出；候选查找、文本谓词与事务可见性由 HawDB 执行，不在 Concord 中维护倒排表或 n-gram 算法（[用现成的能力](../../taste.md#t-10)）。原生调用层只传递有界查询、事务和结果，不决定搜索语义。
 
 桥接识别 typed `HawDBError::BranchBusy` 与固定版本的旧目录锁争用，该分类贯穿 schema 与事务准入。事务获取失败保留具名错误，真正的 schema 形状错误为 `HawdbIncompatible`。
 
@@ -283,16 +285,17 @@ CLI 查询与受管操作默认自动启动或复用同协议的工作区服务�
 | `config_cache` | 128 | 8 MiB |
 | `feedback_cache` | 10000 | 32 MiB |
 | `query_cache` | 64 | 16 MiB |
+| 检索投影（两个标签合计） | 20000 个文档 | 64 MiB |
 
 内存 `document_parse` 中，文档占 9872 条、15 MiB，静态配置占 128 条、1 MiB。
 
-内存总逻辑预算 36 MiB，持久总逻辑预算 96 MiB，各命名空间共享总预算。淘汰按插入顺序；自身超过预算的新批次整批拒绝。
+解析内存总逻辑预算 36 MiB，检索的内存降级另有最多 64 MiB 逻辑预算；持久总逻辑预算 96 MiB，持久检索与各命名空间共享总预算。普通缓存淘汰按插入顺序；自身超过预算的新批次整批拒绝。检索按[整个集合失效](data-model.md#capacity)，不能逐条淘汰后返回不完整结果。
 
 内存实例按累计写入与删除量有界重建，避免引擎 tombstone 无限累积；重建期间新旧实例合计不超过两份逻辑预算。
 
 静态配置解析使用独立的解析器身份。配置命中只复用严格解码的值，每次操作仍读取配置原文并执行仓库安全与协调检查。
 
-桥接单条输入最多 8 MiB，每批最多 1000 条、16 MiB。原生查询最多 20000 行、64 MiB payload，更大的命名空间读取分批进行。关系索引读取上限 16 MiB，hydration 64 MiB。
+普通缓存的原生单条输入最多 8 MiB，每批最多 1000 条、16 MiB。检索原子更新一次调用可接收最多 64 MiB 的完整变更集，单文档仍不超过 8 MiB，事务内部每批语句不超过 1000 条、16 MiB；这是独立的集合更新准入，不逐批跨调用提交。原生查询最多 20000 行、64 MiB payload，更大的普通命名空间读取分批进行；检索的累计上限与回退见[查询边界](#knowledge-search-query)。关系索引读取上限 16 MiB，hydration 64 MiB。
 
 WAL 上限为 100000 条、replay 128 MiB、单条 64 MiB、每批 50000 次操作。checkpoint encoded 256 MiB、decoded 512 MiB；segment cache 16 MiB，graph manifest 8 MiB，out-of-core delta 16 MiB。不采用上游 TiB 级默认额度，不自动修复坏 WAL。
 
@@ -307,7 +310,7 @@ WAL 上限为 100000 条、replay 128 MiB、单条 64 MiB、每批 50000 次操�
 文档与静态配置解析、代码解析及不可变 Git 测试基线使用进程期的有界 HawDB 内存实例，保持容量上限、当前源字节身份与可丢弃语义，不另存解析结果 Map。
 
 - 每篇文档每个进程最多解析一次，元数据、标题锚点、steps 与链接事实取自同一棵语法树。
-- 当前源文件集合和字节每次读取。
+- 普通来源扫描按其操作 Spec 读取文件集合与字节；Memory 与 Issue 检索按[来源核对](#knowledge-search-refresh)复用未变化的正文，只读取变化文件。
 - 配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
 当前来源缓存严格解码，并核对原文摘要、解析器身份和 Schema，来源前后核验保留；不可用时回源或给出具名诊断。当前来源查询的临时结果只属于当前调用。
@@ -344,6 +347,83 @@ WAL 上限为 100000 条、replay 128 MiB、单条 64 MiB、每批 50000 次操�
 恢复不删除目录、不覆盖文档、不创建缺失的数据库。关闭缓存的模式和普通只读调用不启用该恢复，恢复失败仍报告不可用。
 
 进程对原生产物的加载失败保留一个有界失败记录，一秒内复用该失败，随后重新验证安装产物，期间缓存调用按不可用回源。该退避只限制重复的安装检查，不跳过来源摘要、Schema 或扫描一致性验证。
+
+## Memory 与 Issue 检索 {#knowledge-search}
+
+检索服务于[读取当前内容](use-case/query-current-projections.md)。`memory.search` 与 `issue.search` 的 CLI、RPC 和 Web 操作共用这一条路径。匹配语义由[关键词检索](../local-sdlc/use-case/recall-and-maintain-memory.md#recall)拥有：所有空白分隔的词项都须在标题或正文中出现，不区分大小写，返回完整命中集合。数据库只保存可重建的[检索投影](concepts.md#knowledge-search-projection)，文件仍是事实来源（[一件事只写一次](../../taste.md#t-3)）。
+
+```mermaid
+flowchart LR
+  Files[Memory / Issue 文件] -->|目录与文件身份核对| Changes[变化文件与删除路径]
+  Changes -->|只读取变化正文并严格解码| Documents[当前文档记录]
+  Documents -->|事务更新| DB[HawDB 文档节点与 FULLTEXT 索引]
+  Query[查询词项] -->|参数化 CONTAINS| DB
+  DB -->|命中文档与来源摘要| Verify[核对来源观察与代次]
+  Verify --> Result[原有命令结果]
+```
+
+### 引擎选择与查询 {#knowledge-search-query}
+
+采用图属性 `FULLTEXT` 索引，不采用 `SearchIndex` 的 BM25 候选排名。HawDB 的属性索引按 Unicode 字符生成长度为 1～3 的 n-gram，查询计划可选择 `IndexNodeTextSeek` 或带 `FullText` 访问路径的 `NodeProjectionScanExec`；候选仍须经过完整的 `CONTAINS` 谓词，不能把 n-gram 命中等同于子串命中。这样单字、中文、英文词内片段和标点都沿用原有匹配规则，不需要模型、分词字典或语义召回。
+
+候选必须包含全部精确命中。合法词项没有可用 gram 时，由 HawDB 自身退回精确属性扫描，不得直接返回零候选。例如 U+0085 不被 JavaScript 的 `trim` / `/\s/u` 删除，却被 Rust 视为空白；纯此类词项以及它与普通词项的 AND 组合仍须正确匹配。Concord 不复制引擎分词或空白字符表，也不把此类输入改判为 `InvalidInput`；只有通过这一完整性验证的引擎发行产物才能启用检索投影，否则使用等价来源扫描。
+
+节点、字段、索引与事务定义见[检索数据模型](data-model.md)。标题与正文先按与查询相同的规则归一化，存为 `searchText`；谓词直接作用于这个字段，不能在查询里对字段调用小写转换而使索引失去作用。查询形状如下，节点标签只由 `memory` / `issue` 的固定映射选择，词项一律绑定参数：
+
+```cypher
+MATCH (document:MemorySearchDocument)
+WHERE document.searchText CONTAINS $term0
+  AND document.searchText CONTAINS $term1
+RETURN document.path, document.id, document.title, document.body, document.digest
+ORDER BY document.path
+```
+
+Issue 查询另返回 `provider`。词项数量决定 `AND` 的个数，重复词项可去重，不拼接用户文本。一次原生检索调用在内部创建、使用并释放 `DatabaseReadTransaction`，读取代次并完成全部匹配；TypeScript 不持有事务或跨调用游标。需要分批时，在该调用内用同一引擎路径排序和严格大于上一页末路径的游标读取；路径唯一，不能混用 locale 排序作游标。原生返回完整命中及其代次后，输出层再按现有 `localeCompare` 排序，保持 JSON / 人读结构。
+
+该调用的所有批次合计最多 20000 个文档、64 MiB payload，并共享 HawDB 的执行与快照预算。预算耗尽或任一批次失败时丢弃全部部分结果、释放事务，再按完整来源扫描规则处理；不能通过多批重置累计预算，也不能用 top-k 或 `LIMIT` 截掉命中并报告成功。原生调用返回前释放事务，请求取消也须等待在途调用结束并丢弃结果，clear 和关闭等待这一调用退出。请求本身已取消或总执行期限已耗尽时直接传播该失败，不启动回退计算。
+
+数据库在同一读快照内完成匹配和正文读取，只把命中记录跨原生边界返回。正常热查询不先把所有节点或正文搬到 TypeScript 再过滤，也不调用 `loadDocuments` 读取整个集合。优化器可以为小集合或低选择性词项选择扫描；验收必须区分这种成本选择、原生索引缺失和来源回退。
+
+### 来源核对与增量更新 {#knowledge-search-refresh}
+
+工作区服务拥有搜索数据与其句柄，解析线程只交付文档记录。已有文件监听和内部发布通知用于提前更新；它们是变化提示，不能单独证明“没有变化”。查询使用者不打开第二个持久库。
+
+1. 每次尝试只发现目标种类的完整目录与文件集合，并记录路径、device、inode、size、mtimeNs、ctimeNs 和文件类型，整数保留完整精度。进入每个目录前记录其身份；目标根不存在时记录 absent 观察及其最近存在的祖先，保留路径安全所需的根和祖先锚点。目录新增、删除、移动、分支切换和 symlink 都须被核对，不能只观察上次命中的路径。
+2. 同一服务实例内，身份未变且已有成功解码记录的文件复用正文和摘要。变化文件按现有安全读取协议读取字节、计算摘要并严格解码；读取前后身份不同则按来源漂移处理。没有完整的已核验记录时，先完整建立目标集合。
+3. 一次原生更新调用在内部创建写事务，完成全部新增、修改、删除与[检索代次](concepts.md#knowledge-search-generation)后提交并释放；内部语句批次不产生独立提交。文件改名表现为旧路径删除和新路径插入。索引由引擎在同一提交中维护；失败回滚，取消后也须等待调用释放事务，已提交的投影须重新核对来源才能复用。
+4. 原生检索调用固定读快照并核对代次与本次完整来源观察一致。返回结果前，仅对已观察的目录、文件、absent 路径和路径锚点做安全元数据复核，不重新枚举整树，不重读未变化正文。文件身份变化使本次结果失效；目录或锚点变化、缺失根变为存在时，同样丢弃整次结果，下一次尝试重新发现目标集合，再重读必要文件。路径安全失败仍具名拒绝。初次尝试之外最多重试两次，耗尽后返回 `SourceChanged`，不能返回上一代结果。
+
+来源核对可以进行 O(文件数) 的元数据检查；本方案不声称整个查询与文件数量无关。它消除热查询对全部正文的重读、摘要重算和宿主文本扫描。不能仅为了加速而省略集合完整性、路径安全或并发变化核验（[快到每次都愿意跑](../../taste.md#t-7)）。
+
+这是检索专用的身份观察路径，不能调用会重读正文和递归枚举的旧复核器来满足热查询验收。来源发布仍遵守[写入协调](../portable-coordination/architecture.md#access-modes)的摘要与 CAS 边界。
+
+同一目标集合中任一来源解码失败，搜索按该来源的具名错误失败，即使它原本不会命中也不能忽略；另一种类的错误不阻塞本次查询。失败保留已完成的来源写入，投影标记不可用于当前查询。修好文件后只重算必要记录，再建立完整代次。
+
+### 重建、降级与资源释放 {#knowledge-search-lifecycle}
+
+持久节点与索引放在同一个 `cache.hawdb`，不引入独立服务、第二份数据目录或人工索引。持久库重开后，完整核对目标文件集合和来源摘要，才允许把磁盘代次用于当前查询；跨进程持久元数据不能单独免除首次字节核对。活跃服务内的后续查询使用增量身份核对。
+
+`cache clear` 在现有 draining / 写互斥边界等待搜索读快照结束，关闭并清理同一个库；重建时可以复用服务已经核验的当前文档记录。重建未完成前不读旧代次。数据库数据、原生索引与代次身份一起丢弃；schema、解析器或归一化身份不符时从来源重建，不转换旧数据。
+
+持久缓存不可用而原生引擎可用时，由服务在自己的内存 HawDB 中建立相同节点和索引。原生产物不可用、索引能力缺失、预算耗尽或数据损坏时，基础搜索回退到当前来源的同一子串匹配，诊断保留原因；不能使用部分索引或把查询失败变成空结果。领域输入、坏来源与来源漂移错误不作为缓存失败吞掉。cache-off 与 dry-run 不访问持久库，使用调用作用域的内存路径或等价来源扫描。
+
+dry-run 只允许建立并释放本次调用的临时内存状态，不更新共享服务的检索代次或缓存，也不通过连接服务持久化查询副作用。命令作用域与服务复用遵守已有的[关闭持久缓存](#关闭持久缓存)规则。
+
+请求成功、失败或取消都释放读事务与结果缓冲；clear 和停止服务等待在途快照结束再释放唯一数据库句柄。索引更新失败不回滚已经成功的文件发布，也不重跑文件写入。节点、索引页、查询工作内存与结果缓冲都计入各自的资源准入，不以原文字节数代表全部索引成本。
+
+### 引擎依据与验收 {#knowledge-search-acceptance}
+
+以下依据来自 `native-release.json` 所引用的 HawDB 引擎提交 `ffab379f79e9b77e961fd84d696ec1ac78b90d3c`，不是对现有 Concord 绑定交付能力的声明：
+
+- [属性索引分词](https://github.com/CorrectRoadH/hawdb/blob/ffab379f79e9b77e961fd84d696ec1ac78b90d3c/crates/storage/src/statistics.rs)定义 Unicode n-gram，但丢弃 Rust 认定的纯空白 gram；该提交的属性读取对空 token 直接结束候选访问。因此启用检索前须在 HawDB 修正这个漏召回边界，并重新固定通过完整性验证的发行产物。[索引与事务测试](https://github.com/CorrectRoadH/hawdb/blob/ffab379f79e9b77e961fd84d696ec1ac78b90d3c/src/api/tests/schema_indexes.rs)覆盖 `CREATE FULLTEXT INDEX`、约束与持久恢复。
+- [执行计划选择](https://github.com/CorrectRoadH/hawdb/blob/ffab379f79e9b77e961fd84d696ec1ac78b90d3c/crates/optimizer-graph/src/graph/tests/fulltext_costing.rs)表明优化器会比较索引与扫描；[属性读取实现](https://github.com/CorrectRoadH/hawdb/blob/ffab379f79e9b77e961fd84d696ec1ac78b90d3c/crates/storage/src/store/graph_read.rs)包含原生投影缺失、内存路径或预算条件下的扫描分支。
+- [能力测试](https://github.com/CorrectRoadH/hawdb/blob/ffab379f79e9b77e961fd84d696ec1ac78b90d3c/src/api/tests/runtime_capabilities.rs)要求同时满足编译特性与运行时能力；[公共查询 Spec](https://github.com/CorrectRoadH/hawdb/blob/ffab379f79e9b77e961fd84d696ec1ac78b90d3c/docs/specs/QUERY_FIRST_PUBLIC_API_SPEC.md)拥有参数化查询、事务与预算规则。
+
+交付必须验证实际归档中的引擎、能力配置和查询路径。选择性查询的 `EXPLAIN` 显示索引计划还不够：同时核对真实属性索引访问计数、候选量、来源字节读取量和跨原生边界返回量。若所选构建的物理读取仍遍历全部正文，应在 HawDB 修正该路径并重新固定经过验证的发行产物，不能在 TypeScript 自建索引或把扫描标成索引加速（[只声称证明过的](../../taste.md#t-5)）。
+
+功能验收覆盖中英文、单字符、标点、组合字符、跨标题与正文的多词项、n-gram 假阳性、空查询、来源新增修改删除、坏的非命中文档、监听丢失、同大小同 mtime 的改写、并发编辑、服务重启、clear、事务失败与取消。缓存启用、内存降级和来源扫描的路径、正文、摘要与顺序须等价。性能边界见[检索测量](performance.md#knowledge-search)。
+
+还须分别验证：U+0085 单独及混合普通词项时不漏召回；发现之后、返回之前新增文件、嵌套目录或原先缺失的根时，在丢失全部监听事件下仍重试；分页期间发生数据库增删改仍只读取固定代次；读批次、写批次或预算中断后没有事务泄漏、部分成功结果或可用的部分代次。稳定查询的返回前复核只允许元数据与路径安全检查。
 
 ## 引擎版本
 

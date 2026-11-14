@@ -65,7 +65,7 @@ Memory 只保存可复用的经验，Issue 只保存还要处理的问题，Spec
 | `InvalidInput` | 查询为空：`recall/search query must be non-empty` |
 | 具名拒绝 | 短选择器匹配多条记录，需要改用完整路径 |
 
-`list memory` 与 `memory search` 读取 `memory/` 的全部记录。其中有坏记录或未完成的写入时，查询失败，不返回部分结果。
+`list memory` 与 `memory search` 核对 `memory/` 的完整记录集合。其中有坏记录或未完成的写入时，查询失败，不返回部分结果。搜索按[检索架构](../../local-data-engine/architecture.md#knowledge-search)复用已核验且来源身份未变化的记录，并由 HawDB 查询全部命中。
 
 ## 规则
 
