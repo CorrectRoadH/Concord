@@ -11,6 +11,7 @@
 - 没有任何 `writing.md` 时，写作检查只检查概念，不检查长度与不用的词。
 - CLI、结构化 action、Web 与 Concord mod 看到的是同一份结果。
 - 检查失败不妨碍读取、直接编辑或运行其它命令。
+- `concord check` 不接受路径参数；传入路径时以 `InvalidInput` 失败，消息给出等价的 `concord docs check <路径>` 命令，说明它只检查所选范围的写作与术语。
 
 ## 页面种类
 
