@@ -103,23 +103,23 @@ test('config editing rejects retired fields and validates source roots', () => E
 })))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('editing includes existing JS/TS files from testRoots without treating runner source files as roots', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('editing includes existing JS/TS files from testRoots without treating unrelated directories as roots', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = (await createConsumer());
   let repo: LocalRepository | undefined;
   try {
     writeProjectConfig(root, { testRoots: ['test'] });
     mkdirSync(join(root, 'test'), { recursive: true });
-    mkdirSync(join(root, 'runner-only'), { recursive: true });
+    mkdirSync(join(root, 'unrelated'), { recursive: true });
     writeFileSync(join(root, 'test', 'association.ts'), 'export const association = 1;\n');
-    writeFileSync(join(root, 'runner-only', 'setup.ts'), 'export const setup = 1;\n');
+    writeFileSync(join(root, 'unrelated', 'setup.ts'), 'export const setup = 1;\n');
     const config = (await readProjectConfig(root));
-    writeProjectConfig(root, { ...config, runner: { kind: 'node-test', timeoutMs: 60000, sourceFiles: ['runner-only/setup.ts'] } });
+    writeProjectConfig(root, config);
     repo = (await LocalRepository.open(root));
     assert.deepEqual(listSources(repo).map(item => item.path), ['test/association.ts']);
     const source = readSource(repo, 'test/association.ts');
     (await setSource(repo, source.path, 'export const association = 2;\n', source.digest));
     assert.equal(readFileSync(join(root, 'test', 'association.ts'), 'utf8'), 'export const association = 2;\n');
-    (await throwsCode('SourceNotFound', () => readSource(repo!, 'runner-only/setup.ts')));
+    (await throwsCode('SourceNotFound', () => readSource(repo!, 'unrelated/setup.ts')));
   } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
 })));
 

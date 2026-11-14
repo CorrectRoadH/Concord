@@ -1,4 +1,4 @@
-import type { GitDiff, GitStatus, ViewAction, ViewFailure, ViewFile, ViewJob, ViewResponse, WorkspaceProjection } from '../../src/model/index.ts';
+import type { GitDiff, GitStatus, ViewAction, ViewFailure, ViewFile, ViewResponse, WorkspaceProjection } from '../../src/model/index.ts';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -91,9 +91,6 @@ export class ConcordApi {
     const request = () => this.request('/api/action', { method: 'POST', body: JSON.stringify(action), signal });
     return ['document.set', 'document.metadata', 'source.set', 'writing.show', 'writing.check'].includes(action.action) ? this.retryBusy(request, signal) : request();
   }
-  jobs(signal?: AbortSignal): Promise<readonly ViewJob[]> { return this.read(() => this.request('/api/jobs', { signal })); }
-  run(caseId: string): Promise<ViewJob> { return this.request('/api/jobs', { method: 'POST', body: JSON.stringify({ caseId }) }); }
-  cancel(id: string): Promise<ViewJob> { return this.request(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   git(signal?: AbortSignal): Promise<GitStatus> { return this.read(() => this.request('/api/git', { signal })); }
   gitDiff(path: string, area: 'staged' | 'unstaged' | 'untracked', signal?: AbortSignal): Promise<GitDiff> {
     return this.read(() => this.request(`/api/git/diff?path=${encodeURIComponent(path)}&area=${area}`, { signal }));

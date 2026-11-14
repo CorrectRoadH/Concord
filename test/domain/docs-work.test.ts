@@ -1,4 +1,3 @@
-import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.ts';
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, readdirSync } from 'node:fs';
@@ -7,12 +6,10 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { tmpdir } from '../support/temporary.ts';
 import { git, fixture, custom } from '../support/docs-work-fixture.ts';
-import { plan, report, verify, prepare, check, finalize, show, item, readPlan } from '../support/docs-work-domain-fixture.ts';
-import { LocalRepository } from '../support/repository.ts';
-import { initialize } from '../support/operations.ts';
+import { plan, report, verify, prepare, check, finalize, show, item, readPlan, initializedFixture } from '../support/docs-work-domain-fixture.ts';
 
-test('C5/C6 public CLI dynamically owns directory writes and binds verified dependency receipts', () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = fixture(custom);
+test('C5/C6 static checks dynamically own directory writes and bind verified dependency receipts', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = await initializedFixture();
   try {
     writeFileSync(join(root, 'outside.txt'), 'Unrelated change\n');
     const prepared = (await plan(root, [item('a', ['docs/a/']), item('b', ['docs/b/'], { read: ['docs/a/'], blockedBy: ['a'] })], 'dependencies'));
@@ -26,7 +23,7 @@ test('C5/C6 public CLI dynamically owns directory writes and binds verified depe
     const dynamic = (await report(root, 'dependencies', 'a'));
     assert.notEqual(dynamic.receipt!.writeDigest, a.receipt!.writeDigest);
     assert.ok(dynamic.receipt!.changedPaths.includes('docs/a/new.md'));
-    assert.match(dynamic.receipt!.checks[0]!.summary, /docs\/a\/new.md/);
+    assert.deepEqual(JSON.parse(dynamic.receipt!.checks[0]!.summary), { ok: true, findings: [] });
     assert.equal((await check(root, 'dependencies', 'a', { report: false, verify: a.receiptDigest! }, 1)).error, 'DocsWorkReceiptMismatch');
     (await verify(root, 'dependencies', 'a', dynamic.receiptDigest!));
     (await verify(root, 'dependencies', 'b', b.receiptDigest!));
@@ -39,7 +36,7 @@ test('C5/C6 public CLI dynamically owns directory writes and binds verified depe
     writeFileSync(join(root, 'docs/b/two.md'), originalB);
     assert.equal((await finalize(root, 'dependencies')).status, 'finalized');
     assert.equal((await finalize(root, 'dependencies', 1)).error, 'DocsWorkFinalized');
-    assert.equal(readFileSync(join(root, 'finalizer-count'), 'utf8'), '1');
+    assert.equal(existsSync(join(root, 'finalizer-count')), false);
     assert.equal((await show(root, 'dependencies')).runId, 'dependencies');
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
@@ -65,6 +62,38 @@ test('C5 prepare aggregates dirty paths, overlaps, duplicate IDs, dependencies, 
   } finally { rmSync(path, { force: true }); rmSync(root, { recursive: true, force: true }); }
 })));
 
+test('prepare rejects external checks, finalizers and timeout configuration before creating run state', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const command = { argv: [process.execPath, '-e', 'require("node:fs").writeFileSync("external-command", "ran")'], timeoutMs: 1000 };
+  for (const docsWork of [{ checks: { writing: command } }, { finalizer: command }, { timeoutMs: 1000 }, { argv: command.argv }]) {
+    const root = fixture();
+    try {
+      writeFileSync(join(root, 'concord.config.ts'), `export default ${JSON.stringify({ docsWork })} as const;\n`);
+      const rejected = await prepare(root, { scopes: ['docs/a/'], runId: 'external' }, 1);
+      assert.equal(rejected.error, 'DocsWorkPlanInvalid');
+      assert.equal(existsSync(join(root, '.git/concord/docs-work/v1/external')), false);
+      assert.equal(existsSync(join(root, 'external-command')), false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
+})));
+
+test('writing is the only check ID, including when reading existing run state', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = fixture();
+  try {
+    const rejected = await prepare(root, { plan: { format: 'concord.docs-work-plan/v1', items: [item('custom', ['docs/a/'], { checks: ['custom'] })] }, runId: 'unknown' }, 1);
+    assert.equal(rejected.error, 'DocsWorkPlanInvalid');
+    assert.deepEqual(rejected.details?.problems?.map(problem => problem.code), ['UnknownCheck']);
+    assert.equal(existsSync(join(root, '.git/concord/docs-work/v1/unknown')), false);
+    const prepared = await prepare(root, { scopes: ['docs/a/'], runId: 'writing' });
+    const path = join(prepared.statePath!, 'run.json');
+    const run = JSON.parse(readFileSync(path, 'utf8'));
+    assert.deepEqual(run.items[0].checks, ['writing']);
+    run.items[0].checks = ['custom'];
+    writeFileSync(path, JSON.stringify(run));
+    assert.equal((await check(root, 'writing', 'a', { report: true }, 1)).error, 'DocsWorkPlanInvalid');
+    assert.equal(existsSync(join(prepared.statePath!, 'receipts/a.reported.json')), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
 test('default shared paths protect the global concepts.md catalog and writing policy', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = fixture(custom);
   try {
@@ -81,11 +110,14 @@ test('default shared paths protect the global concepts.md catalog and writing po
 })));
 
 test('C5/C6 failed reports persist; read and configuration drift reject without running checks', () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = fixture(custom);
+  const root = await initializedFixture();
   try {
-    const prepared = (await plan(root, [item('failed', ['docs/a/'], { checks: ['failed'] }), item('reader', ['docs/b/'], { read: ['docs/input.md'] })], 'drift'));
+    const prepared = (await plan(root, [item('failed', ['docs/a/']), item('reader', ['docs/b/'], { read: ['docs/input.md'] })], 'drift'));
+    writeFileSync(join(root, 'docs/a/one.md'), '# One\n\nForbidden text.\n');
     const failed = (await check(root, 'drift', 'failed', { report: true }, 1));
-    assert.equal(failed.receipt!.checks[0]!.status, 'failed'); assert.equal(failed.receipt!.checks[0]!.exitCode, 7);
+    assert.equal(failed.receipt!.checks[0]!.status, 'failed'); assert.equal(failed.receipt!.checks[0]!.exitCode, 1);
+    assert.match(failed.receipt!.checks[0]!.summary, /Forbidden/);
+    const receiptSource = readFileSync(join(prepared.statePath!, 'receipts/failed.reported.json'), 'utf8');
     assert.ok(existsSync(join(prepared.statePath!, 'receipts/failed.reported.json')));
     assert.equal((await check(root, 'drift', 'failed', { report: false, verify: failed.receiptDigest! }, 1)).error, 'DocsWorkReceiptMismatch');
     writeFileSync(join(root, 'docs/input.md'), '# Changed input\n');
@@ -95,11 +127,11 @@ test('C5/C6 failed reports persist; read and configuration drift reject without 
     assert.equal((await check(root, 'drift', 'failed', { report: true }, 1)).error, 'DocsWorkReadChanged');
     const configPath = join(root, 'concord.config.ts'); writeFileSync(configPath, `${readFileSync(configPath, 'utf8')}\n`);
     assert.equal((await check(root, 'drift', 'failed', { report: true }, 1)).error, 'DocsWorkConfigChanged');
-    assert.equal(readFileSync(join(root, 'failed-count'), 'utf8'), '1');
+    assert.equal(readFileSync(join(prepared.statePath!, 'receipts/failed.reported.json'), 'utf8'), receiptSource);
     assert.equal((await finalize(root, 'drift', 1)).error, 'DocsWorkConfigChanged');
     writeFileSync(configPath, 'export default {broken:}');
     assert.equal((await check(root, 'drift', 'failed', { report: true }, 1)).error, 'DocsWorkConfigChanged');
-    assert.equal(readFileSync(join(root, 'failed-count'), 'utf8'), '1');
+    assert.equal(readFileSync(join(prepared.statePath!, 'receipts/failed.reported.json'), 'utf8'), receiptSource);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
@@ -119,14 +151,9 @@ test('scope prepare, exclusive locking, temporary cleanup, symlink rejection and
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
-test('default writing uses main CLI rules on item paths and default finalizer calls checkProject', () => Effect.runPromise(Effect.tryPromise(async () => {
-  const root = fixture(undefined, false);
+test('default writing uses docs check rules on item paths and finalizer calls checkProject', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = await initializedFixture();
   try {
-    // `init` creates valid project contract owners for the aggregate finalizer.
-    const repository = (await LocalRepository.open(root, { initialize: true }));
-    try { (await initialize(repository, false, { testRoots: [] })); } finally { repository.close(); }
-    writeFileSync(join(root, 'docs/writing.md'), renderWritingPolicy({ roots: ['docs/a', 'docs/b'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'Fixture rule' }] }));
-    git(root, 'add', "."); git(root, 'commit', '-qm', 'initialized');
     const run = (await prepare(root, { runId: 'builtin', scopes: ['docs/a/'] }));
     writeFileSync(join(root, 'docs/a/one.md'), '# One\n\nForbidden text.\n');
     const failed = (await check(root, 'builtin', 'a', { report: true }, 1)); assert.equal(failed.receipt!.checks[0]!.status, 'failed');
@@ -135,6 +162,23 @@ test('default writing uses main CLI rules on item paths and default finalizer ca
     const passed = (await report(root, 'builtin', 'a')); (await verify(root, 'builtin', 'a', passed.receiptDigest!));
     const result = (await finalize(root, 'builtin', 1)); assert.equal(result.status, 'failed');
     assert.match(readFileSync(join(run.statePath!, 'finalize.json'), 'utf8'), /Forbidden/);
+    writeFileSync(join(root, 'docs/b/two.md'), '# Two\n\nAllowed text.\n');
+    assert.equal((await finalize(root, 'builtin')).status, 'finalized');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
+test('static writing receipts retain failed findings with a bounded UTF-8 summary', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const root = await initializedFixture();
+  try {
+    await prepare(root, { runId: 'summary', scopes: ['docs/a/'] });
+    writeFileSync(join(root, 'docs/a/one.md'), `# One\n\n${Array.from({ length: 30 }, () => `Forbidden ${'文'.repeat(150)}.`).join('\n\n')}\n`);
+    const failed = await check(root, 'summary', 'a', { report: true }, 1);
+    const result = failed.receipt!.checks[0]!;
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.status, 'failed');
+    assert.ok(Buffer.byteLength(result.summary) <= 4096);
+    assert.match(result.summary, /文/);
+    assert.equal(result.summary.includes('\uFFFD'), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 

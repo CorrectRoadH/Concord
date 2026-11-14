@@ -1,26 +1,21 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from '../support/temporary.ts';
-import { dirname, join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import test from 'node:test';
-import { Effect, Schema } from 'effect';
+import { Effect } from 'effect';
 import { scanAnnotations } from "../../src/domain/tests/index.ts";
 import { scanCode } from "../../src/domain/code/index.ts";
 import { loadDocuments } from "../../src/domain/documents/index.ts";
 import { LocalRepository } from "../support/repository.ts";
-import { readWritingPolicy } from "../../src/domain/writing/index.ts";
-import { projectConfigPath, readProjectConfig } from '../support/support.ts';
+import { readProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
-test('current checkout configures a version-matched runner whose annotations scan cleanly', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('current checkout source and test roots scan cleanly without execution configuration', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = resolve('.');
   const project = (await readProjectConfig(root));
   assert.equal('format' in project, false);
   assert.deepEqual(project.testRoots, ['test']);
   assert.deepEqual(project.sourceRoots, ['src', 'web', 'scripts']);
-  assert.ok(project.runner);
-  assert.deepEqual(project.runner.argv, ['bun', '--no-env-file', '--config=/dev/null', '--conditions=concord-source', 'test', '--preload', './test/support/source-runtime.ts', '--timeout', '120000', '--isolate', '--test-name-pattern', '{pattern}', '{file}']);
+  assert.equal('runner' in project, false);
 
     const repository = (await LocalRepository.open(root));
     try {

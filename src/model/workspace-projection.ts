@@ -1,3 +1,4 @@
+import { NativeBindingViewSchema } from './test-adapter-protocol.ts';
 import { WorkspaceConceptCatalogSchema } from './concept-directory.ts';
 import { Schema } from "effect";
 import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, RoadmapSchema, UseCaseSchema } from "./shared.ts";
@@ -41,7 +42,7 @@ export const WorkspaceProjectionSnapshotSchema = Schema.Struct({
     provider: Schema.Literals(['local', 'github', 'linear']), triage: Schema.Literals(['pending', 'linked']),
     availability: Schema.Literals(['local', 'cached', 'unavailable']), warnings: Schema.Array(Schema.String), remote: Schema.NullOr(Remote) })),
   pages: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String, documentPath: Schema.optional(Schema.String), derivedTitle: Schema.optional(Schema.String) })),
-  cases: Schema.Array(AnnotatedCaseSchema), codes: Schema.Array(CodeDeclarationSchema),
+  cases: Schema.Array(AnnotatedCaseSchema), bindings: Schema.Array(NativeBindingViewSchema), codes: Schema.Array(CodeDeclarationSchema),
   edges: Schema.Array(Schema.Struct({ from: Schema.String, to: Schema.String, relation: Schema.String })), findings: Schema.Array(Finding),
   sources: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })), evidenceIds: Schema.Array(Schema.String),
   templates: Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.String })),

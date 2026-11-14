@@ -1,22 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { basename, join } from "node:path";
-import { Clock, Effect, Schema, Stdio, Stream } from "effect";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { Clock, Effect, Schema } from "effect";
 import { closeRepositoryCache, PersistentCache, HawdbFailure } from "../../base/cache/index.ts";
 import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
-import { diagnosticOutputTail, processDiagnostic, type ProcessDiagnostic, hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runTestProcess, type OwnedProcessResult } from "../../base/process/index.ts";
+import { diagnosticOutputTail, processDiagnostic, type ProcessDiagnostic, hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
 import { observation, observationSchema, type Observation } from "../../model/index.ts";
 import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.ts";
-import { ConcordError, canonical, decode, digest, failure, objectDigest, Text, type AnnotatedCase, type Repository } from "../../model/index.ts";
+import { ConcordError, canonical, decode, digest, failure, objectDigest, Text, type Repository } from "../../model/index.ts";
 import type { LocalRepository } from "../../base/workspace/index.ts";
 import { inPath, type test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.ts";
-import { bindNative } from "./test-adapter-binding.ts";
-import { builtinCollectParse, builtinCollectPlan, builtinReportParse, builtinSelectPlan, builtinVersionCommand } from "./test-adapter-builtins.ts";
-import { ADAPTER_FORMAT, AdapterVersionsSchema, ManifestSchema, PayloadSchemas, test_adapter_protocol_PlanSchema as PlanSchema, ReportSchema, RequestSchema, protocolDecode, protocolJson, type AdapterContext, type AdapterOp, type AdapterPlan, type AdapterReport, type AdapterVersions, type Captured, type NativeManifest, type ProcessStatus } from "../../model/index.ts";
+import { builtinCollectParse, builtinCollectPlan, builtinVersionCommand } from "./test-adapter-builtins.ts";
+import { ADAPTER_FORMAT, AdapterVersionsSchema, ManifestSchema, PayloadSchemas, test_adapter_protocol_PlanSchema as PlanSchema, RequestSchema, protocolDecode, protocolJson, type AdapterContext, type AdapterOp, type AdapterPlan, type AdapterVersions, type Captured, type NativeManifest, type ProcessStatus } from "../../model/index.ts";
 import { readReports, reportPath, type ReportBudget } from "./test-adapter-reports.ts";
 import { Sources, snapshotBytes, snapshotMetadata } from '../../base/sources/index.ts';
 
 // @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
+// @concord-implements docs/feature/local-sdlc/use-case/collect-native-tests.md#discover
 export const adapterFor = (repo: Repository, file: string): TestAdapter | undefined => repo.config.testAdapters?.find(adapter => adapter.include.some(root => inPath(file, root)));
 const ObservationSchema = observationSchema(ManifestSchema);
 const InputScopeSchema = Schema.Struct({ inputs: Text, members: Schema.Array(Schema.Struct({ path: Text, digest: Text })), excluded: Schema.Array(Text), versions: AdapterVersionsSchema });
@@ -29,7 +28,20 @@ export function adapterInputSnapshot(repo: Repository, adapter: TestAdapter): { 
   for (const root of [...repo.config.testRoots, ...(repo.config.sourceRoots ?? []), ...adapter.inputRoots]) {
     for (const path of repo.files(root)) if (!(repo.config.sourceIgnore ?? []).some(ignored => inPath(path, ignored))) paths.add(path);
   }
-  for (const path of [...(repo.config.runner?.sourceFiles ?? []), ...adapter.implementationFiles, ...adapter.lockFiles, 'concord.config.ts']) paths.add(path);
+  for (const path of [...adapter.implementationFiles, ...adapter.lockFiles, 'concord.config.ts']) paths.add(path);
+  const argv = adapter.argv ?? builtinVersionCommand(adapter);
+  if (repo.runtimeInputs === undefined) throw new ConcordError('CollectFailed', 'Adapter runtime inputs are unavailable in this source view');
+  const runtime = repo.runtimeInputs(argv[0]!, adapter.envNames);
+  // Local executable and script operands remain inputs even outside source roots
+  // or sourceIgnore. Their identity does not depend on a second manual registry.
+  for (const [index, argument] of [runtime.executable.path, ...argv.slice(1)].entries()) {
+    if (argument.startsWith('-') || index > 0 && ['-e', '--eval', '-p', '--print', '-c', '--command'].includes(argv[index - 1]!)) continue;
+    const path = relative(repo.root, resolve(repo.root, argument)).replaceAll('\\', '/');
+    if (path === '' || path === '..' || path.startsWith('../') || isAbsolute(path)) continue;
+    if (path.split('/').some(part => part === '.git' || part === 'node_modules')) continue;
+    const metadata = snapshotMetadata(repo, path);
+    if (metadata !== undefined && !metadata.directory) paths.add(path);
+  }
   const members = [...paths].sort().map(path => {
     repo.absolute(path);
     const stat = snapshotMetadata(repo, path);
@@ -38,13 +50,6 @@ export function adapterInputSnapshot(repo: Repository, adapter: TestAdapter): { 
     return { path, digest: digest(snapshotBytes(repo, path)!) };
   });
   for (const path of [...adapter.implementationFiles, ...adapter.lockFiles]) if (!members.some(member => member.path === path) || snapshotMetadata(repo, path) === undefined) throw new ConcordError('CollectFailed', `A declared adapter input is missing: ${path}`);
-  const argv = adapter.argv ?? builtinVersionCommand(adapter);
-  if (adapter.argv && argv[0] && ['node', 'node.exe'].includes(basename(argv[0]))) {
-    const script = argv.find((part, index) => index > 0 && !part.startsWith('-') && /\.[cm]?[jt]s$/u.test(part));
-    if (script && !adapter.implementationFiles.includes(script)) throw new ConcordError('AdapterProtocolInvalid', 'The executed adapter script must be included in implementationFiles');
-  }
-  if (repo.runtimeInputs === undefined) throw new ConcordError('CollectFailed', 'Adapter runtime inputs are unavailable in this source view');
-  const runtime = repo.runtimeInputs(argv[0]!, adapter.envNames);
   const env = Object.fromEntries(adapter.envNames.map(name => [name, runtime.env[name] ?? null]));
   const excluded = ['.git', '**/node_modules', 'AGENTS.md', ...(repo.config.sourceIgnore ?? [])];
   const inputs = objectDigest({ algorithm: 'concord-native-inputs/v2', root: repo.root, config: repo.configSnapshot.digest, adapter, implementation: runtime.implementation, members, excluded, executable: runtime.executable, runtime: runtime.version, env });
@@ -57,7 +62,7 @@ function status(invocationId: string, value: OwnedProcessResult): ProcessStatus 
   return { invocationId, exitCode: value.error === undefined ? value.exitCode : null, signal: value.signal, timedOut: value.timedOut, cancelled: value.cancelled, outputTruncated: value.outputLimitExceeded, cleanup: hasConfirmedOwnedGroupCleanup(value) ? 'complete' : 'unknown' };
 }
 interface InvocationDiagnostic extends ProcessStatus { readonly stdout: string; readonly stderr: string; }
-interface Session { readonly runId: string; readonly directory: string; readonly deadline: number; cleanupKnown: boolean; readonly reportBudget: ReportBudget; readonly reportErrors: string[]; readonly invocations: InvocationDiagnostic[]; readonly processes: ProcessDiagnostic[]; }
+interface Session { readonly runId: string; readonly directory: string; readonly deadline: number; cleanupKnown: boolean; readonly reportBudget: ReportBudget; readonly invocations: InvocationDiagnostic[]; readonly processes: ProcessDiagnostic[]; }
 const sync = <A>(use: () => A | Promise<A>) => Effect.tryPromise({ try: async () => await use(), catch: failure }).pipe(Effect.uninterruptible);
 const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[], use: (session: Session) => Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication>, publish?: (value: A) => void): Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication> => Effect.gen(function* () {
   const service = yield* OwnedProcess;
@@ -67,7 +72,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
   const now = yield* Clock.currentTimeMillis;
   const owned = yield* Effect.acquireRelease(sync(() => repo.snapshot(() => {
       const run = beginRun(repo.root, environment);
-      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, reportErrors: [], invocations: [], processes: [] };
+      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, invocations: [], processes: [] };
       return { run, session };
   })), owned => Effect.gen(function* () {
     const results = yield* service.cleanupResults;
@@ -80,7 +85,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
         const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'adapter-finalize', true, false, environment)!;
         try {
           finalizeRun(repo.root, owned.run, cleanup, environment);
-          if (cleanup) finishRun(repo.root, owned.run, environment); else { quarantineRun(repo.root, owned.run, environment); throw new ConcordError('CleanupUnknown', `Adapter cleanup is unconfirmed; preserve ${owned.session.directory} and runner ownership`, { invocations: owned.session.invocations }); }
+          if (cleanup) finishRun(repo.root, owned.run, environment); else { quarantineRun(repo.root, owned.run, environment); throw new ConcordError('CleanupUnknown', `Adapter cleanup is unconfirmed; preserve ${owned.session.directory} and observation ownership`, { invocations: owned.session.invocations }); }
         } finally { releaseTraceLeaseSync(lease, 'adapter-finalize'); }
       } catch (cause) { quarantineRun(repo.root, owned.run, environment); throw cause; }
     });
@@ -89,10 +94,10 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
   yield* scratch.remove.pipe(Effect.mapError(() => { owned.session.cleanupKnown = false; scratch.preserve(); return new ConcordError('CleanupUnknown', 'Could not remove adapter report directories'); }));
   const finishedAt = yield* Clock.currentTimeMillis;
   yield* sync(() => {
-    if (finishedAt > owned.session.deadline) throw new ConcordError('CollectFailed', 'Adapter run exceeded its wall time budget');
+    if (finishedAt > owned.session.deadline) throw new ConcordError('CollectFailed', 'Adapter collection exceeded its wall time budget');
     repo.snapshot(() => {
       const invalidated = finalizeRun(repo.root, owned.run, owned.session.cleanupKnown, environment);
-      if (invalidated) throw new ConcordError('InputChanged', 'The run was invalidated during adapter execution');
+      if (invalidated) throw new ConcordError('InputChanged', 'The collection was invalidated during observation');
       publish?.(value);
     });
   });
@@ -102,8 +107,15 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
 const callProcess = Effect.fn('testAdapter.process')(function* (repo: Repository, adapter: TestAdapter, session: Session, argv: readonly string[], options: { cwd?: string; stdin?: string; timeout?: number; envNames?: readonly string[]; invocationId?: string; op?: AdapterOp } = {}) {
   const service = yield* OwnedProcess;
   const remaining = session.deadline - (yield* Clock.currentTimeMillis);
-  if (remaining <= 0) return yield* Effect.fail(new ConcordError('CollectFailed', 'Adapter run wall time budget expired'));
-  const value = yield* runTestProcess(argv, { cwd: options.cwd ?? repo.root, env: { ...safeEnvironment(service.environment.env, options.envNames ?? adapter.envNames), ...(adapter.builtin === 'pytest' ? { PYTHONDONTWRITEBYTECODE: '1' } : {}) }, stdin: options.stdin, timeoutMs: Math.max(1, Math.min(remaining, options.timeout ?? adapter.collectTimeoutMs ?? 60_000)), outputLimitBytes: adapter.budgets?.outputBytes ?? 16 * 1024 * 1024 }, repo.root, options.op ? 'adapter exchange' : options.invocationId ? 'native invocation' : 'adapter version', options.op).pipe(Effect.scoped, Effect.mapError(failure));
+  if (remaining <= 0) return yield* Effect.fail(new ConcordError('CollectFailed', 'Adapter collection wall time budget expired'));
+  // Resolve with the caller's captured environment without forwarding PATH or
+  // other environment values that the adapter did not whitelist.
+  const executable = yield* sync(() => {
+    const command = argv[0]!;
+    const input = !isAbsolute(command) && command.includes('/') ? resolve(options.cwd ?? repo.root, command) : command;
+    return repo.runtimeInputs!(input, []).executable.path;
+  });
+  const value = yield* runOwnedProcess([executable, ...argv.slice(1)], { cwd: options.cwd ?? repo.root, env: { ...safeEnvironment(service.environment.env, options.envNames ?? adapter.envNames), ...(adapter.builtin === 'pytest' ? { PYTHONDONTWRITEBYTECODE: '1' } : {}) }, stdin: options.stdin, timeoutMs: Math.max(1, Math.min(remaining, options.timeout ?? adapter.collectTimeoutMs ?? 60_000)), outputLimitBytes: adapter.budgets?.outputBytes ?? 16 * 1024 * 1024 }).pipe(Effect.scoped, Effect.mapError(failure));
   session.processes.push(processDiagnostic(value, repo.root, options.cwd ?? repo.root, options.op ? 'adapter exchange' : options.invocationId ? 'native invocation' : 'adapter version', options.op));
   if (options.invocationId !== undefined) session.invocations.push({ ...status(options.invocationId, value), stdout: diagnosticOutputTail(value.stdout), stderr: diagnosticOutputTail(value.stderr) });
   if (!hasConfirmedOwnedGroupCleanup(value)) { session.cleanupKnown = false; return yield* Effect.fail(new ConcordError('CleanupUnknown', 'Owned adapter process group cleanup is unknown')); }
@@ -120,29 +132,23 @@ const exchange = Effect.fn('testAdapter.exchange')(function* <A>(repo: Repositor
     return response.payload;
   });
 });
-const executePlan = Effect.fn('testAdapter.executePlan')(function* (repo: Repository, adapter: TestAdapter, session: Session, context: AdapterContext, plan: AdapterPlan, collecting: boolean, requested?: readonly string[]) {
+const executePlan = Effect.fn('testAdapter.executePlan')(function* (repo: Repository, adapter: TestAdapter, session: Session, context: AdapterContext, plan: AdapterPlan) {
   yield* sync(() => {
     if (plan.invocations.length > (adapter.budgets?.invocations ?? 128) || new Set(plan.invocations.map(item => item.invocationId)).size !== plan.invocations.length) throw new ConcordError('AdapterProtocolInvalid', 'Invocation count exceeds the budget or IDs are repeated');
-    const assigned: string[] = [];
     for (const item of plan.invocations) {
       if (!/^[A-Za-z0-9_-]+$/u.test(item.invocationId) || item.envNames.some(name => !adapter.envNames.includes(name)) || item.argv.some(argument => argument.includes('\0'))) throw new ConcordError('AdapterProtocolInvalid', 'Unsafe invocation identity, arguments or environment');
       if (item.cwd !== '.') { reportPath(item.cwd); repo.absolute(item.cwd); }
       item.reports.forEach(reportPath);
-      if (!collecting) {
-        if (!item.requested?.length || item.requested.some(id => !requested?.includes(id))) throw new ConcordError('AdapterProtocolInvalid', 'Each select invocation must own a nonempty requested subset');
-        assigned.push(...item.requested);
-      }
     }
-    if (!collecting && (new Set(assigned).size !== assigned.length || assigned.length !== requested?.length)) throw new ConcordError('AdapterProtocolInvalid', 'Selection invocation subsets do not partition requested IDs exactly once');
   });
   const captures: Captured[] = [];
   for (const item of plan.invocations) {
     const directory = join(context.reportDirectory, item.invocationId);
     const sources = yield* Sources;
     yield* sources.createReportDirectory(directory);
-    const result = yield* callProcess(repo, adapter, session, item.argv, { invocationId: item.invocationId, cwd: item.cwd === '.' ? repo.root : repo.absolute(item.cwd), envNames: item.envNames, timeout: collecting ? adapter.collectTimeoutMs ?? 60_000 : adapter.runTimeoutMs ?? 300_000 });
-    if (collecting && !hasSuccessfulOwnedProcessResult(result)) return yield* Effect.fail(new ConcordError('CollectFailed', 'A native collection invocation did not exit normally with code 0'));
-    const reports = yield* readReports(directory, item.reports, adapter, session.reportBudget).pipe(Effect.catch(error => { if (collecting) return Effect.fail(error); session.reportErrors.push(error.code); return Effect.succeed([]); }));
+    const result = yield* callProcess(repo, adapter, session, item.argv, { invocationId: item.invocationId, cwd: item.cwd === '.' ? repo.root : repo.absolute(item.cwd), envNames: item.envNames, timeout: adapter.collectTimeoutMs ?? 60_000 });
+    if (!hasSuccessfulOwnedProcessResult(result)) return yield* Effect.fail(new ConcordError('CollectFailed', 'A native collection invocation did not exit normally with code 0'));
+    const reports = yield* readReports(directory, item.reports, adapter, session.reportBudget);
     captures.push({ status: status(item.invocationId, result), stdout: result.stdout, stderr: result.stderr, reports });
   }
   return captures;
@@ -177,35 +183,39 @@ const collectOne = Effect.fn('testAdapter.collect')(function* (repo: LocalReposi
   const sources = yield* Sources;
   yield* sources.createReportDirectory(reportDirectory);
   const context: AdapterContext = { root: repo.root, runId: session.runId, planId: randomUUID(), inputs: before.inputs, reportDirectory };
-  const versions: { -readonly [K in keyof AdapterVersions]: AdapterVersions[K] } = { framework: adapter.frameworkVersion, runtime: process.versions.bun ?? 'unavailable' };
+  const versions: { -readonly [K in keyof AdapterVersions]: AdapterVersions[K] } = { framework: 'unknown', runtime: 'unknown' };
   if (adapter.builtin) {
     const version = yield* callProcess(repo, adapter, session, builtinVersionCommand(adapter));
-    if (!hasSuccessfulOwnedProcessResult(version) || !`${version.stdout}\n${version.stderr}`.split(/[\s/]+/u).some(token => token === adapter.frameworkVersion || adapter.builtin === 'node-test' && token === `v${adapter.frameworkVersion}`)) return yield* Effect.fail(new ConcordError('CollectFailed', 'Installed framework version does not match the pinned adapter version'));
+    const output = `${version.stdout}\n${version.stderr}`.trim();
+    if (!hasSuccessfulOwnedProcessResult(version) || output === '') return yield* Effect.fail(new ConcordError('CollectFailed', 'Framework version could not be observed'));
+    if (adapter.frameworkVersion !== undefined && output !== adapter.frameworkVersion && !output.split(/[\s/]+/u).some(token => token === adapter.frameworkVersion || adapter.builtin === 'node-test' && token === `v${adapter.frameworkVersion}`)) return yield* Effect.fail(new ConcordError('CollectFailed', 'Installed framework version does not match the pinned adapter version'));
     versions.observedFramework = version.stdout.trim() || version.stderr.trim();
+    const observedVersion = adapter.builtin === 'go' ? /\bgo\d+\.\d+(?:\.\d+)?(?:[a-z]+\d+)?\b/u.exec(output)?.[0] : /(?:^|[\s/])v?(\d+\.\d+\.\d+(?:[-+][\w.-]+)?)(?=[\s/]|$)/u.exec(output)?.[1];
+    versions.framework = adapter.frameworkVersion ?? observedVersion ?? versions.observedFramework;
     const runtimeCommand = adapter.builtin === 'cargo' ? ['rustc', '+stable', '--version'] : adapter.builtin === 'pytest' ? ['uv', 'run', '--offline', '--no-project', '--with', 'pytest==9.2.0', 'python', '--version'] : adapter.builtin === 'vitest' ? ['node', '--version'] : undefined;
     if (runtimeCommand) {
       const runtime = yield* callProcess(repo, adapter, session, runtimeCommand);
-      if (hasSuccessfulOwnedProcessResult(runtime)) {
+      if (hasSuccessfulOwnedProcessResult(runtime) && `${runtime.stdout}${runtime.stderr}`.trim() !== '') {
         versions.observedRuntime = runtime.stdout.trim() || runtime.stderr.trim();
-        if (adapter.builtin === 'vitest') versions.runtime = versions.observedRuntime;
+        versions.runtime = versions.observedRuntime;
       } else if (adapter.builtin === 'vitest') return yield* Effect.fail(new ConcordError('CollectFailed', 'Project Node runtime version could not be read'));
     } else {
-      versions.observedRuntime = adapter.builtin === 'go' || adapter.builtin === 'node-test' ? versions.observedFramework : process.versions.bun ?? 'unavailable';
-      if (adapter.builtin === 'node-test') versions.runtime = versions.observedRuntime;
+      versions.observedRuntime = versions.observedFramework;
+      versions.runtime = versions.observedRuntime;
     }
   }
   const plan = adapter.builtin ? yield* builtinCollectPlan(adapter, context, files) : yield* exchange(repo, adapter, session, context, 'collect-plan', { files, members: before.members }, PlanSchema);
-  const captures = yield* executePlan(repo, adapter, session, context, plan, true);
-  const collected = adapter.builtin ? yield* builtinCollectParse(adapter, context, files, captures) : yield* exchange(repo, adapter, session, context, 'collect-parse', { planContext: plan.planContext, captures }, ManifestSchema);
+  const captures = yield* executePlan(repo, adapter, session, context, plan);
+  const collected = adapter.builtin ? yield* builtinCollectParse({ ...adapter, frameworkVersion: versions.framework }, context, files, captures) : yield* exchange(repo, adapter, session, context, 'collect-parse', { planContext: plan.planContext, captures }, ManifestSchema);
   // Provider completeness covers collection only. System/toolchain/cache inputs
   // remain outside the repository snapshot, including for a trusted provider.
-  const manifest: NativeManifest = { ...collected, completeness: { complete: false, gaps: [...new Set([...collected.completeness.gaps, 'ExternalInputUnknown'])] } };
+  const manifest: NativeManifest = { ...collected, completeness: { complete: false, gaps: [...new Set([...collected.completeness.gaps, 'ExternalInputUnknown', ...(versions.framework === 'unknown' ? ['FrameworkVersionUnavailable'] : []), ...(versions.runtime === 'unknown' ? ['RuntimeVersionUnavailable'] : [])])] } };
   yield* revalidateReports(adapter, context, plan, captures);
   yield* sync(() => repo.snapshot(() => { validateManifest(repo, adapter, files, manifest); if (adapterInputSnapshot(repo, adapter).inputs !== before.inputs) throw new ConcordError('InputChanged', 'Adapter collection inputs or member set changed'); }));
-  return { adapter, manifest, context, before, providerComplete: collected.completeness.complete, versions };
+  return { adapter, manifest, context, before, versions };
 });
 // @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
+// @concord-implements docs/feature/local-sdlc/use-case/collect-native-tests.md#discover
 export function readNativeObservations(repo: Repository): readonly { adapterId: string; observation: Observation<NativeManifest>; inputScope?: typeof InputScopeSchema.Type }[] {
   const results: { adapterId: string; observation: Observation<NativeManifest>; inputScope?: typeof InputScopeSchema.Type }[] = [];
   for (const adapter of repo.config.testAdapters ?? []) {
@@ -241,11 +251,11 @@ function publishObservations(repo: LocalRepository, results: readonly { adapter:
 }
 // @concord-end
 // @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
+// @concord-implements docs/feature/local-sdlc/use-case/collect-native-tests.md#discover
 export const collectNativeTests = Effect.fn('collectNativeTests')(function* (repo: LocalRepository, requestedFiles: readonly string[] = []) {
   const adapters = repo.config.testAdapters ?? [];
   const files = yield* sync(() => repo.snapshot(() => requestedFiles.length ? [...new Set(requestedFiles)] : [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].filter(file => adapterFor(repo, file) !== undefined && /(?:\.(?:[cm]?[jt]sx?|py|go|rs))$/u.test(file))));
-  yield* sync(() => { for (const file of files) { repo.absolute(file); if (!adapterFor(repo, file)) throw new ConcordError('NativeSelectionUnsupported', `No adapter covers ${file}`); } });
+  yield* sync(() => { for (const file of files) { repo.absolute(file); if (!adapterFor(repo, file)) throw new ConcordError('NativeBindingUnavailable', `No adapter covers ${file}`); } });
   yield* sync(() => {
     PersistentCache.repository(repo).prepareWrite({ create: true });
     closeRepositoryCache(repo);
@@ -254,61 +264,5 @@ export const collectNativeTests = Effect.fn('collectNativeTests')(function* (rep
     return yield* Effect.forEach(adapters.filter(adapter => files.some(file => adapter.include.some(root => inPath(file, root)))), adapter => collectOne(repo, adapter, files.filter(file => adapter.include.some(root => inPath(file, root))), session), { concurrency: 1 });
   }), results => { publishObservations(repo, results); });
   return { operation: 'test-discover', observations: results.map(item => ({ adapterId: item.adapter.id, observation: { ...observation(item.manifest, item.before.inputs, item.manifest.completeness.gaps, true, new Date().toISOString()), complete: item.manifest.completeness.complete }, inputScope: { ...item.before, versions: item.versions } })) };
-});
-// @concord-end
-export interface NativeExecution { readonly adapter: TestAdapter; readonly inputs: string; readonly manifest: NativeManifest; readonly requested: readonly string[]; readonly report: AdapterReport; readonly statuses: readonly ProcessStatus[]; readonly plan: AdapterPlan; readonly planId: string; readonly versions: AdapterVersions; readonly inputScope: ReturnType<typeof adapterInputSnapshot>; readonly processes: readonly ProcessDiagnostic[]; }
-// @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
-export const executeNativeCase = Effect.fn('executeNativeCase')(function* (repo: LocalRepository, marker: AnnotatedCase, requireNative = false, publish?: (execution: NativeExecution) => void) {
-  const adapter = adapterFor(repo, marker.file);
-  if (!adapter) {
-    if (requireNative) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'This file uses the command runner'));
-    return undefined;
-  }
-  yield* sync(() => {
-    PersistentCache.repository(repo).prepareWrite({ create: true });
-    closeRepositoryCache(repo);
-  });
-  let cacheWarning: ConcordError | undefined;
-  const result = yield* withSession(repo, [adapter], session => Effect.gen(function* () {
-    const collection = yield* collectOne(repo, adapter, [marker.file], session);
-    const requested = yield* sync(() => repo.snapshot(() => bindNative(repo, marker, collection.manifest)));
-    const caps = collection.manifest.capabilities;
-    if (!requested || !caps.realCollection || !caps.exactSelection || !caps.perItemReport || !collection.providerComplete) {
-      if (requireNative || marker.native !== undefined) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'Current collection cannot authorize an exact native selection'));
-      return undefined;
-    }
-    const runDirectory = join(session.directory, `${adapter.id}-selected`);
-    const sources = yield* Sources;
-    yield* sources.createReportDirectory(runDirectory);
-    const context = { ...collection.context, reportDirectory: runDirectory, planId: randomUUID() };
-    const plan = adapter.builtin ? yield* builtinSelectPlan(adapter, context, collection.manifest, requested) : yield* exchange(repo, adapter, session, context, 'select-plan', { nativeIds: requested, manifestInputs: context.inputs, manifest: collection.manifest }, PlanSchema);
-    const captures = yield* executePlan(repo, adapter, session, context, plan, false, requested);
-    const invalidReport = (gaps: readonly string[]): AdapterReport => ({ observed: [], capabilities: collection.manifest.capabilities, completeness: { complete: false, gaps } });
-    const parse = adapter.builtin ? sync(() => protocolDecode(ReportSchema, builtinReportParse(adapter, requested.map(id => collection.manifest.cases.find(item => item.nativeId === id)!), captures))) : exchange(repo, adapter, session, context, 'report-parse', { planContext: plan.planContext, requested, captures }, ReportSchema);
-    let report = session.reportErrors.length ? invalidReport(session.reportErrors) : yield* parse.pipe(Effect.catch(error => error.code === 'DependenciesModified' ? Effect.fail(error) : Effect.succeed(invalidReport([error.code]))));
-    yield* revalidateReports(adapter, context, plan, captures).pipe(Effect.catch(cause => Effect.sync(() => { report = invalidReport([cause.code]); })));
-    yield* sync(() => {
-      if (report.observed.length > (adapter.budgets?.cases ?? 100_000)) report = invalidReport(['AdapterProtocolInvalid']);
-    });
-    yield* sync(() => repo.snapshot(() => { if (adapterInputSnapshot(repo, adapter).inputs !== collection.before.inputs) throw new ConcordError('InputChanged', 'Native execution inputs or member set changed'); }));
-    return { adapter, inputs: collection.before.inputs, manifest: collection.manifest, requested, report, statuses: captures.map(captured => captured.status), plan, planId: context.planId, versions: collection.versions, inputScope: collection.before, processes: session.processes } satisfies NativeExecution;
-  }), execution => {
-    if (execution) {
-      if (adapterInputSnapshot(repo, adapter).inputs !== execution.inputs) throw new ConcordError('InputChanged', 'Inputs changed before native evidence publication');
-      try { publishObservations(repo, [{ adapter, manifest: execution.manifest, before: execution.inputScope, versions: execution.versions }]); }
-      catch (cause) {
-        if (!(cause instanceof ConcordError) || cause.code !== 'CacheUpdateFailed') throw cause;
-        cacheWarning = cause;
-      }
-      publish?.(execution);
-    }
-  });
-  if (cacheWarning) {
-    const stdio = yield* Effect.serviceOption(Stdio.Stdio);
-    if (stdio._tag === 'Some') yield* Stream.run(Stream.succeed(`${JSON.stringify({ warning: cacheWarning.code, message: cacheWarning.message, details: cacheWarning.details })}\n`), stdio.value.stderr({ endOnDone: false })).pipe(Effect.ignore);
-  }
-  return result;
 });
 // @concord-end

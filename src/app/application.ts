@@ -1,3 +1,4 @@
+import { nativeBindings, readNativeObservations } from '../domain/tests/index.ts';
 import { RuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
 import { renderPage } from './page-render.ts';
 import { workspaceSourceDigest } from './workspace-source.ts';
@@ -11,7 +12,7 @@ import { Effect, Result, Predicate } from "effect";
 import { recoverLocalState } from "./recovery.ts";
 import { waitForPublication } from "../base/publication/index.ts";
 import { getGitStatus, type GitBaselineCache } from "./git-view.ts";
-import { cacheStatus, clearCache, closeFixedIssue, previewCacheClear, scanAnnotations } from "../domain/tests/index.ts";
+import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../domain/tests/index.ts";
 import { codeSnippet, locateCode } from "./code-commands.ts";
 import { scanCode } from "../domain/code/index.ts";
 import { adoptRoadmap } from "./adopt-roadmap.ts";
@@ -135,7 +136,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
   const environment = yield* RuntimeEnvironment;
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput, environment));
   const required = yield* sync('view.initialization', () => projectInitializationRequired(root, false, environment));
-  if (required) return { root, project: null, complete: true, configDigest: null, documents: [], feedback: [], pages: [], cases: [], codes: [], edges: [], findings: [], sources: [], evidenceIds: [], templates: [], cache: { status: 'off' }, diagnostics: uninitializedDoctor(required, 'unknown') };
+  if (required) return { root, project: null, complete: true, configDigest: null, documents: [], feedback: [], pages: [], cases: [], bindings: [], codes: [], edges: [], findings: [], sources: [], evidenceIds: [], templates: [], cache: { status: 'off' }, diagnostics: uninitializedDoctor(required, 'unknown') };
   const config = yield* directConfig(root, timing);
   const templates = yield* listTemplates();
   if (config.project === null) {
@@ -148,6 +149,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       feedback: [],
       pages: config.source === undefined ? [] : [{ path: config.path, body: config.source, digest: config.configDigest! }],
       cases: [],
+      bindings: [],
       codes: [],
       edges: [],
       findings: [],
@@ -199,6 +201,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       feedback: listFeedback(repo, inspected.documents),
       pages: inspected.pages,
       cases: cases.cases,
+      bindings: nativeBindings(repo, cases.cases, readNativeObservations(repo)),
       codes,
       edges,
       findings,
@@ -378,20 +381,12 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
     return yield* withRepository(root, (repo) => initialize(repo, dryRun, {
       testRoots: action.docsOnly ? [] : action.testRoots,
       sourceRoots: action.sourceRoots,
-      runner: action.runner,
     }), { initialize: true, dryRun }, timing);
   }
   if (action.action === 'check') return yield* checkCurrentProject(root);
   if (action.action === 'recover') return yield* recoverLocalState(root);
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
   if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);
-  if (action.action === 'issue.close') {
-    if (action.fixed) {
-      if (action.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'fixed verification does not accept --dry-run'));
-      return yield* withRepository(root, repo => closeFixedIssue(repo, action.id, action.reason ?? 'Verified fix', action.defect, action.fix), {}, timing);
-    }
-    if (action.defect !== undefined || action.fix !== undefined) return yield* Effect.fail(new ConcordError('InvalidOption', '--defect and --fix require --fixed'));
-  }
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
 });

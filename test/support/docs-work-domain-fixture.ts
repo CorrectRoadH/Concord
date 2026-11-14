@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { Effect, Result, Schema } from 'effect';
 import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from '../../src/app/index.ts';
-import { model_DocsWorkError as DocsWorkError } from '../../src/model/index.ts';
-import { runApplication } from './repository.ts';
+import { model_DocsWorkError as DocsWorkError, renderWritingPolicy } from '../../src/model/index.ts';
+import { LocalRepository, runApplication } from './repository.ts';
+import { fixture, git } from './docs-work-fixture.ts';
+import { initialize } from './operations.ts';
 
 const OutputSchema = Schema.Struct({
   operation: Schema.optional(Schema.String), runId: Schema.optional(Schema.String), statePath: Schema.optional(Schema.String), error: Schema.optional(Schema.String),
@@ -34,4 +37,18 @@ export const report = async (root: string, runId: string, itemId: string) => (aw
 export const verify = async (root: string, runId: string, itemId: string, digest: string) => (await check(root, runId, itemId, { report: false, verify: digest }));
 export const finalize = async (root: string, runId: string, status = 0) => outcome(finalizeDocsWork(runId, root), status !== 0);
 export const show = async (root: string, runId: string) => outcome(showDocsWork(runId, root));
-export const item = (id: string, write: string[], rest: Record<string, unknown> = {}) => ({ id, goal: `Update ${id}`, write, checks: ['ok'], ...rest });
+export const item = (id: string, write: string[], rest: Record<string, unknown> = {}) => ({ id, goal: `Update ${id}`, write, ...rest });
+
+export async function initializedFixture(): Promise<string> {
+  const root = fixture(undefined, false);
+  try {
+    const repository = await LocalRepository.open(root, { initialize: true, persistentCache: 'off' });
+    try { await initialize(repository, false, { testRoots: [] }); } finally { repository.close(); }
+    writeFileSync(join(root, 'docs/writing.md'), renderWritingPolicy({ roots: ['docs/a', 'docs/b'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'Fixture rule' }] }));
+    git(root, 'add', '.'); git(root, 'commit', '-qm', 'initialized');
+    return root;
+  } catch (cause) {
+    rmSync(root, { recursive: true, force: true });
+    throw cause;
+  }
+}

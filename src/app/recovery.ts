@@ -8,7 +8,7 @@ import { genericPrivateDirectorySync, recoverPublicationLeaseSync, Publication }
 import { CoordinationError } from "../base/publication/index.ts";
 import { ConcordError, failure } from "../model/index.ts";
 import { assertCurrentRuntimeFormat, discoverRoot } from "../base/workspace/index.ts";
-import { inspectRunner } from "../base/publication/index.ts";
+import { inspectObservationSlot } from "../base/publication/index.ts";
 
 
 export const pendingJournals = Effect.fn('recovery.pendingJournals')(function*(root: string) {
@@ -32,7 +32,7 @@ export function recoveryFailure(cause: unknown): ConcordError {
 
 /** Reclaim once, then select and recheck journals under each short lease.
  * Engines must not silently reclaim an owner that arrived after dispatch. */
-export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?: string, releaseTestSlot?: string) {
+export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?: string, releaseObservationSlot?: string) {
   const runtime = yield* RuntimeEnvironment;
   const publication = yield* Publication;
   const initial = yield* Effect.try({ try: () => {
@@ -46,15 +46,10 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
     const pending = yield* pendingJournals(initial.root);
     return yield* Effect.try({ try: () => {
       if (pending.length > 1) throw new ConcordError('RecoveryConflict', 'Multiple publication journals exist; preserve the conflicting recovery state');
-      if (releaseTestSlot !== undefined) recovery.releaseRunner(initial.root, releaseTestSlot, runtime.env);
-      return { ...initial, trace: pending.length === 1 && pending[0] !== join(initial.privateDir, 'journal.json'), pending: pending.length > 0, runner: inspectRunner(initial.root, runtime.env) };
+      if (releaseObservationSlot !== undefined) recovery.releaseObservationSlot(initial.root, releaseObservationSlot, runtime.env);
+      return { ...initial, trace: pending.length === 1 && pending[0] !== join(initial.privateDir, 'journal.json'), pending: pending.length > 0, observationSlot: inspectObservationSlot(initial.root, runtime.env) };
     }, catch: recoveryFailure });
   }));
-  if (selected.runner.status === 'blocked') return {
-    operation: 'recover', status: 'blocked', journalStatus: selected.pending ? 'pending' : 'clean', changedPaths: [], warnings: [],
-    testSlot: selected.runner,
-    coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner: selected.runner },
-  };
   const completion = yield* Effect.gen(function*() {
     if (selected.trace) {
       const receipt = yield* (recovery.recoverTrace(selected.root, { reclaimPublication: false }) as Effect.Effect<unknown, unknown, RuntimeEnvironment>).pipe(Effect.mapError(recoveryFailure));
@@ -66,18 +61,18 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
       repo => Effect.sync(() => repo.close()),
     ));
   });
-  const runner = yield* Effect.scoped(Effect.gen(function*() {
+  const observationSlot = yield* Effect.scoped(Effect.gen(function*() {
     yield* publication.lease(selected.root, 'recover-verify', true, false);
     yield* Effect.try({ try: () => assertCurrentRuntimeFormat(selected.root, genericPrivateDirectorySync(selected.root, runtime.env)), catch: recoveryFailure });
     if ((yield* pendingJournals(selected.root)).length > 0) return yield* Effect.fail(new ConcordError('RecoveryRequired', 'A publication journal remains after recovery; preserve it and retry recovery'));
-    return yield* Effect.try({ try: () => inspectRunner(selected.root, runtime.env), catch: recoveryFailure });
+    return yield* Effect.try({ try: () => inspectObservationSlot(selected.root, runtime.env), catch: recoveryFailure });
   }));
   return {
     ...completion,
-    status: runner.status === 'blocked' ? 'blocked' : completion.status,
+    status: observationSlot.status === 'blocked' ? 'blocked' : completion.status,
     journalStatus: completion.journalStatus ?? completion.status,
     warnings: completion.warnings ?? [],
-    testSlot: releaseTestSlot !== undefined && runner.status === 'absent' ? { status: 'released', token: releaseTestSlot } : runner,
-    coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner },
+    observationSlot: releaseObservationSlot !== undefined && observationSlot.status === 'absent' ? { status: 'released', token: releaseObservationSlot } : observationSlot,
+    coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, observationSlot },
   };
 });

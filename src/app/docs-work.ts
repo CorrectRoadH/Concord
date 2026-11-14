@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { FinalizeSchema, model_PlanSchema as PlanSchema, ReceiptSchema, RunSchema, fail, problem, type Check, type Item, type Plan, type Problem, type Receipt, type Run } from "../model/index.ts";
-import { atomicJson, decode, digestPaths, expand, git, hash, matches, now, nul, objectHash, overlap, readJson, runProcess, safePath, statePath, snapshotPaths, tailSummary, withLock } from "../base/publication/index.ts";
+import { atomicJson, decode, digestPaths, expand, git, hash, matches, now, nul, objectHash, overlap, readJson, safePath, statePath, snapshotPaths, tailSummary, withLock } from "../base/publication/index.ts";
 import type { shared_ProjectConfig as ProjectConfig } from "../model/index.ts";
 import * as storage from "../base/workspace/index.ts";
 import * as config from "../base/workspace/index.ts";
@@ -101,7 +101,7 @@ export const prepareDocsWork = Effect.fn('DocsWork.prepare')(function*(input: { 
     if (ids.has(item.id)) problems.push({ code: 'DuplicateItemId', item: item.id, message: 'Item ID is duplicated' });
     ids.add(item.id);
     if (!item.write.length) problems.push({ code: 'EmptyWrite', item: item.id, message: 'Write set is empty' });
-    for (const check of item.checks) if (check !== 'writing' && ctx.config.docsWork?.checks?.[check] === undefined) problems.push({ code: 'UnknownCheck', item: item.id, message: `Unknown check ${check}` });
+    for (const check of item.checks) if (check !== 'writing') problems.push({ code: 'UnknownCheck', item: item.id, message: `Unknown check ${check}` });
     for (const dependency of item.blockedBy) if (!items.some(candidate => candidate.id === dependency)) problems.push({ code: 'UnknownDependency', item: item.id, message: `Unknown dependency ${dependency}` });
     if (ancestors(item, items).has(item.id)) problems.push({ code: 'DependencyCycle', item: item.id, message: 'Dependency cycle' });
     for (const entry of item.write) for (const path of sharedPaths) if (overlap(entry, path)) problems.push({ code: 'SharedPathWrite', item: item.id, path, message: 'Write owns a shared path' });
@@ -181,17 +181,17 @@ export const current = Effect.fn('DocsWork.current')(function*(ctx: Context, run
 
 const runBuiltin = Effect.fn('DocsWork.runBuiltin')(function*(ctx: Context, kind: 'writing' | 'finalizer', paths: readonly string[] = []) {
   return yield* Effect.acquireUseRelease(
-    Effect.tryPromise({ try: () => ctx.main.storage.LocalRepository.open(ctx.root, { access: 'read', runtime: ctx.runtime }), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) }),
+    Effect.tryPromise({ try: () => ctx.main.storage.LocalRepository.open(ctx.root, { access: 'read', persistentCache: 'off', runtime: ctx.runtime }), catch: cause => fail('DocsWorkPlanInvalid', String(cause)) }),
     repo => Effect.tryPromise({ try: async () => {
       if (kind === 'finalizer') {
-        const result = await ctx.main.project.checkProject(repo);
+        const result = await ctx.main.project.checkProject(repo, 'off');
         const output = JSON.stringify(result);
         return { exitCode: result.ok ? 0 : 1, outputDigest: hash(output), summary: tailSummary(output) };
       }
       // checkWriting's optional argument selects a policy, not a document.
       // Keep its default rule evaluation, then project findings onto this item.
       const selected = new Set(paths);
-      const report = ctx.main.writing.checkWriting(repo);
+      const report = ctx.main.writing.checkWriting(repo, undefined, false);
       const findings = report.findings.filter(finding => selected.has(finding.file));
       const result = { ok: findings.length === 0, findings };
       const output = JSON.stringify(result);
@@ -202,8 +202,8 @@ const runBuiltin = Effect.fn('DocsWork.runBuiltin')(function*(ctx: Context, kind
 });
 
 const runCheck = Effect.fn('DocsWork.runCheck')(function*(ctx: Context, id: string, paths: readonly string[]) {
-  const command = ctx.config.docsWork?.checks?.[id];
-  const result = command ? yield* runProcess(ctx.root, command.argv.flatMap(arg => arg === '{paths}' ? paths : [arg]), command.timeoutMs ?? 600000) : yield* runBuiltin(ctx, 'writing', paths);
+  if (id !== 'writing') return yield* problem('Invalid Docs Work check', [{ code: 'UnknownCheck', message: `Unknown check ${id}` }]);
+  const result = yield* runBuiltin(ctx, 'writing', paths);
   return { id, status: result.exitCode === 0 ? 'passed' as const : 'failed' as const, ...result } satisfies Check;
 });
 
@@ -233,7 +233,7 @@ export const checkDocsWork = Effect.fn('DocsWork.check')(function*(runId: string
       }
     }
     const checks = yield* Effect.forEach(item.checks, id => runCheck(ctx, id, state.write), { concurrency: 1 });
-    // A command which edits its input cannot certify the pre-check digest.
+    // Static checks cannot certify inputs that changed while they were read.
     const after = yield* current(ctx, run, item);
     if (after.writeDigest !== state.writeDigest) return yield* fail('DocsWorkReceiptMismatch', 'Check changed the write set');
     const passed = checks.every(check => check.status === 'passed');
@@ -273,9 +273,7 @@ export const finalizeDocsWork = Effect.fn('DocsWork.finalize')(function*(runId: 
       }
     }
     if (blocked.length) return { operation: 'docs-work-finalize' as const, status: 'blocked' as const, blocked };
-    const allWrites = [...new Set(yield* expand(ctx.root, run.items.flatMap(item => item.write), yield* universe(ctx.root, run.baseCommit)))];
-    const command = ctx.config.docsWork?.finalizer;
-    const finalizer = command ? yield* runProcess(ctx.root, command.argv.flatMap(arg => arg === '{paths}' ? allWrites : [arg]), command.timeoutMs ?? 600000) : yield* runBuiltin(ctx, 'finalizer');
+    const finalizer = yield* runBuiltin(ctx, 'finalizer');
     const result = { operation: 'docs-work-finalize' as const, status: finalizer.exitCode === 0 ? 'finalized' as const : 'failed' as const, finalizer };
     yield* atomicJson(join(path, 'finalize.json'), result);
     return result;

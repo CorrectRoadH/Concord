@@ -873,8 +873,6 @@ function LifecycleActions({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   const [reason, setReason] = React.useState("")
   const [target, setTarget] = React.useState("")
-  const [defect, setDefect] = React.useState("")
-  const [fix, setFix] = React.useState("")
   const [pending, setPending] = React.useState(false)
   function invoke(action: ViewAction, text: string): void {
     if (pending) return
@@ -901,9 +899,6 @@ function LifecycleActions({ document }: { document: WorkspaceDocument }) {
             <Button variant="outline" disabled={pending} onClick={() => invoke({ action: "issue.link", id: metadata.id, memory: target }, "Issue 已关联 Memory。") }><Link2 data-icon="inline-start" />关联 Memory</Button>
             <Field label="关闭理由"><Textarea aria-label="Issue 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
             <Button disabled={pending || !reason.trim()} onClick={() => invoke({ action: "issue.close", id: metadata.id, reason }, "Issue 已关闭。")}>关闭草稿</Button>
-            <Field label="缺陷提交" hint="留空时从回归测试历史推导"><Input aria-label="缺陷提交" value={defect} onChange={(event) => setDefect(event.target.value)} /></Field>
-            <Field label="修复提交" hint="留空使用 HEAD"><Input aria-label="修复提交" value={fix} onChange={(event) => setFix(event.target.value)} /></Field>
-            <Button disabled={pending} onClick={() => invoke({ action: "issue.close", id: metadata.id, fixed: true, ...(reason.trim() ? { reason } : {}), ...(defect.trim() ? { defect: defect.trim() } : {}), ...(fix.trim() ? { fix: fix.trim() } : {}) }, "修复已核验，Issue 已关闭。")}>{pending ? "正在处理…" : "核验修复并关闭"}</Button>
           </>
         )}
       </div>

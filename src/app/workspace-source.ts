@@ -16,7 +16,7 @@ export const workspaceSourceDigest = Effect.fn('workspaceSourceDigest')(function
   return yield* Effect.scoped(Effect.gen(function*() {
     const repo = yield* workspace.openRead(root, { access: 'read', optimistic: true, persistentCache: 'off' });
     return yield* Effect.try({ try: () => repo.snapshot(() => {
-      const paths = new Set(['concord.config.ts', ...(repo.config.runner?.sourceFiles ?? [])]);
+      const paths = new Set(['concord.config.ts', ]);
       for (const directory of ['docs', 'memory', 'feedback']) for (const path of repo.files(directory)) paths.add(path);
       for (const directory of [...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])]) for (const path of repo.files(directory, 'source')) paths.add(path);
       const inputs = [...paths].sort().map(path => { const bytes = repo.readBytes(path); return [path, bytes === undefined ? null : digest(bytes)]; });

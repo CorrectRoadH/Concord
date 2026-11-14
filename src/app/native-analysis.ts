@@ -31,7 +31,7 @@ export function captureNativeAnalysis(repo: Repository, cases: readonly Annotate
       scopes.set(test.id, {
         adapterId: adapter.id, manifestInputs: item.observation.inputs, manifestDigest: objectDigest(manifest),
         bindingVersion: 'concord.native-analysis-binding/v1', nativeIds: [firstId, ...ids.slice(1)], ranges: [firstRange, ...ranges.slice(1)],
-        selectionDigest: objectDigest({ ids, selections: selected.map(native => native!.selection), ranges, versions: item.inputScope?.versions ?? null }),
+        selectionDigest: objectDigest({ ids, ranges, versions: item.inputScope?.versions ?? null }),
         gaps: [...new Set([...item.observation.gaps, ...manifest.completeness.gaps])].sort(),
       });
     } catch (cause) {

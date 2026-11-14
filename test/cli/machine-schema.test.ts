@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Schema, SchemaRepresentation } from 'effect';
 import { machineSchema } from '../../src/model/index.ts';
 import { createConsumer } from '../support/consumer.ts';
+import { createDocument } from '../support/operations.ts';
+import { LocalRepository, runApplication } from '../support/repository.ts';
+import { getWorkspaceSnapshot } from '../../src/app/index.ts';
 import { runCli } from '../support/cli.ts';
 import { tmpdir } from '../support/temporary.ts';
 
-// @use-case docs/feature/local-sdlc/use-case/run-tests-with-own-runner.md#schema
+// @feature docs/feature/local-sdlc/cli.md#机器可读-schema
 test('schema is available without a repository and rejects unknown configuration fields', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-schema-'));
   try {
@@ -25,6 +28,65 @@ test('schema is available without a repository and rejects unknown configuration
     assert.deepEqual(JSON.parse(missing.stderr).details.available, ['config', 'test-adapter', 'change-preview', 'model', 'workspace-wait']);
     assert.equal(JSON.parse(missing.stderr).error, 'SchemaNotFound');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-sdlc/cli.md#adapter-协议
+test('dependency-free JavaScript collector exchanges conform to the advertised protocol schema', async () => {
+  const root = await createConsumer();
+  const scratch = mkdtempSync(join(tmpdir(), 'concord-collector-schema-'));
+  const transcript = join(scratch, 'transcript.jsonl');
+  const call = async (args: string[]) => {
+    const result = await runCli({ argv: ['--root', root, '--server=command', '--json', ...args], cwd: root, env: process.env });
+    assert.equal(result.exitCode, 0, result.stdout + result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  try {
+    const repo = await LocalRepository.open(root);
+    try { await createDocument(repo, 'feature', { id: 'cart', title: 'Cart' }); }
+    finally { repo.close(); }
+    mkdirSync(join(root, 'test'), { recursive: true });
+    writeFileSync(join(root, 'test/cart.ts'), '// @feature docs/feature/cart/README.md\n// @name cart\nexport const testBody = () => { throw new Error("must not execute"); };\n');
+    // Explicit JavaScript consumer fixture: it imports no Concord implementation.
+    writeFileSync(join(root, 'adapter.mjs'), `import { readFileSync, appendFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+if (process.argv[2] === 'collect') process.exit(0);
+const request = JSON.parse(readFileSync(0, 'utf8'));
+const payload = request.op === 'collect-plan'
+  ? { invocations: [{ invocationId: 'collect', argv: [process.execPath, 'adapter.mjs', 'collect'], cwd: '.', envNames: [], reports: [] }], planContext: {} }
+  : { cases: [{ nativeId: 'cart:add', project: 'cart', file: 'test/cart.ts', kind: 'leaf', range: { startLine: 3, endLine: 3, sourceDigest: 'sha256:' + createHash('sha256').update(readFileSync('test/cart.ts')).digest('hex') }, tags: { layer: 'unit' }, provenance: 'cart/1' }], capabilities: { realCollection: true, leaf: true, parameterGroups: false, range: true, rangeTrivia: true, tags: true }, completeness: { complete: true, gaps: [] } };
+const response = { format: request.format, op: request.op, requestId: request.requestId, planId: request.context.planId, inputs: request.context.inputs, payload };
+appendFileSync(${JSON.stringify(transcript)}, JSON.stringify(request) + '\\n' + JSON.stringify(response) + '\\n');
+process.stdout.write(JSON.stringify(response));
+`);
+    writeFileSync(join(root, 'concord.config.ts'), `export default ${JSON.stringify({ testRoots: ['test'], sourceRoots: [], testAdapters: [{ id: 'cart', include: ['test'], argv: [process.execPath, 'adapter.mjs'], implementationFiles: ['adapter.mjs'], inputRoots: [], frameworkVersion: 'cart/1', lockFiles: [], envNames: [] }] })};\n`);
+    await call(['test', 'discover']);
+    const listed = await call(['test', 'list']);
+    const shown = await call(['test', 'show', listed.cases[0].id]);
+    assert.deepEqual(shown.bindings, listed.bindings);
+    assert.equal(shown.bindings[0].current, true);
+    assert.equal(shown.bindings[0].nativeCases[0].nativeId, 'cart:add');
+    assert.deepEqual(shown.bindings[0].nativeCases[0].tags, { layer: 'unit' });
+    // Command-scoped CLI owners have released the observation store before this direct consumer opens it.
+    const workspace = await runApplication(getWorkspaceSnapshot(root, 'use'));
+    assert.deepEqual(workspace.bindings, listed.bindings);
+    writeFileSync(join(root, 'test/cart.ts'), readFileSync(join(root, 'test/cart.ts'), 'utf8') + '// changed after collection\n');
+    const stale = await call(['test', 'show', listed.cases[0].id]);
+    assert.equal(stale.bindings[0].current, false);
+    assert.equal(stale.bindings[0].complete, false);
+    assert.deepEqual(stale.bindings[0].nativeCases, []);
+    assert.ok(stale.bindings[0].gaps.includes('NativeObservationStale'));
+    assert.ok(stale.observations.length > 0);
+    const protocol = await call(['schema', 'test-adapter']);
+    const decoder = SchemaRepresentation.fromJsonSchemaDocument({ dialect: 'draft-2020-12', schema: protocol, definitions: {} }, { patterns: 'apply' });
+    const validate = Schema.toStandardSchemaV1(Schema.toType(decoder), { parseOptions: { onExcessProperty: 'error' } })['~standard'].validate;
+    const messages = readFileSync(transcript, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(messages.length, 4, 'Each collection operation exchanges one request and response');
+    assert.deepEqual([...new Set(messages.map(message => message.op))].sort(), ['collect-parse', 'collect-plan']);
+    for (const message of messages) {
+      assert.equal((await validate(message)).issues, undefined, JSON.stringify(message));
+      assert.ok((await validate({ ...message, extra: true })).issues);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); rmSync(scratch, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/web-workbench/use-case/review-pull-request.md
@@ -54,89 +116,4 @@ test('view verify checks strict preview data and exact directory entries without
     writeFileSync(join(directory, 'extra'), 'extra');
     assert.equal(JSON.parse((await call()).stderr).error, 'PreviewDirectoryInvalid');
   } finally { rmSync(directory, { recursive: true, force: true }); }
-});
-
-// @use-case docs/feature/local-sdlc/use-case/run-tests-with-own-runner.md#verify
-test('dependency-free JavaScript adapter discovers, selects and replays a fix through the CLI', async () => {
-  const { LocalRepository, runApplication } = await import('../support/repository.ts');
-  const { executeQuery } = await import('../../src/app/index.ts');
-  const { createDocument } = await import('../support/operations.ts');
-  const { execFileSync } = await import('node:child_process');
-  const { readFileSync } = await import('node:fs');
-  const root = (await createConsumer());
-  const scratch = mkdtempSync(join(tmpdir(), 'concord-own-adapter-'));
-  const transcript = join(scratch, 'transcript.jsonl');
-  const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
-  const call = async (args: string[], status = 0) => runCli({ argv: ['--root', root, '--json', ...args], cwd: root, env: process.env }).then(result => {
-    assert.equal(result.exitCode, status, result.stdout + result.stderr);
-    return JSON.parse(result.stdout || result.stderr);
-  });
-  try {
-    const repo = (await LocalRepository.open(root));
-    try {
-      await createDocument(repo, 'feature', { id: 'cart', title: 'Cart' });
-      await createDocument(repo, 'issue', { id: 'duplicate', title: 'Duplicate SKU' });
-    } finally { repo.close(); }
-    mkdirSync(join(root, 'test'), { recursive: true });
-    writeFileSync(join(root, 'test/cart.ts'), '// @feature docs/feature/cart/README.md\n// @issue docs/issues/duplicate.md\n// @name cart\n');
-    writeFileSync(join(root, 'outcome.txt'), 'failed');
-    // This is an explicit JavaScript consumer fixture with no Concord imports.
-    writeFileSync(join(root, 'adapter.mjs'), `import { readFileSync, appendFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
-if (process.argv[2] === 'invoke') process.exit(process.argv[3] === 'collect' || readFileSync('outcome.txt', 'utf8') === 'passed' ? 0 : 1);
-const request = JSON.parse(readFileSync(0, 'utf8'));
-const caps = { realCollection: true, leaf: true, parameterGroups: false, exactSelection: true, perItemReport: true, range: true, rangeTrivia: true, tags: false, skipVisibility: true };
-const outcome = readFileSync('outcome.txt', 'utf8');
-const invoke = (selected) => ({ invocationId: 'invoke', argv: [process.execPath, 'adapter.mjs', 'invoke', selected ? 'run' : 'collect'], cwd: '.', envNames: [], reports: [], ...(selected ? { requested: selected } : {}) });
-let payload;
-if (request.op === 'collect-plan') payload = { invocations: [invoke()], planContext: {} };
-else if (request.op === 'collect-parse') payload = { cases: [{ nativeId: 'cart:add', project: 'cart', file: 'test/cart.ts', kind: 'leaf', range: { startLine: 1, endLine: 4, sourceDigest: 'sha256:' + createHash('sha256').update(readFileSync('test/cart.ts')).digest('hex') }, selection: { opaqueId: 'cart:add', capabilityVersion: '1' }, tags: {}, provenance: 'cart/1' }], capabilities: caps, completeness: { complete: true, gaps: [] } };
-else if (request.op === 'select-plan') payload = { invocations: [invoke(request.payload.nativeIds)], planContext: {} };
-else payload = { observed: outcome === 'prepare-failed' ? [] : request.payload.requested.map(nativeId => ({ nativeId, outcome, provenance: 'cart/1' })), capabilities: caps, completeness: { complete: true, gaps: [] } };
-const response = { format: request.format, op: request.op, requestId: request.requestId, planId: request.context.planId, inputs: request.context.inputs, payload };
-appendFileSync(${JSON.stringify(transcript)}, JSON.stringify(request) + '\\n' + JSON.stringify(response) + '\\n');
-process.stdout.write(JSON.stringify(response));
-`);
-    writeFileSync(join(root, 'concord.config.ts'), `export default ${JSON.stringify({ testRoots: ['test'], sourceRoots: [], testAdapters: [{ id: 'cart', include: ['test'], argv: [process.execPath, 'adapter.mjs'], implementationFiles: ['adapter.mjs'], inputRoots: [], frameworkVersion: 'cart/1', lockFiles: [], envNames: [], runTimeoutMs: 700_000, wallTimeoutMs: 800_000 }] })};\n`);
-    git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.invalid');
-    git('add', '.'); git('commit', '-qm', 'Failing regression');
-    const defect = git('rev-parse', 'HEAD');
-    await call(['test', 'discover']);
-    // Resolving the case ID is preparation; a workspace service adds no adapter evidence.
-    const reply = await runApplication(executeQuery(root, { name: 'test.list', input: {} }));
-    assert.equal(reply.exitCode, 0, JSON.stringify(reply.value));
-    const listed = Schema.decodeUnknownSync(Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: Schema.String })) }))(reply.value);
-    assert.equal(listed.cases.length, 1);
-    const id = listed.cases[0]!.id;
-    assert.match(id, /^neref_/u);
-    const red = await call(['test', 'run', id, '--require-native'], 1);
-    assert.equal(red.scope, 'native'); assert.equal(red.commandOutcome, 'red');
-    writeFileSync(join(root, 'outcome.txt'), 'passed');
-    git('add', 'outcome.txt'); git('commit', '-qm', 'Fix duplicate SKU');
-    const fix = git('rev-parse', 'HEAD');
-    const green = await call(['test', 'run', id, '--require-native']);
-    assert.equal(green.commandOutcome, 'green'); assert.deepEqual(green.requested, ['cart:add']);
-    const replay = await call(['test', 'verify', id, '--defect', defect, '--fix', fix]);
-    assert.equal(replay.red[0].scope, 'native'); assert.equal(replay.red[0].commandOutcome, 'red');
-    assert.equal(replay.green[0].commandOutcome, 'green');
-    writeFileSync(join(root, 'outcome.txt'), 'prepare-failed');
-    const invalid = await call(['test', 'run', id, '--require-native'], 1);
-    assert.equal(invalid.commandOutcome, 'invalid');
-    git('add', 'outcome.txt'); git('commit', '-qm', 'Preparation cannot run');
-    const unverifiable = await call(['test', 'verify', id, '--defect', defect, '--fix', git('rev-parse', 'HEAD')], 1);
-    assert.equal(unverifiable.error, 'FixUnverifiable');
-    writeFileSync(join(root, 'outcome.txt'), 'passed');
-    git('add', 'outcome.txt'); git('commit', '-qm', 'Prepared fix');
-    const closed = await call(['issue', 'close', 'duplicate', '--fixed', '--defect', defect]);
-    assert.equal(closed.red[0].scope, 'native'); assert.equal(closed.green[0].commandOutcome, 'green');
-    const protocol = await call(['schema', 'test-adapter']);
-    const decoder = SchemaRepresentation.fromJsonSchemaDocument({ dialect: 'draft-2020-12', schema: protocol, definitions: {} }, { patterns: 'apply' });
-    const validate = Schema.toStandardSchemaV1(Schema.toType(decoder), { parseOptions: { onExcessProperty: 'error' } })["~standard"].validate;
-    const messages = readFileSync(transcript, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-    assert.deepEqual([...new Set(messages.map(message => message.op))].sort(), ['collect-parse', 'collect-plan', 'report-parse', 'select-plan']);
-    for (const message of messages) {
-      assert.equal((await validate(message)).issues, undefined, JSON.stringify(message));
-      assert.ok((await validate({ ...message, extra: true })).issues);
-    }
-  } finally { rmSync(root, { recursive: true, force: true }); rmSync(scratch, { recursive: true, force: true }); }
 });

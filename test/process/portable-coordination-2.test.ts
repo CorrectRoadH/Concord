@@ -19,7 +19,6 @@ import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSy
 import { LocalRepository } from "../support/repository.ts";
 
 import { beginRun, finalizeRun } from "../../src/base/publication/index.ts";
-import { runCase } from "../../src/domain/tests/index.ts";
 import { OwnedProcessLive } from "../../src/base/process/index.ts";
 import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.ts";
 
@@ -102,7 +101,7 @@ const syncBuiltinESMExports = () => bunMock.module('node:fs', () => ({ ...fs, de
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({
       status: Schema.Literal('clean'), journalStatus: Schema.Literal('clean'),
-      coordination: Schema.Struct({ publication: Schema.Struct({ reclaimedTokens: Schema.Array(Schema.String) }), runner: Schema.Struct({ status: Schema.Literal('absent') }) }),
+      coordination: Schema.Struct({ publication: Schema.Struct({ reclaimedTokens: Schema.Array(Schema.String) }), observationSlot: Schema.Struct({ status: Schema.Literal('absent') }) }),
     })))(result.stdout);
     assert.deepEqual([...report.coordination.publication.reclaimedTokens].sort(), tokens);
     const next = acquireTraceLeaseSync(root, 'exclusive', 'next-writer', undefined, undefined, process.env)!;
@@ -213,71 +212,14 @@ test('built CLI initializes and publishes with only Node and Git on PATH', t => 
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('a live but quarantined runner blocks publication without reclaiming its ownership', async t => {
+test('quarantined observations allow document publication and retain ownership', async t => {
   const root = (await fixture(t)), repo = (await LocalRepository.open(root));
   try {
     const run = repo.snapshot(() => beginRun(root, process.env));
     repo.snapshot(() => finalizeRun(root, run, false, process.env));
-    (await assert.rejects(async () => (await repo.publish('blocked', [{ path: 'memory/blocked.md', before: null, after: 'no' }])), { code: 'CleanupFailed' }));
-    assert.equal(existsSync(join(root, 'memory/blocked.md')), false);
+    await repo.publish('observation-write', [{ path: 'memory/allowed.md', before: null, after: '# Allowed\n' }]);
+    assert.equal(readFileSync(join(root, 'memory/allowed.md'), 'utf8'), '# Allowed\n');
+    assert.throws(() => repo.snapshot(() => beginRun(root, process.env)), { code: 'RepositoryBusy' });
     assert.ok(existsSync(run.lease.path));
   } finally { repo.close(); }
-});
-
-// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('long command releases document ownership and cooperative A-B-A invalidates its receipt', async t => {
-  const root = (await fixture(t));
-  const setup = (await LocalRepository.open(root));
-  (await setup.snapshot(async () => (await createDocument(setup, 'feature', { id: 'example', title: 'Example' })))); setup.close();
-  mkdirSync(join(root, 'test'));
-  writeFileSync(join(root, 'test/example.test.mjs'), `import { test } from 'node:test';
-import { existsSync, writeFileSync } from 'node:fs';
-import { setTimeout } from 'node:timers/promises';
-// @feature docs/feature/example/README.md
-test('wait for editor', async () => {
-  writeFileSync('.git/concord/test-ready', 'ready');
-  while (!existsSync('.git/concord/test-continue')) await setTimeout(10);
-});\n`);
-  // Change the fixture configuration before opening its execution snapshot.
-  const config = join(root, 'concord.config.ts');
-  writeProjectConfig(root, { ...(await readProjectConfig(root)), testRoots: ['test'], runner: { kind: 'command', argv: [process.execPath, 'test', '--no-env-file', '--config=/dev/null', '--timeout=15000', '{file}'], timeoutMs: 15000, sourceFiles: [] } });
-  const repo = (await LocalRepository.open(root));
-  const trace = (await repo.snapshot(async () => (await buildTrace(repo, 'off', { includeCode: false })))); requireValidTrace(trace);
-  const result = runApplication(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
-  try {
-    const deadline = Date.now() + 15000;
-    while (!existsSync(join(root, '.git/concord/test-ready'))) {
-      if (Date.now() > deadline) throw new Error('runner did not become ready');
-      await new Promise(resolve => setTimeout(resolve, 20));
-    }
-    const path = 'docs/feature/example/README.md';
-    const original = readFileSync(join(root, path), 'utf8');
-    const editor = (await LocalRepository.open(root));
-    try {
-      (await editor.publish('edit', [{ path, before: original, after: `${original}\nTransient edit\n` }]));
-      (await editor.publish('revert-edit', [{ path, before: `${original}\nTransient edit\n`, after: original }]));
-    } finally { editor.close(); }
-    writeFileSync(join(root, '.git/concord/test-continue'), 'continue');
-    await assert.rejects(result, { code: 'FileChangedSinceRead' });
-    assert.equal(existsSync(join(root, '.git/concord/runner.lease')), false);
-    // A changed configuration can reject receipt validation, but cannot keep a
-    // successfully cleaned-up process group locked forever.
-    rmSync(join(root, '.git/concord/test-ready'));
-    rmSync(join(root, '.git/concord/test-continue'));
-    const changedConfigRun = runApplication(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
-    const rejected = assert.rejects(changedConfigRun, { code: 'FileChangedSinceRead' });
-    const configDeadline = Date.now() + 15000;
-    try {
-      while (!existsSync(join(root, '.git/concord/test-ready'))) {
-        if (Date.now() > configDeadline) throw new Error('second runner did not become ready');
-        await new Promise(resolve => setTimeout(resolve, 20));
-      }
-      writeFileSync(config, `${readFileSync(config, 'utf8')}\n// edited during execution\n`);
-    } finally { writeFileSync(join(root, '.git/concord/test-continue'), 'continue'); }
-    await rejected;
-    assert.equal(existsSync(join(root, '.git/concord/runner.lease')), false);
-  } finally {
-    writeFileSync(join(root, '.git/concord/test-continue'), 'continue');
-    await result.catch(() => undefined); repo.close();
-  }
 });

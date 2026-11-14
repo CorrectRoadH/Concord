@@ -4,23 +4,19 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { checkCurrentProject, traceShow } from '../../src/app/index.ts';
 import { createConsumer } from '../support/consumer.ts';
-import { gitCommit } from '../support/fix-consumer.ts';
 import { createDocument } from '../support/operations.ts';
-import { renderOwnerFixture } from '../support/owner-fixture.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 import { writeProjectConfig } from '../support/support.ts';
 
 // @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
-test('neutral static checks and trace derive source relations without executing the configured runner', async () => {
+test('neutral static checks and trace derive relations without loading source modules', async () => {
   const root = (await createConsumer());
   try {
     const writer = (await LocalRepository.open(root));
     try { (await createDocument(writer, 'feature', { id: 'cart', title: 'Cart' })); } finally { writer.close(); }
-    writeProjectConfig(root, { testRoots: ['spec'], sourceRoots: ['lib'], runner: {
-      kind: 'command', argv: ['node', '-e', 'require("node:fs").writeFileSync("EXECUTED", "bad")'], sourceFiles: [], timeoutMs: 1000,
-    } });
+    writeProjectConfig(root, { testRoots: ['spec'], sourceRoots: ['lib'] });
     mkdirSync(join(root, 'spec')); mkdirSync(join(root, 'lib'));
-    writeFileSync(join(root, 'spec/cart.test.ts'), '// @feature docs/feature/cart/README.md\n');
+    writeFileSync(join(root, 'spec/cart.test.ts'), '// @feature docs/feature/cart/README.md\nimport { writeFileSync } from "node:fs";\nwriteFileSync(new URL("../EXECUTED", import.meta.url), "loaded");\n');
     writeFileSync(join(root, 'lib/cart.ts'), '// @concord-file\n// @concord-implements docs/feature/cart/README.md\nexport const quantity = 1;\n');
     const repo = (await LocalRepository.open(root));
     try {

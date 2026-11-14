@@ -3,11 +3,6 @@
  * Keep this structural declaration independent from Effect so a consumer does
  * not need Concord's own compiler lib settings merely to type-check its config.
  */
-export interface Runner {
-  readonly argv: readonly [string, ...string[]];
-  readonly timeoutMs?: number;
-}
-
 export type FeedbackConnection =
   | { readonly id: string; readonly provider: 'github'; readonly credentialEnv: string; readonly owner: string; readonly repo: string; readonly repositoryId?: string }
   | { readonly id: string; readonly provider: 'linear'; readonly credentialEnv: string; readonly team: string; readonly organizationId?: string; readonly teamId?: string };
@@ -17,13 +12,12 @@ export interface TestAdapter {
   readonly include: readonly [string, ...string[]];
   readonly builtin?: 'node-test' | 'vitest' | 'pytest' | 'go' | 'cargo';
   readonly argv?: readonly [string, ...string[]];
-  readonly implementationFiles: readonly string[];
-  readonly inputRoots: readonly string[];
-  readonly frameworkVersion: string;
-  readonly lockFiles: readonly string[];
-  readonly envNames: readonly string[];
+  readonly implementationFiles?: readonly string[];
+  readonly inputRoots?: readonly string[];
+  readonly frameworkVersion?: string;
+  readonly lockFiles?: readonly string[];
+  readonly envNames?: readonly string[];
   readonly collectTimeoutMs?: number;
-  readonly runTimeoutMs?: number;
   readonly wallTimeoutMs?: number;
   readonly budgets?: { readonly responseBytes?: number; readonly outputBytes?: number; readonly cases?: number; readonly invocations?: number; readonly reportFiles?: number; readonly reportFileBytes?: number; readonly reportBytes?: number };
 }
@@ -35,17 +29,8 @@ export interface ProjectConfig {
   /** Repository-relative files or directory subtrees excluded from automatic code/test discovery; no globs. */
   readonly sourceIgnore?: readonly string[];
   readonly p5?: { readonly libraries: readonly string[] };
-  readonly runner?: Runner;
   readonly testAdapters?: readonly TestAdapter[];
   readonly docsWork?: {
-    readonly checks?: Readonly<Record<string, {
-      readonly argv: readonly [string, ...string[]];
-      readonly timeoutMs?: number;
-    }>>;
-    readonly finalizer?: {
-      readonly argv: readonly [string, ...string[]];
-      readonly timeoutMs?: number;
-    };
     readonly sharedPaths?: readonly string[];
   };
   readonly feedbackConnections?: readonly FeedbackConnection[];

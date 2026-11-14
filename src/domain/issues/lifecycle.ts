@@ -28,7 +28,7 @@ export async function unlinkIssue(repo: Repository, selector: string, reference:
   }));
 }
 
-/** Only authored links and owner relations retain an Issue; regression markers retain historical evidence. */
+/** Only authored links and owner relations retain an Issue; regression markers are removed during closure. */
 export function issueReferences(repo: Repository, target: string): readonly { path: string; line?: number }[] {
   const references: { path: string; line?: number }[] = [];
   for (const owner of loadDocuments(repo)) {
@@ -55,7 +55,7 @@ export function issueReferences(repo: Repository, target: string): readonly { pa
   }
   return references;
 }
-export async function closeIssue(repo: LocalRepository, selector: string, reason = 'Handled', dryRun = false, verifiedSources?: ReadonlyMap<string, string | undefined>) {
+export async function closeIssue(repo: LocalRepository, selector: string, reason = 'Handled', dryRun = false) {
   return (await inRepositorySnapshot(repo, async () => {
     const record = readDocumentSelector(repo, selector, 'issue');
     const references = issueReferences(repo, record.path);
@@ -63,6 +63,6 @@ export async function closeIssue(repo: LocalRepository, selector: string, reason
     const before = repo.read(record.path);
     if (before === undefined || digest(before) !== record.digest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; reload and retry`);
     const conclusion = `Closed ${record.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
-    return { ...(await repo.publishIssueClose(record.path, dryRun, verifiedSources)), conclusion };
+    return { ...(await repo.publishIssueClose(record.path, dryRun)), conclusion };
   }));
 }

@@ -75,9 +75,6 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   const [testRootsText, setTestRootsText] = React.useState(lines(initial.testRoots))
   const [sourceRootsText, setSourceRootsText] = React.useState(lines(initial.sourceRoots ?? []))
   const [p5LibrariesText, setP5LibrariesText] = React.useState(lines(initial.p5?.libraries ?? []))
-  const [sourceFilesText, setSourceFilesText] = React.useState(lines(initial.runner?.sourceFiles))
-  const [argvText, setArgvText] = React.useState(initial.runner?.kind === "command" ? lines(initial.runner.argv) : "")
-  const [timeoutText, setTimeoutText] = React.useState(String(initial.runner?.timeoutMs ?? 60000))
   const { params, update } = useUrlNavigation()
   const tab = urlChoice(params.get("tab"), ["form", "feedback", "advanced", "diagnostics"], "form")
   const [error, setError] = React.useState("")
@@ -86,7 +83,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   const connectionEditRevision = React.useRef(0)
   const { projection, snapshot } = useWorkspace()
   const [externalConfig, setExternalConfig] = React.useState<{ readonly config: ProjectConfig; readonly digest: string } | null>(null)
-  const formDirty = testRootsText !== lines(baseline.config.testRoots) || sourceRootsText !== lines(baseline.config.sourceRoots ?? []) || sourceFilesText !== lines(baseline.config.runner?.sourceFiles) || timeoutText !== String(baseline.config.runner?.timeoutMs ?? 60000) || draft.runner?.kind !== baseline.config.runner?.kind || (draft.runner?.kind === "command" && argvText !== (baseline.config.runner?.kind === "command" ? lines(baseline.config.runner.argv) : ""))
+  const formDirty = testRootsText !== lines(baseline.config.testRoots) || sourceRootsText !== lines(baseline.config.sourceRoots ?? [])
   const dirty = formDirty || p5LibrariesText !== lines(baseline.config.p5?.libraries ?? []) || source !== json(baseline.config)
   const externallyChanged = externalConfig !== null
   const checkedDigest = React.useRef<string | null>(null)
@@ -111,9 +108,6 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
     setTestRootsText(lines(next.testRoots))
     setSourceRootsText(lines(next.sourceRoots ?? []))
     setP5LibrariesText(lines(next.p5?.libraries ?? []))
-    setSourceFilesText(lines(next.runner?.sourceFiles))
-    setArgvText(next.runner?.kind === "command" ? lines(next.runner.argv) : "")
-    setTimeoutText(String(next.runner?.timeoutMs ?? 60000))
   }
 
   React.useEffect(() => {
@@ -158,19 +152,11 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
     const libraries = values(p5LibrariesText)
     const p5Config = libraries.length || draft.p5 ? { p5: { libraries } } : {}
     const roots = { ...(draft.testRoots === undefined && !testRootsText.trim() ? {} : { testRoots: values(testRootsText) }), ...(draft.sourceRoots === undefined && !sourceRootsText.trim() ? {} : { sourceRoots: values(sourceRootsText) }) }
-    if (draft.runner === undefined) { const { runner: _, ...withoutRunner } = draft; return { ...withoutRunner, ...p5Config, ...roots } }
-    const timeoutMs = Number(timeoutText)
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1) throw new Error("请输入有效的超时时间。")
-    if (draft.runner?.kind === "command") {
-      const argv = argvText.split("\n").filter((item) => item.length > 0)
-      if (!argv[0]) throw new Error("自定义命令至少需要一个参数。")
-      return { ...draft, ...p5Config, ...roots, runner: { kind: "command", argv: [argv[0], ...argv.slice(1)], sourceFiles: values(sourceFilesText), timeoutMs } }
-    }
-    return { ...draft, ...p5Config, ...roots, runner: { kind: "node-test", sourceFiles: values(sourceFilesText), timeoutMs } }
+    return { ...draft, ...p5Config, ...roots }
   }
 
 
-  const revision = JSON.stringify([tab, draft, source, testRootsText, sourceRootsText, p5LibrariesText, sourceFilesText, argvText, timeoutText])
+  const revision = JSON.stringify([tab, draft, source, testRootsText, sourceRootsText, p5LibrariesText])
   const currentRevision = React.useRef(revision)
   currentRevision.current = revision
 
@@ -249,7 +235,6 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
     if (!configured || configured.provider !== "github" || configured.transport !== "gh" || connection.transport !== "gh" || configured.owner !== connection.owner || configured.repo !== connection.repo || configured.repositoryId !== connection.repositoryId) throw new Error("连接尚未保存为当前配置，请先解决保存冲突。")
   }
 
-  const runner = draft.runner
   return (
     <>
       <PageHeader
@@ -269,10 +254,6 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
                 <Field label="源码目录" hint="每行一个"><Textarea aria-label="源码目录" value={sourceRootsText} onChange={(event) => setSourceRootsText(event.target.value)} /></Field>
               </div></ContentSection>
               <ContentSection title="p5 图解"><Field label="项目共享扩展库" hint="每行一个，按顺序加载。内建：p5.sound、p5.brush；也可填写相对项目根的 ./vendor/addon.js。留空只加载 p5 核心。"><Textarea aria-label="p5 扩展库" value={p5LibrariesText} onChange={event => setP5LibrariesText(event.target.value)} /></Field></ContentSection>
-              <ContentSection title="测试运行"><div className="form-grid"><Field label="运行方式"><Select value={runner?.kind ?? "none"} onValueChange={(kind) => change({ ...draft, runner: kind === "none" ? undefined : kind === "node-test" ? { kind: "node-test", sourceFiles: values(sourceFilesText), timeoutMs: Number(timeoutText) } : { kind: "command", argv: ["node"], sourceFiles: values(sourceFilesText), timeoutMs: Number(timeoutText) } })}><SelectTrigger aria-label="运行方式"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">未配置</SelectItem><SelectItem value="node-test">Node test</SelectItem><SelectItem value="command">自定义命令</SelectItem></SelectContent></Select></Field>
-              {runner?.kind === "command" && <Field label="命令参数" hint="每行一个参数，不经过 shell"><Textarea aria-label="命令参数" value={argvText} onChange={(event) => setArgvText(event.target.value)} /></Field>}
-              <Field label="相关文件" hint="每行一个"><Textarea aria-label="运行相关文件" value={sourceFilesText} onChange={(event) => setSourceFilesText(event.target.value)} /></Field>
-              <Field label="超时（毫秒）"><Input aria-label="运行超时" type="number" min="1" max="3600000" value={timeoutText} onChange={(event) => setTimeoutText(event.target.value)} /></Field></div></ContentSection>
               {error && <div className="form-error" role="alert">{error}</div>}
               {autoSave.error && <div className="form-error" role="alert">{autoSave.error}<Button type="submit" variant="outline">重试保存</Button></div>}
             </form>

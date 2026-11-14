@@ -56,10 +56,9 @@ export class NodeSourceWatch {
     this.failure = undefined;
     this.sourceIgnore = project?.sourceIgnore ?? [];
     this.sourceScopes = [...(project?.sourceRoots ?? []), ...(project?.testRoots ?? [])].map(path => normalize(path));
-    this.strictScopes = ['concord.config.ts', 'docs', ...(project?.runner?.sourceFiles ?? []),
-      ...['memory'], ...sources.map(source => source.path)].map(path => normalize(path));
+    this.strictScopes = ['concord.config.ts', 'docs', ...['memory'], ...sources.map(source => source.path)].map(path => normalize(path));
     const scopes = ['concord.config.ts', 'docs', ...(project?.sourceRoots ?? []), ...(project?.testRoots ?? []),
-      ...(project?.runner?.sourceFiles ?? []), ...['memory'], ...sources.map(source => source.path)];
+      ...['memory'], ...sources.map(source => source.path)];
     this.scopes = [...new Set(scopes.map(path => {
       const value = normalize(path);
       if (isAbsolute(value) || value === '..' || value.startsWith(`..${sep}`)) throw new ConcordError('UnsafePath', 'Watch source must stay inside the worktree');

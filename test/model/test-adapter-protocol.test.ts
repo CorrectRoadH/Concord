@@ -1,31 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { ADAPTER_FORMAT, ReportSchema, nativeVerdict, protocolDecode, protocolJson, type ProcessStatus } from '../../src/model/index.ts';
-
-const capabilities = { realCollection: true, leaf: true, parameterGroups: true, exactSelection: true, perItemReport: true, range: true, rangeTrivia: true, tags: true, skipVisibility: true };
-const requested = ['fake:binary-a:one', 'fake:binary-b:two'];
-const status: ProcessStatus = { invocationId: 'run', exitCode: 0, signal: null, timedOut: false, cancelled: false, outputTruncated: false, cleanup: 'complete' };
-
-for (const mode of ['green', 'missing', 'duplicate', 'extra'] as const) {
-  // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md#run
-  test(`external report ${mode} preserves the requested two-item assignment`, () => Effect.runPromise(Effect.sync(() => {
-    const ids = [...requested];
-    if (mode === 'missing') ids.pop();
-    if (mode === 'duplicate') ids.push(ids[0]!);
-    if (mode === 'extra') ids.push('fake:extra');
-    const report = protocolDecode(ReportSchema, protocolJson(JSON.stringify({
-      observed: ids.map(nativeId => ({ nativeId, outcome: 'passed', provenance: 'fixture/v1' })),
-      capabilities, completeness: { complete: true, gaps: [] },
-    })));
-    assert.deepEqual(report.observed.map(item => item.nativeId), ids);
-    assert.equal(requested.length, 2);
-    assert.equal(nativeVerdict(requested, report.observed, [status], report.completeness.complete, [{ invocationId: status.invocationId, requested }]), mode === 'green' ? 'green' : 'invalid', mode);
-  })));
-}
+import { ADAPTER_FORMAT, ManifestSchema, NativeBindingViewSchema, RequestSchema, protocolDecode, protocolJson } from '../../src/model/index.ts';
 
 for (const mode of ['duplicate-key', 'nonfinite'] as const) {
-  // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
+  // @use-case docs/feature/local-sdlc/use-case/collect-native-tests.md#discover
   test(`external response rejects ${mode} before Schema decoding`, () => Effect.runPromise(Effect.sync(() => {
     const response = JSON.stringify({ format: ADAPTER_FORMAT, op: 'collect-plan', requestId: 'request', planId: 'plan', inputs: `sha256:${'1'.repeat(64)}`, payload: { invocations: [{ invocationId: 'collect', argv: ['node', 'adapter.ts', 'invoke', 'collect'], cwd: '.', envNames: ['PATH'], reports: [] }], planContext: { files: ['test/sample.ts'] } } });
     assert.doesNotThrow(() => protocolJson(response));
@@ -35,3 +14,26 @@ for (const mode of ['duplicate-key', 'nonfinite'] as const) {
     assert.throws(() => protocolJson(invalid), { code: 'AdapterProtocolInvalid' }, mode);
   })));
 }
+
+// @feature docs/feature/local-sdlc/cli.md#adapter-协议
+test('collection protocol retains native metadata and rejects unsupported fields at each boundary', () => {
+  const inputs = `sha256:${'1'.repeat(64)}`;
+  const capabilities = { realCollection: true, leaf: true, parameterGroups: true, range: true, rangeTrivia: true, tags: true };
+  const item = { nativeId: 'fixture:one', project: 'fixture', file: 'test/sample.ts', kind: 'leaf', group: 'parameters', range: { startLine: 1, endLine: 4, sourceDigest: inputs }, tags: { owner: 'docs' }, provenance: 'fixture/v1' };
+  const manifest = { cases: [item], capabilities, completeness: { complete: true, gaps: [] } };
+  assert.deepEqual(protocolDecode(ManifestSchema, manifest), manifest);
+  assert.throws(() => protocolDecode(ManifestSchema, { ...manifest, cases: [{ ...item, unexpected: true }] }), { code: 'AdapterProtocolInvalid' });
+  assert.throws(() => protocolDecode(ManifestSchema, { ...manifest, capabilities: { ...capabilities, unexpected: true } }), { code: 'AdapterProtocolInvalid' });
+  const request = { format: ADAPTER_FORMAT, op: 'collect-plan', requestId: 'one', context: { root: '/fixture', runId: 'observation', planId: 'plan', inputs, reportDirectory: '/reports' }, payload: {} };
+  assert.doesNotThrow(() => protocolDecode(RequestSchema, request));
+  assert.throws(() => protocolDecode(RequestSchema, { ...request, op: 'unsupported' }), { code: 'AdapterProtocolInvalid' });
+});
+
+// @feature docs/feature/local-sdlc/cli.md#具体用例绑定输出
+test('binding projection schema retains declared metadata and rejects unrelated native fields', () => {
+  const item = { nativeId: 'fixture:one', project: 'fixture', file: 'test/sample.ts', kind: 'leaf', group: 'parameters', range: { startLine: 1, endLine: 4, sourceDigest: `sha256:${'1'.repeat(64)}` }, tags: { owner: 'docs' } };
+  const binding = { testId: 'marker', current: true, complete: true, nativeCases: [item], gaps: [] };
+  assert.deepEqual(protocolDecode(NativeBindingViewSchema, binding), binding);
+  assert.throws(() => protocolDecode(NativeBindingViewSchema, { ...binding, nativeCases: [{ ...item, provenance: 'fixture/v1' }] }), { code: 'AdapterProtocolInvalid' });
+  assert.throws(() => protocolDecode(NativeBindingViewSchema, { ...binding, nativeCases: [{ ...item, range: { ...item.range, endLine: 0 } }] }), { code: 'AdapterProtocolInvalid' });
+});

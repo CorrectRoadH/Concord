@@ -10,7 +10,6 @@ import { beforeConsumerCleanup, createConsumer, retainConsumer } from './consume
 import { fetchFresh, parseWorkspaceProjection, pollUntil, writeProjectConfig } from './support.ts';
 
 const Instance = Schema.Struct({ pid: Schema.Int, token: Schema.String, installation: Schema.String, socket: Schema.Struct({ path: Schema.String }) });
-const Jobs = Schema.Struct({ ok: Schema.Literal(true), value: Schema.Array(Schema.Unknown) });
 export interface SharedResponse { readonly status: number; readonly type: string | undefined; readonly body: string; readonly headers: Headers }
 
 /** A case owns its requests and RPC scopes; restoration never races their release. */
@@ -81,9 +80,6 @@ export class SharedWorkspace {
 
   async restore(): Promise<void> {
     await this.drain();
-    const jobs = await this.fetch('/api/jobs');
-    const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(Jobs), { onExcessProperty: 'error' })(jobs.body);
-    if (decoded.value.length !== 0) throw new Error('Cases with jobs or subscriptions require a private workspace');
     await this.fixture.restore(this.controller?.signal);
     const current = await this.projection();
     this.frozenSourceDigest ??= current.projection.sourceDigest;

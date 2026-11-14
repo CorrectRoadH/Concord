@@ -27,7 +27,6 @@ export { sourceUri } from './source-uri.ts';
 export { uriPath } from './source-uri.ts';
 export { javascript } from './mdx-parser.ts';
 export { mdxProse } from './mdx-parser.ts';
-export { safeRunnerEnvironment } from './runner-environment.ts';
 export { launchDetachedWorker } from './worker.ts';
 export { id } from './lsp-protocol.ts';
 export { response } from './lsp-protocol.ts';
@@ -42,5 +41,4 @@ export { makeProcessGroupCpuReader } from './group-cpu.ts';
 export type { ProcessGroupCpu } from './group-cpu.ts';
 
 export { diagnosticOutputTail, processDiagnostic } from './process-diagnostic.ts';
-export { runTestProcess, VerificationProcessGuard } from './verification-process.ts';
 export type { ProcessDiagnostic } from './process-diagnostic.ts';

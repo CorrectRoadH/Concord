@@ -32,7 +32,7 @@ const unitKey = (repo: Repository, analyzer: string): string => objectDigest({ k
 export async function captureAnalysisInputs(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)) {
   const paths = [...new Set([...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])].flatMap(root => repo.files(root, 'source')))];
   if (paths.length > ANALYSIS_LIMITS.files) throw new ConcordError('AnalysisBudgetExceeded', 'FileLimit');
-  const explicit = new Set(['tsconfig.json', 'jsconfig.json', 'package.json', 'pnpm-lock.yaml', ...(repo.config.runner?.sourceFiles ?? [])]);
+  const explicit = new Set(['tsconfig.json', 'jsconfig.json', 'package.json', 'pnpm-lock.yaml', ]);
   for (const server of repo.config.languageServers ?? []) {
     try { if (server.cwd !== '.') repo.absolute(server.cwd); }
     catch { throw new ConcordError('InvalidLanguageServer', 'Language server cwd is not a safe repository directory'); }
@@ -119,7 +119,7 @@ function publishObservations(repo: Repository, values: readonly AnalysisObservat
 
 // @concord-end
 
-/** Runner ownership encloses processes; snapshots and publication coordination never enclose waits. */
+/** Observation ownership encloses processes; snapshots and publication coordination never enclose waits. */
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#主流程
 export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
@@ -146,7 +146,7 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
       } catch { quarantineRun(repo.root, run, environment); }
     });
   }));
-  // Runner cleanup is registered before capturing, so capture failure releases ownership.
+  // Observation cleanup is registered before capturing, so capture failure releases ownership.
   const captured = yield* readCapture(repo.root);
   if (captured.identity.config !== repo.configSnapshot.digest) return yield* Effect.fail(new ConcordError('AnalysisSourceChanged', 'Analysis configuration changed before capture'));
   yield* sync(() => {
@@ -161,7 +161,7 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
   }
   const idle = (yield* owned.activeCount) === 0;
   const results = yield* owned.cleanupResults;
-  if (!idle || !results.every(hasConfirmedOwnedGroupCleanup)) return yield* Effect.fail(new ConcordError('AnalysisCleanupUnknown', 'Analysis process group or output pipes remain unconfirmed; runner is quarantined'));
+  if (!idle || !results.every(hasConfirmedOwnedGroupCleanup)) return yield* Effect.fail(new ConcordError('AnalysisCleanupUnknown', 'Analysis process group or output pipes remain unconfirmed; observation is quarantined'));
   // Step 5 closes all source and HawDB handles before the short publication section.
   const after = yield* readCapture(repo.root).pipe(Effect.mapError(() => new ConcordError('AnalysisSourceChanged', 'Analysis inputs changed before final verification')));
   if (after.inputs !== captured.inputs) return yield* Effect.fail(new ConcordError('AnalysisSourceChanged', 'Analysis inputs changed', { changed: Object.keys(captured.identity).filter(key => objectDigest(Reflect.get(captured.identity,key)) !== objectDigest(Reflect.get(after.identity,key))) }));

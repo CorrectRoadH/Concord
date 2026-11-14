@@ -160,7 +160,7 @@ export async function setConfig(repo: LocalRepository, config: ProjectConfig, ex
   const current = showConfig(repo);
   if (current.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${repo.configSnapshot.path} changed; use its current digest`);
   const next = decode(ProjectSchema, config, 'configuration');
-  for (const path of [...(next.testRoots ?? []), ...(next.sourceRoots ?? []), ...(next.runner?.sourceFiles ?? [])]) repo.absolute(path);
+  for (const path of [...(next.testRoots ?? []), ...(next.sourceRoots ?? [])]) repo.absolute(path);
   for (const root of [...(next.testRoots ?? []), ...(next.sourceRoots ?? [])]) if (sourceForbidden(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot or testRoot: ${root}`);
   const after = renderTypeScriptConfig(next);
   return { ...(await repo.publish('set-config', [{ path: repo.configSnapshot.path, before: repo.configSnapshot.source || null, after }], dryRun)), digest: digest(after) };

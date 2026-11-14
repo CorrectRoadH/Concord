@@ -7,7 +7,7 @@ import { adapterConsumer, adapterSuccess, discoverAdapter } from '../support/ada
 import { runApplication } from '../support/repository.ts';
 import { text } from '../support/test-adapters-consumer-fixture.ts';
 
-// @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @use-case docs/feature/local-sdlc/use-case/collect-native-tests.md
 // @name external-adapter-implementation-cache-invalidation
 test('external adapter implementation changes invalidate observations until rediscovery', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, () => runApplication(Effect.scoped(Effect.gen(function* () {
   const consumer = yield* adapterConsumer;

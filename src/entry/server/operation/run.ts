@@ -11,7 +11,7 @@ import { Cache, CacheSnapshot, CacheDerivations, FeedbackCacheWriter } from '../
 import { Publication } from '../../../base/publication/index.ts';
 import { OwnedProcessLive, ProcessEventsLive } from '../../../base/process/index.ts';
 import { ServerRuntime } from '../../../base/server-lock/index.ts';
-import { executeViewAction, runWorkspaceTest, PublicationValidationLive } from '../../../app/index.ts';
+import { executeViewAction, PublicationValidationLive } from '../../../app/index.ts';
 import { ConcordError, failure } from '../../../model/index.ts';
 import { OperationRequest, FRAME_LIMIT, connectWorkspaceSocket, submitFeedback } from '../index.ts';
 
@@ -45,7 +45,7 @@ export const runOperationMain = (): void => {
   const runtime = parseCache.bind(makeRuntimeEnvironment(request.cwd, request.environment), request.root);
   const context = yield* Layer.build(feedbackWriter.pipe(Layer.provideMerge(operationLayer()))).pipe(Effect.provideService(RuntimeEnvironment, runtime), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(runtime.env))));
   const derived = CacheDerivations.make();
-  const operation = request.kind === 'action' ? executeViewAction(request.root, request.input) : runWorkspaceTest(request.root, request.caseId);
+  const operation = executeViewAction(request.root, request.input);
   const value = yield* operation.pipe(Effect.provide(CacheSnapshot.layer(request.snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideContext(context), Effect.provideService(RuntimeEnvironment, runtime), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(runtime.env))));
   return { ok: true as const, value, derived: yield* derived.batches };
   })).pipe(Effect.catch(cause => { const error = failure(cause); return Effect.succeed({ ok: false as const, code: error.code, message: error.message, details: error.details }); }), Effect.flatMap(reply => Effect.sync(() => { process.stdout.write(JSON.stringify(reply)); })));

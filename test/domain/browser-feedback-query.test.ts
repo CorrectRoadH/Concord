@@ -44,7 +44,7 @@ test('feedback action filters the original source while a newer cached remote ob
     const server = await startHostedViewServer({ root, port: 0, webRoot: root }, {
       verify: async () => {}, workspace: unused, refresh: unused, read: unused, git: unused, diff: unused, compile: unused,
       action: input => runApplication(executeViewAction(root, input)),
-      jobs: { list: unused, start: unused, cancel: unused, close: async () => {} }, subscribe: unused, sse: unused,
+      subscribe: unused, sse: unused,
     }, makeRuntimeEnvironment(process.cwd(), process.env), () => true);
     try {
       const post = (input: unknown) => fetchFresh(new URL('/api/action', server.address), {

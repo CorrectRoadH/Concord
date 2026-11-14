@@ -24,7 +24,6 @@ import { clearCache, parseTestDeclarations } from "../../src/domain/tests/index.
 import { digest } from "../../src/model/index.ts";
 import { genericPrivateDirectorySync } from "../../src/base/publication/index.ts";
 import { checkWriting } from "../../src/domain/writing/index.ts";
-import { runCase } from "../../src/domain/tests/index.ts";
 import { OwnedProcess, type OwnedProcessResult } from "../../src/base/process/index.ts";
 
 const path = 'docs/feature/sample/use-case/flow.md';

@@ -6,7 +6,7 @@ import { constants, homedir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { Schema } from 'effect';
-import { InitializationReceiptSchema, RunnerSchema } from '../../src/model/index.ts';
+import { InitializationReceiptSchema } from '../../src/model/index.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { runCli, type CliResult } from '../support/cli.ts';
 import { readProjectConfig } from '../support/support.ts';
@@ -125,19 +125,17 @@ test('concurrent environment snapshots choose their own paths and never fill abs
 });
 
 // @feature docs/engineering/testing/architecture.md#进程内-cli
-test('init reads relative runner JSON from its invocation cwd without a TTY prompt', async t => {
+test('init writes configured roots in its invocation cwd without a TTY prompt', async t => {
   // Init observes the initial state itself, so its consumer must start uninitialized.
   const root = mkdtempSync(join(tmpdir(), 'concord-invocation-init-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   execFileSync('git', ['init', '-q', root]);
-  const runner = { kind: 'node-test' as const, sourceFiles: [], timeoutMs: 1000 };
-  writeFileSync(join(root, 'invocation-runner.json'), Schema.encodeSync(Schema.fromJsonString(RunnerSchema))(runner));
   const unchanged = hostGuard();
   try {
-    const result = await runCli({ argv: ['--json', 'init', '--docs-only', '--runner-config', 'invocation-runner.json'], cwd: root, env: environment(root) });
+    const result = await runCli({ argv: ['--json', 'init', '--docs-only', '--source-root', 'relative-source'], cwd: root, env: environment(root) });
     success(result);
     Schema.decodeUnknownSync(Schema.fromJsonString(InitializationReceiptSchema), { onExcessProperty: 'error' })(result.stdout);
-    assert.deepEqual((await readProjectConfig(root)).runner, runner);
+    assert.deepEqual(await readProjectConfig(root), { testRoots: [], sourceRoots: ['relative-source'] });
   } finally { unchanged(); }
 });
 

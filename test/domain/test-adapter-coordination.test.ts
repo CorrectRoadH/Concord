@@ -11,7 +11,7 @@ import { LocalRepository } from "../support/repository.ts";
 
 import { collectNativeTests, readNativeObservations } from "../../src/domain/tests/index.ts";
 import { makeOwnedProcessService, OwnedProcess, OwnedProcessLive, runOwnedProcess } from "../../src/base/process/index.ts";
-import { inspectRunner, invalidateActiveRun } from "../../src/base/publication/index.ts";
+import { inspectObservationSlot, invalidateActiveRun } from "../../src/base/publication/index.ts";
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 import { pollUntil } from '../support/support.ts';
 
@@ -26,7 +26,7 @@ const consumer = Effect.acquireRelease(Effect.gen(function* () {
   return root;
 }), root => Effect.sync(() => rmSync(root, { recursive: true, force: true })));
 
-// @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @use-case docs/feature/local-sdlc/use-case/collect-native-tests.md
 // @name adapter-config-repository-paths-c17
 test('repository loading rejects symlinks in every configured adapter input path (C17)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
@@ -40,24 +40,24 @@ test('repository loading rejects symlinks in every configured adapter input path
   });
 })).pipe(Effect.provide(OwnedProcessLive))));
 
-// @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @use-case docs/feature/local-sdlc/use-case/collect-native-tests.md
 // @name adapter-cleanup-unknown-c12
-test('unknown adapter cleanup quarantines the same runner domain before another collect can start (C12)', () => runApplication(Effect.scoped(Effect.gen(function* () {
+test('unknown adapter cleanup quarantines the same observation slot before another collect can start (C12)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   const environment = yield* RuntimeEnvironment;
   const repo = yield* Effect.acquireRelease(Effect.tryPromise(async () => (await LocalRepository.open(root))), repo => Effect.sync(() => repo.close()));
   // Only the OS permission boundary is injected. OwnedProcess still runs and
-  // drains the real Node child, and the runner writes its actual quarantine.
+  // drains the real project child, and the observation slot writes its actual quarantine.
   const owned = makeOwnedProcessService({ environment, groupPresence: { kill: () => { throw Object.assign(new Error('permission denied'), { code: 'EPERM' }); } } });
   const first = yield* collectNativeTests(repo, ['test/sample.ts']).pipe(Effect.provideService(OwnedProcess, owned), Effect.result);
   assert.equal(first._tag, 'Failure');
   if (first._tag === 'Failure') assert.equal(first.failure.code, 'CleanupUnknown');
-  assert.equal(inspectRunner(root, environment.env).status, 'blocked');
+  assert.equal(inspectObservationSlot(root, environment.env).status, 'blocked');
   const second = yield* collectNativeTests(repo, ['test/sample.ts']).pipe(Effect.provideService(OwnedProcess, owned), Effect.exit);
   assert.equal(second._tag, 'Failure'); assert.deepEqual(readNativeObservations(repo), []);
 })).pipe(Effect.provide(OwnedProcessLive))));
 
-// @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @use-case docs/feature/local-sdlc/use-case/collect-native-tests.md
 // @name adapter-invalidation-epoch-c10
 test('an invalidated collect run cannot publish an otherwise successful observation (C10)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
@@ -77,7 +77,7 @@ if (request.op === 'collect-plan') {
 }
 const payload = request.op === 'collect-plan'
   ? { invocations: [{ invocationId: 'collect', argv: [process.execPath, '-e', ''], cwd: '.', envNames: [], reports: [] }], planContext: {} }
-  : { cases: [], capabilities: { realCollection: true, leaf: false, parameterGroups: false, exactSelection: false, perItemReport: false, range: false, rangeTrivia: false, tags: false, skipVisibility: false }, completeness: { complete: false, gaps: ['Fixture'] } };
+  : { cases: [], capabilities: { realCollection: true, leaf: false, parameterGroups: false, range: false, rangeTrivia: false, tags: false }, completeness: { complete: false, gaps: ['Fixture'] } };
 process.stdout.write(JSON.stringify({ format: 'concord.test-adapter/v1', op: request.op, requestId: request.requestId, planId: request.context.planId, inputs: request.context.inputs, payload }));
 `);
   });
@@ -85,5 +85,5 @@ process.stdout.write(JSON.stringify({ format: 'concord.test-adapter/v1', op: req
   yield* Effect.promise(() => pollUntil(async () => existsSync(join(root, 'control/started')) ? true : undefined, { description: 'external adapter reached collect-plan' }));
   yield* Effect.sync(() => { repo.snapshot(() => invalidateActiveRun(root, environment.env)); writeFileSync(join(root, 'control/release'), 'continue'); });
   const result = yield* Fiber.join(collecting);
-  assert.equal(result._tag, 'Failure'); assert.deepEqual(readNativeObservations(repo), []); assert.equal(inspectRunner(root, environment.env).status, 'absent');
+  assert.equal(result._tag, 'Failure'); assert.deepEqual(readNativeObservations(repo), []); assert.equal(inspectObservationSlot(root, environment.env).status, 'absent');
 })).pipe(Effect.provide(OwnedProcessLive))));

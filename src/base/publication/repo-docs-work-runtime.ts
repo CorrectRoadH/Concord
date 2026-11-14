@@ -1,5 +1,4 @@
 import { RuntimeEnvironment, runtimePath } from '../environment/index.ts';
-import * as observer from '../process/index.ts';
 import { randomUUID, createHash } from "node:crypto";
 import { resolve, isAbsolute, join, dirname } from "node:path";
 import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
@@ -25,59 +24,6 @@ export const decode = <A>(schema: Schema.ConstraintDecoder<A, never>, value: unk
   catch: () => problem(`Invalid ${label}`, [{ code: 'UnsafePath', message: `Invalid ${label}` }]),
 });
 
-function makeGroupCleanup(pid: number) {
-    let cleaned: boolean | undefined;
-    const cleanup = Effect.uninterruptible(Effect.gen(function*() {
-      if (cleaned !== undefined) return cleaned;
-      const send = (signal: NodeJS.Signals) => Effect.sync(() => {
-        try { process.kill(-pid, signal); } catch { /* observation below determines success */ }
-      });
-      const wait = Effect.fn('DocsWork.waitGroup')(function*(attempts: number) {
-        for (let attempt = 0; attempt < attempts; attempt++) {
-          const state = observer.observeOwnedProcessGroup(pid);
-          if (state !== 'alive') return state === 'gone' || state === 'zombie-only';
-          yield* Effect.sleep(50);
-        }
-        return false;
-      });
-      yield* send('SIGTERM');
-      if (!(yield* wait(10))) { yield* send('SIGKILL'); cleaned = yield* wait(10); }
-      else cleaned = true;
-      return cleaned;
-    })).pipe(Effect.catch(() => Effect.succeed(false)));
-  return cleanup;
-}
-
-// Every child has an owned POSIX process group, including commands which exit
-// before their descendants. Stream draining and leader waiting share one timeout.
-export const runProcess = Effect.fn('DocsWork.runProcess')(function*(root: string, argv: readonly string[], timeoutMs = 600000) {
-  const runtime = yield* RuntimeEnvironment;
-  root = runtimePath(runtime, root);
-  if (argv.length === 0) return yield* fail('DocsWorkPlanInvalid', 'Empty command');
-  if (argv.reduce((bytes, arg) => bytes + Buffer.byteLength(arg) + 1, 0) > 128 * 1024) return yield* fail('DocsWorkArgvTooLong', 'Expanded argv exceeds 128 KiB');
-  return yield* Effect.scoped(Effect.gen(function*() {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const resource = yield* Effect.acquireRelease(
-      spawner.spawn(ChildProcess.make(argv[0]!, argv.slice(1), {
-        cwd: root, env: { ...runtime.env }, extendEnv: false, shell: false, detached: true, stdin: 'ignore', killSignal: 'SIGKILL',
-      })).pipe(Effect.map(handle => ({ handle, cleanup: makeGroupCleanup(handle.pid) }))),
-      resource => resource.cleanup,
-    );
-    const { handle, cleanup } = resource;
-    let tail = Buffer.alloc(0);
-    const outputHash = createHash('sha256');
-    const output = Stream.runForEach(handle.all, bytes => Effect.sync(() => {
-      outputHash.update(bytes);
-      tail = Buffer.concat([tail, Buffer.from(bytes)]).subarray(-4096);
-    }));
-    const code = yield* Effect.all([handle.exitCode.pipe(Effect.catch(() => Effect.succeed(null))), output], { concurrency: 'unbounded' }).pipe(
-      Effect.map(([code]) => code === null ? null : Number(code)), Effect.timeoutOption(timeoutMs),
-    );
-    const groupGone = yield* cleanup;
-    const exitCode = groupGone && code._tag === 'Some' ? code.value : null;
-    return { exitCode, outputDigest: `sha256:${outputHash.digest('hex')}`, summary: tailSummary(tail.toString('utf8')) || (exitCode === null ? 'Command timed out or terminated' : `Command exited ${exitCode}`) };
-  })).pipe(Effect.catch(error => Effect.succeed({ exitCode: null, outputDigest: hash(String(error)), summary: tailSummary(String(error)) })));
-});
 export const git = Effect.fn('DocsWork.git')(function*(root: string, args: readonly string[]) {
   const runtime = yield* RuntimeEnvironment;
   const env = { ...runtime.env };

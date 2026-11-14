@@ -4,10 +4,10 @@ import { PageTheme } from './herdr-mod/index.ts';
 import { FeedbackFilterFields } from "./feedback-filter.ts";
 import { TEMPLATE_PAGES } from "./template-pages.ts";
 import type { CodeDeclaration } from "./code-declaration.ts";
-import type { Evidence } from "./evidence-values.ts";
+import type { NativeBindingView } from './test-adapter-protocol.ts';
 import type { GitDiff, GitStatus } from "./git-values.ts";
-import type { AnnotatedCase, DocumentKind, DocumentMeta, DocumentRecord, Finding, ProjectConfig, Runner } from "./shared.ts";
-import { MEMORY_RELATION_KINDS, ProjectSchema, RunnerSchema } from "./shared.ts";
+import type { AnnotatedCase, DocumentKind, DocumentMeta, DocumentRecord, Finding, ProjectConfig } from "./shared.ts";
+import { MEMORY_RELATION_KINDS, ProjectSchema } from "./shared.ts";
 import type { TraceEdge } from "./trace-edge.ts";
 import type { FeedbackAvailability, FeedbackItem, FeedbackTriage, RemoteFeedback } from "./feedback-schema.ts";
 import { WritingPolicySchema } from "./writing-schema.ts";
@@ -33,6 +33,7 @@ export interface WorkspaceSnapshot {
   readonly feedback: readonly FeedbackItem[];
   readonly pages: readonly ViewFile[];
   readonly cases: readonly AnnotatedCase[];
+  readonly bindings: readonly NativeBindingView[];
   readonly codes: readonly CodeDeclaration[];
   readonly edges: readonly TraceEdge[];
   readonly findings: readonly Finding[];
@@ -91,6 +92,7 @@ export interface WorkspaceProjectionSnapshot {
   readonly feedback: readonly WorkspaceFeedback[];
   readonly pages: readonly WorkspacePage[];
   readonly cases: readonly AnnotatedCase[];
+  readonly bindings: readonly NativeBindingView[];
   readonly codes: readonly CodeDeclaration[];
   readonly edges: readonly TraceEdge[];
   readonly findings: readonly Finding[];
@@ -123,17 +125,6 @@ export interface WorkspaceProjection {
   readonly projection: WorkspaceProjectionStatus;
 }
 
-export type ViewJobState = 'queued' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed' | 'cleanup-failed';
-export interface ViewJob {
-  readonly id: string;
-  readonly caseId: string;
-  readonly state: ViewJobState;
-  readonly startedAt: string;
-  readonly finishedAt?: string;
-  readonly evidence?: Evidence;
-  readonly error?: { readonly code: string; readonly message: string };
-}
-
 export interface ViewSuccess<T> { readonly ok: true; readonly value: T }
 export interface ViewFailure { readonly ok: false; readonly complete?: false; readonly error: string; readonly message: string; readonly details?: unknown }
 export type ViewResponse<T> = ViewSuccess<T> | ViewFailure;
@@ -141,7 +132,6 @@ export type { GitDiff, GitStatus };
 
 const Text = Schema.String.check(Schema.isMinLength(1));
 const Strings = Schema.Array(Text);
-const RunnerInputSchema = RunnerSchema;
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 export const ProjectInputSchema = ProjectSchema;
@@ -151,7 +141,7 @@ const DryRun = { dryRun: Schema.optional(Schema.Boolean) } as const;
 export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('file.get'), path: Text }),
   Schema.Struct({ action: Schema.Literal('page.render'), path: Text, theme: PageTheme }),
-  Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), runner: Schema.optional(RunnerInputSchema), docsOnly: Schema.optional(Schema.Boolean), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), docsOnly: Schema.optional(Schema.Boolean), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('recover') }),
   Schema.Struct({
     action: Schema.Literal('document.create'),
@@ -176,7 +166,7 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('issue.search'), query: Text }),
   Schema.Struct({ action: Schema.Literal('issue.edit'), id: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.remove'), id: Text, expectedDigest: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('issue.close'), id: Text, reason: Schema.optional(Text), fixed: Schema.optional(Schema.Boolean), defect: Schema.optional(Text), fix: Schema.optional(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.close'), id: Text, reason: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('feedback.sync'), connection: Text, url: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('feedback.check'), connection: Text }),
   Schema.Struct({ action: Schema.Literal('feedback.link'), id: Text, feature: Text, ...DryRun }),
@@ -205,8 +195,7 @@ export const ViewActionSchema = Schema.Union([
 export type ViewAction = typeof ViewActionSchema.Type;
 
 // Keep these assignments close to the schema so drift is caught without runtime imports.
-type _RunnerCompatible = Runner extends typeof RunnerInputSchema.Type ? true : never;
 type _ProjectCompatible = ProjectConfig extends typeof ProjectInputSchema.Type ? true : never;
 type _KindCompatible = DocumentKind extends Extract<ViewAction, { action: 'document.create' }>['kind'] ? true : never;
-const _typeCompatibility: readonly [_RunnerCompatible, _ProjectCompatible, _KindCompatible] = [true, true, true];
+const _typeCompatibility: readonly [_ProjectCompatible, _KindCompatible] = [true, true];
 void _typeCompatibility;

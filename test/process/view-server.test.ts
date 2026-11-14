@@ -17,7 +17,6 @@ import { Effect } from 'effect';
 
 import { LocalRepository } from "../support/repository.ts";
 
-import { ViewJobManager } from "../../src/app/index.ts";
 import { startViewServer, type ViewServerHandle } from '../support/view-server.ts';
 import { parseWorkspaceProjection, pollUntil } from '../support/support.ts';
 import { type WorkspaceProjection } from "../../src/model/index.ts";
@@ -112,7 +111,7 @@ test('view server keeps the application shell data-free and allows unauthenticat
       assert.equal(existsSync(join(root, 'concord.config.ts')), false);
       const rejectedJob = await send(server, '/api/jobs', { method: 'POST', headers, body: JSON.stringify({ caseId: viewJobCase }) });
       assert.equal(rejectedJob.status, 403);
-      assert.deepEqual(parsed(await send(server, '/api/jobs')).value, []);
+      assert.equal((await send(server, '/api/jobs')).status, 404);
     }
 
     const excess = await send(server, '/api/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'init', docsOnly: true, extra: true }) });

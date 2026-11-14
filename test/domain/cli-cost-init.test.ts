@@ -30,34 +30,31 @@ async function action<A>(root: string, input: unknown, schema: Schema.Constraint
   return decode(runApplication(executeViewAction(root, input)), schema, status);
 }
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
-test('installed init previews configuration, preserves existing docs, and never runs the configured command', () => Effect.runPromise(Effect.promise(async () => {
+test('initialization previews configured roots and preserves existing docs', () => Effect.runPromise(Effect.promise(async () => {
  const root = join(scratch, 'init-options'); mkdirSync(root); execFileSync('git', ['init', '-q', root]);
  write(root, 'docs/README.md', '# Existing documentation\n');
  write(root, 'docs/concepts.md', '# Existing concepts\n');
  write(root, 'docs/architecture.md', '# Existing architecture\n');
  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
- const runner = { kind: 'command', argv: ['node', '-e', 'require("node:fs").writeFileSync("EXECUTED", "bad")'], sourceFiles: [], timeoutMs: 1200 };
- write(root, 'runner.json', JSON.stringify(runner));
- const input = { action: 'init', testRoots: ['spec'], runner };
+ const input = { action: 'init', testRoots: ['spec'], sourceRoots: ['lib'] };
  assert.equal((await action(root, { ...input, dryRun: true }, DryRunOutput)).dryRun, true);
  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
  assert.equal(existsSync(join(root, '.git/concord')), false);
  (await action(root, input, Ack));
  const config = (await readProjectConfig(root));
- assert.deepEqual(config.testRoots, ['spec']); assert.deepEqual(config.runner, runner);
+ assert.deepEqual(config.testRoots, ['spec']); assert.deepEqual(config.sourceRoots, ['lib']);
  assert.equal(readFileSync(join(root, 'docs/README.md'), 'utf8'), '# Existing documentation\n');
  assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), '# Existing concepts\n');
  assert.equal(readFileSync(join(root, 'docs/architecture.md'), 'utf8'), '# Existing architecture\n');
  const diagnosis = (await action(root, { action: 'doctor' }, DoctorOutput));
  assert.deepEqual(diagnosis.missingTestRoots, ['spec']);
  (await query(root, { name: 'check', input: {} }, CheckOutput));
- assert.equal(existsSync(join(root, 'EXECUTED')), false);
  assert.equal((await action(root, { action: 'init' }, ErrorOutput, 1)).error, 'ProjectExists');
 })));
 
 
 // @feature docs/feature/taste/cli.md
-test('packed boundaries reject non-current formats and preserve configuration, owners, receipts, journals and locks', () => Effect.runPromise(Effect.promise(async () => {
+test('boundaries reject non-current formats and preserve configuration, private state, journals and locks', () => Effect.runPromise(Effect.promise(async () => {
  const root = (await createConsumer());
  writeProjectConfig(root, { testRoots: ['test', 'tests'] });
  const taste = 'docs/taste.md';
@@ -81,12 +78,11 @@ test('packed boundaries reject non-current formats and preserve configuration, o
   assert.equal((await query(root, { name: 'docs.check', input: {} }, ErrorOutput, 1)).error, 'InvalidWritingPolicy');
   assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), source);
  }
- const id = 'ccev_11111111111111111111111111111111';
- const receiptPath = `.git/concord/evidence/${id}.json`;
- const receipt = JSON.stringify({ format: 'concord.command-evidence/v1', id });
- write(root, receiptPath, receipt);
+ const statePath = '.git/concord/unrelated-state.json';
+ const state = JSON.stringify({ unrelated: true });
+ write(root, statePath, state);
  (await query(root, { name: 'config.show', input: {} }, Ack));
- assert.equal(readFileSync(join(root, receiptPath), 'utf8'), receipt);
+ assert.equal(readFileSync(join(root, statePath), 'utf8'), state);
  const journalPath = '.git/concord/journal.json', lockPath = '.git/concord/lock.json';
  const journal = JSON.stringify({ format: 'concord.journal', scope: { kind: 'documents' } });
  const lock = 'preserve invalid lock bytes';

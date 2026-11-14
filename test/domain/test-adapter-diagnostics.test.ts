@@ -24,6 +24,7 @@ test('adapter collection errors retain invocation states and bounded output tail
     repo = (await LocalRepository.open(root));
     const stdout = 'discarded prefix\n' + '界'.repeat(30_000) + '\nstdout last line';
     const stderr = 'discarded prefix\n' + 'x'.repeat(70_000) + '\nstderr last line';
+    const invocationIds = ['first', 'failed'];
     for (const state of [
       { exitCode: 23 },
       { exitCode: null, signal: 'SIGTERM' as const },
@@ -37,7 +38,7 @@ test('adapter collection errors retain invocation states and bounded output tail
           const base: OwnedProcessResult = { command, exitCode: 0, signal: null, timedOut: false, cancelled: false, outputLimitExceeded: false, stdout: '', stderr: '', outputBytes: 0, processGroupOwned: false, groupCleanup: { owned: false, checked: false, aliveAfterLeaderClose: null, signalsSent: [], gone: null, detail: 'Simulated external process boundary' } };
           if (options.stdin !== undefined) {
             const request = protocolDecode(RequestSchema, protocolJson(options.stdin));
-            return { ...base, stdout: JSON.stringify({ format: request.format, op: request.op, requestId: request.requestId, planId: request.context.planId, inputs: request.context.inputs, payload: { invocations: ['first', 'failed'].map(invocationId => ({ invocationId, argv: [process.execPath, invocationId], cwd: '.', envNames: [], reports: [] })), planContext: {} } }) };
+            return { ...base, stdout: JSON.stringify({ format: request.format, op: request.op, requestId: request.requestId, planId: request.context.planId, inputs: request.context.inputs, payload: { invocations: invocationIds.map(invocationId => ({ invocationId, argv: [process.execPath, invocationId], cwd: '.', envNames: [], reports: [] })), planContext: {} } }) };
           }
           return command[1] === 'first' ? { ...base, stdout: 'first output', stderr: 'first warning' } : { ...base, ...state, stdout, stderr };
         }),
@@ -48,8 +49,8 @@ test('adapter collection errors retain invocation states and bounded output tail
         const details = error.details as { invocations: readonly Record<string, unknown>[] } | undefined;
         assert.ok(details?.invocations, 'failure must expose invocation diagnostics');
         assert.deepEqual(details.invocations[0], { invocationId: 'first', exitCode: 0, signal: null, timedOut: false, cancelled: false, outputTruncated: false, cleanup: 'complete', stdout: 'first output', stderr: 'first warning' });
-        const last = details.invocations[1]!;
-        assert.equal(details.invocations.length, 2);
+        const last = details.invocations.at(-1)!;
+        assert.equal(details.invocations.length, invocationIds.length);
         assert.deepEqual({ ...last, stdout: '', stderr: '' }, { invocationId: 'failed', exitCode: state.exitCode === undefined ? 0 : state.exitCode, signal: state.signal ?? null, timedOut: state.timedOut ?? false, cancelled: state.cancelled ?? false, outputTruncated: state.outputLimitExceeded ?? false, cleanup: 'complete', stdout: '', stderr: '' });
         for (const [key, suffix] of [['stdout', '\nstdout last line'], ['stderr', '\nstderr last line']] as const) {
           assert.equal(typeof last[key], 'string');

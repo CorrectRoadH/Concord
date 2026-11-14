@@ -412,7 +412,9 @@ interface NativeBindingView {
 
 `concord test discover [<file>...]` 显式收集框架用例、label 与来源位置，保存可丢弃的原生清单观察。`test list/show`、`trace` 与 Web 只读取已有观察，展示 `current`、`complete` 与 `gaps`，普通查询不启动收集。
 
-`testAdapters` 每项声明 `id`、位于 `testRoots` 内且互不重叠的 `include`，以及 `builtin` 或外部 `argv`。可选项仅有收集超时、预算和允许传递的 `envNames`；没有测试运行配置。
+`testAdapters` 每项声明 `id`、位于 `testRoots` 内且互不重叠的 `include`，以及 `builtin` 或外部 `argv`。收集超时、预算和允许传递的 `envNames` 可选，`envNames` 默认为空；没有测试运行配置。Concord 从收集命令观测工具版本，并记录源码根、测试根、仓库顶层文件和仓库内 adapter 入口的输入身份。需要扩大输入范围或检查版本时，可以声明 `implementationFiles`、`inputRoots`、`lockFiles` 和 `frameworkVersion`；这些是收集新鲜度的可选约束，不是执行配置。前三项默认为空，仓库内 argv 入口仍自动纳入快照；只有显式声明 `frameworkVersion` 才检查版本匹配。外部 adapter 未提供可观测框架版本时记录未知及能力缺口，不伪造版本。
+
+`envNames` 省略时不转发项目环境变量。命令查找使用调用方的环境；执行工具链或版本管理器所需的 `HOME`、`PATH`、`TMPDIR` 等值须由项目显式允许。配置合法不代表外部工具已安装、配置完成或无需环境；缺少所需环境时返回收集错误，不自动继承全部环境，也不增加逐框架的环境配置推断。
 
 当前输入上的原生清单按来源范围或标记中的 `@native` 与测试关联绑定。`tags` 保存框架 label；清单、label 与绑定不创建 Spec 关系，不改变关联 ID，不表示测试执行结果。流程见[收集原生测试并关联具体用例](use-case/collect-native-tests.md)。
 

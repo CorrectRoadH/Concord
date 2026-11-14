@@ -1,17 +1,17 @@
-// 跨进程保证：外部程序——真实pytest、Go和Cargo收集与精确选择只运行请求测试。
+// 跨进程保证：外部程序——真实pytest、Go和Cargo收集不派发测试体。
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
-import { assert, test, Effect, Schema, OwnedProcessLive, hasSuccessfulOwnedProcessResult, text, scratch, command, parse, CaseList, Receipt, setup, configure, builtin } from '../support/test-adapters-consumer-fixture.ts';
-import { prepare, call, success, idFor } from '../support/adapter-runtime-cli.ts';
+import { assert, test, Effect, Schema, OwnedProcessLive, hasSuccessfulOwnedProcessResult, text, scratch, command, parse, setup, configure, builtin } from '../support/test-adapters-consumer-fixture.ts';
+import { prepare, success } from '../support/adapter-runtime-cli.ts';
 
 
-// @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @use-case docs/feature/local-sdlc/use-case/collect-native-tests.md
 // @name packed-real-adapter-frameworks-c18
-test('packed adapters collect and select real pytest Go and Cargo (C2 C4 C6 C13 C17 C18)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, t => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+test('packed adapters collect real pytest Go and Cargo without dispatching test bodies (C2 C4 C6 C13 C17 C18)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, t => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* scratch; const { tool } = yield* setup(root);
   const specifications = [
-    { name: 'pytest', file: 'test/test_example.py', adapter: builtin('py', 'test', 'pytest', '9.2.0'), source: `# @feature docs/feature/example/README.md\n# @native pytest:py:default:test/test_example.py::test_selected\ndef test_selected():\n    assert True\ndef test_excluded():\n    assert False\n` },
-    { name: 'go', file: 'test/example_test.go', adapter: builtin('go', 'test', 'go', 'go1.27.3'), source: `package example\nimport "testing"\n// @feature docs/feature/example/README.md\n// @native go:go:test:test/example_test.go:TestSelected\nfunc TestSelected(t *testing.T) {}\nfunc TestExcluded(t *testing.T) { t.Fatal("must not execute") }\n` },
-    { name: 'cargo', file: 'test/src/lib.rs', adapter: builtin('rs', 'test', 'cargo', '1.97.1', ['test/src']), source: `// @feature docs/feature/example/README.md\n// @native cargo:rs:test:lib:test/src/lib.rs:selected\n#[test]\nfn selected() {}\n#[test]\nfn excluded() { panic!("must not execute"); }\n` },
+    { name: 'pytest', file: 'test/test_example.py', adapter: builtin('py', 'test', 'pytest', '9.2.0'), source: `# @feature docs/feature/example/README.md\n# @native pytest:py:default:test/test_example.py::test_selected\ndef test_selected():\n    raise AssertionError("must not execute")\ndef test_excluded():\n    assert False\n` },
+    { name: 'go', file: 'test/example_test.go', adapter: builtin('go', 'test', 'go', 'go1.27.3'), source: `package example\nimport "testing"\n// @feature docs/feature/example/README.md\n// @native go:go:test:test/example_test.go:TestSelected\nfunc TestSelected(t *testing.T) { t.Fatal("must not execute") }\nfunc TestExcluded(t *testing.T) { t.Fatal("must not execute") }\n` },
+    { name: 'cargo', file: 'test/src/lib.rs', adapter: builtin('rs', 'test', 'cargo', '1.97.1', ['test/src']), source: `// @feature docs/feature/example/README.md\n// @native cargo:rs:test:lib:test/src/lib.rs:selected\n#[test]\nfn selected() { panic!("must not execute"); }\n#[test]\nfn excluded() { panic!("must not execute"); }\n` },
   ];
   for (const spec of specifications) yield* Effect.scoped(Effect.gen(function* () {
     const probe = spec.name === 'pytest' ? ['uv', 'run', '--offline', '--no-project', '--with', 'pytest==9.2.0', 'pytest', '--version'] : spec.name === 'go' ? ['go', 'version'] : ['cargo', '+stable', '--version'];
@@ -51,27 +51,22 @@ test('packed adapters collect and select real pytest Go and Cargo (C2 C4 C6 C13 
     const native = parse(collected.stdout); assert.ok(native.observations);
     const collectedState = Schema.decodeUnknownSync(Schema.Struct({ observations: Schema.Array(Schema.Struct({ observation: Schema.Struct({ complete: Schema.Boolean, gaps: Schema.Array(Schema.String) }), inputScope: Schema.Struct({ members: Schema.Array(Schema.Unknown), excluded: Schema.Array(Schema.String), versions: Schema.Struct({ framework: Schema.String, runtime: Schema.String, observedFramework: Schema.String, observedRuntime: Schema.optional(Schema.String) }) }) })) }))(JSON.parse(collected.stdout)).observations[0]!;
     assert.equal(collectedState.observation.complete, false); assert.ok(collectedState.observation.gaps.includes('ExternalInputUnknown')); assert.equal(collectedState.inputScope.versions.framework, adapter.frameworkVersion);
-    const id = yield* idFor(consumer);
-    const executed = yield* call(consumer, ['test', 'run', id, '--require-native']);
-    { assert.equal(executed.exitCode, 0, `${spec.name}\n${executed.stderr}\n${executed.stdout}`); const receipt = Schema.decodeUnknownSync(Receipt)(JSON.parse(executed.stdout)); assert.equal(receipt.scope, 'native'); assert.equal(receipt.commandOutcome, 'green'); assert.equal(receipt.requested?.length, 1); assert.ok(receipt.gaps?.includes('ExternalInputUnknown')); assert.equal(receipt.versions?.framework, adapter.frameworkVersion); }
     if (spec.name === 'cargo') {
-      yield* Effect.sync(() => text(consumer, 'test/tests/other.rs', '// @feature docs/feature/example/README.md\n// @native cargo:rs:test:test:other:test/tests/other.rs:selected\n#[test]\nfn selected() {}\n#[test]\nfn excluded() { panic!("must not execute"); }\n'));
+      yield* Effect.sync(() => text(consumer, 'test/tests/other.rs', '// @feature docs/feature/example/README.md\n// @native cargo:rs:test:test:other:test/tests/other.rs:selected\n#[test]\nfn selected() { panic!("must not execute"); }\n#[test]\nfn excluded() { panic!("must not execute"); }\n'));
       const multiple = yield* success(consumer, ['test', 'discover', spec.file, 'test/tests/other.rs']);
       const inventory = Schema.decodeUnknownSync(Schema.Struct({ observations: Schema.Array(Schema.Struct({ observation: Schema.Struct({ value: Schema.Struct({ cases: Schema.Array(Schema.Struct({ nativeId: Schema.String })) }) }) })) }))(JSON.parse(multiple.stdout));
       const nativeIds = inventory.observations.flatMap(item => item.observation.value.cases.map(item => item.nativeId));
       assert.equal(new Set(nativeIds).size, nativeIds.length); assert.ok(nativeIds.some(id => id.includes(':lib:'))); assert.ok(nativeIds.some(id => id.includes(':test:other:')));
-      const list = Schema.decodeUnknownSync(CaseList)(JSON.parse((yield* success(consumer, ['test', 'list'])).stdout));
-      for (const item of list.cases) {
-        const run = Schema.decodeUnknownSync(Receipt)(JSON.parse((yield* success(consumer, ['test', 'run', item.id, '--require-native'])).stdout));
-        assert.equal(run.commandOutcome, 'green'); assert.equal(run.requested?.length, 1);
-      }
+
     }
     if (spec.name === 'go') {
       yield* Effect.sync(() => text(consumer, spec.file, 'package example\nimport "testing"\n// @feature docs/feature/example/README.md\n// @native go:go:test:test/example_test.go:TestDynamic\nfunc TestDynamic(t *testing.T) { t.Run("child", func(t *testing.T) {}) }\n'));
-      const dynamicId = yield* idFor(consumer);
-      const dynamic = yield* call(consumer, ['test', 'run', dynamicId, '--require-native']);
-      const receipt = Schema.decodeUnknownSync(Receipt)(JSON.parse(dynamic.stdout));
-      assert.equal(dynamic.exitCode, 1); assert.equal(receipt.commandOutcome, 'invalid'); assert.equal(receipt.requested?.length, 1);
+      const dynamic = yield* success(consumer, ['test', 'discover', spec.file]);
+      const inventory = Schema.decodeUnknownSync(Schema.Struct({ observations: Schema.Array(Schema.Struct({ observation: Schema.Struct({ value: Schema.Struct({ cases: Schema.Array(Schema.Struct({ nativeId: Schema.String })) }), gaps: Schema.Array(Schema.String) }) })) }))(JSON.parse(dynamic.stdout)).observations[0]!.observation;
+      assert.ok(inventory.gaps.includes('GoDynamicSubtestsUnknown'));
+      assert.equal(inventory.value.cases.length, 1);
+      assert.ok(inventory.value.cases[0]!.nativeId.endsWith(':TestDynamic'));
+
     }
   }));
 })).pipe(Effect.provide(OwnedProcessLive), Effect.provideService(RuntimeEnvironment, makeRuntimeEnvironment(process.cwd(), process.env)))));

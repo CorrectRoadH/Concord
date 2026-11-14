@@ -19,7 +19,6 @@ import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSy
 import { LocalRepository } from "../support/repository.ts";
 
 import { beginRun, finalizeRun } from "../../src/base/publication/index.ts";
-import { runCase } from "../../src/domain/tests/index.ts";
 import { OwnedProcessLive } from "../../src/base/process/index.ts";
 import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.ts";
 

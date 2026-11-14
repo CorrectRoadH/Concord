@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
+// @concord-implements docs/feature/local-sdlc/architecture.md#原生-adapter
 // Scope-owned, detached process groups for repository commands.
 import { spawn, type ChildProcess } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
@@ -217,7 +217,7 @@ export function makeOwnedProcessService(options: { readonly environment?: Runtim
     run: (command, processOptions) => Effect.suspend(() => {
       if (isolated) return Effect.fail(new OwnedProcessError({ operation: 'observe', detail: 'Owned process cleanup is unconfirmed; this owner is isolated' }));
       if (stopping !== undefined) {
-        return Effect.succeed({ command, exitCode: null, signal: stopping, timedOut: false, cancelled: true, outputLimitExceeded: false, stdout: '', stderr: '', outputBytes: 0, processGroupOwned: false, groupCleanup: none('runner cancellation was already requested') });
+        return Effect.succeed({ command, exitCode: null, signal: stopping, timedOut: false, cancelled: true, outputLimitExceeded: false, stdout: '', stderr: '', outputBytes: 0, processGroupOwned: false, groupCleanup: none('observation cancellation was already requested') });
       }
       return Effect.acquireRelease(
         acquire(command, { ...processOptions, env: processOptions.env ?? environment.env }, active, graceMs, options.spawner ?? nodeSpawner()).pipe(Effect.tap(entry => Effect.sync(() => {

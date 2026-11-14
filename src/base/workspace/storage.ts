@@ -203,7 +203,7 @@ Before planning, implementing, or reviewing governed work:
 - Use \`concord --skill all\` only when the complete offline guide is needed.
 - Before changing behavior, read or update the owning Spec and the pages for its actual interface. Run \`concord --skill document\` for the document model, docs tree and complete examples. Review the prose before using \`concord trace gaps --json\` to inspect implementation relationships within the task's scope.
 - Write contracts as declarations of intended behavior, constraints, and acceptance. Memory holds reusable lessons; development logs, investigation timelines and delivery progress stay in the task handoff. Product workflows remain valid contract content.
-- Directly edit files under \`docs/\` and \`memory/\`, including relations. Use \`concord memory search\` and \`concord issue search\` for search. Commands run required steps such as fix verification; run \`concord check\` before delivery. Do not maintain a manual INDEX.
+- Directly edit files under \`docs/\` and \`memory/\`, including relations. Use \`concord memory search\` and \`concord issue search\` for search. Use project tools to run tests yourself. Run \`concord check\` and resolve findings until it passes before declaring completion; an Issue is not a substitute for completing authorized work. Report genuine blockers as unfinished. Do not maintain a manual INDEX.
 - For remote Issue writes, run remote preview, obtain explicit user agreement to its authorization string (or its action, target, and payload), then remote apply with \`--authorize\`; never infer authorization from preview success, tool availability, or permissive access.
 - Local issues work without GitHub, Linear, credentials, or connections. Use \`concord new issue\` for local observations; local operations never authorize remote mutations.
 - Directly edit directory-scoped \`concepts.md\` and \`writing.md\`; \`concord check\` validates them. Keep each concept's term, definition and explanation together; only deprecated names become terminology bans.
@@ -266,7 +266,6 @@ export class LocalRepository implements Repository {
   private observing = true;
   private readonly optimistic: boolean;
   private readonly observedFiles = new Map<string, string | undefined>();
-  private verifiedIssueCloseFiles: ReadonlySet<string> | undefined;
   private readonly observedBytes = new Map<string, Buffer | undefined>();
   private observedRootFiles: string | undefined;
   private readonly observedDirectories = new Map<string, { path: string; scope: 'source' | undefined; observation: string; files: readonly string[] }>();
@@ -353,7 +352,7 @@ export class LocalRepository implements Repository {
       this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : await snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
       this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
       this.validateConfiguredRoots(this.config);
-      for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...(this.config.runner?.sourceFiles ?? [])]) this.absolute(path);
+      for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? [])]) this.absolute(path);
       for (const adapter of this.config.testAdapters ?? []) {
         for (const path of [...adapter.include, ...adapter.inputRoots, ...adapter.implementationFiles, ...adapter.lockFiles]) this.absolute(path);
       }
@@ -499,7 +498,6 @@ export class LocalRepository implements Repository {
   }
   private validateProjectConfig(config: ProjectConfig): void {
     this.validateConfiguredRoots(config);
-    for (const path of config.runner?.sourceFiles ?? []) this.absolute(path);
   }
   private allowedOwner(path: string, _config: ProjectConfig = this.config): boolean { return fixedOwner(path) || isWorkflowSkillPath(path) || path.startsWith('memory/') && path.endsWith('.md') || path.startsWith('docs/') && path.endsWith('/writing.md'); }
   private async currentSnapshot(): Promise<ConfigSnapshot> {
@@ -511,7 +509,7 @@ export class LocalRepository implements Repository {
       if (forbiddenSourcePart(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot: ${root}`);
       this.absolute(root);
   }
-  /** An explicit coherent source-read section; never include network or runner waits. */
+  /** An explicit coherent source-read section; never include network or observation waits. */
   // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   snapshot<A>(read: () => A): A {
@@ -701,15 +699,6 @@ export class LocalRepository implements Repository {
     return { observation: canonical(entries), files };
   }
   private validateObservations(): void {
-    // Verified closure depends on its captured Issue and regression sources, not discovery reads.
-    // The dedicated journal still recomputes the complete allowed marker rewrite under the lease.
-    if (this.verifiedIssueCloseFiles !== undefined) {
-      const retained = this.verifiedIssueCloseFiles;
-      for (const path of this.observedFiles.keys()) if (!retained.has(path) && path !== this.configSnapshot.path) this.observedFiles.delete(path);
-      for (const path of this.observedBytes.keys()) if (!retained.has(path) && path !== this.configSnapshot.path) this.observedBytes.delete(path);
-      this.observedDirectories.clear(); this.observedRootFiles = undefined;
-      this.clearPathObservations();
-    }
     this.verifyObservations(false);
   }
   // @concord-code
@@ -809,8 +798,8 @@ export class LocalRepository implements Repository {
     return this.publishJournal(journal, dryRun);
   }
   // @concord-code
-  // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-  async publishIssueClose(issue: string, dryRun = false, verifiedSources?: ReadonlyMap<string, string | undefined>): Promise<MutationReceipt> {
+  // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
+  async publishIssueClose(issue: string, dryRun = false): Promise<MutationReceipt> {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const frozen = await this.currentSnapshot();
     const plan = await this.validation!.planIssueClose(this, { issue });
@@ -821,14 +810,8 @@ export class LocalRepository implements Repository {
       if (!stat.isFile()) throw new ConcordError('InvalidChange', 'Issue closure requires existing regular files');
       return { ...change, beforeDigest: digest(change.before), afterDigest: change.after === null ? null : digest(change.after), mode: stat.mode & 0o777 };
     });
-    if (verifiedSources !== undefined) {
-      for (const [path, source] of verifiedSources) if (source === undefined || this.read(path) !== source) throw new ConcordError('FileChangedSinceRead', `${path} changed during verification`);
-      this.verifiedIssueCloseFiles = new Set([...verifiedSources.keys(), ...changes.map(change => change.path)]);
-    }
-    try {
-      return await this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation: 'close-issue', phase: 'prepared', directories: [], changes,
+    return this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation: 'close-issue', phase: 'prepared', directories: [], changes,
         scope: { kind: 'issue-close', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, issue: plan.issue, inputsDigest: plan.inputsDigest, testFiles: plan.testFiles } }, dryRun);
-    } finally { this.verifiedIssueCloseFiles = undefined; }
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程

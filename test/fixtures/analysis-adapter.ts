@@ -22,8 +22,8 @@ const main = Effect.sync(() => {
     const source = readFileSync(join(request.context.root, file));
     const range = { startLine: mode === 'second' ? 7 : 4, endLine: mode === 'second' ? 9 : 6, sourceDigest: `sha256:${createHash('sha256').update(source).digest('hex')}` };
     payload = {
-      cases: [{ nativeId: 'fixture:selected', project: 'fixture', file, kind: 'leaf', ...(mode === 'no-range' ? {} : { range }), selection: { opaqueId: 'selected', capabilityVersion: 'fixture/v1' }, tags: {}, provenance: 'fixture/v1' }],
-      capabilities: { realCollection: true, leaf: true, parameterGroups: false, exactSelection: true, perItemReport: true, range: mode !== 'no-range', rangeTrivia: false, tags: false, skipVisibility: true },
+      cases: [{ nativeId: 'fixture:selected', project: 'fixture', file, kind: 'leaf', ...(mode === 'no-range' ? {} : { range }), tags: {}, provenance: 'fixture/v1' }],
+      capabilities: { realCollection: true, leaf: true, parameterGroups: false, range: mode !== 'no-range', rangeTrivia: false, tags: false },
       completeness: { complete: true, gaps: [] },
     };
   } else throw new Error('This fixture only collects ranges');

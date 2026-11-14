@@ -18,7 +18,7 @@ function isolatedRepository(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), "concord-coordination-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   execFileSync("git", ["init", "-q", root]);
-  writeFileSync(join(root, "concord.config.ts"), renderTypeScriptConfig({ testRoots: ["test"], runner: { kind: "node-test", sourceFiles: [], timeoutMs: 60000 } }));
+  writeFileSync(join(root, "concord.config.ts"), renderTypeScriptConfig({ testRoots: ["test"] }));
   execFileSync("git", ["-C", root, "add", "concord.config.ts"]);
   execFileSync("git", ["-C", root, "-c", "user.name=Concord Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"]);
   return root;

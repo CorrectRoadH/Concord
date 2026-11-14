@@ -24,7 +24,6 @@ export const requireCommand = Effect.fn('adapterTest.command')(function* (argv: 
 });
 export const parse = (source: string): Record<string, unknown> => Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(JSON.parse(source));
 export const CaseList = Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: Schema.String })) });
-export const Receipt = Schema.Struct({ scope: Schema.String, commandOutcome: Schema.String, definitionDigest: Schema.optional(Schema.String), requested: Schema.optional(Schema.Array(Schema.String)), gaps: Schema.optional(Schema.Array(Schema.String)), commandExecutionCount: Schema.optional(Schema.Int), versions: Schema.optional(Schema.Struct({ framework: Schema.String, runtime: Schema.String })) });
 export const setup = Effect.fn('adapterTest.pack')(function* (root: string, needsEffect = false) {
   return yield* Effect.sync(() => {
     const tool = join(root, 'tool');
@@ -55,7 +54,7 @@ export const prepare = Effect.fn('adapterTest.consumer')(function* (scratch: str
 export const configure = async (root: string, adapters: readonly TestAdapter[], sourceIgnore: readonly string[] = []) => {
   const configPath = join(root, 'concord.config.ts');
   const config = existsSync(configPath) ? (await parseTypeScriptConfig(readFileSync(configPath, 'utf8'))) : {};
-  writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig(Schema.decodeUnknownSync(ProjectSchema)({ ...config, runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 60000 }, testAdapters: adapters, sourceIgnore })));
+  writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig(Schema.decodeUnknownSync(ProjectSchema)({ ...config, testAdapters: adapters, sourceIgnore })));
 };
 export const call = Effect.fn('adapterTest.call')(function* (root: string, cli: string, args: readonly string[]) {
   assert.equal(cli, sourceCli(), 'In-process adapter fixtures must use the source CLI');

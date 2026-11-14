@@ -1,12 +1,3 @@
-export { commitRepository } from './verification-git.ts';
-export { assertDependencyLocks } from './verification-git.ts';
-export { firstParentPath } from './verification-git.ts';
-export { gitBlob } from './verification-git.ts';
-export { gitBlobBytes } from './verification-git.ts';
-export { resolveCommit } from './verification-git.ts';
-export { worktreeIdentity } from './verification-git.ts';
-export { linkWorktreeDependencies } from './verification-git.ts';
-export { dependencyProcessGuard } from './verification-dependencies.ts';
+export { resolveCommit, worktreeIdentity } from './source-state.ts';
 export { Git, OUTPUT_LIMIT, runGit, previewGit, previewGitEnvironment } from './service.ts';
 export type { GitService } from './service.ts';
-export { captureVerificationSnapshot, deriveVerificationRed } from './verification-snapshots.ts';

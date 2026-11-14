@@ -24,7 +24,7 @@ test('optional configuration discovers existing conventional roots and explicit 
   try {
     assert.deepEqual(repo.config.testRoots, ['test']);
     assert.deepEqual(repo.config.sourceRoots, ['src']);
-    assert.equal(repo.config.runner, undefined);
+    assert.equal(repo.config.testAdapters, undefined);
     assert.deepEqual(repo.configSnapshot.config, {});
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);
   } finally { repo.close(); }
@@ -36,7 +36,7 @@ test('optional configuration discovers existing conventional roots and explicit 
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('strict configuration rejects retired fields and runtime expressions', () => Effect.runPromise(Effect.tryPromise(async () => {
-  for (const name of ['format', 'projectId', 'constitution', 'documentDefaults', 'projectTypes', 'memorySources']) {
+  for (const name of ['format', 'projectId', 'constitution', 'documentDefaults', 'projectTypes', 'memorySources', 'runner']) {
     (await assert.rejects(async () => (await parseTypeScriptConfig(`export default { ${name}: null };`)), { code: 'InvalidData' }));
   }
   (await assert.rejects(async () => (await parseTypeScriptConfig('export default { testRoots: getRoots() };')), { code: 'InvalidConfigSyntax' }));

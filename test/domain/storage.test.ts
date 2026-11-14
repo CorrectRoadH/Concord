@@ -72,7 +72,7 @@ test('interrupted multi-file publication rolls back, and recovery preserves exte
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
 test('unified journal recovers interrupted init, preflights every target, and preserves unknown formats',async () => {
  const root=fixture();let repo: LocalRepository | undefined;try {
-  const config=renderTypeScriptConfig({testRoots:[],runner:{kind:'node-test',sourceFiles:[],timeoutMs:60000}});
+  const config=renderTypeScriptConfig({testRoots:[],sourceRoots:['src']});
   const guide='# guide\n'; const journalPath=join(root,'.git','concord','journal.json');mkdirSync(join(root,'.git','concord'),{recursive:true});mkdirSync(join(root,'docs'),{recursive:true});writeFileSync(join(root,'docs/concord.md'),guide);
   writeFileSync(journalPath,JSON.stringify({format:'concord.journal',root,privateDir:join(root,'.git','concord'),operation:'init',phase:'prepared',directories:['docs'],scope:{kind:'documents',configPath:'concord.config.ts',configSource:'',configDigest:digest('')},changes:[
    {path:'concord.config.ts',before:null,after:config,beforeDigest:null,afterDigest:digest(config),mode:420},

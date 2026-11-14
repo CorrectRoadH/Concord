@@ -7,7 +7,7 @@ import { adapterConsumer, adapterQuery, adapterSuccess, clearAdapterCache, corru
 import { runApplication } from '../support/repository.ts';
 import { text } from '../support/test-adapters-consumer-fixture.ts';
 
-// @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @use-case docs/feature/local-sdlc/use-case/collect-native-tests.md
 // @name external-adapter-invalid-source-cache
 test('external adapter preserves invalid-source findings across cold warm corrupt and cleared caches', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, () => runApplication(Effect.scoped(Effect.gen(function* () {
   const consumer = yield* adapterConsumer;

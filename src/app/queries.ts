@@ -14,7 +14,7 @@ import { tasteShow } from '../domain/taste/index.ts';
 import { showWriting, checkWriting, writingIndex } from '../domain/writing/index.ts';
 import { showConcepts, indexConcepts } from '../domain/concepts/index.ts';
 import { listFeedback } from '../domain/feedback/index.ts';
-import { readNativeObservations } from '../domain/tests/index.ts';
+import { nativeBindings, readNativeObservations } from '../domain/tests/index.ts';
 import { scanCode } from '../domain/code/index.ts';
 import { checkCurrentProject } from './check-current.ts';
 import { knowledgeIndex, knowledgeSearchRecords } from './knowledge.ts';
@@ -72,13 +72,14 @@ const queryValue = async (repo: WorkspaceTypes.LocalRepository, request: QueryRe
     case 'memory.search': return knowledgeSearchRecords(repo, 'memory', request.input.query);
     case 'issue.search': return knowledgeSearchRecords(repo, 'issue', request.input.query);
     case 'code.list': return (await listCode(repo));
-    case 'test.list': { const t = (await buildTrace(repo, cache, { includeCode: false })); requireValidTrace(t); return { operation: 'test-list', cases: t.annotations.cases, cache: t.annotations.cache, observations: readNativeObservations(repo) }; }
+    case 'test.list': { const t = (await buildTrace(repo, cache, { includeCode: false })); requireValidTrace(t); const observations = readNativeObservations(repo); return { operation: 'test-list', cases: t.annotations.cases, cache: t.annotations.cache, observations, bindings: nativeBindings(repo, t.annotations.cases, observations) }; }
     case 'test.show': {
       const t = (await buildTrace(repo, cache, { includeCode: false })); requireValidTrace(t);
       const selected = selectCase(t.annotations.cases, request.input.id);
       let codes: Awaited<ReturnType<typeof scanCode>>['codes'] = [];
       try { codes = (await scanCode(repo, { cache: 'off' })).codes; } catch { /* Optional observations. */ }
-      return { operation: 'test-show', case: selected, evidenceScope: 'command', analysis: (await analysisView(repo, [selected], codes, t.documents)), observations: readNativeObservations(repo) };
+      const observations = readNativeObservations(repo);
+      return { operation: 'test-show', case: selected, analysis: (await analysisView(repo, [selected], codes, t.documents)), observations, bindings: nativeBindings(repo, [selected], observations) };
     }
     case 'writing.show': return showWriting(repo, request.input.path);
     case 'writing.index': return writingIndex(repo);

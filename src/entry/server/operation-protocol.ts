@@ -14,10 +14,7 @@ export const Snapshot = strict(Schema.Struct({
   query_cache: Schema.optional(Schema.Array(Row)),
   workspace_projection: Schema.optional(Schema.Array(Row)),
 }));
-export const OperationRequest = Schema.Union([
-  strict(Schema.Struct({ kind: Schema.Literal('action'), root: Schema.String, cwd: CallerCwd, environment: QueryEnvironment, input: ViewActionSchema, snapshot: Snapshot })),
-  strict(Schema.Struct({ kind: Schema.Literal('job'), root: Schema.String, cwd: CallerCwd, environment: QueryEnvironment, caseId: Schema.String, snapshot: Snapshot })),
-]);
+export const OperationRequest = strict(Schema.Struct({ kind: Schema.Literal('action'), root: Schema.String, cwd: CallerCwd, environment: QueryEnvironment, input: ViewActionSchema, snapshot: Snapshot }));
 export const OperationReply = Schema.Union([
   strict(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json, derived: Schema.Array(CacheDerivationBatch) })),
   strict(Schema.Struct({ ok: Schema.Literal(false), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) })),

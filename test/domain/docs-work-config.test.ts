@@ -14,17 +14,22 @@ async function withRepository<A>(root: string, run: (repository: LocalRepository
 }
 
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
-test('config set/show round-trip docsWork and reject malformed commands without changing the owner', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('config set/show round-trip shared paths and reject all external check configuration without changing the owner', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = fixture(custom);
   try {
     const show = async () => (await withRepository(root, showConfig));
     const current = (await show()); assert.deepEqual(current.config.docsWork, custom);
     const source = readFileSync(join(root, 'concord.config.ts'), 'utf8');
-    for (const docsWork of [{ checks: { invalid: { argv: [] } } }, { finalizer: { argv: [process.execPath], timeoutMs: 0 } }, { unsupported: true }]) {
+    for (const docsWork of [
+      { checks: { writing: { argv: [process.execPath, '-e', 'process.exit(0)'] } } },
+      { checks: {} },
+      { finalizer: { argv: [process.execPath, '-e', 'process.exit(0)'], timeoutMs: 1000 } },
+      { argv: [process.execPath] }, { timeoutMs: 1000 }, { unsupported: true },
+    ]) {
       (await assert.rejects(async () => (await withRepository(root, async repository => (await setConfig(repository, { ...current.config, docsWork } as unknown as ProjectConfig, current.digest)))), error => error instanceof ConcordError && error.code === 'InvalidData'));
       assert.equal(readFileSync(join(root, 'concord.config.ts'), 'utf8'), source);
     }
-    const configured = { ...custom, sharedPaths: ['docs/README.md'], finalizer: { ...custom.finalizer, timeoutMs: 2000 } };
+    const configured = { sharedPaths: ['docs/README.md'] };
     const saved = (await withRepository(root, async repository => (await setConfig(repository, { ...current.config, docsWork: configured } as unknown as ProjectConfig, current.digest))));
     assert.equal(saved.operation, 'set-config');
     assert.deepEqual(saved.changedPaths, ['concord.config.ts']);

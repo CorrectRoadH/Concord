@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as annotations from '../../src/domain/tests/index.ts';
 
-// @use-case docs/feature/local-sdlc/use-case/verify-fix-in-one-commit.md#verify-staged
-test('verification bodies use the real marker blocks and preserve exact source characters', async () => {
+// @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md#place
+test('marker bodies use real comment blocks and preserve exact source characters', async () => {
   assert.equal(typeof annotations.testDeclarationBodies, 'function');
   const source = 'const preamble = 1;\r\n// explanatory header\r\n// @name first\r\n// @feature docs/feature/cart/README.md\r\nfirst();\r\n\r\n// @name second\r\n// @feature docs/feature/cart/README.md\r\nsecond(); // exact whitespace  \r\n';
   const parsed = await annotations.testDeclarationBodies('test/cart.ts', source);

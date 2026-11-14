@@ -16,7 +16,7 @@ import { openHawdb } from "../../src/base/cache/index.ts";
 import { ConcordError } from "../../src/model/index.ts";
 import { OwnedProcessLive } from "../../src/base/process/index.ts";
 import { tracePrivateDirectorySync } from "../../src/base/publication/index.ts";
-import { inspectRunner } from "../../src/base/publication/index.ts";
+import { inspectObservationSlot } from "../../src/base/publication/index.ts";
 import { collectNativeTests } from "../../src/domain/tests/index.ts";
 
 const nativeRuntime = makeRuntimeEnvironment(process.cwd(), process.env);
@@ -62,7 +62,7 @@ async function blocked(root: string) {
   return { result, release: () => writeFileSync(join(root, '.git/server-continue'), 'continue') };
 }
 function clean(root: string): void {
-  assert.equal(inspectRunner(root, process.env).status, 'absent');
+  assert.equal(inspectObservationSlot(root, process.env).status, 'absent');
   assert.equal(existsSync(join(tracePrivateDirectorySync(root, process.env), 'publication.lease')), false);
 }
 

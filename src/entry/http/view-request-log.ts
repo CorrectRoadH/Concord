@@ -5,8 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 function routeLabel(target: string | undefined): string {
   const path = (target ?? '').split('?', 1)[0];
-  if (['/api/workspace', '/api/jobs', '/api/action', '/api/file', '/api/git', '/api/git/diff'].includes(path!)) return path!;
-  if (/^\/api\/jobs\/ccjob_[0-9a-f-]+$/u.test(path ?? '')) return '/api/jobs/:id';
+  if (['/api/workspace', '/api/action', '/api/file', '/api/git', '/api/git/diff'].includes(path!)) return path!;
   return path?.startsWith('/api/') ? '/api/unknown' : '/static';
 }
 

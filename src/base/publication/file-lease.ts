@@ -196,7 +196,7 @@ export function ownerIsAlive(owner: LeaseOwner): boolean {
   catch (cause) { if (errno(cause, 'ESRCH')) return false; throw cause; }
 }
 
-/** Only document leases are reclaimable this way; dead parents do not prove dead runners. */
+/** Only document leases are reclaimable this way; dead parents do not prove dead observation processes. */
 export function recoverFileLease(root: string, path: string, operation: string): readonly string[] {
   try {
     const owners = readLeaseOwners(path, operation, true);
@@ -206,7 +206,7 @@ export function recoverFileLease(root: string, path: string, operation: string):
   } catch (cause) { throw error(operation, path, cause, 'cleanup'); }
 }
 
-/** Publication only: runner parent death never authorizes runner reclamation. */
+/** Publication only: observation parent death never authorizes observation reclamation. */
 export function acquireRecoverablePublicationLease(root: string, directory: string, name: 'publication.lease', mode: FileLease['mode'], operation: string, create = true): FileLease | undefined {
   try { return acquireFileLease(root, directory, name, mode, operation, create); }
   catch (cause) {

@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#机器可读-schema
-// @concord-implements docs/feature/local-sdlc/use-case/run-tests-with-own-runner.md#schema
+// @concord-implements docs/feature/local-sdlc/use-case/collect-native-tests.md
 import { Schema } from 'effect';
 import { ConcordError, ProjectSchema, Text, DocumentSchema, AnnotatedCaseSchema, IssueRelationSchema, MemoryRelationSchema } from './shared.ts';
 import { WorkspaceWait } from './herdr-mod/index.ts';
@@ -8,7 +8,7 @@ import { WorkspaceProjectionSnapshotSchema } from './workspace-projection.ts';
 import { ChangePreviewSchema } from './change-preview.ts';
 import { ADAPTER_FORMAT, ContextSchema, PayloadSchemas, ResponseSchemas } from './test-adapter-protocol.ts';
 
-const operations = ['collect-plan', 'collect-parse', 'select-plan', 'report-parse'] as const;
+const operations = ['collect-plan', 'collect-parse'] as const;
 const adapter = Schema.Union(operations.flatMap(op => [
   Schema.Struct({ format: Schema.Literal(ADAPTER_FORMAT), op: Schema.Literal(op), requestId: Text, context: ContextSchema, payload: PayloadSchemas[op] }),
   Schema.Struct({ format: Schema.Literal(ADAPTER_FORMAT), op: Schema.Literal(op), requestId: Text, planId: Text, inputs: Text, payload: ResponseSchemas[op] }),

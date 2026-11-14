@@ -1,13 +1,13 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
+// @concord-implements docs/feature/local-sdlc/use-case/collect-native-tests.md#discover
 import { Schema } from "effect";
 import { Text } from "./shared.ts";
 
 /**
  * Shared shape for disposable observations: native test manifests, language analysis and relevance.
  * Observations live only in HawDB projections. `check` never reads them; see
- * docs/design/test-journey-steps/共同身份.md#观察结果.
+ * docs/feature/local-sdlc/architecture.md#原生-adapter.
  */
 export interface Observation<T> {
   readonly value: T;

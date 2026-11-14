@@ -4,25 +4,23 @@
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#init
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 import { openWriteRepository } from "../../base/workspace/index.ts";
-import { Effect, Option, Stdio } from "effect";
+import { Effect, Stdio } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 
 import { initialize } from "../../app/index.ts";
-import { ConcordError, RunnerSchema } from "../../model/index.ts";
-import { root, optional, many, body, jsonBody, emit, sync } from "./cli-base.ts";
+import { ConcordError } from "../../model/index.ts";
+import { root, many, emit, sync } from "./cli-base.ts";
 import { withRepo } from "./cli-repository.ts";
 
 const init = Command.make('init', {
-  testRoot: many('test-root'), sourceRoot: many('source-root'), docsOnly: Flag.Boolean('docs-only').pipe(Flag.withDefault(false)), runnerConfig: optional('runner-config'),
+  testRoot: many('test-root'), sourceRoot: many('source-root'), docsOnly: Flag.Boolean('docs-only').pipe(Flag.withDefault(false)),
   yes: Flag.Boolean('yes').pipe(Flag.withDefault(false)),
 }, args => withRepo((repo, s) => Effect.gen(function*() {
   if (args.docsOnly && args.testRoot.length) return yield* Effect.fail(new ConcordError('ConflictingOptions', '--docs-only cannot be combined with --test-root'));
-  const configFile = Option.getOrUndefined(args.runnerConfig);
-  const runner = configFile === undefined ? undefined : yield* jsonBody(configFile, RunnerSchema, 'runner configuration');
   const stdio = yield* Stdio.Stdio;
   const interactive = (yield* stdio.stdinIsTerminal) && (yield* stdio.stdoutIsTerminal);
   const options = {
-    testRoots: args.docsOnly ? [] : args.testRoot.length ? args.testRoot : undefined, sourceRoots: args.sourceRoot.length ? args.sourceRoot : undefined, runner,
+    testRoots: args.docsOnly ? [] : args.testRoot.length ? args.testRoot : undefined, sourceRoots: args.sourceRoot.length ? args.sourceRoot : undefined,
   } as const;
   const preview = yield* initialize(repo, true, options);
   const preimages = yield* sync(() => repo.snapshot(() => {

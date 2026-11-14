@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import { canonicalPath } from "../model/index.ts";
-import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, InitializationReceiptSchema, decode, type Change, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.ts";
+import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, InitializationReceiptSchema, decode, type Change, type Repository } from "../model/index.ts";
 import { renderTypeScriptConfig } from "../base/workspace/index.ts";
 import { onboardingGuide } from "../domain/onboarding/index.ts";
 import { projectTemplateFiles, templateCatalog } from "../domain/documents/index.ts";
@@ -24,7 +24,7 @@ export function withAgentInstructions(source: string): string {
   if (source.trim() === '') return `${block}\n`;
   return `${source.replace(/\n*$/u, '')}\n\n${block}\n`;
 }
-export interface InitializeOptions { readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner'] }
+export interface InitializeOptions { readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[] }
 export type InitializationReceipt = typeof InitializationReceiptSchema.Type;
 
 // @concord-begin
@@ -35,13 +35,12 @@ export type InitializationReceipt = typeof InitializationReceiptSchema.Type;
 export const initialize = Effect.fn('initialize')(function*(repo: Repository, dryRun = false, options: InitializeOptions = {}) {
   const catalog = yield* templateCatalog();
   return yield* Effect.tryPromise({ try: async (): Promise<InitializationReceipt> => (await inRepositorySnapshot(repo, async () => {
-  const config = decode(ProjectSchema, { ...(options.testRoots === undefined ? {} : { testRoots: options.testRoots }), ...(options.sourceRoots === undefined ? {} : { sourceRoots: options.sourceRoots }), ...(options.runner === undefined ? {} : { runner: options.runner }) }, 'init configuration');
+  const config = decode(ProjectSchema, { ...(options.testRoots === undefined ? {} : { testRoots: options.testRoots }), ...(options.sourceRoots === undefined ? {} : { sourceRoots: options.sourceRoots }) }, 'init configuration');
   for (const root of [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])]) {
     canonicalPath(root);
     if (forbiddenSourcePart(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot or testRoot: ${root}`);
     repo.absolute(root);
   }
-  for (const path of config.runner?.sourceFiles ?? []) repo.absolute(path);
   const paths: Record<string, string> = { ...(Object.keys(config).length === 0 ? {} : { 'concord.config.ts': renderTypeScriptConfig(config) }), 'docs/taste.md': catalog.render('taste', 'Project'), 'docs/concord.md': onboardingGuide, ...projectTemplateFiles(catalog) };
   const preservedPaths: string[] = [];
   for (const [path, name] of [['docs/README.md', 'project-index'], ['docs/concepts.md', 'concepts'], ['docs/architecture.md', 'project-architecture']] as const) {

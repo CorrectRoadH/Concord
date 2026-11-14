@@ -41,7 +41,6 @@ import { workspaceEvents, WorkspaceState, serviceHeartbeat as importServiceHeart
 import { makeWorkspaceService } from './service.ts';
 import { FeedbackSessions } from './feedback-session.ts';
 import { DerivationSessions } from './derivation-session.ts';
-import { ServerJobs } from './jobs.ts';
 import { makeHttpLeases } from './http-leases.ts';
 import { makeHttpSubscriptions } from './subscriptions.ts';
 import { startHostedViewServer, type HostedViewPorts } from '../http/index.ts';
@@ -133,7 +132,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     worker.used = true;
     return worker;
   }));
-  return { close, pause, resume, drain, ensureClean, run: (input: { readonly kind: 'action'; readonly input: unknown } | { readonly kind: 'job'; readonly caseId: string }) => Effect.gen(function*() {
+  return { close, pause, resume, drain, ensureClean, run: (input: { readonly kind: 'action'; readonly input: unknown }) => Effect.gen(function*() {
     yield* ensureClean;
     const worker = yield* take.pipe(Effect.onError(() => warm.pipe(Effect.ignore)));
     return yield* Effect.gen(function*() {
@@ -396,7 +395,6 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     }));
     const event = SubscriptionRef.changes(service.state.value).pipe(Stream.buffer({ capacity: 1, strategy: 'sliding' }));
     const httpSubscriptions = yield* makeHttpSubscriptions(event, service.connect);
-    const notify = () => { Effect.runFork(SubscriptionRef.update(service.state.value, value => ({ ...value }))); };
     const runOperation = async (input: Parameters<typeof operations.run>[0], signal?: AbortSignal) => {
       try { return await Effect.runPromise(admission.withSlot(service.operate(operations.run(input))).pipe(Effect.mapError(workspaceServerFailure)), { signal }); }
       finally {
@@ -404,8 +402,6 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         if (clean._tag === 'Failure') { await Effect.runPromise(service.state.transition('blocked', { code: 'CleanupFailed', message: clean.failure.message })); throw clean.failure; }
       }
     };
-    const jobs = new ServerJobs((caseId, signal) => runOperation({ kind: 'job', caseId }, signal), () => { notify(); Effect.runFork(service.request); });
-    yield* Effect.addFinalizer(() => Effect.tryPromise(() => jobs.close()).pipe(Effect.orDie));
     yield* Effect.addFinalizer(() => Effect.sync(() => closeGitBaselineCache(serverBaselineCache)));
     const run = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(operation, { signal });
     const runAdmitted = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(admission.withSlot(operation).pipe(Effect.mapError(workspaceServerFailure)), { signal });
@@ -431,7 +427,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
           const value = action.action === 'cache.clear' && !action.dryRun ? await runAdmitted(service.clear, signal) : maintenance ? await runAdmitted(maintenance, signal) : await runOperation({ kind: 'action', input: action }, signal);
           await run(service.request); return value;
         },
-        jobs, sse,
+        sse,
         subscribe: httpSubscriptions.subscribe,
       };
       return startHostedViewServer({ root, host, port }, ports, execution, writeLog);

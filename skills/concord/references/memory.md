@@ -25,4 +25,4 @@ concord show token-format --json
 concord memory link token-format docs/feature/login/README.md#token
 ```
 
-`list` 与 `show` 从当前文件派生索引与反向关系，不手工维护 INDEX。`concord check` 校验关系目标。
+`list` 与 `show` 从当前文件派生索引与反向关系，不手工维护 INDEX。修改后运行 `concord check`，解决 finding 并重跑至通过后才能交付完成；确实受环境、权限或分工阻塞时，明确报告未完成及具体条件。

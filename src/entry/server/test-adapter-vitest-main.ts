@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @concord-implements docs/feature/local-sdlc/use-case/collect-native-tests.md
 // Runs only as an owned child process. Project modules never enter Concord's process.
 import type * as NodeTypes from 'vitest/node';
 import { createRequire } from "node:module";
@@ -24,7 +24,7 @@ export async function run(): Promise<void> {
     const cases = collected.testModules.flatMap(module => [...module.children.allTests()].map(test => {
       const names = [test.name]; let parent = test.parent;
       while (parent.type !== 'module') { names.unshift(parent.name); parent = parent.parent; }
-      return { name: names.join(' '), file: module.moduleId, project: test.project.name || 'default', skipped: test.result().state === 'skipped' };
+      return { name: names.join(' '), file: module.moduleId, project: test.project.name || 'default', tags: Object.fromEntries(test.tags.map(tag => [tag, 'true'])) };
     }));
     yield* Effect.sync(() => writeFileSync(report, JSON.stringify(cases), { flag: 'wx' }));
   });

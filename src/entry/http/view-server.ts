@@ -13,7 +13,7 @@ import { ConcordError, decode, digest, failure } from "../../model/index.ts";
 import type { ViewFailure, ViewResponse } from "../../model/index.ts";
 import { ViewRequestLog } from "./view-request-log.ts";
 import type { RequestTiming } from "../../app/index.ts";
-import type { ViewFile, WorkspaceProjection, ViewJob } from '../../model/index.ts';
+import type { ViewFile, WorkspaceProjection } from '../../model/index.ts';
 
 export interface HostedViewPorts {
   readonly verify: () => Promise<void>;
@@ -24,7 +24,6 @@ export interface HostedViewPorts {
   readonly diff: (path: string, area: GitArea) => Promise<unknown>;
   readonly compile: (input: unknown) => Promise<unknown>;
   readonly action: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
-  readonly jobs: { list(): readonly ViewJob[]; start(caseId: string): ViewJob; cancel(id: string): ViewJob; close(): Promise<void> };
   readonly subscribe: (listener: (event: unknown) => void | Promise<void>) => () => void;
   readonly sse: (delta: number) => void;
 }
@@ -38,7 +37,6 @@ interface ProjectionPort {
 
 const BODY_LIMIT = 4 * 1024 * 1024;
 const STATIC_LIMIT = 16 * 1024 * 1024;
-const JOB_INPUT = Schema.Struct({ caseId: Schema.String.check(Schema.isMinLength(1)) });
 const AUTHORITY_INPUT = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(260),
@@ -69,7 +67,6 @@ export interface ViewServerHandle {
   readonly port: number;
   readonly address: string;
   readonly server: Server;
-  readonly jobs: HostedViewPorts['jobs'];
   close(): Promise<void>;
 }
 
@@ -308,7 +305,7 @@ function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoo
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: HostedViewPorts['jobs'], scans: ProjectionPort, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming, hosted: HostedViewPorts): Promise<void> {
+async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, scans: ProjectionPort, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming, hosted: HostedViewPorts): Promise<void> {
   const method = request.method ?? 'GET';
   const respond = (value: unknown, status = 200) => timing.sync('http.response', () => success(response, value, status));
   if (method === 'GET' && url.pathname === '/api/events') {
@@ -382,21 +379,6 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
       || ['recover', 'feedback.sync', 'cache.clear', 'cache.rebuild'].includes(input.action) && !('dryRun' in input && input.dryRun))) scans.request(true);
     return respond(result);
   }
-  if (method === 'GET' && url.pathname === '/api/jobs') {
-    exactQuery(url, []);
-    return respond(timing.sync('http.jobs', () => jobs.list()));
-  }
-  if (method === 'POST' && url.pathname === '/api/jobs') {
-    exactQuery(url, []);
-    mutationJson(request);
-    const input = decode(JOB_INPUT, await timing.async('http.readBody', () => readJson(request)), 'job request');
-    return respond(timing.sync('http.startJob', () => jobs.start(input.caseId)), 202);
-  }
-  const cancel = /^\/api\/jobs\/(ccjob_[0-9a-f-]+)$/u.exec(url.pathname);
-  if (method === 'DELETE' && cancel !== null) {
-    exactQuery(url, []);
-    return respond(timing.sync('http.cancelJob', () => jobs.cancel(cancel[1]!)));
-  }
   if (method === 'GET' && url.pathname === '/api/git') {
     exactQuery(url, []);
     return respond(await timing.async('http.git', () => hosted.git()));
@@ -421,7 +403,6 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
   const webRoot = options.webRoot ?? builtAssetRoot('web');
   const sourceWeb = sourceInstallation && options.webRoot === undefined ? await sourceWebServer(runtime) : undefined;
   let p5Runtime: Promise<string> | undefined;
-  const jobs = hosted.jobs;
   const requestLog = new ViewRequestLog(write);
   let stopping = false;
   const activeResponses = new Set<ServerResponse>();
@@ -456,7 +437,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
           exactQuery(url, []);
           serveP5Frame(request, response, webRoot, sourceWeb === undefined ? undefined : await (p5Runtime ??= sourceP5Runtime(runtime)));
         } else if (url.pathname.startsWith('/api/')) {
-          await api(request, response, url, root, jobs, scans, runAction, timing, hosted);
+          await api(request, response, url, root, scans, runAction, timing, hosted);
         } else if (request.method === 'GET') {
           if (sourceWeb === undefined) timing.sync('http.static', () => serveStatic(request, response, url.pathname, webRoot));
           else { securityHeaders(response); await timing.async('http.static', () => sourceWeb.serve(request, response, bytes => sendCompressible(request, response, bytes))); }
@@ -489,7 +470,6 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
     port: address.port,
     address: formatViewAddress(host, address.port),
     server,
-    jobs,
     close: () => closing ??= (async () => {
       stopping = true;
       for (const response of activeResponses) response.destroy();

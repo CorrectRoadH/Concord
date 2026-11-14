@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 import { ConcordError, objectDigest, type Change, type Repository } from '../model/index.ts';
 import { readDocumentSelector } from '../domain/documents/index.ts';
 import { issueMarkerLines, scanAnnotations } from '../domain/tests/index.ts';

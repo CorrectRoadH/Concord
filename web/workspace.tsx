@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/web-workbench/architecture.md
 import '@fontsource-variable/noto-sans-sc/wght.css';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { GitStatus, ViewAction, ViewJob, WorkspaceProjection, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../src/model/index.ts';
+import type { GitStatus, ViewAction, WorkspaceProjection, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../src/model/index.ts';
 import type { ConcordApi } from './lib/api.ts';
 import { ApiError } from './lib/api.ts';
 import { Schema } from 'effect';
@@ -25,7 +25,6 @@ interface WorkspaceValue {
   readonly navigationUpdating: boolean;
   readonly git: GitStatus | null;
   readonly gitIssue: WorkspaceIssue | null;
-  readonly jobs: readonly ViewJob[];
   readonly busy: boolean;
   readonly dirty: boolean;
   readonly notices: readonly Notice[];
@@ -37,8 +36,6 @@ interface WorkspaceValue {
   /** Requests a merged write-level refresh and re-reads the served result. */
   requestRefresh(): Promise<void>;
   act(action: ViewAction, success?: string): Promise<unknown>;
-  runCase(caseId: string): Promise<void>;
-  cancelJob(id: string): Promise<void>;
   notify(text: string, tone?: Notice['tone']): void;
   clearNotice(id: number): void;
 }
@@ -85,7 +82,6 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
   const [navigationUpdating, setNavigationUpdating] = useState(false);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [gitIssue, setGitIssue] = useState<WorkspaceIssue | null>(null);
-  const [jobs, setJobs] = useState<readonly ViewJob[]>([]);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
@@ -123,7 +119,6 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
   workspaceProblemRef.current = workspaceProblem;
   const writtenAt = useRef(0);
   const lastGitReadAt = useRef(0);
-  const lastJobsReadAt = useRef(0);
   const applyProjection = useCallback((value: WorkspaceProjection) => {
     setSnapshot(value.snapshot);
     setProjection(value.projection);
@@ -155,7 +150,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     }
   }, [api, applyProjection]);
 
-  const refresh = useCallback(async ({ includeWorkspace = true, includeGit = true, includeJobs = true } = {}) => {
+  const refresh = useCallback(async ({ includeWorkspace = true, includeGit = true } = {}) => {
     // A refresh requested after a write must read after any older refresh finishes.
     while (refreshInFlight.current) await refreshInFlight.current;
     // Git status also loads workspace metadata on the server. Keep it behind the
@@ -163,10 +158,6 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     const pending = (async () => {
       const value = includeWorkspace ? await readWorkspace() : initial;
       const tasks: Promise<unknown>[] = [];
-      if (includeJobs) {
-        lastJobsReadAt.current = Date.now();
-        tasks.push(api.jobs().then(setJobs));
-      }
       if (includeGit && value) {
         lastGitReadAt.current = Date.now();
         tasks.push(api.git().then(result => { setGit(result); setGitIssue(null); }, cause => { setGit(null); setGitIssue(workspaceIssue(cause)); }));
@@ -209,19 +200,18 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
       const sameInitial = firstEvent && event.sourceDigest === initial.projection.sourceDigest
         && event.error === undefined && JSON.stringify(event.workspace?.projection ?? event.projection) === JSON.stringify(initial.projection);
       firstEvent = false;
-      if (!sameInitial) void refresh({ includeWorkspace: true, includeGit: false, includeJobs: true });
+      if (!sameInitial) void refresh({ includeWorkspace: true, includeGit: false });
     };
     events.addEventListener('workspace', onEvent);
     events.addEventListener('stopping', onEvent);
     const poll = async (initial = false) => {
       if (serverStopped) return;
       // Workspace GET reads the published cache. Pending reads retry faster,
-      // while jobs and Git retain their own cadences through the same queue.
+      // while Git retains its own cadence through the same queue.
       const now = Date.now();
       await refresh({
         includeWorkspace: !connected && !initial || retryableProjection(workspaceProblemRef.current),
         includeGit: initial || now - lastGitReadAt.current >= 32_000,
-        includeJobs: initial || !connected && now - lastJobsReadAt.current >= 4000,
       });
       if (!stopped && !serverStopped) timer = window.setTimeout(() => void poll(), retryableProjection(workspaceProblemRef.current) ? 2000 : connected ? 32_000 : 4000);
     };
@@ -246,18 +236,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     } finally { setBusy(false); }
   }, [api, notify, refresh, requestRefresh]);
 
-  const runCase = useCallback(async (caseId: string) => {
-    setBusy(true);
-    try { const job = await api.run(caseId); setJobs(items => [job, ...items.filter(item => item.id !== job.id)]); notify('测试任务已进入队列。', 'success'); }
-    catch (cause) { notify(message(cause), 'error'); }
-    finally { setBusy(false); }
-  }, [api, notify]);
-  const cancelJob = useCallback(async (id: string) => {
-    try { const job = await api.cancel(id); setJobs(items => items.map(item => item.id === id ? job : item)); notify('已请求安全终止测试。', 'info'); }
-    catch (cause) { notify(message(cause), 'error'); }
-  }, [api, notify]);
-
-  const value = useMemo<WorkspaceValue>(() => ({ api, snapshot, projection, workspaceIssue: workspaceProblem, refreshIssue: refreshProblem, navigationUpdating, git, gitIssue, jobs, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, requestRefresh, act, runCase, cancelJob, notify, clearNotice }), [api, snapshot, projection, workspaceProblem, refreshProblem, navigationUpdating, git, gitIssue, jobs, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, requestRefresh, act, runCase, cancelJob, notify, clearNotice]);
+  const value = useMemo<WorkspaceValue>(() => ({ api, snapshot, projection, workspaceIssue: workspaceProblem, refreshIssue: refreshProblem, navigationUpdating, git, gitIssue, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, requestRefresh, act, notify, clearNotice }), [api, snapshot, projection, workspaceProblem, refreshProblem, navigationUpdating, git, gitIssue, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, requestRefresh, act, notify, clearNotice]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 

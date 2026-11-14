@@ -12,11 +12,11 @@ import { createDocument } from '../support/operations.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
-const capabilities = { realCollection: true, leaf: true, parameterGroups: true, exactSelection: true, perItemReport: true, range: true, rangeTrivia: true, tags: true, skipVisibility: true };
+const capabilities = { realCollection: true, leaf: true, parameterGroups: true, range: true, rangeTrivia: true, tags: true };
 const source = '// @feature docs/feature/example/README.md\n// @name parameter-group\n// @issue docs/issues/problem.md\n';
 
 for (const mode of ['green', 'wrong-echo', 'extra-envelope'] as const) {
-  // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
+  // @use-case docs/feature/local-sdlc/use-case/collect-native-tests.md#discover
   test(`real adapter consumer validates ${mode} response and observation publication`, async () => {
     const root = (await createConsumer());
     let repo: LocalRepository | undefined;
@@ -43,7 +43,7 @@ for (const mode of ['green', 'wrong-echo', 'extra-envelope'] as const) {
             const request = protocolDecode(RequestSchema, protocolJson(options.stdin));
             const payload = request.op === 'collect-plan'
               ? { invocations: [{ invocationId: 'collect', argv: [process.execPath, 'adapter.ts', 'invoke', 'collect'], cwd: '.', envNames: ['PATH'], reports: [] }], planContext: { files: ['test/sample.ts'] } }
-              : { cases: ['fake:binary-a:one', 'fake:binary-b:two'].map(nativeId => ({ nativeId, project: 'fixture', file: 'test/sample.ts', kind: 'leaf', group: 'parameters', range: { startLine: 1, endLine: source.split(/\r?\n/u).length, sourceDigest: digest(source) }, selection: { opaqueId: nativeId, capabilityVersion: 'fixture/v1' }, tags: { tag: 'not-a-relation' }, provenance: 'fixture/v1' })), capabilities, completeness: { complete: true, gaps: [] } };
+              : { cases: ['fake:binary-a:one', 'fake:binary-b:two'].map(nativeId => ({ nativeId, project: 'fixture', file: 'test/sample.ts', kind: 'leaf', group: 'parameters', range: { startLine: 1, endLine: source.split(/\r?\n/u).length, sourceDigest: digest(source) }, tags: { tag: 'not-a-relation' }, provenance: 'fixture/v1' })), capabilities, completeness: { complete: true, gaps: [] } };
             stdout = JSON.stringify({ format: request.format, op: request.op, requestId: request.requestId, planId: request.context.planId, inputs: mode === 'wrong-echo' ? `sha256:${'0'.repeat(64)}` : request.context.inputs, payload, ...(mode === 'extra-envelope' ? { unknown: true } : {}) }) + '\n';
           }
           return { command, exitCode: 0, signal: null, timedOut: false, cancelled: false, outputLimitExceeded: false, stdout, stderr: '', outputBytes: Buffer.byteLength(stdout), processGroupOwned: false, groupCleanup: { owned: false, checked: false, aliveAfterLeaderClose: null, signalsSent: [], gone: null, detail: 'External protocol fixture has no OS process' } };

@@ -1,3 +1,4 @@
+import { beginRun, finalizeRun } from '../../src/base/publication/index.ts';
 import assert from 'node:assert/strict';
 import fs, { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -36,20 +37,22 @@ async function interrupt(root: string, repo: LocalRepository) {
   finally { fs.renameSync = rename; syncBuiltinESMExports(); }
 }
 
-// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
+// @use-case docs/feature/feedback/use-case/manage-local-observations.md
 test('Issue closure removes only real matching lines in one publication and preserves test identity and bytes', async () => (await fixture(async (root, repo) => {
   const before = (await parseTestDeclarations(file, source)).cases[0]!.id;
   const preview = (await closeIssue(repo, issue, 'Handled', true));
   assert.deepEqual(preview.changedPaths, [issue, file]);
   assert.equal(readFileSync(join(root, file), 'utf8'), source);
+  writeFileSync(join(root, 'unrelated.txt'), 'uncommitted work');
   (await closeIssue(repo, issue, 'Handled'));
+  assert.equal(readFileSync(join(root, 'unrelated.txt'), 'utf8'), 'uncommitted work');
   assert.equal(existsSync(join(root, issue)), false);
   const after = readFileSync(join(root, file), 'utf8');
   assert.equal(after, source.slice(source.indexOf('\n') + 1));
   assert.equal((await parseTestDeclarations(file, after)).cases[0]!.id, before);
 })));
 
-// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
+// @use-case docs/feature/feedback/use-case/manage-local-observations.md
 test('test source drift after planning refuses Issue closure without publishing', async () => (await fixture(async (root, repo) => {
   (await assert.rejects(async () => (await repo.snapshot(async () => {
     (await planIssueClose(repo, { issue }));
@@ -89,3 +92,20 @@ test('Issue recovery rejects a forged source rewrite and retains the journal', a
   (await assert.rejects(async () => (await LocalRepository.open(root, { recover: true })), { code: 'RecoveryRequired' }));
   assert.equal(existsSync(path), true);
 })));
+
+// @use-case docs/feature/feedback/use-case/manage-local-observations.md
+test('Issue closure needs neither collected tests nor Git history and ignores observation quarantine', async () => fixture(async (root, repo) => {
+  writeFileSync(join(root, 'concord.config.ts'), "export default { testRoots: [] };\n");
+  repo.close();
+  const current = await LocalRepository.open(root);
+  try {
+    const run = current.snapshot(() => beginRun(root, process.env));
+    current.snapshot(() => finalizeRun(root, run, false, process.env));
+    const receipt = await closeIssue(current, issue, 'Handled without a runner');
+    assert.deepEqual(receipt.changedPaths, [issue]);
+    assert.equal(existsSync(join(root, issue)), false);
+    assert.equal(readFileSync(join(root, file), 'utf8'), source);
+    assert.ok(existsSync(run.lease.path));
+    assert.throws(() => current.snapshot(() => beginRun(root, process.env)), { code: 'RepositoryBusy' });
+  } finally { current.close(); }
+}));

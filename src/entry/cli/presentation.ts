@@ -99,12 +99,12 @@ export function humanOutput(value: unknown): string {
   if (value.operation === 'recover') {
     const coordination = Predicate.isObject(value.coordination) ? value.coordination : {};
     const publication = Predicate.isObject(coordination.publication) ? coordination.publication : {};
-    const runner = Predicate.isObject(coordination.runner) ? coordination.runner : {};
+    const observationSlot = Predicate.isObject(coordination.observationSlot) ? coordination.observationSlot : {};
     return [`Recovery: ${String(value.status)}`, `Journal: ${String(value.journalStatus ?? value.status)}`,
       `Publication tokens reclaimed: ${Array.isArray(publication.reclaimedTokens) ? publication.reclaimedTokens.length : 0}`,
-      `Runner: ${String(runner.status ?? 'unknown')}`, ...(typeof runner.message === 'string' ? [runner.message] : []),
-      ...(['token', 'host', 'pid', 'ownerAlive', 'startedAt', 'release'] as const).flatMap(key => key in runner ? [`  ${key}: ${String(runner[key])}`] : []),
-      ...(Predicate.isObject(value.testSlot) && value.testSlot.status === 'released' ? [`Test slot: released (${String(value.testSlot.token)})`] : []),
+      `Observation slot: ${String(observationSlot.status ?? 'unknown')}`, ...(typeof observationSlot.message === 'string' ? [observationSlot.message] : []),
+      ...(['token', 'host', 'pid', 'ownerAlive', 'startedAt', 'release'] as const).flatMap(key => key in observationSlot ? [`  ${key}: ${String(observationSlot[key])}`] : []),
+      ...(Predicate.isObject(value.observationSlot) && value.observationSlot.status === 'released' ? [`Observation slot: released (${String(value.observationSlot.token)})`] : []),
       ...(Array.isArray(value.changedPaths) ? value.changedPaths.map(path => `  ${String(path)}`) : [])].join('\n');
   }
   if ((value.operation === 'memory-search' || value.operation === 'issue-search') && typeof value.query === 'string') {
@@ -122,8 +122,7 @@ export function humanOutput(value: unknown): string {
       'Changed:', ...value.changedPaths.map(path => `  ${String(path)}`),
       ...(value.unmanagedReferences.length ? ['', 'Not rewritten:', ...value.unmanagedReferences.filter(Predicate.isObject).map(reference => `  ${String(reference.path)}:${String(reference.line)}`)] : []),
     ].join('\n');
-    const verified = Predicate.isObject(value.verification) ? [`Verified fix — ${String(value.changedPaths[0])}`, `Defect: ${String(value.verification.defect)}`, `Fix: ${String(value.verification.fix)}`, `Tests: ${Array.isArray(value.verification.tests) ? value.verification.tests.join(', ') : ''}`] : [];
-    const lines = [...verified, `${value.dryRun ? 'Would apply' : 'Applied'} ${String(value.operation)}:`, ...value.changedPaths.map(path => `  ${String(path)}`)];
+    const lines = [`${value.dryRun ? 'Would apply' : 'Applied'} ${String(value.operation)}:`, ...value.changedPaths.map(path => `  ${String(path)}`)];
     if ((value.operation === 'feedback-sync' || value.operation === 'feedback-import') && typeof value.fetched === 'number' && typeof value.imported === 'number') {
       lines.push('', `Fetched: ${String(value.fetched)}; imported: ${String(value.imported)}.`);
     }

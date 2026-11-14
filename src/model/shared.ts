@@ -39,22 +39,6 @@ export const Strings = Schema.Array(Text);
 // @concord-end
 // @concord-begin
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-export const RunnerDirectSchema = Schema.Struct({
-  argv: Schema.NonEmptyArray(Text),
-  timeoutMs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3600000 }))),
-  kind: Schema.optional(Schema.Literal('command')),
-  sourceFiles: Schema.optional(Strings),
-  prepare: Schema.optional(Schema.Array(Schema.NonEmptyArray(Text))),
-});
-export const RunnerLegacySchema = Schema.Struct({
-  kind: Schema.Literal('node-test'),
-  argv: Schema.optional(Schema.NonEmptyArray(Text)),
-  timeoutMs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3600000 }))),
-  sourceFiles: Schema.optional(Strings),
-  prepare: Schema.optional(Schema.Array(Schema.NonEmptyArray(Text))),
-});
-export const RunnerSchema = Schema.Union([RunnerDirectSchema, RunnerLegacySchema]);
-export type Runner = typeof RunnerSchema.Type;
 export const TemplatePageSchema = Schema.Literals(['library', 'cli', 'api', 'format', 'ui', 'performance', 'architecture', 'data-model', 'use-case']);
 export const ProjectSchema = Schema.Struct({
   testRoots: Schema.optional(Schema.Array(Text)),
@@ -64,11 +48,8 @@ export const ProjectSchema = Schema.Struct({
   p5: Schema.optional(Schema.Struct({
     libraries: Schema.Array(Text).check(Schema.isMaxLength(16), Schema.makeFilter(values => new Set(values).size === values.length)),
   })),
-  runner: Schema.optional(RunnerSchema),
   testAdapters: Schema.optional(Schema.Array(TestAdapterSchema)),
   docsWork: Schema.optional(Schema.Struct({
-    checks: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ argv: Schema.NonEmptyArray(Text), timeoutMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))) }))),
-    finalizer: Schema.optional(Schema.Struct({ argv: Schema.NonEmptyArray(Text), timeoutMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))) })),
     sharedPaths: Schema.optional(Schema.Array(Text)),
   })),
   feedbackConnections: Schema.optional(FeedbackConnectionsSchema),
@@ -110,7 +91,7 @@ export function inRepositorySnapshot<A>(repo: Repository, operation: () => A): A
 // @concord-end
 
 // @concord-begin
-// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
+// @concord-implements docs/feature/local-sdlc/format.md#owner
 export const Sha256 = Schema.String.check(Schema.isPattern(/^sha256:[0-9a-f]{64}$/));
 export const ContentHash = Schema.String.check(Schema.isPattern(/^(?:sha256:)?[0-9a-f]{64}$/));
 export const GitCommit = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
@@ -136,7 +117,6 @@ export type MemoryMeta = typeof MemorySchema.Type;
 export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'related'] as const;
 export const IssueRelationSchema = Schema.Struct({ role: Schema.Literals([...MEMORY_RELATION_KINDS, 'spec']), target: Text });
 export type IssueRelation = typeof IssueRelationSchema.Type;
-export const FixVerificationSchema = Schema.Struct({ defect: GitCommit, fix: GitCommit, tests: Schema.NonEmptyArray(Text).check(Schema.makeFilter(values => new Set(values).size === values.length)), runner: Sha256, concord: Text });
 export const IssueSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('issue'), relations: Schema.Array(IssueRelationSchema), source: Schema.optional(FeedbackSourceSchema) });
 export type IssueMeta = typeof IssueSchema.Type;
 export const DocumentSchema = Schema.Union([FeatureSchema, UseCaseSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, IssueSchema]);
