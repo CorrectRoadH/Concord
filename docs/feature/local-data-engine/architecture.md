@@ -8,7 +8,7 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 引擎版本、提交标识与桥接发行版本由 `native-release.json` 声明，更新与校验遵守[原生绑定复用](../../engineering/build/architecture.md#原生绑定复用)。桥接 ABI 与缓存表 schema 由原生接口定义，加载时必须匹配。引擎关闭默认 features，显式编译 `full-text-search` 并开启 `RuntimeCapability::FullTextSearch`，供[Memory 与 Issue 检索](#knowledge-search)使用；向量、图分析和引擎后台维护不启用。
 
-关系缓存使用参数化 SQL。子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据。
+关系缓存使用参数化 SQL。子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或 agent 的验证结果。
 
 检索投影使用 HawDB 的图属性 `FULLTEXT` 索引与参数化 Cypher。TypeScript 负责来源安全、严格解码、文本归一化、发布协调和输出；候选查找、文本谓词与事务可见性由 HawDB 执行，不在 Concord 中维护倒排表或 n-gram 算法（[用现成的能力](../../taste.md#t-10)）。原生调用层只传递有界查询、事务和结果，不决定搜索语义。
 
@@ -84,7 +84,7 @@ Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git
 | socket | `<runtime>/concord-<uid>/<privateDir 的 sha256 前 32 位>.sock`，0600 | 只由服务锁持有者在锁内创建；删除前核对其 inode 与运行记录一致 |
 | HTTP 监听 | `(host, port)`，每次开启返回绑定实例 token 的监听引用 | 按引用与活跃连接计数，见 [Web 工作台架构](../web-workbench/architecture.md#服务托管) |
 
-- [写互斥](../../concepts.md#write-exclusion)、缓存清理与测试单槽任务在服务进程内通过内存信号量与读写互斥协调，不再派生独立的计算子进程、刷新计算子进程或预热操作子进程。
+- [写互斥](../../concepts.md#write-exclusion)、缓存清理与[外部观察任务槽位](../../architecture.md#observation-slot)在服务进程内通过内存信号量与读写互斥协调，不再派生独立的计算子进程、刷新计算子进程或预热操作子进程。
 - 单次计算请求的预算是 600 秒，超出时这次请求以 `ComputeRequestTimedOut` 失败，附已用时间与上限。
 - 后台增量刷新不阻塞前台只读查询；缓存清除等维护操作等待在途读写与刷新完成（[名字说出区别](../../taste.md#t-13)）。
 - 服务锁与数据库[协调锁](#协调锁)是两把锁。

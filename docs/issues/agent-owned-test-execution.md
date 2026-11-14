@@ -16,7 +16,7 @@ relations:
 
 CLI、action/RPC 与 Web 仍提供测试执行和修复核验，配置与内置指引仍要求 runner。`issue close --fixed` 会再次执行红绿验证；源码和测试标记仍引用这些已不属于目标 Spec 的能力。
 
-`test list/show` 只返回源码标记与整份观察，没有按新契约提供具体用例绑定。Docs Work 仍可通过任意检查或 finalizer argv 运行项目命令。外部观察清理未知还可能阻断文件发布。
+`test list/show` 只返回源码标记与整份观察，没有按 Spec 提供具体用例绑定。Docs Work 仍可通过任意检查或 finalizer argv 运行项目命令。外部观察清理未知还可能阻断文件发布。
 
 ## 待完成
 
