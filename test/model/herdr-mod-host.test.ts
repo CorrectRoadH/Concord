@@ -874,7 +874,7 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       } finally { delayed.resolve(); await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
-    await t.test('saving and checking report separate phases and navigation waits for the original page', async () => {
+    await t.test('saving reports separate phases and navigation only waits for the original write', async () => {
       for (const navigate of [false, true]) {
         const b = await start(); const writeGate = pending<void>(), checkGate = pending<void>();
         let writing = false, checking = false;
@@ -890,16 +890,120 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           assert.match(b.output.text(), navigate ? /正在保存上一页/u : /正在保存…/u);
           writeGate.resolve(); await b.until(() => checking);
           assert.equal(b.files.get(`/repo/${page}`), '# Edited\n');
-          assert.match(b.output.text(), navigate ? /正在检查上一页/u : /已保存，正在检查/u);
           if (navigate) {
-            checkGate.resolve(); await b.until(() => b.output.find('concord-body-docs/taste.md') !== undefined);
+            await b.until(() => b.output.find('concord-body-docs/taste.md') !== undefined);
+            assert.match(b.output.text(), /已保存，正在检查/u);
+            assert.doesNotMatch(b.output.text(), /正在检查上一页/u);
           } else {
+            assert.match(b.output.text(), /已保存，正在检查/u);
             checkGate.reject(new Error('check failed'));
             await b.until(() => b.output.text().includes('已保存，检查失败'));
             assert.doesNotMatch(b.output.text(), /正在保存|正在检查/u);
           }
         } finally { writeGate.resolve(); checkGate.resolve(); await b.close(); }
       }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+    await t.test('slow checks coalesce saves and discard old results without blocking repository switches', async () => {
+      const b = await start(), first = pending<void>(), latest = pending<void>();
+      let checks = 0;
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find('preview-block-0') !== undefined);
+        b.click('preview-block-0'); const editor = b.output.find('document-editor')!.state!;
+        b.beforeCheck = async () => { const count = ++checks; await (count === 1 ? first : latest).promise; if (count === 1) throw new Error('obsolete check failure'); };
+        editor.input('# First', b.context()); b.fire(800);
+        await b.until(() => checks === 1);
+        editor.input('# Second', b.context()); b.fire(800);
+        await b.until(() => b.files.get(`/repo/${page}`) === '# Second\n' && b.output.text().includes('已保存，正在检查'));
+        editor.input('# Latest', b.context()); b.fire(800);
+        await b.until(() => b.files.get(`/repo/${page}`) === '# Latest\n' && b.output.text().includes('已保存，正在检查'));
+        assert.equal(checks, 1);
+        // A projection arriving during the check must not mark the save as passed.
+        b.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'changed' }), stderr: '' });
+        await b.until(() => b.watches.length > 1);
+        assert.match(b.output.text(), /已保存，正在检查/u);
+        first.resolve(); await b.until(() => checks === 2);
+        assert.doesNotMatch(b.output.text(), /obsolete check failure|已保存，检查失败/u);
+        b.selectTab('other', '/other');
+        await b.until(() => b.output.find('initialize') !== undefined);
+        assert.equal(checks, 2);
+        latest.resolve();
+        assert.doesNotMatch(b.output.text(), /检查失败|Cart/u);
+        b.selectTab('t1', '/repo');
+        await b.until(() => b.output.find(`concord-body-${page}`) !== undefined && !b.output.text().includes('正在检查'));
+        assert.doesNotMatch(b.output.text(), /正在检查|检查失败/u);
+      } finally { first.resolve(); latest.resolve(); await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+    await t.test('a check failure preserves later input and never labels that draft as a failed save', async () => {
+      const b = await start(), gate = pending<void>(); let checking = false;
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find('preview-block-0') !== undefined);
+        b.click('preview-block-0'); const editor = b.output.find('document-editor')!.state!;
+        b.beforeCheck = async () => { checking = true; await gate.promise; };
+        editor.input('# Saved', b.context()); b.fire(800); await b.until(() => checking);
+        editor.input('# Later input', b.context());
+        gate.reject(new Error('check failed'));
+        await b.until(() => b.output.find('concord-error') !== undefined);
+        assert.equal(editor.value(), '# Later input'); assert.equal(editor.released, false);
+        assert.match(b.output.text(), /等待保存/u); assert.doesNotMatch(b.output.text(), /保存失败/u);
+        assert.equal(b.files.get(`/repo/${page}`), '# Saved\n');
+        await b.close(); assert.equal(b.files.get(`/repo/${page}`), '# Later input\n');
+      } finally { gate.resolve(); if (!b.closed) await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+    await t.test('evicting a retained repository cancels its blocked check and drops the queued generation', async () => {
+      const b = await start(), gate = pending<void>(); let checks = 0;
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find('preview-block-0') !== undefined);
+        b.click('preview-block-0'); const editor = b.output.find('document-editor')!.state!;
+        b.beforeCheck = async () => { checks++; await gate.promise; };
+        editor.input('# First', b.context()); b.fire(800); await b.until(() => checks === 1);
+        editor.input('# Latest', b.context()); b.fire(800);
+        await b.until(() => b.files.get(`/repo/${page}`) === '# Latest\n' && b.output.text().includes('已保存，正在检查'));
+        const originalTasks = b.tasks.filter(task => !task.is_done() && !b.timers.some(timer => timer.repeat && timer.task === task));
+        assert.ok(originalTasks.length > 0);
+        for (let index = 0; index < 8; index++) {
+          const root = `/evict-${index}`; b.roots.set(root, root); b.selectTab(root, root);
+          await b.until(() => b.output.text().includes(root) && b.output.find('initialize') !== undefined);
+        }
+        assert.ok(originalTasks.every(task => task.is_done()), 'eviction cancels the original wait and check tasks');
+        gate.resolve(); await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(checks, 1, 'the queued check must not run after eviction'); assert.deepEqual(b.errors, []);
+      } finally { gate.resolve(); await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+    await t.test('close waits for an active write and its newer draft while skipping background checks', async () => {
+      const b = await start(), gate = pending<void>(); let writing = false;
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find('preview-block-0') !== undefined);
+        b.click('preview-block-0'); const editor = b.output.find('document-editor')!.state!;
+        b.beforeFileRead = async () => { writing = true; await gate.promise; };
+        editor.input('# First write', b.context()); b.fire(800); await b.until(() => writing);
+        editor.input('# Close draft', b.context());
+        let finished = false;
+        const closing = b.close().then(() => { finished = true; });
+        await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(finished, false);
+        gate.resolve(); await closing;
+        assert.equal(b.files.get(`/repo/${page}`), '# Close draft\n');
+        assert.equal(b.calls.some(call => call[0] === 'check'), false); assert.deepEqual(b.errors, []);
+      } finally { gate.resolve(); if (!b.closed) await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+    await t.test('close cancels a blocked check without waiting or losing a newer draft', async () => {
+      const b = await start(), gate = pending<void>(); let checking = false;
+      try {
+        b.click(`page-${page}`); await b.until(() => b.output.find('preview-block-0') !== undefined);
+        b.click('preview-block-0'); const editor = b.output.find('document-editor')!.state!;
+        b.beforeCheck = async () => { checking = true; await gate.promise; };
+        editor.input('# Saved', b.context()); b.fire(800); await b.until(() => checking);
+        editor.input('# Close draft', b.context());
+        await b.close();
+        assert.equal(b.files.get(`/repo/${page}`), '# Close draft\n');
+        assert.ok(b.tasks.every(task => task.is_done()));
+        gate.resolve(); await new Promise<void>(resolve => setImmediate(resolve));
+        assert.deepEqual(b.errors, []);
+      } finally { gate.resolve(); if (!b.closed) await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
     await t.test('unresolved repository targets immediately hide the old editable page and discard late resolution', async () => {
@@ -1075,6 +1179,85 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         assert.equal(b.watches.length, 3);
         const background = listed(); b.focusedTab = 't1'; b.draw();
         await b.until(() => listed() > background && b.watches.length === 4);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    await t.test('cleanup failures during background waits report immediately without a reconnection grace period', async () => {
+      for (const code of ['CleanupFailed', 'WorkspaceServerCleanupFailed']) {
+        const b = await start();
+        try {
+          const reply = { code: 1, stdout: '', stderr: JSON.stringify({ error: code, message: `${code}: cleanup is blocked` }) };
+          b.commandError = reply; b.watches.at(-1)!.result.resolve(reply);
+          await b.until(() => b.output.text().includes(`${code}: cleanup is blocked`));
+          assert.equal(b.output.find('concord-reconnecting'), undefined);
+          assert.equal(b.timers.some(timer => timer.ms === 10_000 && !timer.task.is_done()), false);
+          b.click('copy-error'); assert.match(b.clipboard, new RegExp(code, 'u'));
+          b.commandError = undefined; b.fire(2000);
+          await b.until(() => b.watches.length > 1);
+          assert.equal(b.output.find('concord-error'), undefined);
+        } finally { await b.close(); }
+      }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    await t.test('transient service failures retain the page for ten seconds and keep retrying after reporting', async () => {
+      for (const code of ['WorkspaceServerUnavailable', 'WorkspaceProjectionPending', 'WorkspaceServerBusy']) {
+        const b = await start();
+        try {
+          b.click(`page-${page}`); await b.until(() => b.output.find('preview-block-0') !== undefined);
+          const reply = { code: 1, stdout: '', stderr: JSON.stringify({ error: code, message: `Persistent ${code}` }) };
+          b.commandError = reply; b.watches.at(-1)!.result.resolve(reply);
+          await b.until(() => b.output.text().includes('正在重新连接 Concord'));
+          assert.ok(b.output.find(`concord-body-${page}`)); assert.equal(b.output.find('concord-error'), undefined);
+          const before = b.requests.length;
+          b.fire(2000); await b.until(() => b.requests.length > before);
+          await b.until(() => b.timers.some(timer => timer.ms === 2000 && !timer.repeat && !timer.task.is_done()));
+          assert.doesNotMatch(b.output.text(), /Persistent/u);
+          b.fire(10_000); await b.until(() => b.output.text().includes(`Persistent ${code}`));
+          assert.ok(b.output.find(`concord-body-${page}`));
+          const afterTimeout = b.requests.length;
+          b.fire(2000); await b.until(() => b.requests.length > afterTimeout);
+          await b.until(() => b.timers.some(timer => timer.ms === 2000 && !timer.repeat && !timer.task.is_done()));
+          assert.doesNotMatch(b.output.text(), /正在重新连接/u);
+          b.commandError = undefined; b.fire(2000);
+          await b.until(() => b.watches.length > 1);
+          assert.equal(b.output.find('concord-error'), undefined); assert.equal(b.output.find('concord-reconnecting'), undefined);
+          assert.equal(b.requests.filter(request => request.args[0] === '--version').length, 1, 'business failures retain CLI availability');
+        } finally { await b.close(); }
+      }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    await t.test('the first pending projection starts its ten-second deadline before the workspace wait returns', async () => {
+      const b = await start(boundary => {
+        const execute = boundary.exec.bind(boundary); let pending = true;
+        boundary.exec = async (command, args, options) => {
+          if (pending && args.includes('projection')) {
+            pending = false;
+            return { code: 1, stdout: '', stderr: '{"error":"WorkspaceProjectionPending","message":"Initial projection pending"}' };
+          }
+          return execute(command, args, options);
+        };
+      }, () => host.watches.length === 1 && host.output.text().includes('正在重新连接 Concord'));
+      try {
+        b.fire(10_000); await b.until(() => b.output.text().includes('Initial projection pending'));
+        assert.ok(b.output.find('copy-error'));
+        b.watches[0]!.result.resolve({ code: 0, stdout: '{"operation":"workspace-wait","changed":true,"sourceDigest":"ready"}', stderr: '' });
+        await b.until(() => b.output.find(`page-${page}`) !== undefined);
+        assert.equal(b.output.find('copy-error'), undefined);
+      } finally { await b.close(); }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    await t.test('initial transient failures show reading, and changing repositories starts a fresh recovery deadline', async () => {
+      const reply = { code: 1, stdout: '', stderr: '{"error":"WorkspaceServerUnavailable","message":"Not ready"}' };
+      const b = await start(boundary => { boundary.commandError = reply; }, () => host.output.text().includes('正在重新连接 Concord'));
+      try {
+        assert.equal(b.output.find('copy-error'), undefined);
+        b.fire(10_000); await b.until(() => b.output.text().includes('Not ready'));
+        assert.ok(b.output.find('copy-error'));
+        b.selectTab('other', '/other');
+        await b.until(() => b.output.text().includes('/other') && b.output.text().includes('正在重新连接 Concord'));
+        assert.equal(b.output.find('copy-error'), undefined);
+        b.commandError = undefined; b.fire(2000);
+        await b.until(() => b.output.find('initialize') !== undefined);
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
@@ -1402,6 +1585,46 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
       host.installedVersion = 'dev'; host.fire(2000);
       await host.until(() => host.watches.length === 1);
       assert.ok(host.output.find('concord-tree')); await host.close();
+    });
+    // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
+    await t.test('unknown commands and unavailable executables invalidate cached CLI detection until installation succeeds', async () => {
+      for (const unavailable of ['unknown', 'missing']) {
+        const b = await start();
+        try {
+          const reply = unavailable === 'unknown'
+            ? { code: 1, stdout: '', stderr: '{"error":"UnknownCommand","message":"unknown command workspace"}' }
+            : { code: 1, stdout: '', stderr: 'cannot start concord' };
+          b.commandError = reply; b.installedVersion = undefined;
+          b.watches.at(-1)!.result.resolve(reply);
+          await b.until(() => b.output.find('copy-cli') !== undefined);
+          const detections = b.requests.filter(request => request.args[0] === '--version').length;
+          const beforeDetection = b.frames.length;
+          b.fire(2000);
+          await b.until(() => b.requests.filter(request => request.args[0] === '--version').length > detections && b.frames.length > beforeDetection && b.output.text().includes('这个 mod 需要 Concord 命令行工具'));
+          const failed = b.requests.filter(request => request.args[0] === '--version').length;
+          const beforeRetry = b.frames.length;
+          b.fire(2000); await b.until(() => b.requests.filter(request => request.args[0] === '--version').length > failed && b.frames.length > beforeRetry);
+          b.installedVersion = 'dev'; b.commandError = undefined; b.fire(2000);
+          await b.until(() => b.watches.length > 1);
+          assert.ok(b.output.find(`page-${page}`)); assert.equal(b.output.find('copy-cli'), undefined);
+        } finally { await b.close(); }
+      }
+    });
+    // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
+    await t.test('missing document and configuration files do not invalidate CLI availability', async () => {
+      for (const code of ['ENOENT', 'SpawnFailed']) {
+        const b = await start();
+        try {
+          const reply = { code: 1, stdout: '', stderr: JSON.stringify({ error: code, message: `${code}: no such file concord.config.ts` }) };
+          b.commandError = reply; b.watches.at(-1)!.result.resolve(reply);
+          await b.until(() => b.output.text().includes(`${code}: no such file`));
+          assert.equal(b.output.find('copy-cli'), undefined);
+          b.commandError = undefined; b.fire(2000);
+          await b.until(() => b.watches.length > 1);
+          assert.equal(b.requests.filter(request => request.args[0] === '--version').length, 1);
+          assert.ok(b.output.find(`page-${page}`));
+        } finally { await b.close(); }
+      }
     });
     // @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
     await t.test('remote queries and source reads use the space machine', async () => {

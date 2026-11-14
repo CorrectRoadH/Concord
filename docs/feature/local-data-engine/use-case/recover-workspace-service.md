@@ -19,7 +19,7 @@
 
    安装包更新后，直接运行 `concord list feature`，不需要先执行 `server stop`。即使协议相同，安装身份不同也触发替换：等待旧实例退出并确认服务锁与自有资源释放后，启动当前安装的实例，再执行本次查询。
 
-   用 `concord server status` 核对新实例的 PID、token 与安装身份。上述结果为预期行为；具体交接和并发边界见[启动与裁决](../architecture.md#启动与裁决)。
+   用 `concord server status` 核对新实例的 token 与安装身份。上述结果为预期行为；具体交接和并发边界见[启动与裁决](../architecture.md#启动与裁决)。
 
 3. 服务卡在关闭阶段时报告确切阻断原因。 {#blocked}
 

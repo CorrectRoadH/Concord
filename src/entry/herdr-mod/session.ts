@@ -3,7 +3,7 @@
 // @concord-implements docs/feature/herdr-mod/use-case/init-from-herdr.md#guide
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 // @concord-implements docs/feature/herdr-mod/use-case/use-on-remote-machine.md
-import { Effect, Schema } from 'effect';
+import { Context, Effect, Schema } from 'effect';
 import { ModWorkspaceProjection, ModWorkspaceSnapshot, RenderedPage, WorkspaceWait, pageSource, type PageSource } from '../../model/herdr-mod/index.ts';
 
 export interface ModHost {
@@ -12,7 +12,9 @@ export interface ModHost {
 export class ModFailure extends Schema.TaggedError<ModFailure>()('ModFailure', { message: Schema.String, code: Schema.optional(Schema.String), details: Schema.optional(Schema.String) }) {}
 export class ModDisconnected extends Schema.TaggedError<ModDisconnected>()('ModDisconnected', { machine: Schema.String }) {}
 export const failure = (cause: unknown) => cause instanceof ModFailure ? cause : new ModFailure({ message: 'Concord 命令失败', details: cause instanceof Error ? cause.message : String(cause) });
+export const isCliMissing = (error: ModFailure) => /(?:cannot|unable to|failed to) (?:start|spawn|execute|run) ['"]?(?:[^\s'"]*\/)?concord['"]?(?:\s|:|$)|(?:spawn|spawnSync|exec) (?:[^\s]*\/)?concord(?:\s|:).*?(?:ENOENT|not found)|(?:^|[\s:])(?:[^\s:]*\/)?concord:? (?:command )?not found|command not found: (?:[^\s]*\/)?concord(?:\s|$)/iu.test(`${error.message} ${error.details ?? ''}`);
 const io = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: failure });
+const remotePreparation = Context.Reference<{ session: ModSession; prepare: Effect.Effect<void, ModFailure | ModDisconnected> } | undefined>('concord/entry/herdr-mod/RemotePreparation', { defaultValue: () => undefined });
 const Path = Schema.String.check(Schema.isPattern(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\)[^\u0000]+$/u));
 const Owner = Schema.Struct({ path: Path, kind: Schema.String, title: Schema.String, feature: Schema.optional(Schema.String) });
 const Page = Schema.Struct({ path: Path, kind: Schema.String, name: Schema.String });
@@ -76,8 +78,12 @@ export class ModSession {
   workspaceDigest: string | undefined;
   reloadVersion = 0;
   saving = false;
+  saveFailed = false;
   checking = false;
   checkFailed = false;
+  checkGeneration = 0;
+  checkPending = false;
+  reconnecting = false;
   deleted = false;
   error = '';
   errorDetails = '';
@@ -99,7 +105,18 @@ export class ModSession {
   constructor(host: ModHost, cwd: string, machine: string | null = null) { this.host = host; this.root = cwd; this.machine = machine; }
 
   private io<A>(run: () => Promise<A>) {
-    return io(run).pipe(Effect.mapError(error => this.machine === null || /not found|cannot start concord/iu.test(error.details ?? '') ? error : new ModDisconnected({ machine: this.machine })));
+    return io(run).pipe(Effect.mapError(error => this.machine === null || isCliMissing(error) ? error : new ModDisconnected({ machine: this.machine })));
+  }
+
+  /** Nested reads share this operation's preparation; independent fibers never share it. */
+  private prepareOperation<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> {
+    if (this.machine === null) return effect;
+    return Effect.gen({ self: this }, function*() {
+      const existing = yield* remotePreparation;
+      if (existing?.session === this) return yield* effect;
+      const prepare = yield* Effect.cached(this.ensureRemoteService());
+      return yield* effect.pipe(Effect.provideService(remotePreparation, { session: this, prepare }));
+    });
   }
 
   readFile(path: string) {
@@ -128,7 +145,10 @@ export class ModSession {
   command<S extends Schema.Top & { readonly DecodingServices: never }>(args: readonly string[], schema: S, diagnostic = false) {
     return Effect.gen({ self: this }, function*() {
       const remoteService = this.machine !== null && args[0] !== 'server' && args[0] !== 'init';
-      if (remoteService) yield* this.ensureRemoteService();
+      if (remoteService) {
+        const prepared = yield* remotePreparation;
+        yield* prepared?.session === this ? prepared.prepare : this.ensureRemoteService();
+      }
       const reply = yield* this.io(() => this.host.exec('concord', ['--json', ...(remoteService ? ['--server=existing'] : []), '--root', this.root, ...args], { cwd: this.root, on: this.machine }));
       if (reply.code !== 0) {
         const details = [reply.stderr, reply.stdout].filter(Boolean).join('\n');
@@ -142,12 +162,13 @@ export class ModSession {
         if (!diagnostic || !reply.stdout.trim()) return yield* Effect.fail(new ModFailure({ message: 'Concord 命令失败', details }));
       }
       const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(reply.stdout).pipe(Effect.mapError(failure));
-      if (!this.closed) { this.error = ''; this.errorDetails = ''; this.errorCode = ''; }
       return value;
     });
   }
 
-  refresh = Effect.fn('ModSession.refresh')(function*(this: ModSession, notify: () => void = () => {}): Effect.fn.Return<void, ModFailure | ModDisconnected> {
+  refresh = (notify: (error?: ModFailure) => void = () => {}) => this.prepareOperation(this.refreshOperation(notify));
+
+  private refreshOperation = Effect.fn('ModSession.refresh')(function*(this: ModSession, notify: (error?: ModFailure) => void): Effect.fn.Return<void, ModFailure | ModDisconnected> {
     const observation = this.observation = {};
     const current = () => !this.closed && observation === this.observation;
     const selected = this.selected;
@@ -159,6 +180,7 @@ export class ModSession {
         const reply = yield* Effect.result(this.command(['workspace', 'projection'], ModWorkspaceProjection));
         if (reply._tag === 'Success') return reply.success;
         if (!(reply.failure instanceof ModFailure) || reply.failure.code !== 'WorkspaceProjectionPending') return yield* Effect.fail(reply.failure);
+        notify(reply.failure);
         if (attempt === 2) return yield* Effect.fail(reply.failure);
         const waited = yield* Effect.result(this.waitForWorkspace());
         if (waited._tag === 'Failure' && (!(waited.failure instanceof ModFailure) || waited.failure.code !== 'WorkspaceProjectionPending')) return yield* Effect.fail(waited.failure);
@@ -191,7 +213,7 @@ export class ModSession {
       const owners = new Map(this.documents.map(owner => [owner.path, owner]));
       this.pages = snapshot.pages.map(page => ({ path: page.path, kind: owners.get(page.path)?.kind ?? 'page', name: page.derivedTitle ?? owners.get(page.path)?.title ?? page.path }));
       this.concepts = snapshot.conceptCatalogs.flatMap(catalog => catalog.concepts.map(concept => ({ path: catalog.path, reference: `${catalog.path}#${concept.id}`, concept })));
-      this.check = { ok: snapshot.findings.length === 0, findings: snapshot.findings };
+      if (!this.checking && !this.checkFailed) this.check = { ok: snapshot.findings.length === 0, findings: snapshot.findings };
       this.detail = this.detailFor(this.selected);
       notify();
     }
@@ -204,7 +226,9 @@ export class ModSession {
     return { tests: this.snapshot?.cases.filter(item => matches(item.contract)), codeDeclarations: this.snapshot?.codes.filter(item => item.contracts.some(matches)) };
   }
 
-  open = Effect.fn('ModSession.open')(function*(this: ModSession, path: string, resetDraft = true, expectedSelection = this.selection, notify: () => void = () => {}): Effect.fn.Return<void, ModFailure | ModDisconnected> {
+  open = (path: string, resetDraft = true, expectedSelection = this.selection, notify: () => void = () => {}) => this.prepareOperation(this.openOperation(path, resetDraft, expectedSelection, notify));
+
+  private openOperation = Effect.fn('ModSession.open')(function*(this: ModSession, path: string, resetDraft: boolean, expectedSelection: object, notify: () => void): Effect.fn.Return<void, ModFailure | ModDisconnected> {
     const canonical = yield* Schema.decodeUnknownEffect(Path)(path).pipe(Effect.mapError(failure));
     if (!resetDraft && expectedSelection !== this.selection) return;
     const token = resetDraft ? this.selection = {} : expectedSelection;
@@ -222,12 +246,14 @@ export class ModSession {
     if (!this.closed && token === this.selection) this.detail = this.detailFor(canonical);
   });
 
-  save = Effect.fn('ModSession.save')(function*(this: ModSession, body?: string, notify: () => void = () => {}) {
+  save = (body?: string, notify: () => void = () => {}) => this.prepareOperation(this.saveOperation(body, notify));
+
+  private saveOperation = Effect.fn('ModSession.save')(function*(this: ModSession, body: string | undefined, notify: () => void) {
     if (body !== undefined) this.setDraft(body);
     if (!this.selected || this.draft === undefined || this.closed || this.saving) return;
     const path = this.selected, draft = this.draft, selection = this.selection, version = this.reloadVersion;
     const current = () => !this.closed && selection === this.selection && version === this.reloadVersion;
-    this.saving = true; this.savingBody = draft; this.checkFailed = false;
+    this.saving = true; this.savingBody = draft; this.saveFailed = false;
     notify();
     this.fileObservation += 1;
     yield* Effect.gen({ self: this }, function*() {
@@ -247,19 +273,17 @@ export class ModSession {
         this.acceptFile(confirmed, false);
         if (this.draft === draft) this.draft = undefined;
         if (!current()) return;
-        this.checking = true; this.check = undefined; notify();
-        const check = yield* Effect.result(this.command(['check'], Check, true));
-        if (!current()) return;
-        if (check._tag === 'Failure') { this.checkFailed = true; return yield* Effect.fail(check.failure); }
-        this.check = check.success;
+        this.checkGeneration += 1; this.checkPending = true;
+        this.checking = true; this.check = undefined; this.checkFailed = false;
+        this.error = ''; this.errorCode = ''; this.errorDetails = '';
         return;
       }
-    }).pipe(Effect.ensuring(Effect.sync(() => {
-      this.saving = false; this.checking = false; this.savingBody = undefined; notify();
+    }).pipe(Effect.onError(() => Effect.sync(() => { if (current()) this.saveFailed = true; })), Effect.ensuring(Effect.sync(() => {
+      this.saving = false; this.savingBody = undefined; notify();
     })));
   });
 
-  initialize = Effect.fn('ModSession.initialize')(function*(this: ModSession, notify: () => void = () => {}) {
+  initialize = Effect.fn('ModSession.initialize')(function*(this: ModSession, notify: (error?: ModFailure) => void = () => {}) {
     const receipt = yield* this.command(['init'], Initialization);
     if (this.closed) return;
     this.initialization = receipt;
@@ -275,7 +299,17 @@ export class ModSession {
 
   suspend(): void { this.observation = {}; this.fileObservation += 1; }
 
-  checkNow = Effect.fn('ModSession.checkNow')(function*(this: ModSession) { this.check = yield* this.command(['check'], Check, true); });
+  checkNow = Effect.fn('ModSession.checkNow')(function*(this: ModSession) {
+    if (this.closed || !this.checkPending) return;
+    const generation = this.checkGeneration;
+    this.checkPending = false; this.checking = true;
+    yield* Effect.gen({ self: this }, function*() {
+      const result = yield* Effect.result(this.command(['check'], Check, true));
+      if (this.closed || generation !== this.checkGeneration) return;
+      if (result._tag === 'Failure') { this.checkFailed = true; return yield* Effect.fail(result.failure); }
+      this.check = result.success; this.checkFailed = false;
+    }).pipe(Effect.ensuring(Effect.sync(() => { this.checking = !this.closed && this.checkPending; })));
+  });
 
   private ensureRemoteService = Effect.fn('ModSession.ensureRemoteService')(function*(this: ModSession): Effect.fn.Return<void, ModFailure | ModDisconnected> {
     let status = yield* this.command(['server', 'status'], ServerStatus);
@@ -304,5 +338,5 @@ export class ModSession {
 
   wait = Effect.fn('ModSession.wait')(function*(this: ModSession) { return yield* this.waitForWorkspace(this.workspaceDigest); });
 
-  stop(): void { this.closed = true; this.observation = {}; this.selection = {}; }
+  stop(): void { this.closed = true; this.checkPending = false; this.checking = false; this.checkGeneration += 1; this.observation = {}; this.selection = {}; }
 }

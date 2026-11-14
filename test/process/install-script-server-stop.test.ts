@@ -1,4 +1,4 @@
-// 跨进程保证：服务与 IPC——不同安装共享服务，只按 token 和命令作用域授权且不影响另一工作区。
+// 跨进程保证：服务与 IPC——不同安装替换服务，token 和命令作用域授权保持且不影响另一工作区。
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,7 +9,7 @@ import { privateSourceInstallation } from '../support/private-source.ts';
 import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
 // @use-case docs/feature/cross-platform-release/use-case/install-with-script.md#upgrade-running-service
-test('different installations share data and cache requests while preserving token and scope authorization', { timeout: 45_000 }, async () => {
+test('different installations replace services while preserving token and scope authorization', { timeout: 45_000 }, async () => {
   const root = (await fixture()), other = (await fixture()), installation = mkdtempSync(join(tmpdir(), 'concord-installer-stop-'));
   const entry = privateSourceInstallation(installation);
   try {
@@ -30,10 +30,10 @@ test('different installations share data and cache requests while preserving tok
       assert.equal(wrongScope._tag, 'Failure');
     })));
     const startB = await command(root, ['server', 'start'], entry); assert.equal(startB.status, 0, startB.stdout + startB.stderr);
-    const shared = record(root); assert.equal(shared.installation, before.installation); assert.equal(shared.token, before.token);
+    const replacement = record(root); assert.notEqual(replacement.installation, before.installation); assert.notEqual(replacement.token, before.token);
     assert.equal(record(other).token, unrelated.token);
     const cache = await command(root, ['cache', 'status']); assert.equal(cache.status, 0, cache.stdout + cache.stderr);
-    const returned = record(root); assert.equal(returned.installation, before.installation); assert.equal(returned.token, shared.token);
+    const returned = record(root); assert.equal(returned.installation, before.installation); assert.notEqual(returned.token, replacement.token);
     assert.equal(record(other).token, unrelated.token);
     assert.equal((await command(root, ['list', 'feature'], entry)).status, 0);
     assert.equal((await command(root, ['server', 'stop'], entry)).status, 0);

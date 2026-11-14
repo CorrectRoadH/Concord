@@ -102,10 +102,13 @@ test('mod observes public CLI schemas, package pages and only fixed or linked Ma
 });
 
 // @use-case docs/feature/herdr-mod/use-case/edit-and-check.md
-test('saving reads the current CLI digest and overwrites an unobserved external edit before checking', async () => {
+test('saving confirms the current CLI digest and queues a check without running it', async () => {
   const b = boundary(); await Effect.runPromise(b.session.open(path));
   await Effect.runPromise(b.session.save('# Cart\n\nEdited\n'));
   assert.deepEqual(b.writes, [{ path: `/repo/${path}`, expected: digest(original) }]);
+  assert.equal(b.session.checking, true); assert.equal(b.session.checkPending, true);
+  assert.equal(b.calls.some(call => call[0] === 'check'), false);
+  await Effect.runPromise(b.session.checkNow());
   assert.equal(b.session.check?.ok, false); assert.equal(b.session.check?.findings[0]?.line, 2);
   b.files.set(`/repo/${path}`, '# Agent edits\n');
   await Effect.runPromise(b.session.save('# My draft\n'));
@@ -113,6 +116,28 @@ test('saving reads the current CLI digest and overwrites an unobserved external 
   assert.equal(b.files.get(`/repo/${path}`), '# My draft\n');
   assert.equal(b.writes[1]?.expected, digest('# Agent edits\n'));
   assert.equal(b.writes.length, 2);
+});
+
+// @use-case docs/feature/herdr-mod/use-case/edit-and-check.md#save
+test('a check cannot publish success for an older save or after the session stops', async () => {
+  const b = boundary(); await Effect.runPromise(b.session.open(path));
+  const execute = b.host.exec;
+  for (const stop of [false, true]) {
+    const entered = Promise.withResolvers<void>();
+    const reply = Promise.withResolvers<{ code: number; stdout: string; stderr: string }>();
+    b.host.exec = (command, args, options) => {
+      if (args.at(-1) === 'check') { entered.resolve(); return reply.promise; }
+      return execute(command, args, options);
+    };
+    await Effect.runPromise(b.session.save(`# First ${stop}\n`));
+    const checking = Effect.runPromise(b.session.checkNow()); await entered.promise;
+    if (stop) b.session.stop();
+    else await Effect.runPromise(b.session.save('# Latest\n'));
+    reply.resolve({ code: 0, stdout: '{"ok":true,"findings":[]}', stderr: '' }); await checking;
+    assert.equal(b.session.check, undefined);
+    assert.equal(b.session.checkPending, !stop); assert.equal(b.session.checking, !stop);
+    assert.equal(b.session.checkFailed, false);
+  }
 });
 
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
@@ -196,6 +221,56 @@ test('remote drafts use the same digest action and UTF-8 bounded argument chunks
   assert.equal(b.files.get(`/repo/${path}`), draft);
   assert.ok(b.calls.some(call => call.filter(arg => arg.startsWith('--input-text=')).length > 1));
   assert.equal(b.session.sourceDigest, digest(draft));
+});
+
+// @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#edit
+test('each remote save and refresh prepares once, including retries and selected file reads', async () => {
+  const b = boundary(); b.session = new ModSession(b.host, '/repo', 'vps');
+  await Effect.runPromise(b.session.open(path)); b.calls.length = 0;
+  await Effect.runPromise(b.session.save('# Remote edit\n'));
+  assert.equal(b.calls.filter(call => call[0] === 'server').length, 1);
+  assert.equal(b.calls.filter(call => call[0] === 'action').length, 3);
+  assert.equal(b.calls.some(call => call[0] === 'check'), false);
+  b.calls.length = 0;
+  b.files.set(`/repo/${path}`, '# New observation\n');
+  await Effect.runPromise(b.session.refresh());
+  assert.deepEqual(b.calls.map(call => call[0]), ['server', 'workspace', 'action']);
+  b.calls.length = 0;
+  await Promise.all([Effect.runPromise(b.session.refresh()), Effect.runPromise(b.session.checkNow())]);
+  assert.equal(b.calls.filter(call => call[0] === 'server').length, 2, 'independent operations have independent Effect contexts');
+  b.calls.length = 0;
+  await Effect.runPromise(b.session.save('# Another save\n'));
+  assert.equal(b.calls.filter(call => call[0] === 'server').length, 1, 'the previous save cannot prepare this one');
+});
+
+// @use-case docs/feature/herdr-mod/use-case/use-on-remote-machine.md#open
+test('pending projection waits share preparation but a failed write never re-prepares or replays', async () => {
+  const b = boundary(); b.session = new ModSession(b.host, '/repo', 'vps');
+  const execute = b.host.exec; let pending = true;
+  b.host.exec = async (command, args, options) => {
+    const operation = args.slice(args.indexOf('--root') + 2);
+    if (operation[1] === 'projection' && pending) {
+      pending = false; b.calls.push(operation);
+      return { code: 1, stdout: '', stderr: '{"error":"WorkspaceProjectionPending","message":"Opening"}' };
+    }
+    if (operation[1] === 'wait') {
+      b.calls.push(operation);
+      return { code: 0, stdout: '{"operation":"workspace-wait","changed":true,"sourceDigest":"new"}', stderr: '' };
+    }
+    return execute(command, args, options);
+  };
+  await Effect.runPromise(b.session.refresh());
+  assert.deepEqual(b.calls.map(call => call[0]), ['server', 'workspace', 'workspace', 'workspace']);
+  await Effect.runPromise(b.session.open(path)); b.calls.length = 0;
+  b.host.exec = async (command, args, options) => {
+    if (args.some(arg => arg.includes('document.set'))) {
+      b.calls.push(['write']); return { code: 1, stdout: '', stderr: '{"error":"WorkspaceServerUnavailable","message":"Service changed"}' };
+    }
+    return execute(command, args, options);
+  };
+  await assert.rejects(Effect.runPromise(b.session.save('# Kept draft\n')), error => error instanceof ModFailure && error.code === 'WorkspaceServerUnavailable');
+  assert.deepEqual(b.calls.map(call => call[0]), ['server', 'action', 'write']);
+  assert.equal(b.session.draft, '# Kept draft\n'); assert.equal(b.session.saving, false);
 });
 
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md

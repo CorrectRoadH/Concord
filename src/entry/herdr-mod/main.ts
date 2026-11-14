@@ -10,7 +10,7 @@ import { Effect, Scheduler } from 'effect';
 import { View, div, type AsyncContext, type Context, type FocusHandle, type Element, type Task } from 'gpui-kit';
 import { h_flex, v_flex, TextView, Editor, EditorState, Textarea, TextareaState, VirtualListScrollHandle } from 'gpui-base';
 import { exec, focused, panes, spaces, run, closeOverlay, home, props as hostProps, theme, settings } from 'herdr';
-import { ModSession, ModFailure, ModDisconnected, failure, markdownTarget } from './session.ts';
+import { ModSession, ModFailure, ModDisconnected, failure, isCliMissing, markdownTarget } from './session.ts';
 import { pageSource, type PageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
 import { RenderAssets, type RenderLease } from './render-assets.ts';
 import { codeMarkdown, livePreviewElements } from './rendered-page.ts';
@@ -30,6 +30,8 @@ export default class ConcordMod extends View {
   private cliMachines = new Set<string | null>();
   private session = new ModSession({ exec }, '');
   private tasks = new Set<Task>();
+  private checks = new Map<ModSession, { task?: Task; cancel: () => void }>();
+  private recoveries = new Map<ModSession, { error: ModFailure; timeout: Task }>();
   private watcher: Task | undefined;
   private polling: Task | undefined;
   private watchedRoot: string | undefined;
@@ -136,23 +138,27 @@ export default class ConcordMod extends View {
         await this.detectCli({ cwd: session.root, machine: session.machine }, () => !this.closed && session === this.session && token === this.targetToken, true);
         if (this.cli === 'ready' && session === this.session) { this.refresh(next); next.notify(); }
       } catch { /* The next tick tries again. */ }
-      finally { this.rechecking = false; }
+      finally {
+        this.rechecking = false;
+        if (!this.closed && session === this.session && token === this.targetToken) next.notify();
+      }
     });
   }
 
   private async detectCli(target: Target, current: () => boolean, quiet = false): Promise<void> {
-    if (this.cliMachines.has(target.machine)) { this.cli = 'ready'; return; }
+    if (this.cliMachines.has(target.machine)) { if (current()) this.cli = 'ready'; return; }
     if (!quiet) { this.cli = 'checking'; this.session.error = ''; }
     let reply;
     try { reply = await exec('concord', ['--version'], { cwd: target.cwd, on: target.machine }); }
     catch {
+      this.cliMachines.delete(target.machine);
       // A successful Git probe distinguishes an absent executable from a lost machine.
       if (target.machine !== null) await this.resolveRoot(target);
       if (current()) this.cli = 'missing';
       return;
     }
     if (!current()) return;
-    if (reply.code !== 0) { this.cli = 'missing'; return; }
+    if (reply.code !== 0) { this.cliMachines.delete(target.machine); this.cli = 'missing'; return; }
     this.cli = 'ready'; this.cliMachines.add(target.machine);
   }
 
@@ -216,7 +222,7 @@ export default class ConcordMod extends View {
         const different = this.session.root !== resolved.root || this.session.machine !== target.machine;
         if (different) this.finishEditing(next);
         if (different && (this.session.draft !== undefined || this.saving)) {
-          await this.flush(() => { if (current()) next.notify(); });
+          await this.flush(next, () => { if (current()) next.notify(); });
           if (!current()) return;
         }
         this.switchingTarget = false;
@@ -241,27 +247,28 @@ export default class ConcordMod extends View {
     });
   }
 
-  private run<A, E>(cx: Context, effect: Effect.Effect<A, E> | ((cx: Context) => Effect.Effect<A, E>), after?: (cx: Context) => void): void {
+  private run<A, E>(cx: Context, effect: Effect.Effect<A, E> | ((cx: Context) => Effect.Effect<A, E>), after?: (cx: Context) => void, recover = false): void {
     const session = this.session;
     for (const task of this.tasks) if (task.is_done()) this.tasks.delete(task);
     const task = cx.spawn(async current => {
       try {
         await runEffect(typeof effect === 'function' ? effect(current) : effect);
         this.tasks.delete(task); // A completed action may switch folders and cancel other tasks.
-        if (!session.closed && session === this.session) after?.(current);
+        if (!this.closed && !session.closed && session === this.session) after?.(current);
       } catch (cause) {
-        if (!session.closed && session === this.session) {
+        if (!this.closed && !session.closed && session === this.session) {
           if (cause instanceof ModDisconnected) this.disconnected = true;
-          else this.reportFailure(cause, session);
+          else this.reportFailure(cause, session, recover ? current : undefined);
         }
       }
       this.tasks.delete(task);
-      if (!session.closed && session === this.session) current.notify();
+      if (!this.closed && !session.closed && session === this.session) current.notify();
     });
     this.tasks.add(task);
   }
 
   private useFolder(cwd: string, machine: string | null, cx: Context): void {
+    this.clearRecovery(this.session);
     if (this.session.root) {
       this.session.suspend();
       this.sessions.set(JSON.stringify([this.session.machine, this.session.root]), { session: this.session, expanded: this.expanded, collapsedGroups: this.collapsedGroups, pageLease: this.pageLease, renderedPage: this.renderedPage, renderedBlocks: this.renderedBlocks, renderedPath: this.renderedPath, renderKey: this.renderedKey, treeScroll: this.treeScroll, pageScroll: this.pageScroll });
@@ -277,6 +284,7 @@ export default class ConcordMod extends View {
     const retained = this.sessions.get(key);
     this.sessions.delete(key);
     this.session = retained?.session ?? new ModSession({ exec }, cwd, machine);
+    this.clearRecovery(this.session);
     this.checkDetailsExpanded = false;
     this.cli = this.cliMachines.has(machine) ? 'ready' : 'checking';
     this.pageLease = retained?.pageLease; this.renderedPage = retained?.renderedPage;
@@ -290,6 +298,7 @@ export default class ConcordMod extends View {
     while (this.sessions.size > 7) {
       const oldest = this.sessions.keys().next().value!;
       const removed = this.sessions.get(oldest)!; this.sessions.delete(oldest);
+      this.cancelCheck(removed.session); this.clearRecovery(removed.session);
       removed.session.stop(); removed.treeScroll.release(); removed.pageScroll.release();
       for (const [address, resolved] of this.resolvedTargets) {
         if (resolved.root === removed.session.root && resolved.machine === removed.session.machine) this.resolvedTargets.delete(address);
@@ -304,16 +313,21 @@ export default class ConcordMod extends View {
     const digest = session.workspaceDigest, source = session.sourceDigest;
     this.refreshing = true;
     this.run(cx, current => Effect.gen({ self: this }, function*() {
-      yield* session.refresh(() => { this.syncEditor(); current.notify(); }).pipe(Effect.onError(() => Effect.sync(() => {
-        if (!session.closed && session === this.session) this.pollLater(current);
+      yield* session.refresh(error => {
+        if (this.closed || session.closed || session !== this.session) return;
+        if (error) this.reportFailure(error, session, current);
+        this.syncEditor(); current.notify();
+      }).pipe(Effect.onError(() => Effect.sync(() => {
+        if (!this.closed && !session.closed && session === this.session) this.pollLater(current);
       })));
-      this.disconnected = false; session.errorDetails = '';
+      this.clearRecovery(session);
+      this.disconnected = false; session.error = ''; session.errorCode = ''; session.errorDetails = '';
       // Images and imported sketch inputs can change while Markdown stays identical.
       if (session.workspaceDigest !== digest && session.sourceDigest === source) this.renderKey = '';
     }).pipe(Effect.ensuring(Effect.sync(() => { if (session === this.session) this.refreshing = false; }))), current => {
       this.watch(current);
       if (this.refreshQueued) { this.refreshQueued = false; this.refresh(current); }
-    });
+    }, true);
   }
 
   private pauseWatch(): void {
@@ -325,7 +339,7 @@ export default class ConcordMod extends View {
   private pollLater(cx: Context): void {
     const session = this.session;
     this.polling?.cancel();
-    this.polling = cx.timer.after(2000, next => { if (!session.closed && session === this.session && this.foreground) this.refresh(next); });
+    this.polling = cx.timer.after(2000, next => { if (!session.closed && session === this.session && this.foreground && this.cli === 'ready') this.refresh(next); });
   }
 
   private watch(cx: Context): void {
@@ -350,8 +364,8 @@ export default class ConcordMod extends View {
         if (session.closed || session !== this.session || token !== this.watchToken || !this.foreground) return;
         this.watchedRoot = undefined;
         if (cause instanceof ModDisconnected) { this.disconnected = true; current.notify(); return; }
-        if (!(cause instanceof ModFailure) || !/^(?:Hawdb|Workspace|ProjectNotInitialized$)/u.test(cause.code ?? '')) {
-          this.reportFailure(cause, session); current.notify();
+        if (!(cause instanceof ModFailure) || !/^(?:HawdbUnavailable|WorkspaceProjectionUnavailable|ProjectNotInitialized)$/u.test(cause.code ?? '')) {
+          this.reportFailure(cause, session, current); current.notify();
         }
         this.pollLater(current);
       }
@@ -369,16 +383,22 @@ export default class ConcordMod extends View {
     this.expandPath(path);
     cx.notify();
     this.run(cx, next => Effect.tryPromise({ try: async () => {
+      let reading = false;
       try {
-        await this.flush(() => { if (current()) next.notify(); });
+        await this.flush(next, () => { if (current()) next.notify(); });
         if (!current()) return;
         next.notify();
+        reading = true;
         await runEffect(session.open(path));
         if (!current()) return;
+        this.clearRecovery(session); session.error = ''; session.errorCode = ''; session.errorDetails = '';
         this.clearDetails();
         this.syncEditor();
       } catch (cause) {
-        if (current()) throw cause;
+        if (current()) {
+          if (!reading || cause instanceof ModDisconnected) throw cause;
+          this.reportFailure(cause, session, next);
+        }
       } finally {
         if (current()) this.pendingPage = undefined;
       }
@@ -423,7 +443,7 @@ export default class ConcordMod extends View {
         if (!current()) return;
         this.renderError = failure(cause).message;
         if (cause instanceof ModDisconnected) this.disconnected = true;
-        else this.reportFailure(cause, session);
+        else this.reportFailure(cause, session, next);
       }
       finally { this.renderTasks.delete(task); if (current()) this.rendering = false; }
       if (current()) next.notify();
@@ -463,23 +483,58 @@ export default class ConcordMod extends View {
     this.autoSave = cx.timer.after(delay, next => {
       this.autoSave = undefined;
       if (this.closed || session !== this.session || session.reloadVersion !== version) return;
-      this.run(next, current => Effect.tryPromise({ try: () => this.flush(() => current.notify()), catch: failure }));
+      this.run(next, current => Effect.tryPromise({ try: () => this.flush(current, () => current.notify()), catch: failure }));
       next.notify();
     });
   }
 
-  private flush(notify: () => void = () => {}): Promise<void> {
+  private flush(cx: Context, notify: () => void = () => {}): Promise<void> {
     this.autoSave?.cancel(); this.autoSave = undefined;
     if (this.saving) return this.saving;
     const session = this.session;
     const pending = (async () => {
       while (!session.closed && session.draft !== undefined) {
         await runEffect(session.save(undefined, () => { if (!this.closed && session === this.session) notify(); }));
+        this.startCheck(session, cx);
         if (!this.closed && session === this.session) this.syncEditor();
       }
     })();
     this.saving = pending;
     return pending.finally(() => { if (this.saving === pending) this.saving = undefined; });
+  }
+
+  private startCheck(session: ModSession, cx: Context): void {
+    if (this.closed || session.closed || !session.checkPending || this.checks.has(session)) return;
+    const running: { task?: Task; cancel: () => void } = { cancel: () => {} };
+    this.checks.set(session, running);
+    running.task = cx.spawn(async current => {
+      // Native spawn starts immediately, before the task can be registered.
+      await current.sleep(0);
+      if (this.checks.get(session) !== running) return;
+      const check = Effect.gen({ self: this }, function*() {
+        while (!this.closed && !session.closed && session.checkPending) {
+          const generation = session.checkGeneration;
+          yield* session.checkNow().pipe(Effect.catch(cause => Effect.sync(() => {
+            if (!this.closed && !session.closed && generation === session.checkGeneration) this.reportFailure(cause, session);
+          })));
+          if (!this.closed && !session.closed && session === this.session) current.notify();
+        }
+      }).pipe(Effect.ensuring(Effect.sync(() => {
+        if (this.checks.get(session) === running) this.checks.delete(session);
+      })));
+      await new Promise<void>(resolve => {
+        running.cancel = Effect.runCallback(check, {
+          scheduler: new Scheduler.MixedScheduler('sync'),
+          onExit: () => resolve(),
+        });
+      });
+    });
+  }
+
+  private cancelCheck(session: ModSession): void {
+    const running = this.checks.get(session);
+    this.checks.delete(session);
+    running?.cancel(); running?.task?.cancel();
   }
 
   private finishEditing(cx: Context): void {
@@ -573,12 +628,36 @@ export default class ConcordMod extends View {
     } else this.open(path, cx);
   }
 
-  private reportFailure(cause: unknown, session = this.session): void {
+  private clearRecovery(session: ModSession): void {
+    this.recoveries.get(session)?.timeout.cancel();
+    this.recoveries.delete(session); session.reconnecting = false;
+  }
+
+  private reportFailure(cause: unknown, session = this.session, recover?: Context): void {
     const error = failure(cause);
-    if (/Unknown(?:Command|Option)|UnrecognizedCommand|unknown (?:command|subcommand|option|flag)|unrecognized (?:command|subcommand|option|flag)|not (?:a |be )?recognized.*command|command not found|concord.*not found|cannot start concord/iu.test(`${error.code ?? ''} ${error.message} ${error.details ?? ''}`)) {
+    if (recover && /^(?:WorkspaceServerUnavailable|WorkspaceProjectionPending|WorkspaceServerBusy)$/u.test(error.code ?? '')) {
+      if (session === this.session) this.pollLater(recover);
+      const recovery = this.recoveries.get(session);
+      if (recovery) { recovery.error = error; if (session.reconnecting) return; }
+      else {
+        session.reconnecting = true; session.error = ''; session.errorDetails = ''; session.errorCode = '';
+        const timeout = recover.timer.after(10_000, current => {
+          const latest = this.recoveries.get(session);
+          if (!latest || session.closed || this.closed) return;
+          session.reconnecting = false;
+          session.error = latest.error.message; session.errorDetails = latest.error.details ?? ''; session.errorCode = latest.error.code ?? '';
+          if (session === this.session) current.notify();
+        });
+        this.recoveries.set(session, { error, timeout });
+        return;
+      }
+    } else this.clearRecovery(session);
+    if (isCliMissing(error) || /Unknown(?:Command|Option)|UnrecognizedCommand|unknown (?:command|subcommand|option|flag)|unrecognized (?:command|subcommand|option|flag)|not (?:a |be )?recognized.*command/iu.test(`${error.code ?? ''} ${error.message} ${error.details ?? ''}`)) {
       this.cliMachines.delete(session.machine);
-      this.cli = /command not found|cannot start concord|concord.*not found/iu.test(`${error.message} ${error.details ?? ''}`) ? 'missing' : 'outdated';
-      this.unknownCommand = error.details || error.message;
+      if (session === this.session) {
+        this.cli = isCliMissing(error) ? 'missing' : 'outdated';
+        this.unknownCommand = error.details || error.message;
+      }
     }
     session.error = error.message; session.errorDetails = error.details ?? ''; session.errorCode = error.code ?? '';
   }
@@ -613,6 +692,7 @@ export default class ConcordMod extends View {
 
   private errorElements(): Element[] {
     const session = this.session;
+    if (session.reconnecting) return [this.banner('concord-reconnecting', '正在重新连接 Concord…', [], 'dim')];
     if (!session.error) return [];
     return [h_flex().id('concord-error').flex_none().px(12).py(8).gap(6).items_center().border_b(1).border_color(color('border')).children([
       text(session.error).flex_1().min_w(0).text_color(color('blocked')),
@@ -875,12 +955,12 @@ export default class ConcordMod extends View {
     if (this.pendingPage) return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).children([
       h_flex().id('page-toolbar').flex_none().min_w(0).h(42).px(12).items_center().border_b(1).border_color(color('border'))
         .child(text(this.pendingPage).text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate()),
-      v_flex().id('concord-page-loading').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text(session.checking ? '正在检查上一页…' : session.saving || session.draft !== undefined ? '正在保存上一页…' : '正在读取文档…').text_color(color('dim'))),
+      v_flex().id('concord-page-loading').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text(session.saving || session.draft !== undefined ? '正在保存上一页…' : '正在读取文档…').text_color(color('dim'))),
     ]);
     if (!session.selected) return v_flex().id('concord-page').flex_1().min_w(0).min_h(0).items_center().justify_center().child(text('选一页开始阅读').text_color(color('dim')));
     const toolbar = this.documentMenu(h_flex().id('page-toolbar').flex_none().min_w(0).h(42).px(12).gap(6).items_center().border_b(1).border_color(color('border')).children([
       text(session.selected).text_size(12).text_color(color('dim')).flex_1().min_w(0).truncate(),
-      text(session.checking ? '已保存，正在检查…' : session.saving ? '正在保存…' : session.draft !== undefined ? session.error ? '保存失败' : '等待保存…' : session.checkFailed ? '已保存，检查失败' : session.check?.ok ? '已保存' : '').text_size(11).text_color(color('dim')),
+      text(session.saving ? '正在保存…' : session.draft !== undefined ? session.saveFailed ? '保存失败' : '等待保存…' : session.checking ? '已保存，正在检查…' : session.checkFailed ? '已保存，检查失败' : session.check?.ok ? '已保存' : '').text_size(11).text_color(color('dim')),
       ...(this.copied === 'context-menu' ? [text('已复制').id('context-menu-copied').text_size(11).text_color(color('dim'))] : []),
     ]), session.selected, session.documents.find(item => item.path === session.selected)?.title ?? session.pages.find(item => item.path === session.selected)?.name ?? session.selected);
     const banners = this.checkElements();
@@ -921,7 +1001,7 @@ export default class ConcordMod extends View {
       ...(!session.selected && this.copied === 'context-menu' ? [text('已复制').id('context-menu-copied').text_size(11).text_color(color('dim'))] : []),
     ]);
     if (this.directory === 'no-terminal') return this.statusPage(toolbar, '先在这个 tab 里打开一个终端', '终端报告目录后，Concord 会自动跟随');
-    if (this.switchingTarget) return this.statusPage(toolbar, session.checking ? '正在检查原仓库的修改…' : session.draft !== undefined || session.saving ? '正在保存原仓库的修改…' : '正在切换仓库…', location);
+    if (this.switchingTarget) return this.statusPage(toolbar, session.draft !== undefined || session.saving ? '正在保存原仓库的修改…' : '正在切换仓库…', location);
     if (this.disconnected) return this.statusPage(toolbar, `连不上 ${this.target?.machine ?? session.machine}`, 'Herdr 恢复连接后自动重试');
     if (this.directory === 'not-git') return this.statusPage(toolbar, '这里不是 Git 仓库', location, [text('在终端里 cd 到一个 Git 仓库，mod 会跟着切换')]);
     if (this.cli !== 'ready') {
@@ -935,9 +1015,12 @@ export default class ConcordMod extends View {
     }
     if (session.error && (!session.loaded || !session.initialized)) return this.statusPage(toolbar, session.error, location, this.handoff('copy-error', this.errorRequest(false), this.errorRequest(true)));
     // Background reads keep the page as it is; only the first read of a repository says it is reading.
+    if (session.reconnecting && (!session.loaded || !session.initialized)) return this.statusPage(toolbar, '正在重新连接 Concord…', location);
     if (!session.loaded) return this.statusPage(toolbar, '正在读取 Concord 仓库…', location);
     if (!session.initialized) return this.statusPage(toolbar, '这个仓库还没有初始化 Concord', location, [
-      this.button('initialize', '在这里初始化 Concord', current => this.act('initialize', '正在初始化…', current, next => session.initialize(() => { if (!session.closed && session === this.session) next.notify(); }).pipe(
+      this.button('initialize', '在这里初始化 Concord', current => this.act('initialize', '正在初始化…', current, next => session.initialize(error => {
+        if (!this.closed && !session.closed && session === this.session) { if (error) this.reportFailure(error, session, next); next.notify(); }
+      }).pipe(
         Effect.onError(() => Effect.sync(() => { if (session === this.session && session.initialization) this.pollLater(next); })),
       ), next => this.watch(next)), true),
       ...this.errorElements(),
@@ -960,6 +1043,8 @@ export default class ConcordMod extends View {
   async close(cx: AsyncContext): Promise<void> {
     this.updateDraft(); this.releaseEditor(); this.autoSave?.cancel(); this.autoSave = undefined;
     this.closed = true; this.targetToken = {};
+    for (const session of this.checks.keys()) this.cancelCheck(session);
+    for (const session of this.recoveries.keys()) this.clearRecovery(session);
     this.contextMenu = undefined; this.menuFocus?.release(); this.menuFocus = undefined; this.copiedReset?.cancel();
     this.navigation?.cancel(); this.directoryWatch?.cancel(); this.retry?.cancel();
     this.renderToken = {};
@@ -968,7 +1053,7 @@ export default class ConcordMod extends View {
     this.tasks.clear();
     this.clearDetails();
     // Start both within the host's bounded close window; a slow write must not delay asset cleanup.
-    const save = this.session.saving ? Promise.resolve() : runEffect(this.session.save()).catch(() => {});
+    const save = (this.saving ?? runEffect(this.session.save())).catch(() => {});
     await Promise.all([save, this.assets.close(cx)]);
     this.session.stop(); this.treeScroll.release(); this.pageScroll.release();
     for (const retained of this.sessions.values()) { retained.session.stop(); retained.treeScroll.release(); retained.pageScroll.release(); }
