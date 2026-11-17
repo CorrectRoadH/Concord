@@ -150,8 +150,10 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.catch(cause => namedFailure(cause).code === 'WorkspaceProjectionPending' ? Effect.void : Effect.fail(cause)));
     yield* state.transition('running');
   }).pipe(Effect.catch(fail), Effect.andThen(request));
-  yield* Effect.forkScoped(startup);
-  const refreshFiber = yield* Effect.forkScoped(Effect.forever(Effect.gen(function*() {
+  const startupFiber = yield* Effect.forkScoped(startup);
+  // Watchers can invalidate before opening completes. Keep their queued work
+  // until admission is ready instead of terminating the refresh loop as busy.
+  const refreshFiber = yield* Effect.forkScoped(Fiber.join(startupFiber).pipe(Effect.andThen(Effect.forever(Effect.gen(function*() {
     yield* Queue.take(invalidations);
     while (Number.isFinite(firstInvalidation)) {
       const now = yield* Clock.currentTimeMillis;
@@ -163,7 +165,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* Queue.clear(invalidations);
     pending = false;
     yield* operate(refresh, false);
-  })));
+  })))));
   yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() { if (!pending) yield* request; }), compensationRefresh).pipe(Effect.delay('30 seconds')));
   yield* Effect.forkScoped(Effect.repeat(maintenance.withPermit(Effect.gen(function*() {
     const current = yield* SubscriptionRef.get(state.value);

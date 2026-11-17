@@ -249,6 +249,7 @@ clear、重开与 shutdown 串行执行。
 服务是该 worktree 唯一的工作区图与投影维护者，增量刷新在服务进程内执行。
 
 - 监听只产生变更信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。
+- `opening` 期间的变更信号保留在刷新队列中；刷新循环等待启动流程结束后再消费，不能因服务尚未就绪而退出。
 - 收到文件变更信号或内部写入完成后，服务按 `(mtime, size, inode)` 与内容摘要只重新解析变更的文件，增量更新内存工作区图，并异步写入 `workspace_projection` 作为服务重启后的冷启动快照。
 
 订阅、`GET /api/workspace` 与经服务的 `workspace projection` 从内存返回，不读持久库。

@@ -9,6 +9,29 @@ import { displaySnapshot } from '../support/workspace-display-fixture.ts';
 
 import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.ts';
 
+// @feature docs/feature/local-data-engine/architecture.md#刷新与推送
+test('invalidations during opening preserve the refresh loop and publish the first projection', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const opened = yield* Deferred.make<void>();
+  let scans = 0, published = false;
+  const service = yield* makeWorkspaceService(ports({
+    open: Deferred.await(opened),
+    restore: () => published ? Effect.succeed(projection) : Effect.fail(new ConcordError('WorkspaceProjectionPending', 'No accepted result')),
+    compute: () => Effect.sync(() => { scans++; return record; }),
+    persist: (_context, candidate) => Effect.sync(() => { if (candidate) published = true; }),
+  }));
+  yield* service.invalidate;
+  yield* TestClock.adjust(250);
+  assert.equal(scans, 0);
+  yield* Deferred.succeed(opened, undefined);
+  yield* TestClock.adjust(0);
+  assert.equal((yield* service.current).sourceDigest, record.sourceDigest);
+  assert.equal(scans, 1);
+  yield* service.request;
+  yield* TestClock.adjust(0);
+  assert.equal(scans, 2);
+  yield* service.stop;
+})).pipe(Effect.provide(stateLayer))));
+
 // @feature docs/feature/local-data-engine/README.md
 test('service expiry uses the Effect clock and a connected client prevents idle shutdown', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const service = yield* makeWorkspaceService(ports({ compute: () => Effect.never }));
