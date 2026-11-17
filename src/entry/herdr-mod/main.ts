@@ -863,7 +863,8 @@ export default class ConcordMod extends View {
   private documentList(): Element {
     const session = this.session;
     const roots = session.documents.map(owner => ({ path: owner.path, kind: owner.kind, name: owner.title }));
-    const entries = [...new Map([...session.pages, ...roots].map(page => [page.path, page])).values()];
+    const entries = [...new Map([...session.pages, ...roots].map(page => [page.path, page])).values()]
+      .filter(page => !page.path.startsWith('docs/_template/'));
     const rows = documentGroups.flatMap(label => {
       const pages = entries.filter(page => this.pageGroup(page.path) === label);
       if (!pages.length) return [];

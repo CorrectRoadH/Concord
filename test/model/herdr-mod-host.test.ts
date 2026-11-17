@@ -744,6 +744,28 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
         }
       } finally { await b.close(); }
     });
+    // @use-case docs/feature/herdr-mod/use-case/read-spec.md
+    await t.test('reference templates stay out of navigation but remain readable through links', async () => {
+      const template = 'docs/_template/feature-design/README.md';
+      const b = await start(boundary => {
+        boundary.files.set(`/repo/${template}`, '# Your title\n');
+        boundary.files.set('/repo/docs/_template/taste.md', '# Your title taste\n');
+        boundary.files.set('/repo/docs/architecture.md', '# Architecture\n');
+      });
+      try {
+        assert.ok(b.output.find(`page-${page}`));
+        b.click('category-其它文档');
+        assert.ok(b.output.find('page-docs/architecture.md'));
+        assert.equal(b.output.find(`page-${template}`), undefined);
+        assert.equal(b.output.find('page-docs/_template/taste.md'), undefined);
+        assert.doesNotMatch(b.output.find('concord-tree')!.text(), /Your title/u);
+        b.click(`page-${page}`); await b.until(() => b.output.find(`concord-body-${page}`) !== undefined);
+        b.output.find(`concord-block-${page}-0`)!.link!('../../_template/feature-design/README.md', b.context());
+        await b.until(() => b.output.find(`concord-body-${template}`) !== undefined);
+        assert.match(b.output.find(`concord-body-${template}`)!.text(), /Your title/u);
+        assert.equal(b.output.find(`page-${template}`), undefined);
+      } finally { await b.close(); }
+    });
     // @feature docs/feature/herdr-mod/ui.md#文档列表
     await t.test('the document model groups packages and catalogs with their titles and opens collapsed groups from links', async () => {
       const b = await start(boundary => {
