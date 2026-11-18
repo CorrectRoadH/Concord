@@ -1,27 +1,27 @@
 {
   "format": "concord.native-release/v2",
   "repository": "nowledge-co/hawdb",
-  "version": "0.31.0",
-  "tag": "v0.31.0",
-  "revision": "74f7bb3aa98663874738f79e6d56aae4995b56b1",
+  "version": "0.34.0",
+  "tag": "v0.34.0",
+  "revision": "b96fbbfbfe2b8cfb55ac6e23eaca6043426639a8",
   "assets": [
     {
       "target": "linux-x64-glibc",
       "upstreamTarget": "x86_64-unknown-linux-gnu",
-      "name": "hawdb-ffi-0.31.0-x86_64-unknown-linux-gnu.tar.gz",
-      "archiveSha256": "9dcd2a443f54d3e75dc7807a4c8c213aa7608421856eea8de04839e57f553549",
-      "manifestSha256": "e3aa79260d38d5ea6bc42bbb6464316f0a7e59f4de8a9cd0b81561ac6e1d967a",
-      "binarySha256": "823608cc81cb70b99f900f3fa551f105edf03c9e793fef3e7491bdf19568197c",
+      "name": "hawdb-ffi-0.34.0-x86_64-unknown-linux-gnu.tar.gz",
+      "archiveSha256": "e5e4043dad13946e94762b79d56f08f1217d50a2d8f9c0b374bae26d3e71ea99",
+      "manifestSha256": "2e3f889d5a8c08360507caf80fb6dfb7ffdf36cfb97ce2c28a1e5330fbd7c43c",
+      "binarySha256": "e80457ffb596fa2e97e67598f6bcb3347f4bc90fd757e314471ea3675fbe83f5",
       "headerSha256": "8ace0d95c1faf191fca0c0d5a6e5dfb32b9f6be8172cb045aa101bca1bedf244",
       "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     },
     {
       "target": "darwin-arm64",
       "upstreamTarget": "aarch64-apple-darwin",
-      "name": "hawdb-ffi-0.31.0-aarch64-apple-darwin.tar.gz",
-      "archiveSha256": "4ce6f0ad45e3c9ca6c6bcdd65b66491dbef1cad1a114de2375afd8bbe32e85f7",
-      "manifestSha256": "03e09b5048523c64cf34e2e5d8a8e8c68aa4c2bbaf1067d79a0a408f84356c91",
-      "binarySha256": "3a02a80a7b8733080ad62e8eee450424f6b1b8d350fa49830b9470865f936dd4",
+      "name": "hawdb-ffi-0.34.0-aarch64-apple-darwin.tar.gz",
+      "archiveSha256": "c9bfad8682fe09894a6aca49d9575d727e1daf9ad43c75e2c8aed6f852c62561",
+      "manifestSha256": "2522f9e33358a0d3a0b3fd6050c50bb443152e08d89cc1ce80c7e94bce291cac",
+      "binarySha256": "7fefc221ee394d51e786d6b031c8cc18b4b9dccc76172ef4a5ad5322461f7c06",
       "headerSha256": "8ace0d95c1faf191fca0c0d5a6e5dfb32b9f6be8172cb045aa101bca1bedf244",
       "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     }

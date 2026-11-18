@@ -421,7 +421,7 @@ checkpoint 采用上游的自动行为，宿主不主动 checkpoint。官方没�
 
 数据库 Worker 在同一事务内写入当前来源的缓存并删除被替代的记录。确认来源已删除时移除对应记录；局部读取未涉及的路径不构成删除依据。服务重启后完整核对来源时同样清除已失效的记录。
 
-当缓存记录及活跃读取快照都已释放对旧数据的引用，底层空间应自动回收或可供后续写入复用。保留仍供查询的历史投影与远端观察；整库格式失效按[缓存 schema 自动失效](#cache-schema-invalidation)受锁清空全部缓存数据并重开。`cache status` 报告按 inode 去重的物理字节数。
+当缓存记录及活跃读取快照都已释放对旧数据的引用，HawDB 在 checkpoint 发布后回收被替代的分支对象与 WAL，释放空间或供后续写入复用。保留仍供查询的历史投影与远端观察；整库格式失效按[缓存 schema 自动失效](#cache-schema-invalidation)受锁清空全部缓存数据并重开。`cache status` 报告按 inode 去重的物理字节数。
 
 清理后缺失的远端反馈快照与诊断投影按各自的 unavailable 规则处理，不隐式联网重建。
 
@@ -508,9 +508,9 @@ dry-run 只允许建立并释放本次调用的临时内存状态，不更新共
 
 以下依据来自 `native-release.json` 固定的官方发行所对应的引擎提交，不是对 Concord 交付能力的声明：
 
-- [属性索引分词](https://github.com/nowledge-co/hawdb/blob/74f7bb3aa98663874738f79e6d56aae4995b56b1/crates/storage/src/statistics.rs)定义 Unicode n-gram，但丢弃 Rust 认定的纯空白 gram；[属性读取实现](https://github.com/nowledge-co/hawdb/blob/74f7bb3aa98663874738f79e6d56aae4995b56b1/crates/storage/src/store/graph_read.rs)对空 token 直接结束候选访问，并在 `bounded_work`、缺持久属性投影或内存路径下选择扫描。前者由[零命中复核](#knowledge-search-recheck)覆盖。[索引与事务测试](https://github.com/nowledge-co/hawdb/blob/74f7bb3aa98663874738f79e6d56aae4995b56b1/src/api/tests/schema_indexes.rs)覆盖 `CREATE FULLTEXT INDEX`、约束与持久恢复。
-- [执行计划选择](https://github.com/nowledge-co/hawdb/blob/74f7bb3aa98663874738f79e6d56aae4995b56b1/crates/optimizer-graph/src/graph/tests/fulltext_costing.rs)表明优化器会比较索引与扫描；[正则谓词](https://github.com/nowledge-co/hawdb/blob/74f7bb3aa98663874738f79e6d56aae4995b56b1/crates/executor/src/expression/predicate.rs)对字符串执行完整匹配。
-- [官方 Bun 适配器](https://github.com/nowledge-co/hawdb/blob/74f7bb3aa98663874738f79e6d56aae4995b56b1/bindings/bun/src/index.ts)以同步 FFI 执行查询与事务回调，区分回调失败的回滚与提交阶段的结果未知；[公共查询 Spec](https://github.com/nowledge-co/hawdb/blob/74f7bb3aa98663874738f79e6d56aae4995b56b1/docs/specs/QUERY_FIRST_PUBLIC_API_SPEC.md)拥有参数化查询、事务与预算规则。
+- [属性索引分词](https://github.com/nowledge-co/hawdb/blob/b96fbbfbfe2b8cfb55ac6e23eaca6043426639a8/crates/storage/src/statistics.rs)定义 Unicode n-gram，但丢弃 Rust 认定的纯空白 gram；[属性读取实现](https://github.com/nowledge-co/hawdb/blob/b96fbbfbfe2b8cfb55ac6e23eaca6043426639a8/crates/storage/src/store/graph_read.rs)对空 token 直接结束候选访问，并在 `bounded_work`、缺持久属性投影或内存路径下选择扫描。前者由[零命中复核](#knowledge-search-recheck)覆盖。[索引与事务测试](https://github.com/nowledge-co/hawdb/blob/b96fbbfbfe2b8cfb55ac6e23eaca6043426639a8/src/api/tests/schema_indexes.rs)覆盖 `CREATE FULLTEXT INDEX`、约束与持久恢复。
+- [执行计划选择](https://github.com/nowledge-co/hawdb/blob/b96fbbfbfe2b8cfb55ac6e23eaca6043426639a8/crates/optimizer-graph/src/graph/tests/fulltext_costing.rs)表明优化器会比较索引与扫描；[正则谓词](https://github.com/nowledge-co/hawdb/blob/b96fbbfbfe2b8cfb55ac6e23eaca6043426639a8/crates/executor/src/expression/predicate.rs)对字符串执行完整匹配。
+- [官方 Bun 适配器](https://github.com/nowledge-co/hawdb/blob/b96fbbfbfe2b8cfb55ac6e23eaca6043426639a8/bindings/bun/src/index.ts)以同步 FFI 执行查询与事务回调，区分回调失败的回滚与提交阶段的结果未知；[公共查询 Spec](https://github.com/nowledge-co/hawdb/blob/b96fbbfbfe2b8cfb55ac6e23eaca6043426639a8/docs/specs/QUERY_FIRST_PUBLIC_API_SPEC.md)拥有参数化查询、事务与预算规则。
 
 功能交付接受 HawDB 内部扫描：谓词实际由官方库执行，结果完整，稳定热查询的来源正文读取与重解析为零。这不等于已证明索引加速；官方结果只有列与行，候选访问、属性页读取与索引内存不可观测，不能以 `EXPLAIN` 的计划名称代替。不在 TypeScript 自建索引，也不把扫描标成索引加速（[只声称证明过的](../../taste.md#t-5)）。
 

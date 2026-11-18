@@ -94,7 +94,7 @@ if (childRole) {
   test('official native identity, parameterized SQL roundtrip, callback rollback and durable close', () => {
     const f = fixture();
     try {
-      assert.equal(hawdbIdentity(runtime).version, '0.31.0');
+      assert.equal(hawdbIdentity(runtime).version, '0.34.0');
       const database = openHawdb(f.path, { readOnly: false, create: true }, runtime);
       const key = `quote'\"; DROP TABLE x; -- \n Ω`;
       try {

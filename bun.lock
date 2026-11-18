@@ -19,7 +19,7 @@
         "@lezer/highlight": "1.2.5",
         "@lezer/xml": "1.0.6",
         "@mdxeditor/editor": "4.5.0",
-        "@nowledge/hawdb-bun": "0.31.0",
+        "@nowledge/hawdb-bun": "0.34.0",
         "@stylexjs/stylex": "0.19.1",
         "@stylexjs/unplugin": "0.19.1",
         "@tailwindcss/vite": "4.3.5",
@@ -72,8 +72,8 @@
     "esbuild",
   ],
   "patchedDependencies": {
-    "@nowledge/hawdb-bun@0.31.0": "patches/@nowledge%2Fhawdb-bun@0.31.0.patch",
     "typescript@7.1.0-beta": "patches/typescript@7.1.0-beta.patch",
+    "@nowledge/hawdb-bun@0.34.0": "patches/@nowledge%2Fhawdb-bun@0.34.0.patch",
   },
   "overrides": {
     "@effect/platform-node-shared": "4.1.2",
@@ -365,9 +365,17 @@
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.2.6", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^1.7.1 || 2.0.0-beta.2", "@emnapi/runtime": "^1.7.1 || 2.0.0-beta.2" } }, "sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw=="],
 
-    "@nowledge/hawdb-bun": ["@nowledge/hawdb-bun@0.31.0", "", { "optionalDependencies": { "@nowledge/hawdb-ffi-darwin-arm64": "0.31.0" } }, "sha512-WMK6xtNgCUVtA6lQqmlYdbOh5WTj96tox3YkDaQHdgU2XWze+1qWBx94NNlhrCOAbWCznp9rMIWbRHYPDaIslQ=="],
+    "@nowledge/hawdb-bun": ["@nowledge/hawdb-bun@0.34.0", "", { "optionalDependencies": { "@nowledge/hawdb-ffi-darwin-arm64": "0.34.0", "@nowledge/hawdb-ffi-darwin-x64": "0.34.0", "@nowledge/hawdb-ffi-linux-arm64-gnu": "0.34.0", "@nowledge/hawdb-ffi-linux-x64-gnu": "0.34.0", "@nowledge/hawdb-ffi-win32-x64-msvc": "0.34.0" } }, "sha512-QGqsKfFRwjlAzhiNJ87A2noYK/Mckk1P456kKZ1KpFKo7mgZ/XHYN0tDjKbU+/iLjXK/fbAcsrhfSKvBUwyd8g=="],
 
-    "@nowledge/hawdb-ffi-darwin-arm64": ["@nowledge/hawdb-ffi-darwin-arm64@0.31.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-eTEfAP8F+AGl9lcCi8pvDQ46SSV2PAEd5cPEZbBKtr1pVp1mEekN5spnFolEHA/Ozered2Kmssm/eIaw99nOjw=="],
+    "@nowledge/hawdb-ffi-darwin-arm64": ["@nowledge/hawdb-ffi-darwin-arm64@0.34.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-JugECABNS+ejdlvqCqoOKV/BShgoFmbLwdHeGaJaLACLpMzCGlM3+aH1FUeEujaf3ELp1Yc0xQyk7IYix0EwxQ=="],
+
+    "@nowledge/hawdb-ffi-darwin-x64": ["@nowledge/hawdb-ffi-darwin-x64@0.34.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-Oi2ZRScBMKA2UiEPjlQz9wiknAZ8yaO0UDVNZNv9Nk70AbP+hFU7w+TGG5yor0pQ9D+FhRWEFg2EsCew+AB6mA=="],
+
+    "@nowledge/hawdb-ffi-linux-arm64-gnu": ["@nowledge/hawdb-ffi-linux-arm64-gnu@0.34.0", "", { "os": "linux", "cpu": "arm64", "libc": "glibc" }, "sha512-ApEPaVL+bm20tBBm7SOGHP2PPbvk75DVdjsfpylRVtuObakxwZNB/BZS0wkV8fMts2K7mwD1OWMi3Pari4o4Ew=="],
+
+    "@nowledge/hawdb-ffi-linux-x64-gnu": ["@nowledge/hawdb-ffi-linux-x64-gnu@0.34.0", "", { "os": "linux", "cpu": "x64", "libc": "glibc" }, "sha512-qqaWJM3eOjL9oUcV+HFDkKK/poSUY8nGooCZ8XXfZbq8aVvG7VzKrlWSt6hxH0Z6Wfh3l5i/12VgSkAWFB+RDQ=="],
+
+    "@nowledge/hawdb-ffi-win32-x64-msvc": ["@nowledge/hawdb-ffi-win32-x64-msvc@0.34.0", "", { "os": "win32", "cpu": "x64" }, "sha512-m0buERU7SQQue3KCGiXC4pew6muvRE6s48QRSA+I110+WHK4eQ+5alFAi9lrWKMvs7OcOiQptxbPUtIkDKRVrQ=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.157.0", "", {}, "sha512-95iTox1qdt6WGWce3xwNOVayByOfLaYAq+qGPpub6NWbBh9sv0GG3+zyfh9ZBCO/jVu5A0EWI+qQI7g6fevjxg=="],
 

@@ -32,8 +32,8 @@ const invoke = (root: string, args: string[]) => spawnSync(process.execPath, ['s
 
 // @feature docs/engineering/build/README.md
 test('official release pin rejects mismatched targets, duplicate assets and legacy metadata', () => {
-  assert.equal(decodeNativeRelease(release).tag, 'v0.31.0');
-  for (const mutation of [{ format: 'concord.native-release/v1' }, { repository: 'other/hawdb' }, { tag: 'hawdb-0.31.0' }, { abi: 'bridge' }, { assets: [release.assets[0], release.assets[0]] }, { assets: release.assets.map(asset => ({ ...asset, upstreamTarget: 'wrong' })) }]) {
+  assert.equal(decodeNativeRelease(release).tag, 'v0.34.0');
+  for (const mutation of [{ format: 'concord.native-release/v1' }, { repository: 'other/hawdb' }, { tag: 'hawdb-0.34.0' }, { abi: 'bridge' }, { assets: [release.assets[0], release.assets[0]] }, { assets: release.assets.map(asset => ({ ...asset, upstreamTarget: 'wrong' })) }]) {
     assert.throws(() => decodeNativeRelease({ ...release, ...mutation }));
   }
 });

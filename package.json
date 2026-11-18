@@ -24,7 +24,7 @@
     "typescript": "7.1.0-beta"
   },
   "devDependencies": {
-    "@nowledge/hawdb-bun": "0.31.0",
+    "@nowledge/hawdb-bun": "0.34.0",
     "@codemirror/commands": "6.11.1",
     "@codemirror/lang-javascript": "6.2.5",
     "@codemirror/language": "6.13.1",
@@ -86,7 +86,7 @@
   },
   "patchedDependencies": {
     "typescript@7.1.0-beta": "patches/typescript@7.1.0-beta.patch",
-    "@nowledge/hawdb-bun@0.31.0": "patches/@nowledge%2Fhawdb-bun@0.31.0.patch"
+    "@nowledge/hawdb-bun@0.34.0": "patches/@nowledge%2Fhawdb-bun@0.34.0.patch"
   },
   "trustedDependencies": ["esbuild"]
 }
