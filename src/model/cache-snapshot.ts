@@ -7,6 +7,7 @@ export const CacheSnapshotUnavailable = Schema.Struct({
 }).annotate({ parseOptions: { onExcessProperty: 'error' } });
 export const CacheDerivationBatch = Schema.Struct({
   namespace: Schema.Literals(['annotation_cache', 'code_cache', 'config_cache', 'query_cache']),
+  removed: Schema.optional(Schema.Array(Schema.String)),
   entries: Schema.Array(Schema.Struct({ key: Schema.String, payload: Schema.String }).annotate({ parseOptions: { onExcessProperty: 'error' } })),
 }).annotate({ parseOptions: { onExcessProperty: 'error' } });
 export type CacheDerivationBatch = typeof CacheDerivationBatch.Type;

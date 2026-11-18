@@ -1,7 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#清理
-import { basename, join } from 'node:path';
-import { acquireFileLock, type FileLock } from '../file-lock/index.ts';
+import { lstatSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
+import { acquireFileLock, verifyFileLocks, type FileLock } from '../file-lock/index.ts';
 import type { RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { assertCacheDatabaseSafe, inspectCacheTree } from './cache-file.ts';
 import { HawdbFailure } from './hawdb-types.ts';
@@ -22,25 +23,36 @@ export function acquireHawdbClearGuard(path: string, _runtime?: RuntimeEnvironme
     if (tree.has(branches)) locks.push(acquireFileLock(join(branches, 'metadata.hawdb.lock')));
     tree = inspectCacheTree(path);
     const expected = new Map([...tree].filter(([name, entry]) => entry.directory || basename(name).endsWith('.lock')));
-    const verify = () => {
+    const verify = (target?: string) => {
       try {
-      if (closed) throw new HawdbFailure('HawdbClosed', 'Clear guard is closed');
-      gate!.verify();
-      for (const lock of locks) lock.verify();
-      const current = inspectCacheTree(path);
-      // Data can be removed by this guard; directory and lock identities cannot change.
-      for (const [name, entry] of current) {
-        if (!entry.directory && !basename(name).endsWith('.lock')) continue;
-        const prior = expected.get(name);
-        if (!prior || prior.dev !== entry.dev || prior.ino !== entry.ino || prior.directory !== entry.directory) throw new HawdbFailure('UnsafePath', `Cache ownership inventory changed: ${name}`);
-      }
-      for (const [name, entry] of expected) if (!entry.directory && !current.has(name)) throw new HawdbFailure('UnsafePath', `Cache lock disappeared: ${name}`);
+        if (closed) throw new HawdbFailure('HawdbClosed', 'Clear guard is closed');
+        verifyFileLocks([gate!, ...locks]);
+        if (target !== undefined) {
+          // The complete tree is checked between deletion phases. Before each unlink,
+          // recheck its ancestors against the locked inventory, without rescanning siblings.
+          for (let parent = dirname(target); ; parent = dirname(parent)) {
+            const prior = expected.get(parent);
+            const stat = lstatSync(parent, { bigint: true });
+            if (!prior?.directory || !stat.isDirectory() || prior.dev !== stat.dev || prior.ino !== stat.ino) throw new HawdbFailure('UnsafePath', `Cache directory changed: ${parent}`);
+            if (parent === path) break;
+          }
+          return;
+        }
+        const current = inspectCacheTree(path);
+        for (const [name, entry] of current) {
+          if (!entry.directory && !basename(name).endsWith('.lock')) continue;
+          const prior = expected.get(name);
+          if (!prior || prior.dev !== entry.dev || prior.ino !== entry.ino || prior.directory !== entry.directory) throw new HawdbFailure('UnsafePath', `Cache ownership inventory changed: ${name}`);
+        }
+        for (const [name, entry] of expected) if (!entry.directory && !current.has(name)) throw new HawdbFailure('UnsafePath', `Cache lock disappeared: ${name}`);
       } catch (cause) { throw hawdbFailure(cause); }
     };
     for (const [name, entry] of expected) {
       if (entry.directory || name === join(path, 'owner.hawdb.lock') || name === join(branches, 'metadata.hawdb.lock')) continue;
-      locks.push(acquireFileLock(name, false));
-      verify();
+      const lock = acquireFileLock(name, false);
+      locks.push(lock);
+      if (lock.identity.device !== String(entry.dev) || lock.identity.inode !== String(entry.ino)) throw new HawdbFailure('UnsafePath', `Cache lock changed: ${name}`);
+      verify(name);
     }
     verify();
     const final = inspectCacheTree(path);

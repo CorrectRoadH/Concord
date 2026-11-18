@@ -92,6 +92,11 @@ function execute(request: DatabaseRequest, check: () => void): DatabaseValue {
         for (const batch of input.batches) {
           check();
           if (batch.namespace === 'query_cache' && batch.entries.some(row => !row.key.startsWith('writing:'))) throw new HawdbFailure('HawdbIncompatible', 'Derived writes cannot overwrite historical observations');
+          if (batch.removed?.length) {
+            const allowed = batch.removed.every(key => batch.namespace === 'code_cache' && key.startsWith('source:') || batch.namespace === 'config_cache' && key === 'concord.config.ts');
+            if (!allowed) throw new HawdbFailure('HawdbIncompatible', 'Derived removals require source-owned cache keys');
+            db.remove(batch.namespace, batch.removed);
+          }
           writeCachePayloads({ put: (namespace, rows, limits) => { check(); db.put(namespace, rows, limits); } }, batch.namespace, batch.entries);
         }
         value = null; break;

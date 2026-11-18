@@ -44,6 +44,7 @@ const CodeSnapshotSchema = Schema.Struct({
   digest: Text,
 });
 const CodeParseSchema = Schema.Struct({
+  sourceIdentity: Text,
   codes: Schema.Array(CodeDeclarationSchema),
   findings: Schema.Array(FindingSchema),
   digest: Text,
@@ -55,6 +56,7 @@ interface CompiledFiles {
   readonly findings: readonly Finding[];
   readonly hits: number;
   readonly misses: number;
+  readonly removed: readonly string[];
   readonly rows: readonly { readonly key: string; readonly payload: string }[];
 }
 
@@ -470,17 +472,20 @@ function sameSources(left: readonly Source[], right: readonly Source[]): boolean
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-code-parse/v2`; }
 export const makeCodeContentCache = (runtime: RuntimeEnvironmentSnapshot) => new ContentCache<ParsedFile>('code_parse', parserVersion(), Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), findings: Schema.Array(FindingSchema) }), undefined, runtime);
-function fileKey(repo: Repository, source: Source): string {
-  return objectDigest({ root: repo.root, privateDir: repo.privateDir, parser: parserVersion(), path: source.path, sourceDigest: source.digest });
+function fileKey(path: string): string { return `source:${path}`; }
+function sourceIdentity(source: Source): string {
+  return objectDigest({ parser: parserVersion(), path: source.path, digest: source.digest });
 }
-function encodeParse(parsed: ParsedFile): string {
-  return canonical({ codes: parsed.codes, findings: parsed.findings, digest: objectDigest({ codes: parsed.codes, findings: parsed.findings }) });
+function encodeParse(parsed: ParsedFile, source: Source): string {
+  const content = { sourceIdentity: sourceIdentity(source), codes: parsed.codes, findings: parsed.findings };
+  return canonical({ ...content, digest: objectDigest(content) });
 }
-function decodeParse(payload: string, path: string): ParsedFile {
-  const value = decode(Schema.fromJsonString(CodeParseSchema), payload, 'code cache');
-  if (value.digest !== objectDigest({ codes: value.codes, findings: value.findings })) throw new ConcordError('InvalidData', 'code cache digest does not match its payload');
-  if (value.codes.some(code => code.file !== path) || value.findings.some(finding => finding.path !== path)) throw new ConcordError('InvalidData', 'code cache source does not match its cache key');
-  return { codes: value.codes, findings: value.findings };
+function decodeParse(payload: string, source: Source): ParsedFile | undefined {
+  const { digest, ...content } = decode(Schema.fromJsonString(CodeParseSchema), payload, 'code cache');
+  if (digest !== objectDigest(content)) throw new ConcordError('InvalidData', 'code cache digest does not match its payload');
+  if (content.sourceIdentity !== sourceIdentity(source)) return undefined;
+  if (content.codes.some(code => code.file !== source.path) || content.findings.some(finding => finding.path !== source.path)) throw new ConcordError('InvalidData', 'code cache source does not match its cache key');
+  return content;
 }
 function mergeParsed(parsed: readonly ParsedFile[]): { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] } {
   const codes = parsed.flatMap(item => item.codes).sort((left, right) => left.id.localeCompare(right.id) || left.file.localeCompare(right.file) || left.line - right.line);
@@ -499,9 +504,9 @@ async function compileAstCached(repo: Repository, current: readonly Source[], mo
 async function compileAstCachedInScope(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean, codeContentCache: ContentCache<ParsedFile>): Promise<CompiledFiles> {
   if (mode === 'off' || skipCache) {
     const inputs = current.map(source => ({ path: source.path, source: source.text }));
-    return { ...mergeParsed((await codeContentCache.getManyResultsAsync(inputs, async input => input.source.includes('@concord-') ? (await parseSource({ path: input.path, text: input.source, digest: digest(input.source) })) : { codes: [], findings: [] })).map(result => { if (!result.ok) throw result.cause; return result.value; })), hits: 0, misses: current.length, rows: [] };
+    return { ...mergeParsed((await codeContentCache.getManyResultsAsync(inputs, async input => input.source.includes('@concord-') ? (await parseSource({ path: input.path, text: input.source, digest: digest(input.source) })) : { codes: [], findings: [] })).map(result => { if (!result.ok) throw result.cause; return result.value; })), hits: 0, misses: current.length, rows: [], removed: [] };
   }
-  const stored = mode === 'use' ? readCodePayloads(repo, current.map(source => fileKey(repo, source))) : new Map<string, string>();
+  const previous = readCodePayloads(repo);
   const parsed: ParsedFile[] = [];
   const rows: { key: string; payload: string }[] = [];
   let hits = 0;
@@ -509,9 +514,12 @@ async function compileAstCachedInScope(repo: Repository, current: readonly Sourc
   const missesToParse: Source[] = [];
   const pending: { index: number; key: string }[] = [];
   for (const source of current) {
-    const key = fileKey(repo, source);
-    if (mode === 'use' && stored.has(key)) {
-      parsed.push(decodeParse(stored.get(key)!, source.path));
+    const key = fileKey(source.path);
+    const payload = mode === 'use' ? previous.get(key) : undefined;
+    previous.delete(key);
+    const cached = payload === undefined ? undefined : decodeParse(payload, source);
+    if (cached) {
+      parsed.push(cached);
       hits += 1;
       continue;
     }
@@ -525,9 +533,9 @@ async function compileAstCachedInScope(repo: Repository, current: readonly Sourc
     const item = pending[index]!;
     const fresh = freshValues[index]!;
     parsed[item.index] = fresh;
-    rows.push({ key: item.key, payload: encodeParse(fresh) });
+    rows.push({ key: item.key, payload: encodeParse(fresh, missesToParse[index]!) });
   }
-  return { ...mergeParsed(parsed), hits, misses, rows };
+  return { ...mergeParsed(parsed), hits, misses, rows, removed: [...previous.keys()] };
 }
 
 /** Text markers own foreign-language relations even when no analyzer is available. */
@@ -598,7 +606,7 @@ function finish(repo: Repository, compiled: CompiledFiles, current: readonly Sou
   if (changed) return withCache(body, { status: 'source-changed', hits: 0, misses: compiled.misses, path: cachePath });
   if (mode === 'off') return withCache(body, { status: 'off', hits: 0, misses: compiled.misses, path: cachePath });
   persistNotedConfig(repo);
-  if (compiled.rows.length > 0) writeCodePayloads(repo, compiled.rows);
+  writeCodePayloads(repo, compiled.rows, compiled.removed);
   const status = compiled.misses === 0 ? 'hit' : compiled.hits === 0 ? 'miss' : 'partial';
   return withCache(body, { status, hits: compiled.hits, misses: compiled.misses, path: cachePath });
 }
@@ -625,14 +633,14 @@ async function scanCodeUnderSnapshot(repo: Repository, options: { cache?: CodeMo
   const initial = await measureScanAsync(options.timing, 'code.cacheAndParse', async () => (await compileCached(repo, before, mode, changed, codeContentCache)));
   let after: readonly Source[];
   try { after = measureScan(options.timing, 'code.verifySources', () => readSources(repo)); }
-  catch (cause) { if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath, true); else throw cause; }
+  catch (cause) { if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [], removed: [] }, [], true, mode, cachePath, true); else throw cause; }
   if (sameSources(before, after)) return finish(repo, initial, before, changed, mode, cachePath, false);
   const fresh = await compileCached(repo, after, mode, true, codeContentCache);
   try {
     const stable = readSources(repo);
-    return sameSources(after, stable) ? finish(repo, fresh, after, true, mode, cachePath, false) : finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, stable, true, mode, cachePath, true);
+    return sameSources(after, stable) ? finish(repo, fresh, after, true, mode, cachePath, false) : finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [], removed: [] }, stable, true, mode, cachePath, true);
   } catch (cause) {
-    if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath, true);
+    if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [], removed: [] }, [], true, mode, cachePath, true);
     throw cause;
   }
 }

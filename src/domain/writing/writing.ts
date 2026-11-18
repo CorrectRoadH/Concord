@@ -204,8 +204,8 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
       if (!policySources.has(file) && /\.(?:mdx?|svg)$/iu.test(file)) documents.set(file, source);
     }
     const inputDigest = snapshotDigest([...inputs, ['@writing-parser-version', WRITING_PARSER_VERSION], ['@writing-policy-membership', JSON.stringify(policyPaths)], ['@concept-catalog-membership', JSON.stringify(catalogPaths)]], [...memberships]);
-    const cacheDigest = objectDigest({ inputDigest, selectedPath: selectedPath ?? null, selection: paths.length ? selectedRoots : null });
-    const cached = persistentCache ? readWritingFindings(repo, cacheDigest) : undefined;
+    const cacheIdentity = objectDigest({ inputDigest, selectedPath: selectedPath ?? null, selection: paths.length ? selectedRoots : null });
+    const cached = persistentCache ? readWritingFindings(repo, cacheIdentity) : undefined;
     const findings: WritingFinding[] = cached ?? [];
     if (cached === undefined) {
       for (const legacyPath of repo.files('docs').filter(path => path === 'docs/concord-writing.json' || path.endsWith('/concord-writing.json')).filter(path => !paths.length || selected(path))) {
@@ -216,7 +216,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
           findings.push({ file: catalogPath, line: 1, rule: 'LegacyWritingPolicy', message: 'Legacy frontmatter deprecated map detected; convert to ## concept and 旧写法： paragraphs', context: catalogPath });
         }
       }
-      // The cache key binds every catalog byte and the parser revision. Reparse
+      // The input digest binds every catalog byte and the parser revision. Reparse
       // changed or uncached sources; exact validated hits need no Markdown parser.
       const catalogs = analyzeCatalogs(sourceCatalogs, repositoryRuntime(repo));
       if (catalogs.diagnostics.length) throw new ConcordError(catalogs.diagnostics[0]!.code, catalogs.diagnostics.map(item => item.message).join('; '), catalogs.diagnostics);
@@ -266,7 +266,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     if (JSON.stringify(discovered('policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered('catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('SourceChanged', 'Writing owner membership changed during checks');
     if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
     findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
-    if (persistentCache && cached === undefined) writeWritingFindings(repo, cacheDigest, findings);
+    if (persistentCache && cached === undefined) writeWritingFindings(repo, cacheIdentity, findings);
     return { operation: 'docs-check', ok: findings.length === 0, complete: true, policy: selectedPath ?? 'project', mode, selectedRoots, selection: selectedRoots, files: documents.size, findings, inputDigest };
   });
 }

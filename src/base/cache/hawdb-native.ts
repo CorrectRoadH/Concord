@@ -17,7 +17,7 @@ export { HAWDB_REVISION, HAWDB_VERSION };
 export { acquireHawdbClearGuard } from './hawdb-lock.ts';
 
 const defaultRuntime = makeRuntimeEnvironment(packageRoot, {});
-const cacheSchema = 'concord.cache/v2';
+const cacheSchema = 'concord.cache/v3';
 const decodeEntries = Schema.decodeUnknownSync(Schema.Array(HawdbEntry), { onExcessProperty: 'error' });
 const decodeNamespace = Schema.decodeUnknownSync(HawdbNamespace);
 const utf8 = new TextDecoder('utf-8', { fatal: true });
@@ -51,6 +51,7 @@ export interface HawdbDatabase {
   get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[];
   scan(namespace: HawdbNamespace): readonly HawdbEntry[];
   put(namespace: HawdbNamespace, entries: readonly HawdbEntry[], limits?: HawdbLimits): void;
+  remove(namespace: HawdbNamespace, keys: readonly string[]): void;
   clearNamespace(namespace: HawdbNamespace): void;
   namespaces(): readonly HawdbNamespace[];
   atomic<A>(run: () => A, check?: () => void): A;
@@ -209,6 +210,14 @@ export class NativeDatabase implements HawdbDatabase {
   }
   searchLogicalBytes(): number {
     return this.query('MATCH (g:KnowledgeSearchGeneration) RETURN g.logicalBytes AS bytes').reduce((n, row) => n + safeInteger(row.bytes), 0);
+  }
+  remove(namespace: HawdbNamespace, keys: readonly string[]): void {
+    this.quota(namespace);
+    for (let start = 0; start < keys.length; start += 500) {
+      const batch = keys.slice(start, start + 500);
+      const parameters = batch.map((_, index) => `$${index + 2}`);
+      this.sql(`DELETE FROM concord_cache_entries WHERE namespace = $1 AND cache_key IN (${parameters.join(',')})`, [namespace, ...batch]);
+    }
   }
   clearNamespace(namespace: HawdbNamespace): void { this.quota(namespace); this.atomic(() => { this.sql('DELETE FROM concord_cache_entries WHERE namespace = $1', [namespace]); }); }
   private rebuildMemory(): void {

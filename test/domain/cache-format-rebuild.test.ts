@@ -20,7 +20,7 @@ const prepare = (root: string, missing: boolean) => {
   try {
     database.put('config_cache', [{ key: 'retained', payload: 'preserve until explicit clear' }]);
     database.atomic(() => {
-      database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v2']);
+      database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v3']);
       if (!missing) database.sql('INSERT INTO concord_cache_schema (version) VALUES ($1)', ['incompatible format']);
     });
   } finally { database.close(); }

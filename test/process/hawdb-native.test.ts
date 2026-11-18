@@ -1,7 +1,7 @@
 // 跨进程保证：原生模块与句柄——官方 C ABI 句柄互斥，clear 与崩溃恢复保留已提交数据。
 import { loadHawDB, HawDBError } from '@nowledge/hawdb-bun';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { nativeArtifactRoot, nativeCacheRoot, hawdbTarget, verifiedHawdbLibrary } from '../../src/base/installation/index.ts';
-import { acquireHawdbClearGuard, createMemoryHawdb, deleteInspectedCache, hawdbIdentity, inspectCacheClear, openHawdb, type HawdbFailureCode } from '../../src/base/cache/index.ts';
+import { acquireHawdbClearGuard, cachePhysicalBytes, createMemoryHawdb, deleteInspectedCache, hawdbIdentity, inspectCacheClear, openHawdb, type HawdbFailureCode } from '../../src/base/cache/index.ts';
 import { makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { tmpdir } from '../support/temporary.ts';
 
@@ -116,6 +116,34 @@ if (childRole) {
       finally { reopened.close(); }
     } finally { f.cleanup(); }
   });
+  // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#invalidate
+  test('published checkpoints release retired writes while retaining the current parse', () => {
+    const f = fixture();
+    try {
+      const db = openHawdb(f.path, { readOnly: false, create: true }, runtime);
+      try {
+        const key = 'source:src/changing.ts';
+        let retainedBytes = 0;
+        for (let generation = 0; generation < 5; generation++) {
+          let payload = '';
+          for (let edit = 0; edit < 8; edit++) {
+            payload = randomBytes(96 * 1024).toString('base64');
+            db.put('code_cache', [{ key, payload }]);
+          }
+          const before = cachePhysicalBytes(f.dir);
+          // Exercise the pinned engine at a deterministic checkpoint boundary.
+          db.exec('CHECKPOINT');
+          const after = cachePhysicalBytes(f.dir);
+          assert.ok(before - after > 3 * payload.length, `retired generation ${generation}: ${before} -> ${after}`);
+          // Allow the previous checkpoint to remain reachable. Later checkpoints
+          // must not keep even one additional retired payload per generation.
+          if (generation === 1) retainedBytes = after;
+          if (generation > 1) assert.ok(after < retainedBytes + payload.length, `checkpoint bytes: ${retainedBytes} -> ${after}`);
+          assert.deepEqual(db.scan('code_cache'), [{ key, payload }]);
+        }
+      } finally { db.close(); }
+    } finally { f.cleanup(); }
+  });
   // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
   test('memory instances isolate rows, enforce namespaces and atomically evict by recent insertion', () => {
     const left = createMemoryHawdb(runtime), right = createMemoryHawdb(runtime);
@@ -157,7 +185,7 @@ if (childRole) {
     const f = fixture();
     try {
       const database = openHawdb(f.path, { readOnly: false, create: true }, runtime);
-      database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v2']); database.sql('INSERT INTO concord_cache_schema (version) VALUES ($1)', ['not-concord']); database.close();
+      database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v3']); database.sql('INSERT INTO concord_cache_schema (version) VALUES ($1)', ['not-concord']); database.close();
       for (const readOnly of [true, false]) code(() => openHawdb(f.path, { readOnly, create: false }, runtime), 'HawdbIncompatible');
       const beforeLocks = locks(f.path);
       const guard = acquireHawdbClearGuard(f.path, runtime);

@@ -81,6 +81,11 @@ export class CacheSnapshot extends Context.Service<CacheSnapshot, {
         get: (namespace, keys) => Effect.try({ try: () => persistent(() => keys.flatMap(key => { const row = indexes.get(namespace)?.get(key); return row ? [row] : []; })), catch: cacheFailure }),
         attach: repo => Effect.gen(function*() {
           const derivations = yield* Effect.serviceOption(CacheDerivations);
+          const record: RepositoryCache['reconcile'] = (namespace, entries, removed) => {
+            persistent(() => undefined);
+            if (derivations._tag === 'Some') { derivations.value.record(namespace, entries, removed); return; }
+            throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access');
+          };
           const access: RepositoryCache = {
             prepareWrite: () => {
               persistent(() => undefined);
@@ -90,11 +95,8 @@ export class CacheSnapshot extends Context.Service<CacheSnapshot, {
             get: (namespace, keys) => persistent(() => keys.flatMap(key => { const row = indexes.get(namespace)?.get(key); return row ? [row] : []; })),
             scan: namespace => persistent(() => copy[namespace] ?? []),
             namespaces: () => persistent(() => Object.keys(rows) as HawdbNamespace[]),
-            put: (namespace, entries) => {
-              persistent(() => undefined);
-              if (derivations._tag === 'Some') { derivations.value.record(namespace, entries); return; }
-              throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access');
-            },
+            put: (namespace, entries) => record(namespace, entries, []),
+            reconcile: record,
           };
           yield* Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, access), catch: cacheFailure }), release => Effect.sync(release));
         }),

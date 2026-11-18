@@ -166,7 +166,7 @@ test('current schema mismatch preserves cache data until explicit clear and rebu
     const path = join(directory, 'cache.hawdb');
     const database = openHawdb(path, { readOnly: false, create: true }, nativeRuntime);
     database.put('config_cache', [{ key: 'sentinel', payload: 'retain until explicit clear' }]);
-    database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v2']);
+    database.sql('DELETE FROM concord_cache_schema WHERE version = $1', ['concord.cache/v3']);
     database.sql('INSERT INTO concord_cache_schema (version) VALUES ($1)', ['incompatible-schema']); database.close();
     const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
     const status = cli(root, 'cache', 'status');

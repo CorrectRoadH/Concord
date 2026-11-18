@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
+import { writeCachePayloads } from './cache-query.ts';
 import type * as HawdbNativeTypes from './hawdb-native.ts';
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "./cache-file.ts";
 import { HawdbFailure, type HawdbDatabase } from "./hawdb-native.ts";
@@ -47,11 +48,12 @@ export interface RepositoryCache {
   readonly get: (namespace: HawdbNativeTypes.HawdbNamespace, keys: readonly string[]) => readonly HawdbNativeTypes.HawdbEntry[];
   readonly scan: (namespace: HawdbNativeTypes.HawdbNamespace) => readonly HawdbNativeTypes.HawdbEntry[];
   readonly put: (namespace: HawdbNativeTypes.HawdbNamespace, rows: readonly HawdbNativeTypes.HawdbEntry[]) => void;
+  readonly reconcile: (namespace: HawdbNativeTypes.HawdbNamespace, rows: readonly HawdbNativeTypes.HawdbEntry[], removed: readonly string[]) => void;
   readonly namespaces: () => readonly HawdbNativeTypes.HawdbNamespace[];
 }
 const owners = new WeakMap<Repository, RepositoryCache>();
 const disabled = () => { throw new HawdbFailure('HawdbUnavailable', 'Persistent cache access is disabled'); };
-const unavailable: RepositoryCache = { get: () => [], scan: () => [], namespaces: () => [], put: disabled, prepareWrite: disabled };
+const unavailable: RepositoryCache = { get: () => [], scan: () => [], namespaces: () => [], put: disabled, reconcile: disabled, prepareWrite: disabled };
 export const repositoryCache = (repo: Repository): RepositoryCache => owners.get(repo) ?? unavailable;
 export function bindRepositoryCache(repo: Repository, access: RepositoryCache): () => void {
   if (owners.has(repo)) throw new HawdbFailure('HawdbBusy', 'Repository cache already has an owner');
@@ -69,7 +71,20 @@ export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase, ru
     scan: namespace => use(namespace, false, database => database?.scan(namespace) ?? []),
     put: (namespace, rows) => {
       if (repo.persistentCache === 'off') return;
-      return use(namespace, true, database => { if (!database) throw missing(); database.put(namespace, rows); });
+      use(namespace, true, database => {
+        if (!database) throw missing();
+        database.put(namespace, rows);
+      });
+    },
+    reconcile: (namespace, rows, removed) => {
+      if (repo.persistentCache === 'off') return;
+      return use(namespace, true, database => {
+        if (!database) throw missing();
+        database.atomic(() => {
+          database.remove(namespace, removed);
+          writeCachePayloads(database, namespace, rows);
+        });
+      });
     },
     namespaces: () => withPersistentCache(repo, false, database => database?.namespaces() ?? [], false, runtime),
   };

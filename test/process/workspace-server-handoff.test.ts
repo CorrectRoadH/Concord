@@ -92,7 +92,7 @@ test('a different data protocol retains control frames for automatic service rep
     const entry = privateSourceInstallation(installation);
     for (const path of ['src/model/workspace-protocol.ts']) {
       const target = join(installation, path);
-      writeFileSync(target, readFileSync(target, 'utf8').replaceAll('concord.workspace/v3', 'concord.workspace/takeover-fixture'));
+      writeFileSync(target, readFileSync(target, 'utf8').replaceAll('concord.workspace/v4', 'concord.workspace/takeover-fixture'));
     }
     const started = await command(root, ['server', 'start'], entry);
     assert.equal(started.status, 0, started.stderr);

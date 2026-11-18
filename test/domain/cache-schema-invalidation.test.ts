@@ -42,7 +42,7 @@ async function fixture() {
   const database = openHawdb(path, { create: true, readOnly: false }, runtime);
   try {
     database.put('config_cache', [{ key: 'obsolete', payload: 'old cached value' }]);
-    database.sql('UPDATE concord_cache_schema SET version = $1 WHERE version = $2', ['concord.cache/v1', 'concord.cache/v2']);
+    database.sql('UPDATE concord_cache_schema SET version = $1 WHERE version = $2', ['concord.cache/v2', 'concord.cache/v3']);
   } finally { database.close(); }
   return { root, privateDir, path, runtime };
 }
@@ -79,7 +79,7 @@ test('a schema observation cannot authorize clearing a cache changed by an exter
     const library = loadHawDB(verifiedHawdbLibrary(f.runtime).binary);
     try {
       const database = library.open(f.path);
-      try { database.querySQL('UPDATE concord_cache_schema SET version = $1 WHERE version = $2', ['concord.cache/v2', 'concord.cache/v1']); }
+      try { database.querySQL('UPDATE concord_cache_schema SET version = $1 WHERE version = $2', ['concord.cache/v3', 'concord.cache/v2']); }
       finally { database.close(); }
     } finally { library.close(); }
     const guard = acquireHawdbClearGuard(f.path, f.runtime);
@@ -145,7 +145,7 @@ test('a malformed schema stays intact until explicit clear, including after the 
     const library = loadHawDB(verifiedHawdbLibrary(f.runtime).binary);
     try {
       const database = library.open(f.path);
-      try { database.querySQL('UPDATE concord_cache_schema SET version = $1 WHERE version = $2', ['broken', 'concord.cache/v1']); }
+      try { database.querySQL('UPDATE concord_cache_schema SET version = $1 WHERE version = $2', ['broken', 'concord.cache/v2']); }
       finally { database.close(); }
     } finally { library.close(); }
     const live = PersistentCache.layer.pipe(Layer.provide(NodeServices.layer));

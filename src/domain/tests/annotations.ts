@@ -181,15 +181,18 @@ function cacheKey(repo: Repository, current: readonly Source[]): string {
   return objectDigest({ root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: parserVersion(), files: current.map(source => ({ path: source.path, digest: source.digest })) });
 }
 function readCache(repo: Repository, key: string, current: readonly Source[]): CachedSnapshot | undefined {
-  const row = PersistentCache.repository(repo).get('annotation_cache', [key])[0];
+  const row = PersistentCache.repository(repo).get('annotation_cache', ['sources'])[0];
   if (row === undefined) return undefined;
-  const value = decode(Schema.fromJsonString(CachedSnapshotSchema), row.payload, 'annotation cache');
+  const record = decode(Schema.fromJsonString(Schema.Struct({ identity: Schema.String, checksum: Schema.String, value: CachedSnapshotSchema })), row.payload, 'annotation cache');
+  if (record.checksum !== objectDigest([record.identity, record.value.digest])) throw new ConcordError('InvalidData', 'annotation cache identity or digest is damaged');
+  if (record.identity !== key) return undefined;
+  const value = record.value;
   if (value.digest !== objectDigest({ cases: value.cases, findings: value.findings, files: value.files })) throw new ConcordError('InvalidData', 'annotation cache digest does not match its payload');
   if (value.files.length !== current.length || value.files.some((file, index) => file.path !== current[index]?.path || file.digest !== current[index]?.digest)) throw new ConcordError('InvalidData', 'annotation cache sources do not match its cache key');
   return value;
 }
 function writeCache(repo: Repository, key: string, value: CachedSnapshot): void {
-  PersistentCache.repository(repo).put('annotation_cache', [{ key, payload: canonical(value) }]);
+  PersistentCache.repository(repo).put('annotation_cache', [{ key: 'sources', payload: canonical({ identity: key, checksum: objectDigest([key, value.digest]), value }) }]);
 }
 function unchanged(repo: Repository, before: readonly Source[], mode: SourceMode): boolean {
   try { const after = sources(repo, mode); return after.length === before.length && after.every((source, index) => source.path === before[index]?.path && source.digest === before[index]?.digest); } catch { return false; }
@@ -257,7 +260,7 @@ function clearUnderSnapshot(repo: Repository, onlyAboveBytes: number | undefined
   try {
     guard.verify();
     if (onlyAboveBytes !== undefined && cachePhysicalBytes(repo.privateDir) <= onlyAboveBytes) return { status: 'below-limit', path: inventory.path };
-    deleteInspectedCache(inspectCacheClear(repo.privateDir), () => guard.verify());
+    deleteInspectedCache(inspectCacheClear(repo.privateDir), guard.verify);
   }
   finally { guard.close(); }
   return { status: inventory.empty ? 'empty' : 'cleared', path: inventory.path };

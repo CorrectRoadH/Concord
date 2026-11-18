@@ -9,10 +9,18 @@ import { Schema } from 'effect';
 export class FileLockFailure extends Schema.TaggedError<FileLockFailure>()('FileLockFailure', {
   reason: Schema.Literals(['busy', 'permission', 'io', 'type', 'identity', 'closed', 'native']), message: Schema.String,
 }) {}
+type DirectoryIdentity = { readonly dev: bigint; readonly ino: bigint };
+const verifyInGroup = Symbol('verifyInGroup');
 export interface FileLock {
   readonly identity: { readonly device: string; readonly inode: string };
   verify(): void;
+  [verifyInGroup](directories: Map<string, DirectoryIdentity>): void;
   close(): void;
+}
+/** Share ancestor observations only within one synchronous verification of held locks. */
+export function verifyFileLocks(locks: readonly FileLock[]): void {
+  const directories = new Map<string, DirectoryIdentity>();
+  for (const lock of locks) lock[verifyInGroup](directories);
 }
 let system: ReturnType<typeof loadSystem> | undefined;
 function loadSystem() {
@@ -53,12 +61,20 @@ export function acquireFileLock(input: string, create = true): FileLock {
     if (!owned.isFile() || owned.nlink !== 1n) throw new FileLockFailure({ reason: 'type', message: `Invalid lock file: ${path}` });
     if (before && (before.dev !== owned.dev || before.ino !== owned.ino)) throw new FileLockFailure({ reason: 'identity', message: `Lock changed during open: ${path}` });
     let closed = false;
-    const verify = () => {
+    const verify = (directories?: Map<string, DirectoryIdentity>) => {
       if (closed) throw new FileLockFailure({ reason: 'closed', message: `Lock is closed: ${path}` });
       try {
         for (const [parent, expected] of ancestors) {
-          const current = lstatSync(parent, { bigint: true });
-          if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== expected.dev || current.ino !== expected.ino) throw new FileLockFailure({ reason: 'identity', message: `Lock ancestor changed: ${parent}` });
+          const observed = directories?.get(parent);
+          let current: DirectoryIdentity;
+          if (observed) current = observed;
+          else {
+            const stat = lstatSync(parent, { bigint: true });
+            if (!stat.isDirectory()) throw new FileLockFailure({ reason: 'identity', message: `Lock ancestor changed: ${parent}` });
+            current = { dev: stat.dev, ino: stat.ino };
+            directories?.set(parent, current);
+          }
+          if (current.dev !== expected.dev || current.ino !== expected.ino) throw new FileLockFailure({ reason: 'identity', message: `Lock ancestor changed: ${parent}` });
         }
         const current = lstatSync(path, { bigint: true }), open = fstatSync(fd, { bigint: true });
         if (!current.isFile() || current.isSymbolicLink() || current.nlink !== 1n || open.nlink !== 1n || current.dev !== owned.dev || current.ino !== owned.ino || open.dev !== owned.dev || open.ino !== owned.ino) throw new FileLockFailure({ reason: 'identity', message: `Lock identity changed: ${path}` });
@@ -75,7 +91,7 @@ export function acquireFileLock(input: string, create = true): FileLock {
       throw new FileLockFailure({ reason: code === 'EAGAIN' || code === 'EWOULDBLOCK' ? 'busy' : code === 'EACCES' || code === 'EPERM' ? 'permission' : 'io', message: `Cannot acquire lock ${path}: ${code}` });
     }
     verify();
-    return { identity: { device: String(owned.dev), inode: String(owned.ino) }, verify, close: () => {
+    return { identity: { device: String(owned.dev), inode: String(owned.ino) }, verify: () => verify(), [verifyInGroup]: verify, close: () => {
       if (closed) return;
       closed = true;
       closeSync(fd);

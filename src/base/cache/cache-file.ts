@@ -106,7 +106,7 @@ export function inspectCacheClear(privateDir: string): CacheClearInventory {
   return { path, existing, empty, entries };
 }
 
-export function deleteInspectedCache(inventory: CacheClearInventory, verifyOwnership: () => void): void {
+export function deleteInspectedCache(inventory: CacheClearInventory, verifyOwnership: (target?: string) => void): void {
   const safePath = (path: string): void => {
     try { assertLeasePath(path); }
     catch (cause) { throw new ConcordError('UnsafePath', cause instanceof Error ? cause.message : `Unsafe cache path: ${path}`); }
@@ -122,7 +122,7 @@ export function deleteInspectedCache(inventory: CacheClearInventory, verifyOwner
   const links = new Map<string, bigint>();
   for (const entry of remaining.values()) if (!entry.directory) links.set(inodeKey(entry), entry.links);
   const unchanged = (path: string, expected: CacheTreeEntry): void => {
-    verifyOwnership();
+    verifyOwnership(path);
     safePath(path);
     const stat = lstatSync(path, { bigint: true });
     if (stat.isSymbolicLink() || stat.dev !== expected.dev || stat.ino !== expected.ino || stat.isDirectory() !== expected.directory || (!expected.directory && (!stat.isFile() || stat.nlink !== links.get(inodeKey(expected))))) throw new ConcordError('UnsafePath', `Cache entry changed during clear: ${path}`);

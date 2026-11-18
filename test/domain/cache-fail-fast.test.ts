@@ -112,9 +112,9 @@ const withSnapshot = async (snapshot: ReadonlyCacheSnapshot, use: (repo: Reposit
   } finally { rmSync(root, { recursive: true, force: true }); }
 };
 const inputDigest = digest('writing source');
-const writingKey = `writing:${objectDigest({ format: 'concord.writing-findings/v1', inputDigest })}`;
+const writingKey = 'writing:current';
 const findings: WritingFinding[] = [{ file: 'docs/example.md', line: 1, rule: 'Example', message: 'finding', context: 'source' }];
-const writingRecord = { format: 'concord.writing-findings/v1', inputDigest, findingsDigest: objectDigest(findings), findings };
+const writingRecord = { format: 'concord.writing-findings/v1', inputDigest, inputChecksum: objectDigest(inputDigest), findingsDigest: objectDigest(findings), findings };
 
 // @feature docs/feature/local-data-engine/architecture.md#failure-propagation
 test('writing cache rejects damaged JSON, schema, input identity and findings digests', async () => {

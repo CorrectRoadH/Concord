@@ -47,6 +47,26 @@ async function open<A>(root: string, use: (repo: LocalRepository) => A): Promise
   try { return await use(repo); } finally { repo.close(); }
 }
 
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#invalidate
+test('repeated source edits replace the parse and deletion retires only the missing source', async () => {
+  const root = await consumer();
+  try {
+    write(root, 'src/beta.ts', marked('beta'));
+    for (let round = 0; round < 12; round++) {
+      const symbol = `a${String(round).padStart(2, '0')}`;
+      write(root, 'src/alpha.ts', marked(symbol));
+      const current = await scan(root);
+      assert.equal(current.cache.hits, round === 0 ? 0 : 1);
+      assert.ok(current.codes.some(code => code.symbol === symbol));
+    }
+    rmSync(join(root, 'src/alpha.ts'));
+    assert.equal((await scan(root)).cache.hits, 1);
+    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false }, nativeRuntime);
+    try { assert.deepEqual(db.scan('code_cache').map(row => row.key), ['source:src/beta.ts']); }
+    finally { db.close(); }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('caches code declaration parses per file and rejects a corrupt row without overwriting it', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = (await consumer());
