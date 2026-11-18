@@ -13,6 +13,8 @@
 
 schema 身份不是 `concord.cache/v2` 时按[结构不兼容](architecture.md#打开与恢复模式)处理，不读取或转换旧格式（[当前格式](../../architecture.md#当前格式)）。各命名空间的条目与字节配额、按 `sequence` 的插入顺序淘汰由 TypeScript 精确维护，与[资源预算](architecture.md#资源预算)一致。upsert 以新的 `sequence` 重新插入，使被覆盖的键按最近写入排队。
 
+同一命名空间内，同一来源的同一种派生结果只保留当前版本；来源身份与内容摘要分别用于定位被替代的记录和验证命中。失效记录的存储生命周期见[目录体积与维护](architecture.md#目录体积与维护)。
+
 普通缓存行与检索代次共享 96 MiB 持久逻辑预算；检索部分按代次节点的 `logicalBytes` 计入。
 
 ### 观察值的比较替换 {#compare-and-replace}
