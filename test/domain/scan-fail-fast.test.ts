@@ -42,16 +42,16 @@ for (const [name, read] of Object.entries(readers)) {
     const repo = await LocalRepository.open(root);
     const access = PersistentCache.repository(repo);
     const fault = new HawdbFailure('HawdbBusy', 'selected cache is owned elsewhere', { cause: new Error('engine lock busy') });
-    const get = mock.method(access, 'get', () => { throw fault; });
-    const put = mock.method(access, 'put');
+    const load = mock.method(access, name === 'code' ? 'scan' : 'get', () => { throw fault; });
+    const save = mock.method(access, name === 'code' ? 'reconcile' : 'put');
     const source = mock.method(repo, 'read');
     try {
       await assert.rejects(read(repo), cause => cause === fault);
-      assert.equal(get.mock.callCount(), 1);
-      assert.equal(put.mock.callCount(), 0);
+      assert.equal(load.mock.callCount(), 1);
+      assert.equal(save.mock.callCount(), 0);
       if (name === 'annotation' || name === 'code') assert.equal(source.mock.callCount(), 1);
       else assert.equal(source.mock.callCount(), 0);
-    } finally { get.mock.restore(); put.mock.restore(); source.mock.restore(); repo.close(); rmSync(root, { recursive: true, force: true }); }
+    } finally { load.mock.restore(); save.mock.restore(); source.mock.restore(); repo.close(); rmSync(root, { recursive: true, force: true }); }
   });
 }
 
@@ -61,13 +61,13 @@ for (const [name, read] of Object.entries({ annotation: readers.annotation, code
     const root = await fixture();
     const repo = await LocalRepository.open(root);
     const access = PersistentCache.repository(repo);
-    const get = mock.method(access, 'get', () => []);
+    const load = mock.method(access, name === 'code' ? 'scan' : 'get', () => []);
     const fault = new HawdbFailure('HawdbLimit', 'selected cache write exceeded its budget');
-    const put = mock.method(access, 'put', () => { throw fault; });
+    const save = mock.method(access, name === 'code' ? 'reconcile' : 'put', () => { throw fault; });
     try {
       await assert.rejects(read(repo), cause => cause === fault);
-      assert.equal(put.mock.callCount(), 1);
-    } finally { get.mock.restore(); put.mock.restore(); repo.close(); rmSync(root, { recursive: true, force: true }); }
+      assert.equal(save.mock.callCount(), 1);
+    } finally { load.mock.restore(); save.mock.restore(); repo.close(); rmSync(root, { recursive: true, force: true }); }
   });
 
   // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md#hit
@@ -75,20 +75,22 @@ for (const [name, read] of Object.entries({ annotation: readers.annotation, code
     const root = await fixture();
     const repo = await LocalRepository.open(root);
     const access = PersistentCache.repository(repo);
-    const put = mock.method(access, 'put');
+    const save = mock.method(access, name === 'code' ? 'reconcile' : 'put');
     try {
       const wrongSource = name === 'annotation' ? { cases: [], findings: [], files: [{ path: 'another-source.py', digest: 'wrong-generation' }] }
         : { codes: [], findings: [{ code: 'ParseFinding', path: 'another-source.ts', message: 'wrong source' }] };
       for (const payload of ['{broken', '{}', JSON.stringify({ ...wrongSource, digest: objectDigest(wrongSource) })]) {
-        const get = mock.method(access, 'get', (_namespace: HawdbNamespace, keys: readonly string[]) => [{ key: keys[0]!, payload }]);
+        const load = name === 'code'
+          ? mock.method(access, 'scan', () => [{ key: 'source:src/sample.ts', payload }])
+          : mock.method(access, 'get', (_namespace: HawdbNamespace, keys: readonly string[]) => [{ key: keys[0]!, payload }]);
         const source = mock.method(repo, 'read');
         try {
           await assert.rejects(read(repo), error => error instanceof ConcordError && error.code === 'InvalidData');
           assert.equal(source.mock.callCount(), 1);
-          assert.equal(put.mock.callCount(), 0);
-        } finally { get.mock.restore(); source.mock.restore(); }
+          assert.equal(save.mock.callCount(), 0);
+        } finally { load.mock.restore(); source.mock.restore(); }
       }
-    } finally { put.mock.restore(); repo.close(); rmSync(root, { recursive: true, force: true }); }
+    } finally { save.mock.restore(); repo.close(); rmSync(root, { recursive: true, force: true }); }
   });
 }
 
