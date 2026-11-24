@@ -58,10 +58,9 @@ test('recovery handles prepared and committed journals while observation cleanup
         assert.equal(result.exitCode, 1, result.stdout + result.stderr);
         const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.Literal('blocked'), journalStatus: Schema.String, observationSlot: Schema.Struct({ status: Schema.Literal('blocked') }) })))(result.stdout);
         assert.equal(report.status, 'blocked');
-        assert.equal(report.journalStatus, phase === 'prepared' ? 'rolled-back' : 'committed');
+        assert.equal(report.journalStatus, phase === 'prepared' ? 'completed' : 'committed');
         assert.equal(existsSync(path), false, 'observation cleanup does not prevent journal recovery');
-        if (phase === 'committed') assert.equal(readFileSync(join(root, 'memory/interrupted.md'), 'utf8'), 'pending\n');
-        else assert.equal(existsSync(join(root, 'memory/interrupted.md')), false, 'prepared publication rolls back to its absent preimage');
+        assert.equal(readFileSync(join(root, 'memory/interrupted.md'), 'utf8'), 'pending\n');
         assert.ok(existsSync(join(run.lease.path, `${run.lease.owner.token}.json`)), 'journal recovery preserves observation ownership');
       }
     } finally { repo.close(); }

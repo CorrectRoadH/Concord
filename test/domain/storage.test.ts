@@ -15,7 +15,8 @@ import { projectConfigPath, readProjectConfig } from '../support/support.ts';
 const fixture = () => { const root=mkdtempSync(join(tmpdir(),'concord-storage-'));execFileSync('git',['init','-q',root]);return root; };
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
-test('project outlines preview without writes and recover using exact document paths', () => Effect.runPromise(Effect.tryPromise(async () => {
+// @spec docs/feature/portable-coordination/statechart.md#RecoveredFilesMatchOneImage
+test('project outlines preview without writes and recovery completes a fully installed prepared publication', () => Effect.runPromise(Effect.tryPromise(async () => {
  const root = fixture(); let repo: LocalRepository | undefined;
  try {
   repo = (await LocalRepository.open(root, { initialize: true, dryRun: true }));
@@ -36,10 +37,16 @@ test('project outlines preview without writes and recover using exact document p
   });
   repo.close(); repo = undefined;
   for (const change of changes) writeFileSync(join(root, change.path), change.after);
-  writeFileSync(join(root, '.git/concord/journal.json'), JSON.stringify({ format: 'concord.journal', root, privateDir: join(root, '.git/concord'), operation: 'outlines', phase: 'prepared', directories: [], scope: frozen, changes }));
+  const journal = join(root, '.git/concord/journal.json');
+  const temp = `${journal}.123.00000000-0000-4000-8000-000000000000.tmp`;
+  writeFileSync(journal, JSON.stringify({ format: 'concord.journal', root, privateDir: join(root, '.git/concord'), operation: 'outlines', phase: 'prepared', directories: [], scope: frozen, changes }));
+  writeFileSync(temp, 'interrupted committed journal');
   repo = (await LocalRepository.open(root, { recover: true }));
-  assert.equal((await repo.recover()).status, 'rolled-back');
-  for (const change of changes) assert.equal(repo.read(change.path), change.before);
+  const result = await repo.recover();
+  assert.equal(result.journalStatus, 'completed');
+  for (const change of changes) assert.equal(repo.read(change.path), change.after);
+  assert.equal(existsSync(journal), false);
+  assert.equal(existsSync(temp), false);
  } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
 })));
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
@@ -64,7 +71,7 @@ test('interrupted multi-file publication rolls back, and recovery preserves exte
   assert.equal(discarded.status,'discarded');assert.deepEqual(discarded.warnings,['memory/a.md']);assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'external');
   writeFileSync(join(root,'memory/a.md'),'after');const recoveryJournalPath=join(root,'.git','concord','journal.json');
   const confSource=readFileSync(join(root,'concord.config.ts'),'utf8');
-  writeFileSync(recoveryJournalPath,JSON.stringify({format:'concord.journal',root,privateDir:join(root,'.git','concord'),operation:'failure',phase:'prepared',directories:[],scope:{kind:'documents',configPath:'concord.config.ts',configSource:confSource,configDigest:digest(confSource)},changes:[{path:'memory/a.md',before:'before',after:'after',beforeDigest:digest('before'),afterDigest:digest('after'),mode:420}]})+'\n');
+  writeFileSync(recoveryJournalPath,JSON.stringify({format:'concord.journal',root,privateDir:join(root,'.git','concord'),operation:'failure',phase:'prepared',directories:[],scope:{kind:'documents',configPath:'concord.config.ts',configSource:confSource,configDigest:digest(confSource)},changes:[{path:'memory/a.md',before:'before',after:'after',beforeDigest:digest('before'),afterDigest:digest('after'),mode:420},{path:'docs/design/blocked/b.md',before:'before-b',after:'after-b',beforeDigest:digest('before-b'),afterDigest:digest('after-b'),mode:420}]})+'\n');
   const recoveryRepo=(await LocalRepository.open(root,{recover:true}));repo=recoveryRepo;assert.equal((await recoveryRepo.recover()).status,'rolled-back');assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'before');recoveryRepo.close();
  } finally {repo?.close();chmodSync(join(root,'docs/design/blocked'),0o755);rmSync(root,{recursive:true,force:true});}
 })));
