@@ -63,8 +63,7 @@ export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | 
   }), lease => Effect.sync(() => { if (lease) releaseFileLease(lease, 'query-refresh'); }));
   if (!lease) return;
   const before = yield* queryContext(context.root, query);
-  // Queued old-identity owners abandon their request before starting another scan.
-  if (before.key !== context.key) return;
+  if (before.key !== context.key) return yield* requestNewIdentity(before);
   const previous = yield* readQuery(context);
   if (queryRequestSatisfied(previous, requestedAt)) return;
   const scannedAt = Date.now();
