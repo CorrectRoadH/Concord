@@ -1,0 +1,49 @@
+---
+title: "Herdr 保存后的后台检查"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 等待检查
+    lg1: 正在检查
+    lg2: 检查已完成
+    lg3: 检查失败
+    lg4: 会话关闭
+  }
+  class lg0 orange
+  class lg1 blue
+  class lg2 teal
+  class lg3 pink
+  class lg4 tan
+  s0: 尚未保存
+  s1: 仓库会话已关闭
+  s2: 尚未保存#65292;后台读取仓库
+  s3: 已保存#65292;等待开始检查
+  s4: 已保存#65292;正在检查
+  s5: 已保存#65292;检查失败
+  s6: 已保存#65292;显示检查问题
+  s7: 旧检查仍在运行#65292;等待检查最新保存
+  [*] --> s0
+  s0 --> s1: 仓库会话淘汰或关闭 mod
+  s0 --> s2: 开始后台读取仓库
+  s0 --> s3: 文件写入并读回确认
+  s2 --> s0: 后台读取返回 or 切换仓库#65292;中止后台读取
+  s2 --> s1: 仓库会话淘汰或关闭 mod
+  s2 --> s3: 文件写入并读回确认
+  s3 --> s1: 仓库会话淘汰或关闭 mod
+  s3 --> s4: 开始检查最新保存
+  s4 --> s1: 仓库会话淘汰或关闭 mod
+  s4 --> s5: 检查执行失败
+  s4 --> s6: 检查返回问题
+  s4 --> s7: 文件写入并读回确认
+  s5 --> s1: 仓库会话淘汰或关闭 mod
+  s5 --> s3: 文件写入并读回确认
+  s6 --> s1: 仓库会话淘汰或关闭 mod
+  s6 --> s3: 文件写入并读回确认
+  s7 --> s3: 旧检查返回#65292;丢弃结论
+  s7 --> s1: 仓库会话淘汰或关闭 mod
+  class s1 tan
+  class s3 orange
+  class s4 blue
+  class s5 pink
+  class s6 teal
+  class s7 blue

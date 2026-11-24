@@ -534,7 +534,7 @@ check、trace check、Memory 与 Issue 检索、作者读取、写入、恢复�
 
 ### 刷新
 
-查询刷新由工作区服务调度并写入 `query_cache`。扫描在服务经 `OwnedProcessService` 持有的 `query-scan-worker` 子进程中运行，与前台计算隔离，受刷新上限、4 MiB 输出上限与进程组清理约束。没有工作区服务时，命令启动 detached 的 `query-refresh-worker` 完成同样的一次刷新。同一查询同一时刻只有一个刷新持有该键的租约。
+查询刷新由工作区服务调度并写入 `query_cache`。扫描在服务经 `OwnedProcessService` 持有的 `query-scan-worker` 子进程中运行，与前台计算隔离，受刷新上限、4 MiB 输出上限与进程组清理约束。没有工作区服务时，命令启动 detached 的 `query-refresh-worker` 完成同样的一次刷新。同一查询同一时刻只运行一个刷新，其它请求等待它。
 
 投影身份键由 worktree、Git-private 目录、配置字节摘要、命令参数、安装 JS 与原生产物摘要组成。
 

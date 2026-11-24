@@ -1,0 +1,60 @@
+---
+title: "历史诊断投影的后台刷新"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 等待
+    lg1: 刷新
+    lg2: 重试
+    lg3: 完成
+    lg4: 错误
+  }
+  class lg0 purple
+  class lg1 blue
+  class lg2 yellow
+  class lg3 teal
+  class lg4 orange
+  s0: 尚未请求刷新
+  s1: 刷新待开始
+  s2: 正在扫描
+  s3: 等待按新身份刷新
+  s4: 扫描已结束#65292;等待入库
+  s5: 一致投影已发布
+  s6: 保留原结果和尝试#65292;记录错误
+  s7: 缓存占用#65292;等待重试
+  s8: 超过入库期限#65292;缓存保持原样
+  s9: 保留一致投影#65292;记录漂移
+  s10: 只记录不完整的尝试
+  s11: 带漂移标记的投影已发布
+  [*] --> s0
+  s0 --> s1: 请求后台刷新
+  s1 --> s2: 开始扫描#65292;合并已到达的请求
+  s1 --> s3: 身份键变化#65292;放弃本次刷新
+  s2 --> s4: 扫描结束
+  s3 --> s2: 开始扫描#65292;合并已到达的请求
+  s4 --> s5: 发布一致投影
+  s4 --> s7: 缓存占用#65292;本次入库暂停
+  s4 --> s6: 记录刷新错误
+  s4 --> s3: 身份键变化#65292;放弃本次刷新
+  s4 --> s9: 仅更新尝试记录
+  s4 --> s10: 更新不完整的尝试记录
+  s7 --> s5: 发布一致投影
+  s7 --> s8: 缓存仍被占用#65292;结束本次刷新
+  s7 --> s6: 记录刷新错误
+  s7 --> s3: 身份键变化#65292;放弃本次刷新
+  s7 --> s9: 仅更新尝试记录
+  s7 --> s10: 更新不完整的尝试记录
+  s4 --> s11: 发布并标记来源漂移
+  s7 --> s11: 发布并标记来源漂移
+  class s0 purple
+  class s1 purple
+  class s2 blue
+  class s3 purple
+  class s4 blue
+  class s5 teal
+  class s6 orange
+  class s7 yellow
+  class s8 orange
+  class s9 teal
+  class s10 teal
+  class s11 teal

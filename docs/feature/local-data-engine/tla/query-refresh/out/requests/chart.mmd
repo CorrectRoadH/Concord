@@ -1,0 +1,50 @@
+---
+title: "历史诊断投影的后台刷新"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 等待
+    lg1: 刷新
+    lg2: 重试
+    lg3: 完成
+    lg4: 错误
+  }
+  class lg0 purple
+  class lg1 blue
+  class lg2 yellow
+  class lg3 teal
+  class lg4 orange
+  s0: 尚未请求刷新
+  s1: 刷新待开始
+  s2: 正在扫描
+  s3: 扫描已结束#65292;等待入库
+  s4: 一致投影已发布
+  s5: 保留原结果和尝试#65292;记录错误
+  s6: 缓存占用#65292;等待重试
+  s7: 后续刷新待开始
+  s8: 超过入库期限#65292;缓存保持原样
+  [*] --> s0
+  s0 --> s1: 请求后台刷新
+  s1 --> s2: 开始扫描#65292;合并已到达的请求
+  s2 --> s3: 扫描结束 or 后台刷新被取消
+  s3 --> s4: 发布一致投影
+  s3 --> s6: 缓存占用#65292;本次入库暂停
+  s3 --> s5: 记录刷新错误
+  s4 --> s7: 请求后台刷新
+  s5 --> s7: 请求后台刷新
+  s6 --> s4: 发布一致投影
+  s6 --> s8: 缓存仍被占用#65292;结束本次刷新
+  s6 --> s5: 记录刷新错误
+  s3 --> s7: 发布一致投影 or 记录刷新错误
+  s7 --> s2: 开始扫描#65292;合并已到达的请求
+  s8 --> s7: 请求后台刷新
+  s6 --> s7: 发布一致投影 or 缓存仍被占用#65292;结束本次刷新 or 记录刷新错误
+  class s0 purple
+  class s1 purple
+  class s2 blue
+  class s3 blue
+  class s4 teal
+  class s5 orange
+  class s6 yellow
+  class s7 purple
+  class s8 orange

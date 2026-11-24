@@ -1,6 +1,6 @@
 # 工作区服务与缓存的状态
 
-这一页用模型检查器穷举两段有限规模的交错：工作区服务在安装更新后的替换与退出，以及持久缓存的清理与自动失效。每段先写规则，再给模型与检查结果。
+这一页用模型检查器穷举三段有限规模的交错：工作区服务在安装更新后的替换与退出、持久缓存的清理与自动失效，以及诊断投影的刷新。每段先写规则，再给模型与检查结果。
 
 ## 服务替换与退出
 
@@ -117,3 +117,59 @@
 ### 模型没有覆盖的部分
 
 逐文件删除与部分 I/O 失败、删除预检与每次 unlink 之间的文件系统竞态、删除后解析缓存写回、多个持久 owner、排队请求、超时、Worker 意外退出，以及同一服务的重复尝试。五条规则只覆盖一次尝试：自动清理重开失败后服务进入 degraded 再次打开的后续尝试不在模型内。
+
+## 诊断投影的刷新
+
+`trace show`、`trace gaps` 与 `review` 读取后台算好的[诊断投影](architecture.md#刷新)。同一查询的多个刷新请求会合并，扫描期间来源可能被编辑、配置可能改变，发布时数据库可能被占用。
+
+### 规则
+
+#### 合并的扫描开始于请求之后 {#CoalescedAttemptStartsAfterRequest}
+
+一个刷新请求被某次扫描满足时，这次扫描开始于请求之后。
+
+#### 身份变化时丢弃候选 {#IdentityChangeDiscardsCandidate}
+
+扫描前后投影身份不同时，候选结果、lastAttempt 与 error 都不发布，以新身份重新刷新。
+
+#### 漂移保留一致的结果 {#DriftKeepsLastConsistentRecord}
+
+扫描期间来源漂移、结果不一致时，不替换已有的一致结果。
+
+#### 失败保留上一代结果 {#FailedRefreshKeepsPreviousResult}
+
+刷新失败只记录新的错误，保留此前的结果与 lastAttempt。
+
+### 模型
+
+```statechart spec="./tla/query-refresh/QueryRefresh.tla" config="./tla/query-refresh/requests.cfg" view="./tla/query-refresh/query-refresh-view.ts" out="./tla/query-refresh/out/requests" digest="sha256:487a823220fad4fa65e9060794409bea9ea12bd5f504a5cb79f1460dc77b1d47"
+```
+
+```statechart spec="./tla/query-refresh/QueryRefresh.tla" config="./tla/query-refresh/identity.cfg" view="./tla/query-refresh/query-refresh-view.ts" out="./tla/query-refresh/out/identity" digest="sha256:bb06e23bcbdb26123de07f8ac7bd5a68a8ed8645716053aa8f2b973908d32cfd"
+```
+
+```statechart spec="./tla/query-refresh/QueryRefresh.tla" config="./tla/query-refresh/envelope.cfg" view="./tla/query-refresh/query-refresh-view.ts" out="./tla/query-refresh/out/envelope" digest="sha256:469582def9c685646235430eebf80d17aa4242a51084bf3420a598c35ef04baa"
+```
+
+```statechart spec="./tla/query-refresh/QueryRefresh.tla" config="./tla/query-refresh/all.cfg" view="./tla/query-refresh/query-refresh-view.ts" out="./tla/query-refresh/out/all" digest="sha256:a42e03d86ed9654d6e3ea442ffe5b95366da80bc07b7f4f0a8daca28defb911a"
+```
+
+两个请求、两个身份、一个扫描槽。前三块分别看请求合并与断开取消、排队到重试之间的身份变化、已有结果上的替换与保留；最后一块把它们合在一起，状态数超过图的规模上限，只显示检查报告。四条规则都成立。图隐藏断开、身份变化、来源编辑与终态步骤，它们的效果体现在丢弃与入库结果上。
+
+### 按路径重放的测试
+
+`test/domain/asynchronous-projections-generation.test.ts` 重放两条路径：排队时身份改变，请求按新身份重新排队而不是丢失；入库重试跨过三秒期限后不再写入，保留原结果并返回最近一次可重试失败。
+
+### 动作与代码
+
+| 动作 | 代码 |
+| --- | --- |
+| 请求刷新、断开 | `src/entry/server/main.ts` 的刷新调度 |
+| 身份与来源变化 | `src/app/query-cache.ts`；`src/base/workspace/identity.ts`；`src/app/query-scan.ts` |
+| 等待同一查询的刷新、扫描、取消 | `src/app/query-refresh.ts`；`src/app/query-scan.ts`；`src/base/process/owned-process.ts` |
+| 丢弃、重新请求、入库等待与到期 | `src/app/query-refresh.ts`；`src/app/query-refresh-store.ts` |
+| 发布 | `src/app/query-cache.ts`；`src/base/cache/owner.ts` |
+
+### 模型没有覆盖的部分
+
+多个独立查询、同毫秒与时钟回拨、具体正文与错误码、输出量与进程组清理细节、等待同一查询的另一个刷新超时的路径，以及前台当前投影。
