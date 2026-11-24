@@ -203,6 +203,7 @@ export { renderOwnerFrontmatter } from './owner-frontmatter.ts';
 export type { AnnotatedCase } from './shared.ts';
 export { AnnotatedCaseSchema } from './shared.ts';
 export type { AnnotationSnapshot } from './shared.ts';
+export { cacheClearFailure } from './shared.ts';
 export { canonical } from './shared.ts';
 export type { Change } from './shared.ts';
 export { ConcordError } from './shared.ts';

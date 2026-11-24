@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#状态
 import { Clock, Deferred, Effect, Fiber, Queue, Schema, Schedule, Semaphore, Stream, SubscriptionRef } from 'effect';
-import { ConcordError, failure, decodeWorkspaceProjectionCandidate, type WorkspaceProjection, type WorkspaceProjectionCandidate } from '../../model/index.ts';
+import { ConcordError, cacheClearFailure, failure, decodeWorkspaceProjectionCandidate, type WorkspaceProjection, type WorkspaceProjectionCandidate } from '../../model/index.ts';
 import type { WorkspaceProjectionContext } from '../../model/index.ts';
 import { WorkspaceState, compensationRefresh, serviceHeartbeat } from './state.ts';
 import type { Computation } from './computation.ts';
@@ -193,19 +193,17 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* ports.beforeClear ?? ports.close;
     yield* ports.verify;
     yield* state.transition('clearing');
-    const outcome = yield* Effect.result(ports.clear);
-    if (outcome._tag === 'Failure') {
-      const error = namedFailure(outcome.failure);
-      yield* state.transition('blocked', { code: error.code, message: error.message });
-      return yield* Effect.fail(error);
-    }
+    const outcome = yield* ports.clear.pipe(Effect.mapError(namedFailure));
     yield* state.reset;
     yield* state.transition('opening');
     yield* ports.open;
     yield* state.transition('running');
     yield* request;
-    return outcome.success;
-  }).pipe(Effect.tapError(cause => { const error = namedFailure(cause); return state.transition('blocked', { code: error.code, message: error.message }); })));
+    return outcome;
+  }).pipe(
+    Effect.mapError(cacheClearFailure),
+    Effect.tapError(cause => { const error = namedFailure(cause); return state.transition('blocked', { code: error.code, message: error.message }); }),
+  ));
   yield* Effect.addFinalizer(() => stop.pipe(Effect.andThen(Fiber.interrupt(refreshFiber)), Effect.andThen(ports.close), Effect.orDie));
   return { state, current, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
     maintain: <A, E, R>(operation: Effect.Effect<A, E, R>) => foregroundRequest(maintain(operation)),

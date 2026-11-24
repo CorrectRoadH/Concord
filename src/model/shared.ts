@@ -28,6 +28,13 @@ export function failure(cause: unknown): ConcordError {
   }
   return new ConcordError('OperationFailed', cause instanceof Error ? cause.message : String(cause));
 }
+export function cacheClearFailure<E>(cause: E): E | ConcordError {
+  const error = failure(cause);
+  if (error.code !== 'UnsafePath') return cause;
+  const cleanup = new ConcordError('CleanupFailed', error.message, error.details);
+  cleanup.cause = cause;
+  return cleanup;
+}
 export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;

@@ -6,7 +6,7 @@ import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysic
 import { inspectCacheStatus, type CacheStatus } from "../../base/cache/index.ts";
 import { PersistentCache, closeRepositoryCache } from "../../base/cache/index.ts";
 import { acquireHawdbClearGuard, hawdbIdentity } from "../../base/cache/index.ts";
-import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from "../../model/index.ts";
+import { AnnotatedCaseSchema, ConcordError, cacheClearFailure, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from "../../model/index.ts";
 import { caseDiscriminator, deriveTestReference } from "../../model/index.ts";
 import * as ts from 'typescript/ast';
 import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from "../../base/process/index.ts";
@@ -234,7 +234,9 @@ async function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'r
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#rebuild
 export function clearCache(repo: Repository, onlyAboveBytes?: number, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)): { readonly status: string; readonly path: string } {
-  return repo.snapshot === undefined ? clearUnderSnapshot(repo, onlyAboveBytes, runtime) : repo.snapshot(() => clearUnderSnapshot(repo, onlyAboveBytes, runtime));
+  try {
+    return repo.snapshot === undefined ? clearUnderSnapshot(repo, onlyAboveBytes, runtime) : repo.snapshot(() => clearUnderSnapshot(repo, onlyAboveBytes, runtime));
+  } catch (cause) { throw cacheClearFailure(cause); }
 }
 export function previewCacheClear(repo: Repository, runtime: RuntimeEnvironmentSnapshot = repositoryRuntime(repo)) {
   const preview = () => {
