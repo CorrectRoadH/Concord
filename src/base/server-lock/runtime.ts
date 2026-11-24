@@ -60,16 +60,22 @@ const serviceProcessExited = Effect.fn('ServerRuntime.processExited')(function*(
     }
   }, catch: failure });
 });
-export function readServerRecord(privateDir: string, requireSocket = true): ServerRecord | undefined {
+export const MAX_SERVER_RECORD_OBSERVATIONS = 3;
+export class UnlinkedServerRecord extends ConcordError {}
+export function readServerRecord(
+  privateDir: string, requireSocket = true, observations: 1 | typeof MAX_SERVER_RECORD_OBSERVATIONS = MAX_SERVER_RECORD_OBSERVATIONS,
+): ServerRecord | undefined {
   const path = join(privateDir, 'server', 'current.json');
-  let stat = lstatSync(path, { throwIfNoEntry: false });
-  // Linux can observe an unlinked inode when the owner atomically replaces
-  // current.json during stat. Re-observe the path, never accept that inode.
-  for (let attempt = 1; stat?.isFile() && stat.nlink === 0 && attempt < 3; attempt++) {
-    stat = lstatSync(path, { throwIfNoEntry: false });
+  for (let attempt = 1; ; attempt++) {
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    if (!stat) return undefined;
+    const boundedFile = stat.isFile() && stat.size <= 16 * 1024;
+    if (boundedFile && stat.nlink === 1) break;
+    const unlinked = boundedFile && stat.nlink === 0;
+    if (unlinked && attempt < observations) continue;
+    const ErrorType = unlinked ? UnlinkedServerRecord : ConcordError;
+    throw new ErrorType('WorkspaceServerUnavailable', 'Server record must be a bounded regular file', { mode: stat.mode, links: stat.nlink, bytes: stat.size });
   }
-  if (!stat) return undefined;
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 16 * 1024) throw new ConcordError('WorkspaceServerUnavailable', 'Server record must be a bounded regular file', { mode: stat.mode, links: stat.nlink, bytes: stat.size });
   let contents: string;
   try { contents = readFileSync(path, 'utf8'); }
   catch (cause) {

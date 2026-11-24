@@ -18,19 +18,30 @@ test('server stop reobserves an unlinked record while the owner releases its loc
   fs.unlinkSync(path);
   const unlinked = fs.fstatSync(fd);
   const original = fs.lstatSync;
-  let observed = false, probed = false;
+  let observations = 0, probed = false, releasing = false;
   const inspect = (...args: Parameters<typeof fs.lstatSync>) => {
     if (args[0] === path) {
-      observed = true;
-      if (!probed) return unlinked;
+      observations++;
+      if (!releasing || !probed) return unlinked;
       owner.close();
     }
-    if (args[0] === lock && observed) probed = true;
+    if (args[0] === lock && observations > 0) probed = true;
     return original(...args);
   };
   const mock = spyOn(fs, 'lstatSync').mockImplementation(inspect as typeof fs.lstatSync);
   try {
-    const result = await runCli({ argv: ['--root', root, '--json', 'server', 'stop'], cwd: root, env: process.env });
+    const stop = () => runCli({ argv: ['--root', root, '--json', 'server', 'stop'], cwd: root, env: process.env });
+    const held = await stop();
+    assert.equal(held.exitCode, 1, held.stdout + held.stderr);
+    assert.deepEqual(JSON.parse(held.stdout || held.stderr), { ok: false, error: 'WorkspaceServerUnavailable',
+      message: 'Server record must be a bounded regular file', details: { mode: unlinked.mode, links: 0, bytes: unlinked.size } });
+    assert.equal(observations, 3);
+    owner.verify();
+
+    observations = 0;
+    probed = false;
+    releasing = true;
+    const result = await stop();
     assert.ok(probed, 'the client checked the native lock after observing the unlinked record');
     assert.equal(result.exitCode, 0, result.stdout + result.stderr);
     assert.equal(fs.existsSync(path), false);

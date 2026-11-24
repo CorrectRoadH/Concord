@@ -20,7 +20,7 @@ import { Workspace } from '../../base/workspace/index.ts';
 import { Sources } from '../../base/sources/index.ts';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.ts';
 import { mergeLocalFeedbackObservation } from '../../domain/feedback/index.ts';
-import { ServerRuntime } from '../../base/server-lock/index.ts';
+import { ServerRuntime, MAX_SERVER_RECORD_OBSERVATIONS, UnlinkedServerRecord } from '../../base/server-lock/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
 import { CliInvocation, writeStderr } from './invocation.ts';
 import { cliFailure } from './cli-failure.ts';
@@ -50,13 +50,17 @@ const workspaceServerFailure = (cause: unknown): ConcordError => remoteFailure(c
 const asServerError = workspaceServerFailure;
 const installationIdentity = (runtime: ServerRuntime['Service']) => Effect.try({ try: () => runtime.installation(), catch: failure });
 const readWorkspaceRecord = Effect.fn('cli.readWorkspaceRecord')(function*(runtime: ServerRuntime['Service'], privateDir: string, requireSocket = true) {
-  const read = yield* Effect.result(Effect.try({ try: () => runtime.read(privateDir, requireSocket), catch: failure }));
-  if (read._tag === 'Success') return read.success;
-  // Reboot or remount can invalidate a dead owner's device/socket identity.
-  // Only the actual native lock can establish absence; the next server still
-  // acquires that lock before replacing the record or touching its socket.
-  if (read.failure.code === 'WorkspaceServerUnavailable' && (yield* runtime.released(privateDir))) return undefined;
-  return yield* Effect.fail(read.failure);
+  let unlinked: UnlinkedServerRecord | undefined;
+  for (let observation = 1; ; observation++) {
+    const read = yield* Effect.result(Effect.try({ try: () => runtime.read(privateDir, requireSocket, 1), catch: failure }));
+    if (read._tag === 'Success' && read.success) return read.success;
+    const error = read._tag === 'Failure' ? read.failure : unlinked;
+    if (!error || error.code === 'WorkspaceServerUnavailable' && (yield* runtime.released(privateDir))) return undefined;
+    if (!(error instanceof UnlinkedServerRecord) || observation === MAX_SERVER_RECORD_OBSERVATIONS) return yield* Effect.fail(error);
+    // The owner still holds its lock and may be replacing or removing the record.
+    unlinked = error;
+    yield* Effect.sleep('10 millis');
+  }
 });
 const nativeAvailable = Effect.flatMap(PersistentCache, cache => cache.verifyArtifact).pipe(
   Effect.mapError(cause => new ConcordError('HawdbUnavailable', cause.message)),
