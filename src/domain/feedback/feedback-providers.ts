@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/architecture.md
 import { Config, DateTime, Effect, Option, Predicate, Schema } from "effect";
-import { RemoteFeedbackSchema, type feedback_schema_FeedbackConnection as FeedbackConnection, type RemoteFeedback } from "../../model/index.ts";
+import { RemoteFeedbackSchema, feedbackTimestampKey, type feedback_schema_FeedbackConnection as FeedbackConnection, type RemoteFeedback } from "../../model/index.ts";
 import { ConcordError, canonical } from "../../model/index.ts";
 
 const GITHUB_API = 'https://api.github.com';
@@ -113,7 +113,9 @@ function decodeVendor<A>(schema: Schema.ConstraintDecoder<A, never>, value: unkn
 
 function normalizeDate(value: string, source: string): string {
   try {
-    return Schema.decodeUnknownSync(Schema.DateFromString)(value).toISOString();
+    const utc = Schema.decodeUnknownSync(Schema.DateFromString)(value).toISOString();
+    const subMilliseconds = /:\d{2}\.\d{3}(\d+)/u.exec(value)?.[1]?.replace(/0+$/u, '');
+    return subMilliseconds ? `${utc.slice(0, -1)}${subMilliseconds}Z` : utc;
   } catch {
     throw providerError('ProviderResponseInvalid', `${source} returned an invalid updated timestamp`);
   }
@@ -338,8 +340,10 @@ function keepLatest(target: Map<string, RemoteFeedback>, next: RemoteFeedback): 
     target.set(next.id, next);
     return;
   }
-  if (current.updatedAt < next.updatedAt) target.set(next.id, next);
-  else if (current.updatedAt === next.updatedAt && !sameRemote(current, next)) {
+  const currentVersion = feedbackTimestampKey(current.updatedAt);
+  const nextVersion = feedbackTimestampKey(next.updatedAt);
+  if (currentVersion < nextVersion) target.set(next.id, next);
+  else if (currentVersion === nextVersion && !sameRemote(current, next)) {
     throw providerError('RemoteIdentityConflict', `Provider item ${next.id} repeated with conflicting content at the same version`);
   }
 }

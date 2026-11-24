@@ -5,7 +5,7 @@ import type { OwnedProcess } from '../../base/process/index.ts';
 import type { Publication } from "../../base/publication/index.ts";
 import { Effect } from "effect";
 import { FeedbackCacheWriter, readFeedbackCache, mergeFeedbackCache } from "../../base/cache/index.ts";
-import { FeedbackConnectionSchema, FeedbackSourceSchema, RemoteFeedbackSchema, feedbackIdentity, type feedback_schema_FeedbackConnection as FeedbackConnection, type FeedbackItem, type FeedbackSource, type RemoteFeedback } from "../../model/index.ts";
+import { FeedbackConnectionSchema, FeedbackSourceSchema, RemoteFeedbackSchema, feedbackIdentity, feedbackTimestampKey, type feedback_schema_FeedbackConnection as FeedbackConnection, type FeedbackItem, type FeedbackSource, type RemoteFeedback } from "../../model/index.ts";
 import { loadDocuments } from "../documents/index.ts";
 import { renderDocument } from "../../model/index.ts";
 import { fetchFeedback, type FeedbackTransport } from "./feedback-providers.ts";
@@ -85,9 +85,14 @@ function distinctRemote(input: readonly RemoteFeedback[]): { readonly items: rea
     const remote = decode(RemoteFeedbackSchema, candidate, 'fetched feedback item');
     const identity = feedbackIdentity(remote);
     const prior = items.get(identity);
-    const comparison = prior === undefined ? 1 : Date.parse(remote.updatedAt) - Date.parse(prior.updatedAt);
-    if (prior === undefined || comparison > 0) items.set(identity, remote);
-    else if (comparison === 0 && comparableRemote(remote) !== comparableRemote(prior)) {
+    if (prior === undefined) {
+      items.set(identity, remote);
+      continue;
+    }
+    const version = feedbackTimestampKey(remote.updatedAt);
+    const priorVersion = feedbackTimestampKey(prior.updatedAt);
+    if (version > priorVersion) items.set(identity, remote);
+    else if (version === priorVersion && comparableRemote(remote) !== comparableRemote(prior)) {
       warnings.push(`Remote identity ${identity} had conflicting payloads at ${remote.updatedAt}; preserved the first payload.`);
     }
   }
@@ -95,7 +100,7 @@ function distinctRemote(input: readonly RemoteFeedback[]): { readonly items: rea
 }
 
 function comparableRemote(remote: RemoteFeedback): string {
-  return canonical({ ...remote, updatedAt: new Date(Date.parse(remote.updatedAt)).toISOString() });
+  return canonical({ ...remote, updatedAt: feedbackTimestampKey(remote.updatedAt) });
 }
 
 function importedId(remote: RemoteFeedback): string {

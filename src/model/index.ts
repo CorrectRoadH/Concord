@@ -146,6 +146,7 @@ export type { FeedbackIssueRecord } from './feedback-schema.ts';
 export type { FeedbackItem } from './feedback-schema.ts';
 export type { FeedbackSource } from './feedback-schema.ts';
 export { FeedbackSourceSchema } from './feedback-schema.ts';
+export { feedbackTimestampKey } from './feedback-schema.ts';
 export type { FeedbackTriage } from './feedback-schema.ts';
 export { GitHubFeedbackApiConnectionSchema } from './feedback-schema.ts';
 export { GitHubFeedbackGhConnectionSchema } from './feedback-schema.ts';

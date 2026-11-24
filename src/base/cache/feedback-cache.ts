@@ -4,7 +4,7 @@
 import type * as HawdbNativeTypes from './hawdb-native.ts';
 import { Schema } from "effect";
 import { repositoryCache } from "./cache-store.ts";
-import { RemoteFeedbackSchema, feedbackIdentity, type RemoteFeedback } from "../../model/index.ts";
+import { RemoteFeedbackSchema, feedbackIdentity, feedbackTimestampKey, type RemoteFeedback } from "../../model/index.ts";
 import { ConcordError, canonical, decode, inRepositorySnapshot, type Repository } from "../../model/index.ts";
 
 const CachedFeedbackSchema = Schema.Struct({ connectionId: Schema.String, remote: RemoteFeedbackSchema });
@@ -55,13 +55,15 @@ export function mergeFeedbackRows(database: Pick<HawdbNativeTypes.HawdbDatabase,
       const identity = feedbackIdentity(remote);
       const old = current.get(identity);
       if (old !== undefined) {
-        const comparison = Date.parse(remote.updatedAt) - Date.parse(old.remote.updatedAt);
-        if (comparison < 0) continue;
-        if (comparison === 0 && comparable(remote) !== comparable(old.remote)) {
+      const version = feedbackTimestampKey(remote.updatedAt);
+      const oldVersion = feedbackTimestampKey(old.remote.updatedAt);
+      if (version < oldVersion) continue;
+      if (version === oldVersion) {
+        if (comparable(remote) !== comparable(old.remote)) {
           warnings.push(`Remote identity ${identity} returned conflicting payloads for ${remote.updatedAt}; preserved the existing cache entry.`);
+        }
           continue;
         }
-        if (comparison === 0) continue;
       }
       const merged: CachedFeedback = { connectionId, remote };
       current.set(identity, merged);
@@ -72,5 +74,5 @@ export function mergeFeedbackRows(database: Pick<HawdbNativeTypes.HawdbDatabase,
 }
 
 function comparable(remote: RemoteFeedback): string {
-  return canonical({ ...remote, updatedAt: new Date(Date.parse(remote.updatedAt)).toISOString() });
+  return canonical({ ...remote, updatedAt: feedbackTimestampKey(remote.updatedAt) });
 }

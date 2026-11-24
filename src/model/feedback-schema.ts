@@ -83,6 +83,12 @@ export const LinearRemoteFeedbackSchema = Schema.Struct({
 export const RemoteFeedbackSchema = Schema.Union([GitHubRemoteFeedbackSchema, LinearRemoteFeedbackSchema]);
 export type RemoteFeedback = typeof RemoteFeedbackSchema.Type;
 
+/** Fixed-width UTC instants retain the order of every fraction accepted by IsoInstant. */
+export function feedbackTimestampKey(updatedAt: RemoteFeedback['updatedAt']): string {
+  const [second, fraction = ''] = updatedAt.slice(0, -1).split('.');
+  return `${second}.${fraction.padEnd(9, '0')}`;
+}
+
 export const FeedbackSourceSchema = Schema.Union([
   Schema.Struct({ ...GitHubRemoteFeedbackSchema.fields, connectionId: Slug, importedAt: IsoInstant }),
   Schema.Struct({ ...LinearRemoteFeedbackSchema.fields, connectionId: Slug, importedAt: IsoInstant }),
