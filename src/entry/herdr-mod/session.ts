@@ -170,6 +170,7 @@ export class ModSession {
 
   private refreshOperation = Effect.fn('ModSession.refresh')(function*(this: ModSession, notify: (error?: ModFailure) => void): Effect.fn.Return<void, ModFailure | ModDisconnected> {
     const observation = this.observation = {};
+    const checkGeneration = this.checkGeneration;
     const current = () => !this.closed && observation === this.observation;
     const selected = this.selected;
     // Pair the shown page with its own token, so a page being opened now is not replaced by the older one.
@@ -211,7 +212,7 @@ export class ModSession {
       const owners = new Map(this.documents.map(owner => [owner.path, owner]));
       this.pages = snapshot.pages.map(page => ({ path: page.path, kind: owners.get(page.path)?.kind ?? 'page', name: page.derivedTitle ?? owners.get(page.path)?.title ?? page.path }));
       this.concepts = snapshot.conceptCatalogs.flatMap(catalog => catalog.concepts.map(concept => ({ path: catalog.path, reference: `${catalog.path}#${concept.id}`, concept })));
-      if (!this.checking && !this.checkFailed) this.check = { ok: snapshot.findings.length === 0, findings: snapshot.findings };
+      if (checkGeneration === this.checkGeneration && !this.checking && !this.checkFailed) this.check = { ok: snapshot.findings.length === 0, findings: snapshot.findings };
       this.detail = this.detailFor(this.selected);
       notify();
     }
