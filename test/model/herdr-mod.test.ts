@@ -140,6 +140,35 @@ test('a check cannot publish success for an older save or after the session stop
   }
 });
 
+// @spec docs/feature/herdr-mod/architecture.md#background-check
+test('a projection read before saving cannot replace the new check result', async () => {
+  const b = boundary(); await Effect.runPromise(b.session.open(path));
+  const entered = Promise.withResolvers<void>();
+  const returnProjection = Promise.withResolvers<void>();
+  const execute = b.host.exec;
+  b.host.exec = async (command, args, options) => {
+    const reply = await execute(command, args, options);
+    if (args.at(-2) === 'workspace' && args.at(-1) === 'projection') {
+      entered.resolve();
+      await returnProjection.promise;
+    }
+    return reply;
+  };
+  b.files.set('/repo/docs/taste.md', '# Updated taste\n');
+  const refreshing = Effect.runPromise(b.session.refresh());
+  try {
+    await entered.promise;
+    await Effect.runPromise(b.session.save('# Now has a broken link\n'));
+    await Effect.runPromise(b.session.checkNow());
+    assert.equal(b.session.check?.findings[0]?.message, 'Broken link');
+  } finally {
+    returnProjection.resolve();
+    await refreshing;
+  }
+  assert.equal(b.session.check?.findings[0]?.message, 'Broken link');
+  assert.equal(b.files.get(`/repo/${path}`), '# Now has a broken link\n');
+});
+
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
 test('refresh retains selection, replaces the draft, reports deletion, and close suppresses in-flight reads', async () => {
   const b = boundary(); await Effect.runPromise(b.session.refresh()); await Effect.runPromise(b.session.open(path));
