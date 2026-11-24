@@ -37,7 +37,6 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
   const publication = yield* Publication;
   const initial = yield* Effect.try({ try: () => {
     const root = discoverRoot(input, false, runtime);
-    assertCurrentRuntimeFormat(root, genericPrivateDirectorySync(root, runtime.env));
     const reclaimedTokens = recoverPublicationLeaseSync(root, runtime.env);
     return { root, reclaimedTokens, privateDir: genericPrivateDirectorySync(root, runtime.env) };
   }, catch: recoveryFailure });

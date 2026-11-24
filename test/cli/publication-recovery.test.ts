@@ -16,7 +16,10 @@ test('CLI recover reports a discarded stale journal and exits successfully', asy
   const root = await fixture(t);
   const journal = join(root, '.git/concord/journal.json');
   const target = join(root, 'memory/interrupted.md');
+  const config = join(root, 'concord.config.ts');
+  const invalidConfig = 'export default {\n';
   writeFileSync(target, '# Current state\n');
+  writeFileSync(config, invalidConfig);
   writeFileSync(journal, '{"format":"concord.journal/v2"}', { mode: 0o600 });
 
   const result = await runCli({ argv: ['--root', root, '--json', 'recover'], cwd: process.cwd(), env: process.env, stdin: '', signal: AbortSignal.timeout(15000) });
@@ -31,6 +34,7 @@ test('CLI recover reports a discarded stale journal and exits successfully', asy
   assert.ok(report.warnings.some(warning => warning.includes('journal.json')));
   assert.equal(existsSync(journal), false);
   assert.equal(readFileSync(target, 'utf8'), '# Current state\n');
+  assert.equal(readFileSync(config, 'utf8'), invalidConfig);
 });
 
 

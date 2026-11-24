@@ -10,7 +10,7 @@ import { canonicalPath } from "../../model/index.ts";
 import { execFileSync } from "node:child_process";
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from "node:crypto";
-import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, rmdirSync, writeFileSync, type BigIntStats } from "node:fs";
+import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, rmdirSync, unlinkSync, writeFileSync, type BigIntStats } from "node:fs";
 import { release } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { Schema } from "effect";
@@ -69,21 +69,21 @@ function assertReadHost(): void {
   if (process.platform === 'darwin' && Number(release().split('.')[0]) < 20) throw new ConcordError('UnsupportedHost', 'Concord requires macOS 11 or later for O_NOFOLLOW_ANY');
 }
 
-function readCheckedBytes(target: string, path: string, stat: BigIntStats, verifying = false): Buffer {
+function readCheckedBytes(target: string, path: string, stat: BigIntStats, verifying = false, maxBytes = MAX_BYTES): Buffer {
   if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
   if (!stat.isFile()) throw new ConcordError(verifying ? 'UnsafePath' : 'InvalidFile', `${path} must be a regular file`);
   let fd: number | undefined;
   try {
-    fd = openSync(target, constants.O_RDONLY | (process.platform === 'darwin' ? 0x20000000 : constants.O_NOFOLLOW));
+    fd = openSync(target, constants.O_RDONLY | constants.O_NONBLOCK | (process.platform === 'darwin' ? 0x20000000 : constants.O_NOFOLLOW));
     const opened = fstatSync(fd, { bigint: true });
     if (!opened.isFile()) throw new ConcordError(verifying ? 'UnsafePath' : 'InvalidFile', `${path} must be a regular file`);
     if (opened.size !== stat.size || opened.dev !== stat.dev || opened.ino !== stat.ino) {
       if (verifying) throw new ObservationChanged(path);
       throw new ConcordError('SourceChanged', `${path} was replaced while opening; retry the query`);
     }
-    if (opened.size > BigInt(MAX_BYTES)) {
+    if (opened.size > BigInt(maxBytes)) {
       if (verifying) throw new ObservationChanged(path);
-      throw new ConcordError('InvalidFile', `${path} exceeds ${MAX_BYTES} bytes`);
+      throw new ConcordError('InvalidFile', `${path} exceeds ${maxBytes} bytes`);
     }
     return readFileSync(fd);
   } catch (cause) {
@@ -128,13 +128,6 @@ export function assertDarwinPublicationPaths(paths: readonly string[], platform:
       seen.set(key, prefix);
     }
   }
-}
-function jsonFile<A>(path: string, schema: Schema.ConstraintDecoder<A, never>): A {
-  assertNoSymlink(path);
-  let value: unknown;
-  try { const s = lstatSync(path); if (!s.isFile() || s.size > MAX_TRANSACTION_BYTES) throw new Error('file is not regular or exceeds size limit'); value = JSON.parse(readFileSync(path, 'utf8')); }
-  catch (cause) { throw new ConcordError('InvalidData', `Cannot decode ${path}: ${cause instanceof Error ? cause.message : String(cause)}`); }
-  return decode(schema, value, path);
 }
 function syncDirectory(path: string): void { const fd = openSync(path, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); } }
 function atomic(path: string, contents: string | Uint8Array, mode = 0o600, canReplace?: () => boolean): void {
@@ -182,9 +175,34 @@ const JournalSchema = Schema.Struct({
   phase: Schema.Literals(['prepared', 'committed']), directories: Schema.Array(Text), changes: Schema.Array(JournalChangeSchema), scope: JournalScopeSchema,
 });
 type Journal = typeof JournalSchema.Type;
+const JournalSource = Schema.fromJsonString(JournalSchema);
+type JournalRead =
+  | { readonly kind: 'current'; readonly journal: Journal }
+  | { readonly kind: 'undecodable'; readonly stat: BigIntStats; readonly error: ConcordError };
 
-function currentJournal(path: string): Journal {
-  return jsonFile(path, JournalSchema);
+function readJournal(path: string): JournalRead | undefined {
+  const stat = lstatSync(path, { bigint: true, throwIfNoEntry: false });
+  if (stat === undefined) return undefined;
+  assertNoSymlink(path);
+  const source = readCheckedBytes(path, path, stat, false, MAX_TRANSACTION_BYTES).toString('utf8');
+  try { return { kind: 'current', journal: decode(JournalSource, source, path) }; }
+  catch (cause) {
+    if (!(cause instanceof ConcordError) || cause.code !== 'InvalidData') throw cause;
+    return { kind: 'undecodable', stat, error: cause };
+  }
+}
+
+function discardUndecodableJournal(path: string, observed: BigIntStats): void {
+  assertNoSymlink(path);
+  const current = lstatSync(path, { bigint: true });
+  if (!current.isFile() || current.nlink !== 1n || current.uid !== BigInt(process.geteuid?.() ?? -1) || (current.mode & 0o7777n) !== 0o600n) {
+    throw new ConcordError('UnsafePath', `Journal must be a private regular file owned by the current user: ${path}`);
+  }
+  if (current.dev !== observed.dev || current.ino !== observed.ino || current.size !== observed.size || current.mtimeNs !== observed.mtimeNs || current.ctimeNs !== observed.ctimeNs) {
+    throw new ConcordError('RecoveryConflict', `Journal changed during recovery; preserve it and retry: ${path}`);
+  }
+  unlinkSync(path);
+  syncDirectory(dirname(path));
 }
 // @concord-end
 
@@ -192,8 +210,8 @@ function currentJournal(path: string): Journal {
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function assertCurrentRuntimeFormat(root: string, privateDir = genericPrivateDirectorySync(root)): void {
-  const journal = join(privateDir, 'journal.json');
-  if (present(journal)) currentJournal(journal);
+  const result = readJournal(join(privateDir, 'journal.json'));
+  if (result?.kind === 'undecodable') throw result.error;
 }
 
 // @concord-begin
@@ -338,7 +356,7 @@ export class LocalRepository implements Repository {
     assertReadHost();
     if (git(this.root, ['rev-parse', '--show-toplevel'], this.executionEnvironment) !== this.root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
     const privateDir = genericPrivateDirectorySync(this.root, this.executionEnvironment);
-    assertCurrentRuntimeFormat(this.root, privateDir);
+    if (!this.recovering) assertCurrentRuntimeFormat(this.root, privateDir);
     this.privateDir = privateDir;
     assertNoSymlink(this.privateDir);
     this.coordinationDirectory = tracePrivateDirectorySync(this.root, this.executionEnvironment);
@@ -360,7 +378,7 @@ export class LocalRepository implements Repository {
       }
       catch (cause) { throw storageCoordinationFailure(cause); }
       assertNoSymlink(this.privateDir);
-      assertCurrentRuntimeFormat(this.root, this.privateDir);
+      if (!this.recovering) assertCurrentRuntimeFormat(this.root, this.privateDir);
       const traceDir = coordinationDir;
       const traceJournal = traceDir === undefined ? undefined : join(traceDir, 'publication-journal.json');
       const traceMultiJournal = traceDir === undefined ? undefined : join(traceDir, 'multi-file-publication-journal.json');
@@ -371,9 +389,15 @@ export class LocalRepository implements Repository {
       const genericJournal = join(this.privateDir, 'journal.json');
       assertNoSymlink(genericJournal);
       if (!options.recover) assertJournalFinished(this.root, coordinationDir, genericJournal, 'An interrupted publication exists; run concord recover', this.traceLease?.owner.token);
-      const marker = this.read('concord.config.ts');
       const markerPath = 'concord.config.ts';
-      const recoveryJournal = options.recover && present(genericJournal) ? currentJournal(genericJournal) : undefined;
+      const recoveryJournal = this.recovering ? readJournal(genericJournal) : undefined;
+      if (recoveryJournal?.kind === 'undecodable') {
+        // Discarding an undecodable journal requires no authorization from workspace files.
+        this.configSnapshot = { path: markerPath, source: '', digest: digest(''), config: {} };
+        this.config = { testRoots: [], sourceRoots: [] };
+        return;
+      }
+      const marker = this.read(markerPath);
       if (options.initialize && marker !== undefined) throw new ConcordError('ProjectExists', `${markerPath} already exists`);
       this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : await snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
       this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
@@ -382,7 +406,7 @@ export class LocalRepository implements Repository {
       for (const adapter of this.config.testAdapters ?? []) {
         for (const path of [...adapter.include, ...adapter.inputRoots, ...adapter.implementationFiles, ...adapter.lockFiles]) this.absolute(path);
       }
-      if (recoveryJournal !== undefined) await this.preflight(recoveryJournal, true);
+      if (recoveryJournal?.kind === 'current') await this.preflight(recoveryJournal.journal, true);
       this.validateObservations();
       if (this.optimistic) this.verifySnapshot();
 
@@ -721,7 +745,7 @@ export class LocalRepository implements Repository {
     if (!this.recovering) assertJournalFinished(this.root, directory, generic, 'An interrupted publication exists; run concord recover', this.traceLease?.owner.token);
   }
   private assertReady(): void {
-    assertCurrentRuntimeFormat(this.root, this.privateDir);
+    if (!this.recovering) assertCurrentRuntimeFormat(this.root, this.privateDir);
     this.assertNoPendingPublication();
     if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('FileChangedSinceRead', 'Project configuration changed; open a fresh repository snapshot', 'source-observation');
   }
@@ -1294,8 +1318,17 @@ export class LocalRepository implements Repository {
   private async recoverUnderLease(): Promise<{ operation: string; status: string; changedPaths: readonly string[]; journalStatus: string; warnings: readonly string[] }> {
     this.clearPathObservations();
     const path = join(this.privateDir, 'journal.json');
-    if (!present(path)) return { operation: 'recover', status: 'clean', changedPaths: [], journalStatus: 'clean', warnings: [] };
-    const journal = currentJournal(path);
+    const result = readJournal(path);
+    if (result === undefined) return { operation: 'recover', status: 'clean', changedPaths: [], journalStatus: 'clean', warnings: [] };
+    if (result.kind === 'undecodable') {
+      if (this.traceLease?.mode !== 'exclusive') throw new ConcordError('RepositoryBusy', 'Journal recovery requires an exclusive publication lease');
+      discardUndecodableJournal(path, result.stat);
+      return {
+        operation: 'recover', status: 'discarded', journalStatus: 'discarded', changedPaths: [],
+        warnings: ['Discarded undecodable journal.json and kept the current workspace files'],
+      };
+    }
+    const { journal } = result;
     await this.preflight(journal, true);
     this.validateObservations();
     this.observing = false;
