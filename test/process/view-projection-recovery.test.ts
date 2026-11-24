@@ -19,7 +19,7 @@ import { cacheDatabasePath } from "../../src/base/cache/index.ts";
 import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from "../../src/base/publication/index.ts";
 
 import { openHawdb } from "../../src/base/cache/index.ts";
-import { digest } from "../../src/model/index.ts";
+import { ConcordError, digest } from "../../src/model/index.ts";
 import { LocalRepository } from "../support/repository.ts";
 
 import { type WorkspaceProjection } from "../../src/model/index.ts";
@@ -67,21 +67,25 @@ test('a live publication keeps the first workspace generation pending and refres
 // @spec docs/feature/portable-coordination/statechart.md#RecoveryBeforeFirstReply
 test('startup recovery logs and preserves an external edit before publishing the first workspace generation', async () => {
   const root = (await fixture());
-  (await interruptPublication(root));
-  const target = join(root, 'docs/architecture.md');
-  const external = `${readFileSync(target, 'utf8')}\nExternal edit before restart.\n`;
-  writeFileSync(target, external);
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  const base = baseOf(server);
+  let server: ViewServerHandle | undefined;
   try {
+    await interruptPublication(root);
+    const target = join(root, 'docs/architecture.md');
+    const external = `${readFileSync(target, 'utf8')}\nExternal edit before restart.\n`;
+    writeFileSync(target, external);
+    await storeWorkspaceProjection(await workspaceProjectionContext(root), undefined, new ConcordError('RecoveryRequired', 'Prior refresh saw the interrupted publication'));
+    const started = server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     assert.equal(existsSync(join(genericPrivateDirectorySync(root, process.env), 'journal.json')), false);
     assert.equal(readFileSync(target, 'utf8'), external);
-    await pollUntil(async () => server.stderr.split('\n').some(line => line.includes('"journalStatus":"discarded"') && line.includes('"docs/architecture.md"')) ? true : undefined,
+    await pollUntil(async () => started.stderr.split('\n').some(line => line.includes('"journalStatus":"discarded"') && line.includes('"docs/architecture.md"')) ? true : undefined,
       { description: 'startup recovery logs the preserved external edit' });
-    const value = await waitForWorkspaceProjection(base);
+    const value = await waitForWorkspaceProjection(baseOf(started));
     assert.equal(value.projection.status, 'ready');
     assert.equal(value.projection.lastError, undefined);
-  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    try { await server?.close(); }
+    finally { rmSync(root, { recursive: true, force: true }); }
+  }
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

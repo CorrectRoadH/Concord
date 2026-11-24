@@ -49,7 +49,7 @@ import { mergeLocalFeedbackObservation } from '../../domain/feedback/index.ts';
 import type { RemoteFeedback } from '../../model/index.ts';
 import { clearWorkspaceCache, decodeViewAction, KnowledgeSearch, makeKnowledgeSearchOwner } from '../../app/index.ts';
 import { Snapshot } from './computation.ts';
-import { assertWorkspacePublicationReady } from '../../app/index.ts';
+import { assertWorkspacePublicationReady, recoverLocalState } from '../../app/index.ts';
 import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.ts';
 
 import { OperationReply, OperationReady } from './operation-protocol.ts';
@@ -327,6 +327,19 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const platform = yield* ServerRuntime;
     const installation = platform.installation();
     const runtime = yield* platform.acquire(root, privateDir);
+    // @concord-begin
+    // @concord-implements docs/feature/portable-coordination/statechart.md#RecoveryBeforeFirstReply
+    let recoveredPublication = false;
+    const publicationState = yield* Effect.result(assertWorkspacePublicationReady({ root, privateDir }));
+    if (publicationState._tag === 'Failure') {
+      const error = publicationState.failure;
+      if (error instanceof ConcordError && error.code === 'RecoveryRequired') {
+        const recovery = yield* recoverLocalState(root).pipe(Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive))));
+        recoveredPublication = true;
+        if (recovery.warnings.length > 0) writeLog(`${JSON.stringify({ operation: recovery.operation, journalStatus: recovery.journalStatus, warnings: recovery.warnings })}\n`);
+      } else if (!(error instanceof ConcordError && error.code === 'RepositoryBusy')) return yield* Effect.fail(error);
+    }
+    // @concord-end
     let shuttingDown = false;
     // Losing the record path must not prevent releasing the owned resources.
     const cleaning = (phase: Parameters<typeof runtime.cleaning>[0], pid?: number) => Effect.suspend(() => shuttingDown ? runtime.cleaning(phase, pid).pipe(Effect.ignore) : Effect.void);
@@ -375,6 +388,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       sourceDigest: backgroundComputation.run({ kind: 'source-digest' }).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(Schema.String)(value)), Effect.mapError(workspaceServerFailure)),
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources), Effect.provideService(RuntimeEnvironment, execution)),
       restore: ctx => owned(readWorkspaceProjection(ctx), true).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } })), Effect.provideService(RuntimeEnvironment, execution)),
+      skipStartupProjection: recoveredPublication,
       persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt), true).pipe(Effect.provideService(RuntimeEnvironment, execution)),
       compute: operation => (operation.kind === 'scan' ? cachePermit.withPermit(snapshot(true)) : cacheSnapshot).pipe(Effect.flatMap(snapshot => (operation.kind === 'scan' ? backgroundComputation : computation).run(operation, snapshot))),
       open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open), Effect.andThen(computation.open), Effect.andThen(backgroundComputation.open)),

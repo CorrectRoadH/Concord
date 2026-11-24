@@ -18,7 +18,7 @@ import type { WorkspaceProjection, WorkspaceSnapshot } from "../model/index.ts";
 const key = 'workspace';
 import { type StatechartWatch, type WorkspaceProjectionCandidate, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord, decodeWorkspaceProjectionCandidate } from "../model/index.ts";
 
-export const assertWorkspacePublicationReady = Effect.fn('workspaceProjection.publicationReady')(function*(context: WorkspaceProjectionContext) {
+export const assertWorkspacePublicationReady = Effect.fn('workspaceProjection.publicationReady')(function*(context: Pick<WorkspaceProjectionContext, 'root' | 'privateDir'>) {
   const pending = yield* (yield* Sources).pendingPublications(context.privateDir);
   if (pending.length === 0) return;
   const live = yield* Effect.try({ try: () => {

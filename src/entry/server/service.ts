@@ -13,6 +13,7 @@ export interface RuntimePorts {
   readonly context: Effect.Effect<WorkspaceProjectionContext, unknown>;
   readonly ready: (context: WorkspaceProjectionContext) => Effect.Effect<void, unknown>;
   readonly restore: (context: WorkspaceProjectionContext) => Effect.Effect<WorkspaceProjection, unknown>;
+  readonly skipStartupProjection?: boolean;
   readonly persist: (context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionCandidate, error?: ConcordError, attempt?: WorkspaceProjection['projection']['lastAttempt']) => Effect.Effect<void, unknown>;
   readonly compute: (operation: Computation) => Effect.Effect<unknown, unknown>;
   readonly open: Effect.Effect<void, unknown>;
@@ -147,7 +148,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* ports.open;
     const context = yield* ports.context;
     yield* synchronizeIdentity(context);
-    yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.catch(cause => namedFailure(cause).code === 'WorkspaceProjectionPending' ? Effect.void : Effect.fail(cause)));
+    if (!ports.skipStartupProjection) yield* nativeOwnership.withPermit(ports.restore(context)).pipe(Effect.flatMap(state.accept), Effect.catch(cause => namedFailure(cause).code === 'WorkspaceProjectionPending' ? Effect.void : Effect.fail(cause)));
     yield* state.transition('running');
   }).pipe(Effect.catch(fail), Effect.andThen(request));
   const startupFiber = yield* Effect.forkScoped(startup);
