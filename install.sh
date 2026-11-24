@@ -35,9 +35,13 @@ staging=
 new_version=
 link_temp=
 switching_link=false
+install_lock=
+reclaim_dir=
+reclaim_source=
 cleanup() {
-  rm -rf "$scratch"
-  if [ -n "$staging" ]; then rm -rf "$staging"; fi
+  trap '' 1 2 3 15
+  rm -rf "$scratch" || :
+  if [ -n "$staging" ]; then rm -rf "$staging" || :; fi
   if [ -n "$link_temp" ]; then
     # A signal can arrive after mv commits the link and before the shell resumes.
     if [ "$switching_link" = true ] && [ ! -L "$link_temp" ] &&
@@ -45,9 +49,15 @@ cleanup() {
       new_version=
       touch "$root/$version/.activated" || :
     fi
-    rm -f "$link_temp"
+    rm -f "$link_temp" || :
   fi
-  if [ -n "$new_version" ]; then rm -rf "$new_version"; fi
+  if [ -n "$new_version" ]; then rm -rf "$new_version" || :; fi
+  if [ -n "$reclaim_dir" ] && [ -d "$reclaim_dir" ]; then
+    if [ -z "$reclaim_source" ]; then rm -rf "$reclaim_dir" || :
+    elif [ ! -e "$reclaim_source" ]; then mv "$reclaim_dir" "$reclaim_source" || :
+    else rmdir "$reclaim_dir" || :; fi
+  fi
+  if [ -n "$install_lock" ]; then rmdir "$install_lock" || :; fi
 }
 trap cleanup 0
 trap 'exit 1' 1 2 3 15
@@ -85,6 +95,16 @@ actual=${actual%% *}
 root="$HOME/.local/share/concord"
 bin_dir=${CONCORD_INSTALL_DIR:-"$HOME/.local/bin"}
 mkdir -p "$root"
+# Defer signals until the script knows whether it owns the new lock.
+lock_interrupted=false
+trap 'lock_interrupted=true' 1 2 3 15
+if (trap '' 1 2 3 15; mkdir "$root/.install-lock"); then
+  install_lock="$root/.install-lock"
+else
+  fail "Could not acquire installation lock at $root/.install-lock. Remove it only after confirming no installation is running, then retry."
+fi
+trap 'exit 1' 1 2 3 15
+[ "$lock_interrupted" = false ] || exit 1
 if [ -e "$root/$version" ] || [ -L "$root/$version" ]; then
   [ ! -L "$root/$version" ] && [ -f "$root/$version/.archive-sha256" ] && [ "$(cat "$root/$version/.archive-sha256")" = "$expected" ] && [ -x "$root/$version/bin/concord" ] || fail "Existing version has a different or missing archive checksum; delete $root/$version and retry."
 else
@@ -111,24 +131,42 @@ touch "$root/$version/.activated"
 link_temp=
 # Only successfully activated versions participate in retention. Live markers
 # protect an installation without probing sockets or signalling its services.
-keep=0
-ls -td "$root"/*/.activated 2>/dev/null | while IFS= read -r activation; do
-  directory=${activation%/.activated}
-  activation=${directory##*/}
-  printf '%s\n' "$activation" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || continue
-  directory="$root/$activation"
-  [ "$activation" != "$version" ] && [ ! -L "$directory" ] || continue
+installation_in_use() {
   in_use=false
-  for marker in "$directory"/.in-use/*; do
+  for marker in "$1"/.in-use/*; do
     [ -f "$marker" ] || continue
     pid=${marker##*/}
     case "$pid" in ''|0|*[!0-9]*) continue ;; esac
     if kill -0 "$pid" 2>/dev/null; then in_use=true
     else rm -f "$marker"; fi
   done
-  [ "$in_use" = false ] || continue
+  [ "$in_use" = true ]
+}
+retention_warning() { printf '%s\n' 'Concord is installed, but old version cleanup failed.' >&2; }
+keep=0
+ls -td "$root"/*/.activated > "$scratch/activations" 2>/dev/null || :
+while IFS= read -r activation; do
+  directory=${activation%/.activated}
+  activation=${directory##*/}
+  printf '%s\n' "$activation" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || continue
+  directory="$root/$activation"
+  [ "$activation" != "$version" ] && [ ! -L "$directory" ] || continue
+  if installation_in_use "$directory"; then continue; fi
   keep=$((keep + 1))
-  if [ "$keep" -gt 2 ]; then rm -rf "$directory"; fi
-done || printf '%s\n' 'Concord is installed, but old version cleanup failed.' >&2
+  [ "$keep" -gt 2 ] || continue
+  # Hide the version before checking again so a new service cannot register
+  # there between the final marker check and removal.
+  reclaim_source="$directory"
+  reclaim_dir=$(mktemp -d "$root/.reclaim.XXXXXX") || { retention_warning; break; }
+  rmdir "$reclaim_dir" && mv "$reclaim_source" "$reclaim_dir" || { retention_warning; break; }
+  if installation_in_use "$reclaim_dir"; then
+    mv "$reclaim_dir" "$reclaim_source" || { retention_warning; break; }
+  else
+    reclaim_source=
+    rm -rf "$reclaim_dir" || { retention_warning; break; }
+  fi
+  reclaim_dir=
+  reclaim_source=
+done < "$scratch/activations"
 printf 'Concord is installed: %s/concord\nRun: concord --help\n' "$bin_dir"
 case ":${PATH:-}:" in *":$bin_dir:"*) ;; *) printf 'Add %s to PATH in your shell configuration.\n' "$bin_dir" ;; esac

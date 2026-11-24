@@ -8,6 +8,12 @@ import { packageRoot } from './location.ts';
 import { makeRuntimeEnvironment, runtimePath, type RuntimeEnvironmentSnapshot } from '../environment/index.ts';
 import { sourceInstallation } from './runtime.ts';
 
+class InstallationUnavailable extends ConcordError {
+  constructor(root: string) {
+    super('InstallationUnavailable', `Cannot start a workspace service: the installation is unavailable at ${root}`);
+  }
+}
+
 /** The server scope owns the marker, including interrupted or failed startup.
  * Exclusive create and inode check keep cleanup from removing a replacement.
  */
@@ -15,11 +21,12 @@ export const installationUseMarker = (applicationRoot = packageRoot, source = so
   Effect.try({ try: () => {
     if (source) return undefined;
     const root = dirname(runtimePath(runtime, applicationRoot));
-    if (!lstatSync(join(root, 'bin/concord'), { throwIfNoEntry: false })?.isFile()) return undefined;
+    if (!lstatSync(join(root, 'bin/concord'), { throwIfNoEntry: false })?.isFile()) throw new InstallationUnavailable(root);
     try { accessSync(root, constants.W_OK); }
     catch (cause) {
       const code = (cause as NodeJS.ErrnoException).code;
       if (code === 'EACCES' || code === 'EROFS' || code === 'EPERM') return undefined;
+      if (code === 'ENOENT') throw new InstallationUnavailable(root);
       throw cause;
     }
     const directory = join(root, '.in-use');
@@ -29,23 +36,32 @@ export const installationUseMarker = (applicationRoot = packageRoot, source = so
     } catch (cause) {
       const code = (cause as NodeJS.ErrnoException).code;
       if (code === 'EACCES' || code === 'EROFS' || code === 'EPERM') return undefined;
+      if (code === 'ENOENT') throw new InstallationUnavailable(root);
       if (code !== 'EEXIST') throw cause;
     }
-    const parent = lstatSync(directory);
+    const parent = lstatSync(directory, { throwIfNoEntry: false });
+    if (!parent) throw new InstallationUnavailable(root);
     if (!parent.isDirectory() || parent.isSymbolicLink() || parent.uid !== process.getuid?.()) throw new ConcordError('UnsafePath', 'Installation use markers must be in a user-owned directory');
     try { writeFileSync(path, '', { flag: 'wx', mode: 0o600 }); }
     catch (cause) {
       const code = (cause as NodeJS.ErrnoException).code;
       if (code === 'EACCES' || code === 'EROFS' || code === 'EPERM') return undefined;
+      if (code === 'ENOENT') throw new InstallationUnavailable(root);
       if (code !== 'EEXIST') throw cause;
     }
-    const identity = lstatSync(path, { bigint: true });
+    const identity = lstatSync(path, { bigint: true, throwIfNoEntry: false });
+    if (!identity) throw new InstallationUnavailable(root);
     if (!identity.isFile() || identity.isSymbolicLink() || identity.uid !== BigInt(process.getuid?.() ?? -1) || identity.nlink !== 1n) throw new ConcordError('UnsafePath', 'Installation use marker must be a user-owned regular file');
     return { path, identity };
   }, catch: failure }),
   marker => Effect.sync(() => {
     if (!marker) return;
     const actual = lstatSync(marker.path, { bigint: true, throwIfNoEntry: false });
-    if (actual?.dev === marker.identity.dev && actual.ino === marker.identity.ino) unlinkSync(marker.path);
+    if (actual?.dev !== marker.identity.dev || actual.ino !== marker.identity.ino) return;
+    try { unlinkSync(marker.path); }
+    catch (cause) {
+      // Retention can temporarily move the installation after lstat.
+      if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
+    }
   }),
 );
