@@ -1,3 +1,4 @@
+// 跨进程保证：外部程序——Bash 发布步骤通过 gh 子进程轮询本次派发的运行，只在首轮失败时请求重跑该运行的失败作业。
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

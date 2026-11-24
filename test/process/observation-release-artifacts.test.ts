@@ -1,4 +1,4 @@
-// 跨进程保证：强杀一个真实的收集占用者后，人工解除回收该次收集的产物。
+// 跨进程保证：进程终止与信号——收集进程被 SIGKILL 且 adapter 进程组退出后，恢复命令须显式解除观察槽，才删除该次收集的报告目录并保留无关目录。
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
