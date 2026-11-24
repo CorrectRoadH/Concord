@@ -1,0 +1,66 @@
+---
+title: "发布中断与外部编辑后的恢复"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 发布
+    lg1: 中断
+    lg2: 恢复
+    lg3: 完成
+  }
+  class lg0 blue
+  class lg1 orange
+  class lg2 purple
+  class lg3 teal
+  s0: 两条写入基于同一前像排队
+  s1: journal 已落盘#65292;目标尚未替换
+  s2: 发布中断#65292;journal 留在磁盘
+  s3: 第一个目标已替换
+  s4: 过期计划已被拒绝
+  s5: 正在检查磁盘上的目标
+  s6: 所有目标已替换
+  s7: 正在还原写入前内容
+  s8: 恢复再次中断#65292;journal 留在磁盘
+  s9: 发布已完成#65292;journal 已清除
+  s10: 已保留外部编辑#65292;清除 journal 并告警
+  s11: 已还原完整前像并清除 journal
+  s12: 保留完整计划内容#65292;已清除 journal
+  s13: 恢复后已首次应答
+  [*] --> s0
+  s0 --> s1: 取得写互斥#65292;核对依赖并写 journal
+  s1 --> s2: 发布进程退出 or 目标已变#65292;停止发布
+  s1 --> s3: 核对前像后原子替换一个目标
+  s0 --> s4: 依赖已变#65292;返回 SourceChanged
+  s2 --> s5: 取得服务锁后开始恢复 or 请求恢复
+  s3 --> s2: 发布进程退出 or 目标已变#65292;停止发布
+  s3 --> s6: 核对前像后原子替换一个目标
+  s5 --> s7: 只有前像或计划内容#65292;开始还原
+  s5 --> s8: 恢复进程退出
+  s6 --> s2: 发布进程退出 [提交阶段尚未落盘]
+  s6 --> s9: 记录提交后清除 journal 并确认发布成功
+  s7 --> s8: 恢复进程退出
+  s7 --> s11: 确认所有目标均为前像
+  s8 --> s5: 取得服务锁后开始恢复
+  s5 --> s10: 发现外部编辑#65292;保留当前文件
+  s9 --> s4: 依赖已变#65292;返回 SourceChanged
+  s5 --> s12: 目标均匹配计划#65292;完成发布
+  s7 --> s10: 发现外部编辑#65292;保留当前文件
+  s10 --> s13: 处理第一条业务请求
+  s11 --> s13: 处理第一条业务请求
+  s12 --> s13: 处理第一条业务请求
+  s13 --> s4: 依赖已变#65292;返回 SourceChanged
+  s13 --> s1: 取得写互斥#65292;核对依赖并写 journal
+  class s0 blue
+  class s1 blue
+  class s2 orange
+  class s3 blue
+  class s4 teal
+  class s5 purple
+  class s6 blue
+  class s7 purple
+  class s8 orange
+  class s9 teal
+  class s10 teal
+  class s11 teal
+  class s12 teal
+  class s13 teal
