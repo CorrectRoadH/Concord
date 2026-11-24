@@ -56,3 +56,20 @@ test('read-only installation roots do not acquire a marker', async () => {
     assert.equal(existsSync(join(root, '.in-use', String(process.pid))), false);
   } finally { chmodSync(root, 0o755); rmSync(root, { recursive: true, force: true }); }
 });
+
+// @spec docs/feature/cross-platform-release/architecture.md#安装脚本
+test('marker acquisition refuses startup after retention moves away the installation', async () => {
+  const parent = mkdtempSync(join(tmpdir(), 'concord-reclaim-marker-'));
+  const root = join(parent, '0.9.1'), hidden = join(parent, '.reclaim');
+  mkdirSync(join(root, 'bin'), { recursive: true });
+  mkdirSync(join(root, 'app'));
+  writeFileSync(join(root, 'bin/concord'), '');
+  try {
+    renameSync(root, hidden);
+    const result = await Effect.runPromise(Effect.scoped(installationUseMarker(join(root, 'app'), false)).pipe(Effect.result));
+    assert.equal(result._tag, 'Failure');
+    assert.equal(result.failure.code, 'InstallationUnavailable');
+    assert.equal(existsSync(root), false);
+    assert.equal(existsSync(join(hidden, '.in-use')), false);
+  } finally { rmSync(parent, { recursive: true, force: true }); }
+});
