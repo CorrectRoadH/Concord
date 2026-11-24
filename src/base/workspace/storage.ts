@@ -137,13 +137,15 @@ function jsonFile<A>(path: string, schema: Schema.ConstraintDecoder<A, never>): 
   return decode(schema, value, path);
 }
 function syncDirectory(path: string): void { const fd = openSync(path, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); } }
-function atomic(path: string, contents: string | Uint8Array, mode = 0o600): void {
+function atomic(path: string, contents: string | Uint8Array, mode = 0o600, canReplace?: () => boolean): void {
   assertNoSymlink(dirname(path));
   const temp = `${path}.${process.pid}.${randomUUID()}.tmp`;
   let fd: number | undefined;
   try {
     fd = openSync(temp, 'wx', mode); fchmodSync(fd, mode); writeFileSync(fd, contents); fsyncSync(fd); closeSync(fd); fd = undefined;
-    assertNoSymlink(path); renameSync(temp, path); syncDirectory(dirname(path));
+    assertNoSymlink(path);
+    if (canReplace?.() === false) return;
+    renameSync(temp, path); syncDirectory(dirname(path));
   } finally { if (fd !== undefined) closeSync(fd); if (present(temp)) rmSync(temp); }
 }
 const atomicTemporarySuffix = /\.[1-9][0-9]*\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/u;
@@ -1250,11 +1252,11 @@ export class LocalRepository implements Repository {
       }
     }
   }
-  private apply(path: string, contents: string | null, mode: number, encoding?: 'base64'): void {
+  private apply(path: string, contents: string | null, mode: number, encoding?: 'base64', canReplace?: () => boolean): void {
     this.clearPathObservations();
     const target = this.absolute(path);
-    if (contents === null) { if (present(target)) { rmSync(target); syncDirectory(dirname(target)); } }
-    else atomic(target, encoding === 'base64' ? Buffer.from(contents, 'base64') : contents, mode);
+    if (contents === null) { if (present(target) && canReplace?.() !== false) { rmSync(target); syncDirectory(dirname(target)); } }
+    else atomic(target, encoding === 'base64' ? Buffer.from(contents, 'base64') : contents, mode, canReplace);
     this.clearPathObservations();
   }
   /** File images are committed first, so prepared recovery can restore every source. */
@@ -1306,27 +1308,32 @@ export class LocalRepository implements Repository {
       if (current !== change.before) warnings.push(change.path);
     }
     cleanAtomicTemporaries([path, ...journal.changes.map(change => this.absolute(change.path))]);
-    if (warnings.length > 0) {
-      rmSync(path); syncDirectory(this.privateDir);
-      return { operation: 'recover', status: 'discarded', journalStatus: 'discarded', warnings, changedPaths: [] };
-    }
-    if (!completed) {
+    if (warnings.length === 0 && !completed) {
       invalidateActiveRun(this.root, this.executionEnvironment);
       for (const change of [...journal.changes].reverse()) {
         if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close' || journal.scope.kind === 'document-move') {
           const current = this.readCurrent(journal.scope.configPath) ?? '';
           if (digest(current) !== journal.scope.configDigest) throw new ConcordError('RecoveryConflict', 'Project configuration changed during source recovery');
         }
-        const current = this.moveImage(change);
-        if (current !== change.before) this.apply(change.path, change.before, change.mode, change.encoding);
+        const canRestore = () => {
+          this.clearPathObservations();
+          const current = this.moveImage(change);
+          if (current === change.before) return false;
+          if (current === change.after) return true;
+          warnings.push(change.path);
+          return false;
+        };
+        if (canRestore()) this.apply(change.path, change.before, change.mode, change.encoding, canRestore);
+        if (warnings.length > 0) break;
       }
-      for (const dir of [...journal.directories].sort((a,b) => b.length - a.length)) {
+      if (warnings.length === 0) for (const dir of [...journal.directories].sort((a,b) => b.length - a.length)) {
         const target = this.absolute(dir);
         if (present(target)) { try { rmdirSync(target); } catch (cause) { if (!errno(cause, 'ENOTEMPTY')) throw cause; } }
       }
     }
     if (completed) this.pruneMovedRoadmap(journal);
     rmSync(path); syncDirectory(this.privateDir);
+    if (warnings.length > 0) return { operation: 'recover', status: 'discarded', journalStatus: 'discarded', warnings, changedPaths: [] };
     const status = completed ? journal.phase === 'committed' ? 'committed' : 'completed' : 'rolled-back';
     return { operation: 'recover', status, journalStatus: status, warnings: [], changedPaths: journal.changes.map(c => c.path) };
   }
