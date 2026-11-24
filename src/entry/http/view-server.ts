@@ -311,6 +311,7 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   const method = request.method ?? 'GET';
   const respond = (value: unknown, status = 200) => timing.sync('http.response', () => success(response, value, status));
   if (method === 'GET' && url.pathname === '/api/events') {
+    if (response.destroyed) return;
     exactQuery(url, []); securityHeaders(response);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Connection', 'keep-alive'); response.flushHeaders();

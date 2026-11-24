@@ -4,12 +4,17 @@ import { Clock, Effect, Semaphore } from 'effect';
 import { ConcordError } from '../../model/index.ts';
 
 export interface HostedHttp { readonly host: string; readonly port: number; readonly address: string; close(): Promise<void> }
-interface Listener { readonly handle: HostedHttp; readonly leases: Map<string, { readonly transient: boolean; readonly owner?: number }>; sse: number; idleSince: number }
+type Lease = { readonly transient: true; readonly openedAt: number } | { readonly transient: false; readonly owner: number | undefined };
+interface SseActivity { count: number; idleSince: number }
+interface Listener { readonly handle: HostedHttp; readonly leases: Map<string, Lease>; readonly sse: SseActivity }
+const PANEL_IDLE_TIMEOUT_MS = 600_000;
+
 export const makeHttpLeases = Effect.fn('makeHttpLeases')(function*(token: string, start: (host: string, port: number, sse: (delta: number) => void) => Effect.Effect<HostedHttp, unknown>) {
   const mutex = yield* Semaphore.make(1);
+  const clock = yield* Clock.Clock;
   const listeners = new Map<string, Listener>();
   const closeUnused = (key: string, listener: Listener) => Effect.gen(function*() {
-    if (listener.leases.size === 0 && listener.sse === 0) {
+    if (listener.leases.size === 0 && listener.sse.count === 0) {
       yield* Effect.tryPromise(() => listener.handle.close()); listeners.delete(key);
     }
   });
@@ -17,19 +22,22 @@ export const makeHttpLeases = Effect.fn('makeHttpLeases')(function*(token: strin
     const key = `${host}\0${port}`;
     let listener = listeners.get(key);
     if (!listener) {
+      const sse: SseActivity = { count: 0, idleSince: clock.currentTimeMillisUnsafe() };
       const handle = yield* start(host, port, delta => {
-        const current = listeners.get(key);
-        if (current) {
-          current.sse = Math.max(0, current.sse + delta);
-          if (current.sse === 0) Effect.runFork(Clock.currentTimeMillis.pipe(Effect.tap(now => Effect.sync(() => { current.idleSince = now; }))));
-          Effect.runFork(mutex.withPermit(closeUnused(key, current)));
-        }
+        sse.count = Math.max(0, sse.count + delta);
+        if (sse.count !== 0) return;
+        sse.idleSince = clock.currentTimeMillisUnsafe();
+        Effect.runFork(mutex.withPermit(Effect.suspend(() => {
+          // Tick may have closed this listener and an open may have replaced it while we waited.
+          const current = listeners.get(key);
+          return current?.sse === sse ? closeUnused(key, current) : Effect.void;
+        })));
       });
-      listener = { handle, leases: new Map(), sse: 0, idleSince: yield* Clock.currentTimeMillis };
+      listener = { handle, leases: new Map(), sse };
       listeners.set(key, listener);
     }
     const lease = `${token}:${crypto.randomUUID()}`;
-    listener.leases.set(lease, { transient, ...(transient || owner === undefined ? {} : { owner }) });
+    listener.leases.set(lease, transient ? { transient: true, openedAt: clock.currentTimeMillisUnsafe() } : { transient: false, owner });
     return { host: listener.handle.host, port: listener.handle.port, address: listener.handle.address, lease, token };
   }));
   const close = (lease: string) => mutex.withPermit(Effect.gen(function*() {
@@ -37,15 +45,19 @@ export const makeHttpLeases = Effect.fn('makeHttpLeases')(function*(token: strin
     for (const [key, listener] of listeners) if (listener.leases.delete(lease)) { yield* closeUnused(key, listener); return; }
   }));
   const tick = mutex.withPermit(Effect.gen(function*() {
-    const now = yield* Clock.currentTimeMillis;
+    const now = clock.currentTimeMillisUnsafe();
     for (const [key, listener] of listeners) {
-      if (listener.sse === 0 && now - listener.idleSince >= 600_000) for (const [lease, value] of listener.leases) if (value.transient) listener.leases.delete(lease);
+      if (listener.sse.count === 0) {
+        for (const [lease, value] of listener.leases) {
+          if (value.transient && now - Math.max(value.openedAt, listener.sse.idleSince) >= PANEL_IDLE_TIMEOUT_MS) listener.leases.delete(lease);
+        }
+      }
       yield* closeUnused(key, listener);
     }
   }));
   const disconnect = (owner: number) => mutex.withPermit(Effect.gen(function*() {
     for (const [key, listener] of listeners) {
-      for (const [lease, value] of listener.leases) if (value.owner === owner) listener.leases.delete(lease);
+      for (const [lease, value] of listener.leases) if (!value.transient && value.owner === owner) listener.leases.delete(lease);
       yield* closeUnused(key, listener);
     }
   }));
