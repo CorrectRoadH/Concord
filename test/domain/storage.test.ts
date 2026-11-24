@@ -147,7 +147,6 @@ test('unified journal recovers interrupted init and preflights every target',asy
 });
 
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
-// @issue docs/issues/stale-journal-rejected.md
 test('recovery discards an undecodable journal and keeps the current workspace files', async () => {
   const root = fixture();
   try {
