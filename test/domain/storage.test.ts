@@ -3,7 +3,9 @@ import { recoverLocalState } from '../../src/app/index.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, symlinkSync } from 'node:fs';
+import fs from 'node:fs';
 import { tmpdir } from '../support/temporary.ts';
+import { syncBuiltinMocks } from '../support/builtin-mocks.ts';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
@@ -75,6 +77,51 @@ test('interrupted multi-file publication rolls back, and recovery preserves exte
   const recoveryRepo=(await LocalRepository.open(root,{recover:true}));repo=recoveryRepo;assert.equal((await recoveryRepo.recover()).status,'rolled-back');assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'before');recoveryRepo.close();
  } finally {repo?.close();chmodSync(join(root,'docs/design/blocked'),0o755);rmSync(root,{recursive:true,force:true});}
 })));
+
+// @spec docs/feature/portable-coordination/statechart.md#RecoveryPreservesExternalEdit
+test('recovery preserves an external edit made while it stages a restore', async () => {
+  const root = fixture();
+  let repo: LocalRepository | undefined;
+  const sync = fs.fsyncSync;
+  try {
+    repo = await LocalRepository.open(root, { initialize: true });
+    await initialize(repo, false, { testRoots: [] });
+    const config = repo.configSnapshot;
+    const privateDir = repo.privateDir;
+    repo.close();
+    const changes = ['a.md', 'b.md'].map(name => ({ path: `memory/${name}`, before: 'before', after: 'after', beforeDigest: digest('before'), afterDigest: digest('after'), mode: 0o644 }));
+    const journal = join(privateDir, 'journal.json');
+    const target = join(root, 'memory/a.md');
+    writeFileSync(target, 'after');
+    writeFileSync(join(root, 'memory/b.md'), 'before');
+    writeFileSync(journal, JSON.stringify({ format: 'concord.journal', root, privateDir, operation: 'interrupted', phase: 'prepared', directories: [], changes,
+      scope: { kind: 'documents', configPath: config.path, configSource: config.source, configDigest: config.digest },
+    }));
+    repo = await LocalRepository.open(root, { recover: true });
+    let edited = false;
+    fs.fsyncSync = fd => {
+      sync(fd);
+      if (edited || !fs.readdirSync(join(root, 'memory')).some(name => name.startsWith('a.md.') && name.endsWith('.tmp'))) return;
+      edited = true;
+      const editorTemp = join(root, 'memory/.editor-save');
+      writeFileSync(editorTemp, 'external edit');
+      fs.renameSync(editorTemp, target);
+    };
+    syncBuiltinMocks();
+
+    const result = await repo.recover();
+    assert.equal(edited, true);
+    assert.equal(readFileSync(target, 'utf8'), 'external edit');
+    assert.equal(result.journalStatus, 'discarded');
+    assert.deepEqual(result.warnings, ['memory/a.md']);
+    assert.equal(existsSync(journal), false);
+  } finally {
+    fs.fsyncSync = sync;
+    syncBuiltinMocks();
+    repo?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
 test('unified journal recovers interrupted init, preflights every target, and preserves unknown formats',async () => {
