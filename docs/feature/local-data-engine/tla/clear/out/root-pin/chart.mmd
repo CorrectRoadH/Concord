@@ -1,0 +1,60 @@
+---
+title: "HawDB 缓存清理与重开"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 可用
+    lg1: 排空与确认
+    lg2: 锁定与清理
+    lg3: 重开
+    lg4: 失败
+  }
+  class lg0 teal
+  class lg1 blue
+  class lg2 purple
+  class lg3 yellow
+  class lg4 orange
+  s0: 打开缓存并检查格式
+  s1: 等待关闭旧数据库句柄
+  s2: 等待取得根引擎锁
+  s3: 失活 root-pin 已更新#65292;等待取得根引擎锁
+  s4: 已锁住根#65292;等待子锁
+  s5: 外部占用#65292;报告 HawdbBusy
+  s6: 已取得全部引擎锁#65292;核对缓存树
+  s7: 自动失效检查失败#65292;报告 UnsafePath
+  s8: 核对通过#65292;可以删除缓存数据
+  s9: 缓存数据已删除#65292;锁文件保留
+  s10: 已释放清理锁#65292;等待重开
+  s11: 缓存可用
+  s12: 重开遇到占用#65292;报告 HawdbBusy
+  [*] --> s0
+  s0 --> s1: 确认旧格式#65292;记下缓存树身份
+  s1 --> s2: 官方 close 完成
+  s1 --> s3: 官方 close 完成
+  s2 --> s4: 取得根引擎锁
+  s3 --> s4: 取得根引擎锁
+  s2 --> s5: 外部持有引擎锁#65292;结束清理
+  s3 --> s5: 外部持有引擎锁#65292;结束清理
+  s4 --> s6: 取得剩余引擎锁
+  s4 --> s5: 外部持有引擎锁#65292;结束清理
+  s4 --> s7: 缓存树或锁身份变化#65292;结束清理
+  s6 --> s8: 核对持有的锁与缓存树
+  s6 --> s7: 缓存树或锁身份变化#65292;结束清理
+  s8 --> s9: 删除允许清理的数据
+  s8 --> s7: 缓存树或锁身份变化#65292;结束清理
+  s9 --> s10: 释放引擎清理锁
+  s10 --> s11: 官方库成功重开
+  s10 --> s12: 外部抢先取得引擎锁#65292;结束本次尝试
+  class s0 blue
+  class s1 blue
+  class s2 purple
+  class s3 purple
+  class s4 purple
+  class s5 orange
+  class s6 purple
+  class s7 orange
+  class s8 purple
+  class s9 purple
+  class s10 yellow
+  class s11 teal
+  class s12 orange
