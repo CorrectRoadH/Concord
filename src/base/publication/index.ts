@@ -56,6 +56,7 @@ export { setPublicationToken } from './file-lease.ts';
 export { syncLeaseDirectory } from './file-lease.ts';
 export { waitForPublication } from './publication-wait.ts';
 export { beginRun } from './run-coordination.ts';
+export { createObservationReports } from './run-coordination.ts';
 export { releaseObservationSlot } from './run-coordination.ts';
 export { finalizeRun } from './run-coordination.ts';
 export { finishRun } from './run-coordination.ts';

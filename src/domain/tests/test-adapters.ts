@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { Clock, Effect, Schema } from "effect";
 import { closeRepositoryCache, PersistentCache, HawdbFailure } from "../../base/cache/index.ts";
-import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.ts";
 import { diagnosticOutputTail, processDiagnostic, type ProcessDiagnostic, hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.ts";
 import { observation, observationSchema, type Observation } from "../../model/index.ts";
-import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.ts";
+import { beginRun, createObservationReports, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.ts";
 import { ConcordError, canonical, decode, digest, failure, objectDigest, Text, type Repository } from "../../model/index.ts";
 import type { LocalRepository } from "../../base/workspace/index.ts";
 import { inPath, type test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.ts";
@@ -64,22 +64,20 @@ function status(invocationId: string, value: OwnedProcessResult): ProcessStatus 
 interface InvocationDiagnostic extends ProcessStatus { readonly stdout: string; readonly stderr: string; }
 interface Session { readonly runId: string; readonly directory: string; readonly deadline: number; cleanupKnown: boolean; readonly reportBudget: ReportBudget; readonly invocations: InvocationDiagnostic[]; readonly processes: ProcessDiagnostic[]; }
 const sync = <A>(use: () => A | Promise<A>) => Effect.tryPromise({ try: async () => await use(), catch: failure }).pipe(Effect.uninterruptible);
-const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[], use: (session: Session) => Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication>, publish?: (value: A) => void): Effect.Effect<A, ConcordError, OwnedProcess | Sources | Publication> => Effect.gen(function* () {
+const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[], use: (session: Session) => Effect.Effect<A, ConcordError, OwnedProcess | Sources>, publish?: (value: A) => void): Effect.Effect<A, ConcordError, OwnedProcess | Sources> => Effect.gen(function* () {
   const service = yield* OwnedProcess;
   const environment = service.environment.env;
-  const publication = yield* Publication;
-  const scratch = yield* publication.scratchDirectory(repo.root, '', 'adapter-reports-');
   const now = yield* Clock.currentTimeMillis;
   const owned = yield* Effect.acquireRelease(sync(() => repo.snapshot(() => {
       const run = beginRun(repo.root, environment);
-      const session: Session = { runId: randomUUID(), directory: scratch.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, invocations: [], processes: [] };
-      return { run, session };
+      const reports = createObservationReports(repo.root, run, environment);
+      const session: Session = { runId: randomUUID(), directory: reports.path, deadline: now + Math.min(...adapters.map(adapter => adapter.wallTimeoutMs ?? 600_000)), cleanupKnown: true, reportBudget: { files: 0, bytes: 0 }, invocations: [], processes: [] };
+      return { run, session, reports };
   })), owned => Effect.gen(function* () {
     const results = yield* service.cleanupResults;
     const idle = (yield* service.activeCount) === 0;
     let cleanup = owned.session.cleanupKnown && idle && results.every(hasConfirmedOwnedGroupCleanup);
-    if (cleanup) yield* scratch.remove.pipe(Effect.catch(() => Effect.sync(() => { cleanup = false; })));
-    if (!cleanup) scratch.preserve();
+    if (cleanup) yield* sync(owned.reports.remove).pipe(Effect.catch(() => Effect.sync(() => { cleanup = false; })));
     yield* Effect.sync(() => {
       try {
         const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'adapter-finalize', true, false, environment)!;
@@ -91,7 +89,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
     });
   }));
   const value = yield* use(owned.session).pipe(Effect.mapError(error => new ConcordError(error.code, error.message, { ...(typeof error.details === 'object' && error.details !== null ? error.details : {}), ...(owned.session.processes.length && !(typeof error.details === 'object' && error.details !== null && 'process' in error.details) ? { process: owned.session.processes.at(-1) } : {}), ...(owned.session.invocations.length ? { invocations: owned.session.invocations } : {}) })));
-  yield* scratch.remove.pipe(Effect.mapError(() => { owned.session.cleanupKnown = false; scratch.preserve(); return new ConcordError('CleanupUnknown', 'Could not remove adapter report directories'); }));
+  yield* sync(owned.reports.remove).pipe(Effect.mapError(cause => { owned.session.cleanupKnown = false; return new ConcordError('CleanupUnknown', 'Could not remove adapter report directories', { cause: cause.message }); }));
   const finishedAt = yield* Clock.currentTimeMillis;
   yield* sync(() => {
     if (finishedAt > owned.session.deadline) throw new ConcordError('CollectFailed', 'Adapter collection exceeded its wall time budget');

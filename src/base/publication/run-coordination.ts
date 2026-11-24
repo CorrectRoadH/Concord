@@ -2,8 +2,8 @@
 // @concord-implements docs/feature/local-sdlc/architecture.md#原生-adapter
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#release-observation-slot
 import { randomUUID } from "node:crypto";
-import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { hostname } from 'node:os';
 import { Schema } from "effect";
 import { genericPrivateDirectorySync } from "./coordination.ts";
@@ -15,6 +15,7 @@ const RunState = Schema.Struct({
   token: Schema.String,
   phase: Schema.Literals(['running', 'finalizing', 'quarantined']),
   invalidation: Schema.String,
+  artifacts: Schema.optional(Schema.Literal('adapter-reports')),
 });
 type RunState = typeof RunState.Type;
 export interface RunLease { readonly lease: FileLease; readonly invalidation: string; }
@@ -24,16 +25,23 @@ const location = (root: string, environment: Readonly<Record<string, string | un
 const statePath = (root: string, owner: LeaseOwner, environment: Readonly<Record<string, string | undefined>>) => join(location(root, environment), `observation-${owner.token}.json`);
 const quarantinePath = (root: string, owner: LeaseOwner, environment: Readonly<Record<string, string | undefined>>) => join(location(root, environment), `observation-${owner.token}.quarantine`);
 
-function readState(root: string, owner: LeaseOwner, environment: Readonly<Record<string, string | undefined>> = {}): RunState {
+function readStateIfPresent(root: string, owner: LeaseOwner, environment: Readonly<Record<string, string | undefined>>): RunState | undefined {
   const path = statePath(root, owner, environment);
   try {
     assertLeasePath(path);
-    const stat = lstatSync(path);
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    if (stat === undefined) return undefined;
     if (!stat.isFile() || stat.size > 4096) throw new Error('run state must be a bounded regular file');
     const state = decode(RunState, JSON.parse(readFileSync(path, 'utf8')), path);
     if (state.token !== owner.token || owner.root !== root) throw new Error('run identity does not match this worktree');
     return state;
   } catch (cause) { throw new ConcordError('CleanupFailed', `Observation state is uncertain; preserve it and confirm child-process cleanup before further observations: ${cause instanceof Error ? cause.message : String(cause)}`); }
+}
+
+function readState(root: string, owner: LeaseOwner, environment: Readonly<Record<string, string | undefined>>): RunState {
+  const state = readStateIfPresent(root, owner, environment);
+  if (state === undefined) throw new ConcordError('CleanupFailed', 'Observation state is missing; confirm child-process cleanup before releasing its observation slot.');
+  return state;
 }
 
 function writeState(root: string, owner: LeaseOwner, state: RunState, environment: Readonly<Record<string, string | undefined>> = {}): void {
@@ -91,6 +99,35 @@ export function beginRun(root: string, environment: Readonly<Record<string, stri
   return { lease, invalidation };
 }
 
+function reportDirectory(directory: string, owner: LeaseOwner): string {
+  return join(directory, `adapter-reports-${owner.token}`);
+}
+
+function removeReportDirectory(path: string): void {
+  try {
+    assertLeasePath(path);
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    if (stat === undefined) return;
+    if (!stat.isDirectory()) throw new Error('registered collection artifacts must be a directory');
+    rmSync(path, { recursive: true, force: true });
+    syncLeaseDirectory(dirname(path));
+  } catch (cause) {
+    throw new ConcordError('CleanupFailed', `Could not reclaim registered collection artifacts at ${path}: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+}
+
+/** Register the token's report path before creating it so an interrupted owner can always be recovered. */
+export function createObservationReports(root: string, run: RunLease, environment: Readonly<Record<string, string | undefined>>) {
+  const owner = run.lease.owner;
+  const path = reportDirectory(run.lease.directory, owner);
+  const state = readState(root, owner, environment);
+  assertLeasePath(path);
+  if (lstatSync(path, { throwIfNoEntry: false }) !== undefined) throw new ConcordError('UnsafePath', `Collection artifact directory already exists: ${path}`);
+  writeState(root, owner, { ...state, artifacts: 'adapter-reports' }, environment);
+  mkdirSync(path, { mode: 0o700 });
+  return { path, remove: () => removeReportDirectory(path) };
+}
+
 /** An explicit matching token confirms child cleanup; it never authorizes a live or foreign owner. */
 export function releaseObservationSlot(root: string, token: string, environment: Readonly<Record<string, string | undefined>> = {}): void {
   const directory = location(root, environment);
@@ -99,6 +136,8 @@ export function releaseObservationSlot(root: string, token: string, environment:
   const current = owner ? `token=${owner.token} host=${owner.host} pid=${owner.pid}` : 'no current owner';
   if (!owner || token !== owner.token || owner.host !== hostname() || owner.root !== root) throw new ConcordError('ObservationSlotMismatch', `Observation slot does not match this request: ${current}`);
   if (ownerIsAlive(owner)) throw new ConcordError('ObservationSlotActive', `Observation slot owner is still alive: ${current}; wait for it to finish or terminate it first`);
+  const state = readStateIfPresent(root, owner, environment);
+  if (state?.artifacts === 'adapter-reports') removeReportDirectory(reportDirectory(directory, owner));
   // Keep ownership until every registered resource has been reclaimed.
   for (const file of [statePath(root, owner, environment), quarantinePath(root, owner, environment)]) {
     assertLeasePath(file);
