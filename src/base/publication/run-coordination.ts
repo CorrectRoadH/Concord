@@ -129,7 +129,7 @@ export function createObservationReports(root: string, run: RunLease, environmen
 }
 
 /** An explicit matching token confirms child cleanup; it never authorizes a live or foreign owner. */
-export function releaseObservationSlot(root: string, token: string, environment: Readonly<Record<string, string | undefined>> = {}): void {
+export function releaseObservationSlot(root: string, token: string, environment: Readonly<Record<string, string | undefined>> = {}): { readonly status: 'released'; readonly token: string } {
   const directory = location(root, environment);
   const path = join(directory, 'observation.lease');
   const owner = readLeaseOwner(path, 'release-observation-slot');
@@ -145,6 +145,7 @@ export function releaseObservationSlot(root: string, token: string, environment:
   }
   releaseFileLease({ directory, path, owner, mode: 'exclusive' }, 'release-observation-slot');
   syncLeaseDirectory(directory);
+  return { status: 'released', token };
 }
 
 /** Called before any generic or Trace source mutation, including rollback. */

@@ -45,8 +45,8 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
     const pending = yield* pendingJournals(initial.root);
     return yield* Effect.try({ try: () => {
       if (pending.length > 1) throw new ConcordError('RecoveryConflict', 'Multiple publication journals exist; preserve the conflicting recovery state');
-      if (releaseObservationSlot !== undefined) recovery.releaseObservationSlot(initial.root, releaseObservationSlot, runtime.env);
-      return { ...initial, trace: pending.length === 1 && pending[0] !== join(initial.privateDir, 'journal.json'), pending: pending.length > 0, observationSlot: inspectObservationSlot(initial.root, runtime.env) };
+      const releasedObservationSlot = releaseObservationSlot === undefined ? undefined : recovery.releaseObservationSlot(initial.root, releaseObservationSlot, runtime.env);
+      return { ...initial, trace: pending.length === 1 && pending[0] !== join(initial.privateDir, 'journal.json'), releasedObservationSlot };
     }, catch: recoveryFailure });
   }));
   const completion = yield* Effect.gen(function*() {
@@ -60,18 +60,19 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
       repo => Effect.sync(() => repo.close()),
     ));
   });
-  const observationSlot = yield* Effect.scoped(Effect.gen(function*() {
+  const currentObservationSlot = yield* Effect.scoped(Effect.gen(function*() {
     yield* publication.lease(selected.root, 'recover-verify', true, false);
     yield* Effect.try({ try: () => assertCurrentRuntimeFormat(selected.root, genericPrivateDirectorySync(selected.root, runtime.env)), catch: recoveryFailure });
     if ((yield* pendingJournals(selected.root)).length > 0) return yield* Effect.fail(new ConcordError('RecoveryRequired', 'A publication journal remains after recovery; preserve it and retry recovery'));
     return yield* Effect.try({ try: () => inspectObservationSlot(selected.root, runtime.env), catch: recoveryFailure });
   }));
+  const observationSlot = selected.releasedObservationSlot ?? currentObservationSlot;
   return {
     ...completion,
     status: observationSlot.status === 'blocked' ? 'blocked' : completion.status,
     journalStatus: completion.journalStatus ?? completion.status,
     warnings: completion.warnings ?? [],
-    observationSlot: releaseObservationSlot !== undefined && observationSlot.status === 'absent' ? { status: 'released', token: releaseObservationSlot } : observationSlot,
-    coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, observationSlot },
+    observationSlot,
+    coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, observationSlot: currentObservationSlot },
   };
 });
