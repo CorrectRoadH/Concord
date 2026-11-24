@@ -59,9 +59,8 @@ test('obsolete managed deletion recovers prepared and committed journals and rej
       rmSync(join(root, obsolete));
       write(root, '.git/concord/journal.json', JSON.stringify(journal));
       const recovering = (await LocalRepository.open(root, { recover: true, persistentCache: 'off' }));
-      try { (await recovering.recover()); } finally { recovering.close(); }
-      assert.equal(existsSync(join(root, obsolete)), phase === 'prepared');
-      if (phase === 'prepared') assert.equal(readFileSync(join(root, obsolete), 'utf8'), before);
+      try { assert.equal((await recovering.recover()).status, phase === 'prepared' ? 'completed' : 'committed'); } finally { recovering.close(); }
+      assert.equal(existsSync(join(root, obsolete)), false);
       assert.equal(existsSync(join(root, '.git/concord/journal.json')), false);
     }
     for (const [operation, source] of [['skills-install', 'User owned.\n'], ['new', before]]) {

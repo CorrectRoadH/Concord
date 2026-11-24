@@ -29,9 +29,14 @@ async function fixture(run: (root: string, repo: LocalRepository) => void) {
   const repo = (await LocalRepository.open(root));
   try { await run(root, repo); } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 }
-async function interrupt(root: string, repo: LocalRepository) {
+async function interrupt(root: string, repo: LocalRepository, beforeTestWrite = false) {
   const rename = fs.renameSync;
-  fs.renameSync = (from, to) => { rename(from, to); if (String(to) === join(root, file)) throw new Error('Interrupted test publication'); };
+  fs.renameSync = (from, to) => {
+    const interrupted = String(to) === join(root, file);
+    if (interrupted && beforeTestWrite) throw new Error('Interrupted test publication');
+    rename(from, to);
+    if (interrupted) throw new Error('Interrupted test publication');
+  };
   syncBuiltinESMExports();
   try { (await assert.rejects(async () => (await closeIssue(repo, issue, 'Handled')), { code: 'RecoveryRequired' })); }
   finally { fs.renameSync = rename; syncBuiltinESMExports(); }
@@ -64,9 +69,10 @@ test('test source drift after planning refuses Issue closure without publishing'
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md#完整路径
-test('interrupted Issue cleanup rolls back prepared images and accepts committed images on recovery', async () => {
+test('interrupted Issue cleanup rolls back partial writes and accepts committed images on recovery', async () => {
   for (const phase of ['prepared', 'committed'] as const) (await fixture(async (root, repo) => {
-    (await interrupt(root, repo));
+    (await interrupt(root, repo, phase === 'prepared'));
+    assert.equal(existsSync(join(root, issue)), false);
     const path = join(repo.privateDir, 'journal.json');
     const journal = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
     writeFileSync(path, JSON.stringify({ ...journal, phase }));

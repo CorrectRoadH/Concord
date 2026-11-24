@@ -152,10 +152,9 @@ test('source recovery freezes the exact configuration and preserves external edi
     assert.equal(readFileSync(join(root, 'src', 'main.ts'), 'utf8'), 'external\n');
     writeFileSync(join(root, '.git', 'concord', 'journal.json'), `${JSON.stringify(journal)}\n`);
     writeFileSync(join(root, 'src', 'main.ts'), after);
-    assert.equal((await repo.recover()).status, 'rolled-back');
-    assert.equal(readFileSync(join(root, 'src', 'main.ts'), 'utf8'), before);
+    assert.equal((await repo.recover()).status, 'completed');
+    assert.equal(readFileSync(join(root, 'src', 'main.ts'), 'utf8'), after);
     const committed = { ...journal, phase: 'committed' };
-    writeFileSync(join(root, 'src', 'main.ts'), after);
     writeFileSync(join(root, '.git', 'concord', 'journal.json'), `${JSON.stringify(committed)}\n`);
     assert.equal((await repo.recover()).status, 'committed');
     assert.equal(readFileSync(join(root, 'src', 'main.ts'), 'utf8'), after);

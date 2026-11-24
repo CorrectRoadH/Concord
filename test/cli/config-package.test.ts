@@ -35,7 +35,7 @@ test('source config initialization supplies the shipped writing policy', () => E
 })));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('prepared config recovery restores the frozen source bytes', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('prepared config recovery keeps the fully installed source bytes', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-config-recovery-'));
   let repo: LocalRepository | undefined;
   try {
@@ -49,7 +49,7 @@ test('prepared config recovery restores the frozen source bytes', () => Effect.r
     writeFileSync(join(root, path), after);
     writeFileSync(join(privateDir, 'journal.json'), `${JSON.stringify(journal)}\n`);
     repo = (await LocalRepository.open(root, { recover: true }));
-    assert.equal((await repo.recover()).status, 'rolled-back');
-    assert.equal(readFileSync(join(root, path), 'utf8'), before);
+    assert.equal((await repo.recover()).status, 'completed');
+    assert.equal(readFileSync(join(root, path), 'utf8'), after);
   } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
 })));

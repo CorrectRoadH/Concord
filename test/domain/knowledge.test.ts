@@ -75,7 +75,7 @@ test('packed recall and search require every query term and present a body excer
 
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md
-test('packed recover rolls back prepared Issue deletion, preserves committed deletion, and rejects unknown edits', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('packed recover preserves completed Issue deletion and rejects unknown edits', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = (await consumer('recovery'));
   const path = 'docs/issues/recoverable.md';
   const journalPath = join(root, '.git/concord/journal.json');
@@ -92,9 +92,8 @@ test('packed recover rolls back prepared Issue deletion, preserves committed del
   rmSync(join(root, path));
   writeFileSync(journalPath, `${JSON.stringify({ ...common, phase: 'prepared' })}\n`);
   assert.equal((await recover(root)).operation, 'recover');
-  assert.equal(readFileSync(join(root, path), 'utf8'), before);
+  assert.equal(existsSync(join(root, path)), false);
 
-  rmSync(join(root, path));
   writeFileSync(journalPath, `${JSON.stringify({ ...common, phase: 'committed' })}\n`);
   (await recover(root));
   assert.equal(existsSync(join(root, path)), false);
