@@ -15,6 +15,7 @@ import { command, fixture, record, recordPath } from '../support/workspace-serve
 const Closing = Schema.fromJsonString(Schema.Struct({ cleanup: Schema.Struct({ phase: Schema.String, pid: Schema.Int }) }));
 
 // @spec docs/feature/local-data-engine/architecture.md#退出
+// @spec docs/feature/local-data-engine/statechart.md#UpgradeEventuallyServes
 test('shutdown confirms listener release with its close callback withheld', { skip: process.platform === 'win32', timeout: 35_000 }, async () => {
   const root = await fixture();
   const current = recordPath(root);

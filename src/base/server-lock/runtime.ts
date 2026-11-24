@@ -17,7 +17,7 @@ export const ServerRecord = Schema.Struct({
   pid: Schema.Int, startedAt: Schema.String, token: Schema.String,
   lock: Identity, installation: Schema.String, protocol: Schema.String,
   sourceDigest: Schema.optional(Schema.String),
-  cleanup: Schema.optional(Schema.Struct({ phase: Schema.Literals(['requests', 'operations', 'foreground-computation', 'background-computation', 'rpc', 'http', 'cache', 'resources']), pid: Schema.Int })),
+  cleanup: Schema.optional(Schema.Struct({ phase: Schema.Literals(['requests', 'operations', 'foreground-computation', 'background-computation', 'rpc', 'http', 'cache', 'resources', 'listener']), pid: Schema.Int })),
   socket: Schema.Struct({ path: Schema.String, device: Schema.String, inode: Schema.String }),
 });
 export type ServerRecord = typeof ServerRecord.Type;
@@ -129,8 +129,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
     yield* lock.verify;
     yield* Effect.try({ try: () => {
       if (!current) chmodSync(socketPath, 0o600);
-      // The socket scope is released before later cache/resource finalizers.
-      // While it exists, still verify its identity before publishing progress.
+      // Verify the socket identity while its path still exists.
       const stat = lstatSync(socketPath, { throwIfNoEntry: false });
       const socket = stat ? { path: socketPath, ...identity(socketPath) } : cleanup && current ? current.socket : { path: socketPath, ...identity(socketPath) };
       if (current && (current.socket.device !== socket.device || current.socket.inode !== socket.inode)) throw new ConcordError('ServerLockUnavailable', 'Socket identity changed');
@@ -152,6 +151,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
     } catch { /* A missing or replaced socket is not ours. */ }
   }));
   const cleaning = (phase: NonNullable<ServerRecord['cleanup']>['phase'], pid = process.pid) => Effect.suspend(() => {
+    if (!current) return Effect.void;
     cleanup = { phase, pid };
     return publish('stopping');
   });

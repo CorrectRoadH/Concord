@@ -17,7 +17,6 @@ import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, ContentCacheOw
 import type { ReadonlyCacheSnapshot } from '../../base/cache/index.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
 import type { ChildProcessSpawner } from 'effect/process';
-import { NodeSocketServer } from '@effect/platform-node';
 import { Cause, Clock, Deferred, Exit, Fiber, FiberSet, Queue, Schema, Scope, Semaphore, Stdio, Stream, SubscriptionRef } from 'effect';
 import { RpcClient, RpcSerialization, RpcServer } from 'effect/rpc';
 import { Socket, SocketServer } from 'effect/socket';
@@ -34,6 +33,7 @@ import { makeComputationProtocol } from './computation-protocol.ts';
 import { watchComputation } from './computation-watchdog.ts';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, CommandScope, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.ts';
 import { makeAdmittedProtocol } from './admission.ts';
+import { makeUnixTransport } from './unix-transport.ts';
 import { makeRequestAdmission } from './request-admission.ts';
 import { getWorkspaceRead } from '../../app/index.ts';
 import { QueryRefreshRequest, refreshQuery as refreshDiagnosticQuery } from '../../app/index.ts';
@@ -331,7 +331,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     // Losing the record path must not prevent releasing the owned resources.
     const cleaning = (phase: Parameters<typeof runtime.cleaning>[0], pid?: number) => Effect.suspend(() => shuttingDown ? runtime.cleaning(phase, pid).pipe(Effect.ignore) : Effect.void);
     const admission = makeRequestAdmission();
-    const socketServer = yield* NodeSocketServer.make({ path: runtime.socketPath });
+    const socketServer = yield* makeUnixTransport(runtime.socketPath, runtime.cleaning('listener').pipe(Effect.ignore));
     yield* runtime.publish('opening');
     const persistent = yield* PersistentCache;
     const cache = yield* PersistentCache.owner(privateDir);
