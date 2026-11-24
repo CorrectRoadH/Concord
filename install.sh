@@ -34,10 +34,19 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/concord-download.XXXXXX")
 staging=
 new_version=
 link_temp=
+switching_link=false
 cleanup() {
   rm -rf "$scratch"
   if [ -n "$staging" ]; then rm -rf "$staging"; fi
-  if [ -n "$link_temp" ]; then rm -f "$link_temp"; fi
+  if [ -n "$link_temp" ]; then
+    # A signal can arrive after mv commits the link and before the shell resumes.
+    if [ "$switching_link" = true ] && [ ! -L "$link_temp" ] &&
+       [ "$(readlink "$bin_dir/concord" 2>/dev/null || :)" = "$root/$version/bin/concord" ]; then
+      new_version=
+      touch "$root/$version/.activated" || :
+    fi
+    rm -f "$link_temp"
+  fi
   if [ -n "$new_version" ]; then rm -rf "$new_version"; fi
 }
 trap cleanup 0
@@ -92,13 +101,14 @@ link_temp="$bin_dir/.concord-install-$$"
 ln -s "$root/$version/bin/concord" "$link_temp"
 # Both forms rename the link itself, without following a directory symlink.
 [ -L "$bin_dir/concord" ] || [ ! -d "$bin_dir/concord" ] || fail 'Could not switch the Concord link.'
+switching_link=true
 case "$platform" in
   linux-x64) mv -fT "$link_temp" "$bin_dir/concord" ;;
   darwin-arm64) mv -fh "$link_temp" "$bin_dir/concord" ;;
 esac || fail 'Could not switch the Concord link.'
-link_temp=
 new_version=
 touch "$root/$version/.activated"
+link_temp=
 # Only successfully activated versions participate in retention. Live markers
 # protect an installation without probing sockets or signalling its services.
 keep=0
