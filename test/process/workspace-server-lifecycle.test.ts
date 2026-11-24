@@ -113,6 +113,26 @@ test('the replacement service restores an interrupted publication before its fir
   }
 });
 
+// @spec docs/feature/portable-coordination/statechart.md#RecoveryBeforeFirstReply
+test('workspace service discards an undecodable journal before accepting requests', { timeout: 30_000 }, async () => {
+  const root = await fixture();
+  try {
+    const privateDir = join(root, '.git/concord');
+    const journal = join(privateDir, 'journal.json');
+    const path = 'docs/feature/reader/README.md';
+    const body = readFileSync(join(root, path), 'utf8');
+    mkdirSync(privateDir, { recursive: true });
+    writeFileSync(journal, '{"format":"concord.journal/v2"}', { mode: 0o600 });
+
+    const started = await command(root, ['server', 'start']);
+    assert.equal(started.status, 0, started.stdout + started.stderr);
+    const read = await command(root, ['show', path]);
+    assert.equal(read.status, 0, read.stdout + read.stderr);
+    assert.equal(existsSync(journal), false);
+    assert.equal(readFileSync(join(root, path), 'utf8'), body);
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
 // @feature docs/feature/local-data-engine/README.md
 test('server stop confirms a dead owner through its lock despite a stale record and socket', { timeout: 20_000 }, async () => {
   const root = (await fixture());

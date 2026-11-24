@@ -124,7 +124,7 @@ test('recovery preserves an external edit made while it stages a restore', async
 });
 
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
-test('unified journal recovers interrupted init, preflights every target, and preserves unknown formats',async () => {
+test('unified journal recovers interrupted init and preflights every target',async () => {
  const root=fixture();let repo: LocalRepository | undefined;try {
   const config=renderTypeScriptConfig({testRoots:[],sourceRoots:['src']});
   const guide='# guide\n'; const journalPath=join(root,'.git','concord','journal.json');mkdirSync(join(root,'.git','concord'),{recursive:true});mkdirSync(join(root,'docs'),{recursive:true});writeFileSync(join(root,'docs/concord.md'),guide);
@@ -143,6 +143,65 @@ test('unified journal recovers interrupted init, preflights every target, and pr
   writeFileSync(join(root,'memory/a.md'),'after-a');writeFileSync(join(root,'memory/b.md'),'external');writeFileSync(journalPath,JSON.stringify(batch)+'\n');
   const externalRepo=(await LocalRepository.open(root,{recover:true}));const externalResult=(await externalRepo.recover());externalRepo.close();
   assert.equal(externalResult.status,'discarded');assert.deepEqual(externalResult.warnings,['memory/b.md']);assert.equal(readFileSync(join(root,'memory/a.md'),'utf8'),'after-a');assert.equal(existsSync(journalPath),false);
-  writeFileSync(journalPath,'{"format":"concord.journal/v2"}\n');(await assert.rejects(async ()=>(await LocalRepository.open(root,{recover:true})),{code:'InvalidData'}));assert.equal(existsSync(journalPath),true);
  } finally {repo?.close();rmSync(root,{recursive:true,force:true});}
+});
+
+// @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
+// @issue docs/issues/stale-journal-rejected.md
+test('recovery discards an undecodable journal and keeps the current workspace files', async () => {
+  const root = fixture();
+  try {
+    const initial = await LocalRepository.open(root, { initialize: true });
+    try { await initialize(initial, false, { testRoots: [] }); }
+    finally { initial.close(); }
+    const journal = join(root, '.git/concord/journal.json');
+    const target = join(root, 'memory/a.md');
+    writeFileSync(target, '# Current state\n');
+
+    for (const source of ['{"format":"concord.journal/v2","changes":[{"path":"memory/a.md","before":null}]}', '{ truncated']) {
+      writeFileSync(journal, source, { mode: 0o600 });
+      const repo = await LocalRepository.open(root, { recover: true });
+      try {
+        const result = await repo.recover();
+        assert.equal(result.status, 'discarded');
+        assert.equal(result.journalStatus, 'discarded');
+        assert.deepEqual(result.changedPaths, []);
+        assert.ok(result.warnings.some(warning => warning.includes('journal.json')));
+      } finally { repo.close(); }
+      assert.equal(existsSync(journal), false);
+      assert.equal(readFileSync(target, 'utf8'), '# Current state\n');
+    }
+
+    const result = await runApplication(recoverLocalState(root));
+    assert.equal(result.journalStatus, 'clean');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
+test('recovery preserves unsafe entries at the journal path', async () => {
+  const root = fixture();
+  try {
+    const initial = await LocalRepository.open(root, { initialize: true });
+    try { await initialize(initial, false, { testRoots: [] }); }
+    finally { initial.close(); }
+    const journal = join(root, '.git/concord/journal.json');
+    const target = join(root, 'memory/a.md');
+    writeFileSync(target, 'undecodable', { mode: 0o600 });
+    symlinkSync(target, journal);
+
+    await assert.rejects(runApplication(recoverLocalState(root)), { code: 'UnsafePath' });
+    assert.equal(fs.readlinkSync(journal), target);
+    assert.equal(readFileSync(target, 'utf8'), 'undecodable');
+    rmSync(journal);
+
+    mkdirSync(journal);
+    await assert.rejects(runApplication(recoverLocalState(root)));
+    assert.equal(fs.lstatSync(journal).isDirectory(), true);
+    rmSync(journal, { recursive: true });
+
+    writeFileSync(journal, 'undecodable', { mode: 0o666 });
+    chmodSync(journal, 0o666);
+    await assert.rejects(runApplication(recoverLocalState(root)));
+    assert.equal(readFileSync(journal, 'utf8'), 'undecodable');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

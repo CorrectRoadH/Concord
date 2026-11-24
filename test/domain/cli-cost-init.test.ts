@@ -12,6 +12,7 @@ import { tmpdir } from '../support/temporary.ts';
 const Ack = Schema.Struct({});
 const ErrorOutput = Schema.Struct({ error: Schema.String });
 const CheckOutput = Schema.Struct({ ok: Schema.Boolean });
+const RecoveryOutput = Schema.Struct({ journalStatus: Schema.Literal('discarded'), warnings: Schema.Array(Schema.String) });
 const DoctorOutput = Schema.Struct({ missingTestRoots: Schema.Array(Schema.String) });
 const DryRunOutput = Schema.Struct({ dryRun: Schema.Boolean });
 // Initialization is the tested input, so this repository starts without a template.
@@ -54,7 +55,7 @@ test('initialization previews configured roots and preserves existing docs', () 
 
 
 // @feature docs/feature/taste/cli.md
-test('boundaries reject non-current formats and preserve configuration, private state, journals and locks', () => Effect.runPromise(Effect.promise(async () => {
+test('boundaries reject non-current formats and recovery removes only the stale journal', () => Effect.runPromise(Effect.promise(async () => {
  const root = (await createConsumer());
  writeProjectConfig(root, { testRoots: ['test', 'tests'] });
  const taste = 'docs/taste.md';
@@ -86,10 +87,11 @@ test('boundaries reject non-current formats and preserve configuration, private 
  const journalPath = '.git/concord/journal.json', lockPath = '.git/concord/lock.json';
  const journal = JSON.stringify({ format: 'concord.journal', scope: { kind: 'documents' } });
  const lock = 'preserve invalid lock bytes';
- write(root, journalPath, journal); write(root, lockPath, lock);
- for (const command of ['check', 'recover']) {
-  assert.equal((await (command === 'check' ? (await query(root, { name: 'check', input: {} }, ErrorOutput, 1)) : (await action(root, { action: 'recover' }, ErrorOutput, 1)))).error, 'InvalidData');
-  assert.equal(readFileSync(join(root, journalPath), 'utf8'), journal);
-  assert.equal(readFileSync(join(root, lockPath), 'utf8'), lock);
- }
+ writeFileSync(join(root, journalPath), journal, { mode: 0o600 }); write(root, lockPath, lock);
+ assert.equal((await query(root, { name: 'check', input: {} }, ErrorOutput, 1)).error, 'InvalidData');
+ assert.equal(readFileSync(join(root, journalPath), 'utf8'), journal);
+ const recovered = await action(root, { action: 'recover' }, RecoveryOutput);
+ assert.ok(recovered.warnings.some(warning => warning.includes('journal.json')));
+ assert.equal(existsSync(join(root, journalPath)), false);
+ assert.equal(readFileSync(join(root, lockPath), 'utf8'), lock);
 })));

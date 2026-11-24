@@ -12,6 +12,29 @@ import { fixture } from '../support/publication-ownership-fixture.ts';
 
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+test('CLI recover reports a discarded stale journal and exits successfully', async t => {
+  const root = await fixture(t);
+  const journal = join(root, '.git/concord/journal.json');
+  const target = join(root, 'memory/interrupted.md');
+  writeFileSync(target, '# Current state\n');
+  writeFileSync(journal, '{"format":"concord.journal/v2"}', { mode: 0o600 });
+
+  const result = await runCli({ argv: ['--root', root, '--json', 'recover'], cwd: process.cwd(), env: process.env, stdin: '', signal: AbortSignal.timeout(15000) });
+  assert.equal(result.exitCode, 0, result.stdout + result.stderr);
+  const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({
+    status: Schema.Literal('discarded'),
+    journalStatus: Schema.Literal('discarded'),
+    changedPaths: Schema.Array(Schema.String),
+    warnings: Schema.Array(Schema.String),
+  })))(result.stdout);
+  assert.deepEqual(report.changedPaths, []);
+  assert.ok(report.warnings.some(warning => warning.includes('journal.json')));
+  assert.equal(existsSync(journal), false);
+  assert.equal(readFileSync(target, 'utf8'), '# Current state\n');
+});
+
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name recovery-reports-observation-blocker
 test('CLI recovery reports quarantined observation while permitting publication', t => runApplication(Effect.promise(async () => {
   const root = (await fixture(t));

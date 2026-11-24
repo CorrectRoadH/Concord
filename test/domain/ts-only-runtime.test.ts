@@ -48,7 +48,7 @@ test('only the current TS config is read and unrelated files remain untouched', 
 }));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('old journals are refused before stale locks or interrupted files can be changed', async () => fixture(async root => {
+test('recovery discards obsolete configuration scopes and preserves files and legacy locks', async () => fixture(async root => {
   const initial = (await LocalRepository.open(root, { initialize: true }));
   (await initialize(initial, false, { testRoots: ['test', 'tests'] })); const config = initial.configSnapshot; initial.close();
   const privateDir = join(root, '.git/concord');
@@ -69,17 +69,18 @@ test('old journals are refused before stale locks or interrupted files can be ch
   ] as const) {
     const journal = JSON.stringify({ format: 'concord.journal', root, privateDir, operation: 'old-publication', phase: 'prepared', directories: [], scope, changes: [{ path, before: '# Before\n', after: '# Interrupted\n', beforeDigest: digest('# Before\n'), afterDigest: digest('# Interrupted\n'), mode: 420 }] });
     const lock = JSON.stringify({ format: 'concord.lock/v1', root, host: hostname(), pid: 2147483647, token: 'offline-recovery-only' });
-    writeFileSync(journalPath, journal); writeFileSync(lockPath, lock);
-    for (const options of [{ dryRun: true }, { recover: true }]) (await assert.rejects(async () => (await LocalRepository.open(root, options)), { code }));
-    for (const args of [['check'], ['recover']] as const) {
-      if (args[0] === 'recover') await assert.rejects(runApplication(recoverLocalState(root)), { code: 'InvalidData' });
-      else await assert.rejects((runApplication(executeQuery(root, { name: 'check', input: {} }, 'off'))), { code: 'InvalidData' });
-    }
+    writeFileSync(journalPath, journal, { mode: 0o600 }); writeFileSync(lockPath, lock);
+    await assert.rejects(LocalRepository.open(root, { dryRun: true }), { code });
+    await assert.rejects(runApplication(executeQuery(root, { name: 'check', input: {} }, 'off')), { code });
     assert.equal(readFileSync(journalPath, 'utf8'), journal);
+    const recovered = await runApplication(recoverLocalState(root));
+    assert.equal(recovered.journalStatus, 'discarded');
+    assert.ok(recovered.warnings.some(warning => warning.includes('journal.json')));
+    assert.equal(existsSync(journalPath), false);
     assert.equal(readFileSync(lockPath, 'utf8'), lock);
     assert.equal(readFileSync(join(root, path), 'utf8'), '# Interrupted\n');
     assert.equal(statSync(publicationLock).mode & 0o777, 0o644);
-    rmSync(journalPath); rmSync(lockPath);
+    rmSync(lockPath);
   }
   const repo = (await LocalRepository.open(root));
   try {
