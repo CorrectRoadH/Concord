@@ -60,8 +60,8 @@ const serviceProcessExited = Effect.fn('ServerRuntime.processExited')(function*(
     }
   }, catch: failure });
 });
-export const MAX_SERVER_RECORD_OBSERVATIONS = 3;
-export class UnlinkedServerRecord extends ConcordError {}
+const MAX_SERVER_RECORD_OBSERVATIONS = 3;
+class UnlinkedServerRecord extends ConcordError {}
 export function readServerRecord(
   privateDir: string, requireSocket = true, observations: 1 | typeof MAX_SERVER_RECORD_OBSERVATIONS = MAX_SERVER_RECORD_OBSERVATIONS,
 ): ServerRecord | undefined {
@@ -95,6 +95,19 @@ export function readServerRecord(
   }
   catch { throw new ConcordError('WorkspaceServerUnavailable', 'Invalid server record'); }
 }
+const readWorkspaceRecord = Effect.fn('ServerRuntime.readWorkspaceRecord')(function*(privateDir: string, requireSocket = true) {
+  let unlinked: UnlinkedServerRecord | undefined;
+  for (let observation = 1; ; observation++) {
+    const read = yield* Effect.result(Effect.try({ try: () => readServerRecord(privateDir, requireSocket, 1), catch: failure }));
+    if (read._tag === 'Success' && read.success) return read.success;
+    const error = read._tag === 'Failure' ? read.failure : unlinked;
+    if (!error || error.code === 'WorkspaceServerUnavailable' && (yield* serviceLockReleased(privateDir))) return undefined;
+    if (!(error instanceof UnlinkedServerRecord) || observation === MAX_SERVER_RECORD_OBSERVATIONS) return yield* Effect.fail(error);
+    // The owner still holds its lock and may be replacing or removing the record.
+    unlinked = error;
+    yield* Effect.sleep('10 millis');
+  }
+});
 export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(root: string, privateDir: string) {
   const runtime = yield* RuntimeEnvironment;
   yield* Effect.try({ try: () => {
@@ -166,6 +179,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
 export class ServerRuntime extends Context.Service<ServerRuntime, {
   readonly acquire: (root: string, privateDir: string) => Effect.Effect<Effect.Success<ReturnType<typeof acquireServerRuntime>>, Effect.Error<ReturnType<typeof acquireServerRuntime>>, Exclude<Effect.Services<ReturnType<typeof acquireServerRuntime>>, RuntimeEnvironment>>;
   readonly read: typeof readServerRecord;
+  readonly readWorkspaceRecord: typeof readWorkspaceRecord;
   readonly installation: () => string;
   readonly sourceDigest: () => string | undefined;
   readonly released: (privateDir: string) => Effect.Effect<boolean, Effect.Error<ReturnType<typeof serviceLockReleased>>>;
@@ -176,7 +190,7 @@ export class ServerRuntime extends Context.Service<ServerRuntime, {
     const runtime = yield* RuntimeEnvironment;
     return ServerRuntime.of({
       acquire: (root, privateDir) => acquireServerRuntime(root, privateDir).pipe(Effect.provideService(RuntimeEnvironment, runtime)),
-      read: readServerRecord, installation: () => serverInstallation(runtime), sourceDigest: () => serverSourceDigest(runtime),
+      read: readServerRecord, readWorkspaceRecord, installation: () => serverInstallation(runtime), sourceDigest: () => serverSourceDigest(runtime),
       released: privateDir => serviceLockReleased(privateDir).pipe(Effect.provideService(RuntimeEnvironment, runtime)),
       processExited: serviceProcessExited, cwd: serverCwd,
     });

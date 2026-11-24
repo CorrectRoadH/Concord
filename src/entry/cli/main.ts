@@ -20,7 +20,7 @@ import { Workspace } from '../../base/workspace/index.ts';
 import { Sources } from '../../base/sources/index.ts';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.ts';
 import { mergeLocalFeedbackObservation } from '../../domain/feedback/index.ts';
-import { ServerRuntime, MAX_SERVER_RECORD_OBSERVATIONS, UnlinkedServerRecord } from '../../base/server-lock/index.ts';
+import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../base/environment/index.ts';
 import { CliInvocation, writeStderr } from './invocation.ts';
 import { cliFailure } from './cli-failure.ts';
@@ -49,19 +49,6 @@ const remoteFailure = (cause: unknown): ConcordError | undefined => {
 const workspaceServerFailure = (cause: unknown): ConcordError => remoteFailure(cause) ?? failure(cause);
 const asServerError = workspaceServerFailure;
 const installationIdentity = (runtime: ServerRuntime['Service']) => Effect.try({ try: () => runtime.installation(), catch: failure });
-const readWorkspaceRecord = Effect.fn('cli.readWorkspaceRecord')(function*(runtime: ServerRuntime['Service'], privateDir: string, requireSocket = true) {
-  let unlinked: UnlinkedServerRecord | undefined;
-  for (let observation = 1; ; observation++) {
-    const read = yield* Effect.result(Effect.try({ try: () => runtime.read(privateDir, requireSocket, 1), catch: failure }));
-    if (read._tag === 'Success' && read.success) return read.success;
-    const error = read._tag === 'Failure' ? read.failure : unlinked;
-    if (!error || error.code === 'WorkspaceServerUnavailable' && (yield* runtime.released(privateDir))) return undefined;
-    if (!(error instanceof UnlinkedServerRecord) || observation === MAX_SERVER_RECORD_OBSERVATIONS) return yield* Effect.fail(error);
-    // The owner still holds its lock and may be replacing or removing the record.
-    unlinked = error;
-    yield* Effect.sleep('10 millis');
-  }
-});
 const nativeAvailable = Effect.flatMap(PersistentCache, cache => cache.verifyArtifact).pipe(
   Effect.mapError(cause => new ConcordError('HawdbUnavailable', cause.message)),
 );
@@ -102,7 +89,7 @@ const executeQuery: typeof AppTypes.executeQuery = (...args) => loadApp().pipe(E
 const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string, scope?: string, countReuse = true) {
   const platform = yield* ServerRuntime;
   const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
-  const record = yield* readWorkspaceRecord(platform, privateDir);
+  const record = yield* platform.readWorkspaceRecord(privateDir);
   if (!record) return undefined;
   const { connectWorkspaceSocket } = yield* loadClient();
   const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? (yield* installationIdentity(platform)), record.token, scope, countReuse, (yield* RuntimeEnvironment).env);
@@ -117,7 +104,7 @@ const workspaceServerStatus = Effect.fn('cli.workspaceServerStatus')(function*(r
   if (observed._tag === 'Success' && observed.success) return observed.success;
   const runtime = yield* ServerRuntime;
   const { privateDir } = yield* (yield* Workspace).locate(root, true);
-  const record = yield* readWorkspaceRecord(runtime, privateDir, false);
+  const record = yield* runtime.readWorkspaceRecord(privateDir, false);
   if ((yield* runtime.released(privateDir)) && (!record || (yield* runtime.processExited(record.pid)))) {
     if (wait && observed._tag === 'Failure') return yield* Effect.fail(observed.failure);
     return { operation: 'server-status', state: 'absent' };
@@ -126,7 +113,7 @@ const workspaceServerStatus = Effect.fn('cli.workspaceServerStatus')(function*(r
 });
 
 const workspaceCleanupFailure = Effect.fn('cli.workspaceCleanupFailure')(function*(runtime: ServerRuntime['Service'], privateDir: string, prior?: ReturnType<ServerRuntime['Service']['read']>) {
-  const current = yield* readWorkspaceRecord(runtime, privateDir, false);
+  const current = yield* runtime.readWorkspaceRecord(privateDir, false);
   const replaced = prior !== undefined && current !== undefined && prior.token !== current.token;
   const record = replaced ? prior : current ?? prior;
   const released = replaced || (yield* runtime.released(privateDir));
@@ -212,7 +199,7 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
 
 const prepareWorkspaceRecord = Effect.fn('cli.prepareWorkspaceRecord')(function*(root: string, privateDir: string, installation: string, allowReplace = true) {
   const runtime = yield* ServerRuntime, client = yield* loadClient();
-  const record = yield* readWorkspaceRecord(runtime, privateDir, false);
+  const record = yield* runtime.readWorkspaceRecord(privateDir, false);
   if (!record) return 'absent' as const;
   if (record.state === 'stopping' || (yield* runtime.released(privateDir))) {
     yield* waitForWorkspaceStop(runtime, privateDir, record);
@@ -242,7 +229,7 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
   if ((yield* QueryServerMode) === 'existing') return yield* connectRequiredWorkspace(root, privateDir, installation);
   // Query selection has already verified the same installation for fallback.
   if ((yield* QueryServerMode) === 'shared') return yield* connectOrStartWorkspace(root, false, privateDir, installation, true, retry);
-  const record = yield* readWorkspaceRecord(runtime, privateDir, false);
+  const record = yield* runtime.readWorkspaceRecord(privateDir, false);
   if (record && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'A service already owns this project; command mode cannot attach to it'));
   const current = yield* existingWorkspace(root, installation, privateDir).pipe(Effect.catch(cause => {
     const error = workspaceServerFailure(cause);
@@ -335,7 +322,7 @@ const waitForWorkspaceStop = (runtime: ServerRuntime['Service'], privateDir: str
       let observed: ReturnType<ServerRuntime['Service']['read']>;
       const result = yield* Effect.result(Effect.gen(function*() {
       for (;;) {
-        const record = yield* readWorkspaceRecord(runtime, privateDir, false);
+        const record = yield* runtime.readWorkspaceRecord(privateDir, false);
         if (record && (owner === undefined || record.token === owner.token)) observed = record;
         // A replacement token can only be published after the previous owner released its lock.
         const released = record && owner !== undefined && record.token !== owner.token ? true : yield* runtime.released(privateDir);
@@ -351,7 +338,7 @@ const stopWorkspaceServer = (root: string, identifiedPrivateDir?: string, expect
   const runtime = yield* ServerRuntime;
   const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
   const owner = yield* Effect.scoped(Effect.gen(function*() {
-    const record = yield* readWorkspaceRecord(runtime, privateDir, false);
+    const record = yield* runtime.readWorkspaceRecord(privateDir, false);
     if (!record) { yield* waitForWorkspaceStop(runtime, privateDir); return undefined; }
     if (expectedToken !== undefined && record.token !== expectedToken) return undefined;
     const owner = { token: record.token, pid: record.pid };
