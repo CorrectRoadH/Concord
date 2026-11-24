@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { requiresDraftFlush } from '../lib/draft-navigation.ts';
 import { useWorkspace } from '../workspace.tsx';
 
 /** Serializes saves and flushes the latest revision before navigation. */
@@ -36,14 +37,17 @@ export function useAutoSave({ dirty, revision, save, discard, enabled = true }: 
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
         throw cause;
-      } finally { setSaving(false); }
+      }
     };
-    inFlight.current = operation().finally(() => { inFlight.current = null; });
+    inFlight.current = operation().finally(() => {
+      inFlight.current = null;
+      setSaving(false);
+    });
     return inFlight.current;
   }, []);
   const owner = useMemo(() => ({
     flush,
-    isDirty: () => active.current && latest.current.dirty,
+    isDirty: () => active.current && requiresDraftFlush(latest.current.dirty, inFlight.current !== null),
     discard: async () => {
       window.clearTimeout(timer.current);
       if (inFlight.current) await inFlight.current.catch(() => undefined);
@@ -58,7 +62,7 @@ export function useAutoSave({ dirty, revision, save, discard, enabled = true }: 
     const unregister = registerAutoSave(owner);
     return () => { active.current = false; window.clearTimeout(timer.current); unregister(); };
   }, [enabled, registerAutoSave, owner]);
-  useLayoutEffect(() => { reportDirty(owner); }, [dirty, owner, reportDirty]);
+  useLayoutEffect(() => { reportDirty(owner); }, [dirty, saving, owner, reportDirty]);
   useEffect(() => {
     if (!dirty) { saved.current = null; attempted.current = null; setError(''); return; }
     if (!enabled || attempted.current === revision) return;
