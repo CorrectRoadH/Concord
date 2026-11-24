@@ -8,6 +8,7 @@
 - 终端在远程机器上时，mod 读写的是那台机器上的仓库，与本机一样能编辑、检查和自动刷新。
 - 阅读全部文档：Feature 与 Use Case、Engineering、Roadmap、品味与术语、Design、Issue 与 Memory，按[文档模型](../../document-model.md)的分组排在文档列表里，正文按 Markdown 渲染。
 - 打开一个 Use Case，看守护它的测试和实现它的代码；点开术语，看它的定义。
+- 打开 statechart 页，看模型检查器生成的状态图与检查报告：哪些状态打破了规则、坏状态怎么走到，结果过期时有提示。
 - 右键点击文档节点、页面路径、关联测试或代码，复制相对路径、定位信息与讨论 Prompt，直接与 coding agent 交流。
 - 点击正文或图表，在原位置编辑 Markdown，自动保存并检查；后台更新直接重载。
 - agent 改了文件，mod 自动刷新，不打断你正在读的位置。
@@ -56,6 +57,7 @@ Herdr 的 mod 没有网页引擎，所以 Concord 在仓库所在的机器上把
 - [在空仓库里初始化 Concord](use-case/init-from-herdr.md)
 - [把安装、升级与命令报错交给 agent 处理](use-case/hand-off-errors-to-agent.md)
 - [阅读 Spec 与它的测试和实现](use-case/read-spec.md)
+- [审阅状态图](use-case/review-statechart.md)
 - [修改一页文档并检查](use-case/edit-and-check.md)
 - [agent 改了文件，mod 自动刷新](use-case/follow-changes.md)
 - [在远程机器的终端旁使用](use-case/use-on-remote-machine.md)

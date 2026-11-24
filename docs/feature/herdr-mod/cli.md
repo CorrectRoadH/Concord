@@ -52,6 +52,7 @@ mod 只通过公开 CLI 取数据和执行操作，不读取 Concord 的私有�
 | `markdown` | `text` | 两个特殊块之间的 Markdown 原文 |
 | `image` | `source`、`alt`，以及 `mediaType`、`data`（base64）、`digest` 或 `error` | 仓库内的 PNG、JPEG、GIF、WebP 与 SVG，每张不超过 2 MiB；外链、缺失、越出仓库或超限时只有 `error` |
 | `mermaid` | `source`，以及 `svg`、`digest` 或 `error`（带行号） | 用 pele 渲染；SVG 里的 CSS 变量已替换成具体颜色，因为 Herdr 的图片加载器不计算 CSS 变量 |
+| `statechart` | `source`、`spec`、`config`、`view`、`out`（仓库相对路径）、`stale`，以及 `chart`（`svg`、`digest` 或 `error`）与 `report`（`text` 或 `error`） | 按[状态图块](../local-sdlc/format.md#状态图块)读取 `out`：`chart.mmd` 用与 `mermaid` 块相同的方式渲染，打破规则与可能打破规则的状态分别用主题的 `blocked` 色实线与虚线描边；没有 `chart.mmd` 时没有 `chart`。`report.text` 是 `report.md` 原文。`stale` 与 `check` 的 `StatechartStale` 使用同一摘要；块本身无效时只有 `error`，与 `check` 的 finding 同源 |
 | `p5` | `source`、`description`，以及 `html` 或 `error` | `description` 取自源码里的 `p.describe` 字面量；`html` 是独立页面，用与 Web 工作台相同的编译、输入检查与[运行环境](../web-workbench/format.md#运行环境)运行这一个图解，带主题变量，不联网 |
 
 整个结果不超过 6 MiB，留在 Herdr `exec` 的 8 MiB 输出上限内；超出时后面的图片改为 `error`，文字块不受影响。页面路径的规则与 `file.get` 相同。

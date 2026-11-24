@@ -20,7 +20,8 @@ Feature、Engineering 与 Roadmap 文档包内的每个 Markdown 页面必须属
 - `category` 为 `relation`，`path` 为该页面，`checks.relations.ok` 与总的 `ok` 为 false，退出 1。
 - `complete` 不受影响：页面已经读到，结论完整。
 - 页面照常被发现、在 `show` 的 `pages` 中以 `unknown` 列出，可以阅读与编辑。
-- 文件名与某个种类拼写接近时，`details.suggestions` 给出该种类；否则列出全部种类。
+- 文件名与某个种类拼写接近时，`details.suggestions` 给出该种类；否则列出全部种类。这里的种类包括项目声明的[自定义页面种类](../extensible-page-kinds/README.md)。
+- 文件名等于某个自定义页面种类的页面属于该种类，不产生 `UnknownPageKind`。
 
 | 路径 | 结果 |
 | --- | --- |
@@ -40,6 +41,24 @@ Feature、Engineering 与 Roadmap 文档包内的每个 Markdown 页面必须属
 ```
 
 修复方式是按内容把页面移到对应种类的文件或种类目录，并更新指向它的精确引用；Concord 不自动移动文件。
+
+## 状态图
+
+`check` 按[状态图块](../local-sdlc/format.md#状态图块)校验每个 `statechart` 块。下列 finding 的 `category` 都是 `relation`，`path` 为块所在页面，`line` 为块的起始行，使检查失败；文件能读到时 `complete` 不受影响。`check` 只计算摘要和确认文件存在，不运行模型检查器。
+
+| code | 条件 | `details` |
+| --- | --- | --- |
+| `InvalidStatechartBlock` | 缺少必需属性、出现未知属性、正文非空、`digest` 格式不对，或文件扩展名不符 | `attribute`（出问题的属性） |
+| `InvalidStatechartPosition` | 块出现在 statechart 页以外 | — |
+| `StatechartFileNotFound` | `spec`、`config`、`view` 或 `out` 不存在、越出仓库或违反路径规则 | `attribute`、`target` |
+| `StatechartReportNotFound` | `out` 目录中没有 `report.md` | `target` |
+| `StatechartStale` | 模型源文件的当前摘要与 `digest` 不同 | `expected`（块中的值）、`actual`（当前摘要） |
+
+```json
+{"code": "StatechartStale", "category": "relation", "path": "docs/feature/state/statechart.md", "line": 12, "message": "Statechart result is older than its model: ./statechart/Recovery.tla", "details": {"expected": "sha256:3f…", "actual": "sha256:a9…"}}
+```
+
+`StatechartStale` 的修复方式是重新生成 `out`，再把 `digest` 改为 `actual`；只改 `digest` 不重新生成会让过期结果冒充当前结果。读不到模型源文件时报告 `StatechartFileNotFound`，不报告过期。
 
 ## 写作检查
 

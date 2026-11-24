@@ -60,6 +60,7 @@ Feature 的页面按读者的问题分工（[读得懂胜过写得全](taste.md#
 5. 页面种类见[页面种类](#页面种类)。README 与 cli、library 等行为页像使用教程一样写谁用它、能做什么、怎么做；architecture 与 data-model 页是技术实现；Use Case 把功能连到用户旅程。README 给出用户价值、沿主要使用者实际入口的上手示例和 Use Case 导航；界面操作、命令或调用按产品需要选择。字段、错误与状态由对应细节页拥有，README 只链接它们。
 6. 每个 Use Case 写一种满足用户需求的用法：从什么条件开始，用户怎样操作，最后怎样确认需求得到满足。动作可以是界面操作、命令、调用或与外部工具配合；按实际入口写清看到的结果。用户目标或处理路径明显不同时另写一篇，同一路径的输入变化与错误结果用表格说明（[读得懂胜过写得全](taste.md#t-1)）。
 7. 文字难以说清的过程配图解。多方协作、状态迁移、时序和数据流程用 p5 动画演示，静态结构用 Mermaid。图解只演示页面已声明的规则，不新增规则，也不作为运行证据。
+8. 并发、崩溃恢复与重试这类靠读代码难以确认的状态规则，写成 statechart 页：作者把读者认可的规则写成模型的不变量，由模型检查器穷举有限规模的全部交错，生成[状态图](concepts.md#statechart)。状态图不是图解，是模型的当前检查结果，读者据此判断哪些状态对、哪些错。状态图不证明代码符合模型；每条到达坏状态的路径都要按步重放到真实代码，写成测试，测试用 `@spec` 指向被打破的规则。
 
 ## 页面种类
 
@@ -79,6 +80,7 @@ Feature、Engineering 与 Roadmap 的目录是同一种[文档包](concepts.md#p
 | `performance.md` | 行为 | 多快才算合格 | 场景 ID、测量内容、预算，以及理解预算所需的负载与环境前提 | 测量方法；资源安全上限 |
 | `architecture.md` | 实现 | 怎么实现 | 模块与职责、数据流、不变量、失败阶段、资源生命周期、内部进程间通信、关键取舍与依赖选型 | 重新定义行为 |
 | `data-model.md` | 实现 | 内部存什么 | 实体、存储结构（文件、表或键）、字段类型与约束、唯一性与索引、事务边界、数据生命周期 | 公开文件格式 |
+| `statechart.md` | 实现 | 会经过哪些状态、哪些规则必须成立、哪条路径打破规则 | 带锚点的规则、模型范围与动作到代码的映射、[状态图块](feature/local-sdlc/format.md#状态图块)、模型没有覆盖的部分 | 手写的状态图；重新定义行为；代码已符合模型的断言 |
 | `concepts.md`、`writing.md` | 项目规则 | 用哪些词、怎么写 | 见[术语与语言](#术语与语言) | — |
 
 ### 路径与识别
@@ -86,7 +88,7 @@ Feature、Engineering 与 Roadmap 的目录是同一种[文档包](concepts.md#p
 1. 文档包的入口是 `README.md`，必需，不拆分。其余页面按需要创建。
 2. `use-case/` 是 Use Case 的集合：`use-case/<u>.md` 是一个用户旅程，`use-case/README.md` 是可选的导航页，不是旅程。Use Case 归属所在的 Feature、Engineering 或 Roadmap 文档包，不嵌套，也不跨多个文件。
 3. 除 `README.md`、`use-case/`、`performance.md`、`concepts.md` 与 `writing.md` 外，一种页面写不下时，把 `<种类>.md` 换成 `<种类>/` 目录：入口是 `<种类>/README.md`，其余页面自由命名，种类都与目录相同。同一种类的单页与目录不能并存。种类目录不产生新的 Feature 或 Engineering，其中的页面与锚点仍以精确路径引用。
-4. 识别顺序：文档包入口，`use-case/` 下的页面，各层的 `concepts.md` 与 `writing.md`，种类单页与种类目录。文档包内仍无法归类的 Markdown 页面由 `concord check` 报告 `UnknownPageKind`；它是 `relation` 类 finding，使检查失败，页面照常被发现、阅读与编辑。拼写接近某个种类时，finding 给出该种类，否则列出全部种类。
+4. 识别顺序：文档包入口，`use-case/` 下的页面，各层的 `concepts.md` 与 `writing.md`，种类单页与种类目录。项目在配置中声明的[自定义页面种类](concepts.md#custom-page-kind)与内置种类处在同一层，按同样的单页与目录规则识别，见[可扩展的页面种类](feature/extensible-page-kinds/README.md)。文档包内仍无法归类的 Markdown 页面由 `concord check` 报告 `UnknownPageKind`；它是 `relation` 类 finding，使检查失败，页面照常被发现、阅读与编辑。拼写接近某个种类时，finding 给出该种类，否则列出全部种类。
 5. 分类目录的 README、文档包外的 `docs/` 普通文档（例如 `docs/guides/<g>.md`）、`docs/_template/` 与非 Markdown 文件不受种类限制。项目的说明性文档放在包外，用链接连到 Spec。
 
 ### 重叠时的归属
@@ -100,7 +102,7 @@ Feature、Engineering 与 Roadmap 的目录是同一种[文档包](concepts.md#p
 声明式页面只写现在（[写现在，不写过去](taste.md#t-4)）。
 
 1. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。
-2. 实施日志、进度、测试运行记录、审阅经过、提交记录和 agent 交接留在任务交付中。调查提炼出的根因与可复用经验归 Memory，还要处理的问题归 Issue，正式采用的目标归 Spec。
+2. 实施日志、进度、测试运行记录、审阅经过、提交记录和 agent 交接留在任务交付中。状态图块引用的检查结果不是运行记录：它是当前模型的派生结果，带模型摘要，模型一改就由 `check` 报告过期，作者重新生成并替换，不保留旧结果。调查提炼出的根因与可复用经验归 Memory，还要处理的问题归 Issue，正式采用的目标归 Spec。
 3. 声明式 owner（Feature、Use Case、Engineering、品味、`concepts.md` 与写作规则）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git 保存。
 
 ## 术语与语言
