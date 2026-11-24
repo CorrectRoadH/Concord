@@ -5,7 +5,6 @@ import { failure, ConcordError } from "../../model/index.ts";
 import { acquireTraceLease, releaseTraceLease, type TraceLease } from './coordination.ts';
 import { makePublicationReceiptStore } from './issue-receipts.ts';
 import { inspectExportAncestors, publishExport } from './preview-tree.ts';
-import { scratchDirectory } from './scratch.ts';
 import { OperationCache } from '../cache/index.ts';
 
 export interface PublicationCatalog {
@@ -34,7 +33,6 @@ export class PublicationValidation extends Context.Service<PublicationValidation
 
 /** A writer can only be constructed from a Publication layer with validation. */
 export class Publication extends Context.Service<Publication, {
-  readonly scratchDirectory: (root: string, namespace: string, prefix: string, location?: 'temporary') => ReturnType<typeof scratchDirectory>;
   readonly validation: PublicationValidation['Service'];
   readonly receiptStore: typeof makePublicationReceiptStore;
   readonly inspectExportAncestors: typeof inspectExportAncestors;
@@ -46,7 +44,6 @@ export class Publication extends Context.Service<Publication, {
     const validation = yield* PublicationValidation;
     const runtime = yield* RuntimeEnvironment;
     return Publication.of({
-      scratchDirectory: (root, namespace, prefix, location) => scratchDirectory(runtimePath(runtime, root), namespace, prefix, location, runtime),
       validation,
       receiptStore: root => makePublicationReceiptStore(runtimePath(runtime, root)),
       inspectExportAncestors: (out, root, privatePaths) => inspectExportAncestors(runtimePath(runtime, out), runtimePath(runtime, root), privatePaths.map(path => runtimePath(runtime, path))),
