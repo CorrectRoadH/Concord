@@ -1,7 +1,7 @@
 // 跨进程保证：服务与 IPC——真实缓存维护关闭再打开服务持久owner并发布新generation，同token同时支持读写和HTTP重建。
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
@@ -33,6 +33,41 @@ test('CLI cache clear drains the running persistent owner and publishes a new ge
       const value = JSON.parse(result.stdout);
       return value.projection.builtAt !== previous.projection.builtAt ? value : undefined;
     }, { description: 'new accepted generation after owner clear and reopen', timeoutMs: 8000 });
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+const assertClearRefusesExternalHardLink = async (root: string) => {
+  const cache = join(root, '.git/concord/cache.hawdb');
+  const data = join(cache, 'data'), linked = join(cache, 'linked-data'), outside = join(root, 'outside-cache');
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(data, 'cache data');
+  writeFileSync(outside, 'outside cache');
+  linkSync(outside, linked);
+
+  const cleared = await command(root, ['cache', 'clear']);
+  assert.equal(cleared.status, 1, cleared.stdout + cleared.stderr);
+  assert.equal(readFileSync(data, 'utf8'), 'cache data');
+  assert.equal(readFileSync(linked, 'utf8'), 'outside cache');
+  assert.equal(readFileSync(outside, 'utf8'), 'outside cache');
+  assert.equal(JSON.parse(cleared.stderr).error, 'CleanupFailed', cleared.stderr);
+};
+
+// @spec docs/feature/local-data-engine/architecture.md#清理
+test('CLI cache clear reports CleanupFailed and preserves files with an external hard link', async () => {
+  const root = await fixture();
+  try { await assertClearRefusesExternalHardLink(root); }
+  finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @spec docs/feature/local-data-engine/architecture.md#清理
+test('CLI cache clear through the workspace service reports CleanupFailed and preserves files with an external hard link', async () => {
+  const root = await fixture();
+  try {
+    const started = await command(root, ['server', 'start']);
+    assert.equal(started.status, 0, started.stderr);
+    await pollUntil(async () => (await command(root, ['workspace', 'projection'])).status === 0 ? true : undefined,
+      { description: 'initial workspace generation before adding an external hard link', timeoutMs: 8000 });
+    await assertClearRefusesExternalHardLink(root);
   } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
 });
 
