@@ -1,0 +1,72 @@
+---
+title: "安装目录发布与旧版本回收"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 准备版本
+    lg1: 激活版本
+    lg2: 回收版本
+    lg3: 提前结束
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 purple
+  class lg3 orange
+  s0: 等待校验归档
+  s1: 归档校验通过
+  s2: 开始检查安装目录
+  s3: 版本目录可用
+  s4: 安装已拒绝
+  s5: 新版本已在临时目录备妥
+  s6: 安装已中断
+  s7: 入口已指向目标版本
+  s8: 已记录本次激活
+  s9: 正在核对旧版本
+  s10: 旧版本通过回收检查
+  s11: 旧版本已移到隐藏目录
+  s12: 旧版本通过回收检查#65292;服务准备登记旧版本
+  s13: 旧版本已移到隐藏目录#65292;服务准备登记旧版本
+  s14: 旧版本通过回收检查#65292;待回收版本已被服务使用
+  s15: 旧版本已移到隐藏目录#65292;待回收版本已被服务使用
+  s16: 安装结束
+  [*] --> s0
+  s0 --> s1: 校验下载的归档
+  s1 --> s2: 开始处理版本目录
+  s2 --> s5: 解压并写入校验收据
+  s2 --> s3: 收据相同#65292;复用版本目录
+  s2 --> s4: 收据缺失或不同#65292;结束安装
+  s3 --> s6: 收到中断并执行清理
+  s3 --> s7: 原子替换 Concord 入口
+  s5 --> s3: 发布完整的版本目录
+  s7 --> s8: 写入激活时间
+  s7 --> s6: 收到中断并执行清理
+  s8 --> s9: 按激活时间检查旧版本
+  s9 --> s10: 核对旧版本的使用标记
+  s10 --> s11: 将旧版本移到隐藏目录
+  s11 --> s9: 删除选中的旧版本
+  s10 --> s12: 服务退出#65292;移除在用标记
+  s9 --> s12: 核对旧版本的使用标记
+  s12 --> s13: 将旧版本移到隐藏目录
+  s12 --> s14: 服务登记正在使用的旧版本
+  s13 --> s11: 安装路径不可用#65292;服务拒绝启动
+  s13 --> s9: 删除选中的旧版本
+  s14 --> s15: 将旧版本移到隐藏目录
+  s15 --> s9: 确认版本仍在使用#65292;移回原位
+  s9 --> s16: 结束旧版本清理
+  class s0 blue
+  class s1 blue
+  class s2 blue
+  class s3 blue
+  class s4 orange
+  class s5 blue
+  class s6 orange
+  class s7 teal
+  class s8 teal
+  class s9 purple
+  class s10 purple
+  class s11 purple
+  class s12 purple
+  class s13 purple
+  class s14 purple
+  class s15 purple
+  class s16 purple
