@@ -1,0 +1,52 @@
+---
+title: "HTTP 监听引用与浏览器 SSE"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 监听
+    lg1: 等待
+    lg2: 关闭
+  }
+  class lg0 teal
+  class lg1 orange
+  class lg2 tan
+  s0: 监听已关闭
+  s1: 面板引用仍在空闲期
+  s2: 至少一个 view 引用仍在
+  s3: 面板引用已满空闲期限
+  s4: 有引用和浏览器连接
+  s5: 仅浏览器连接仍在
+  s6: 浏览器已断开#65292;等待关闭
+  s7: 已关闭#65292;旧连接清理待执行
+  s8: 已重新监听#65292;旧连接清理待执行
+  [*] --> s0
+  s0 --> s1: 请求开启监听
+  s0 --> s2: 请求开启监听
+  s1 --> s3: 连续十分钟没有浏览器连接
+  s1 --> s4: 浏览器连接
+  s1 --> s0: 释放引用
+  s2 --> s4: 浏览器连接
+  s2 --> s0: 释放引用
+  s3 --> s4: 浏览器连接
+  s3 --> s0: 释放引用 or 定时检查释放空闲监听
+  s4 --> s1: 浏览器断开
+  s4 --> s5: 释放引用
+  s2 --> s1: 释放引用
+  s4 --> s2: 浏览器断开
+  s2 --> s7: 释放引用
+  s5 --> s6: 浏览器断开
+  s6 --> s0: 连接清理关闭监听
+  s6 --> s7: 定时检查释放空闲监听 or 连接清理关闭监听
+  s7 --> s0: 丢弃旧连接清理
+  s7 --> s8: 请求开启监听
+  s8 --> s1: 丢弃旧连接清理
+  s8 --> s2: 丢弃旧连接清理
+  class s0 tan
+  class s1 orange
+  class s2 teal
+  class s3 orange
+  class s4 teal
+  class s5 teal
+  class s6 orange
+  class s7 tan
+  class s8 teal

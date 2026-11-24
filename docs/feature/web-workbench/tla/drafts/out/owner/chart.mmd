@@ -1,0 +1,53 @@
+---
+title: "Web 草稿与导航"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 草稿
+    lg1: 保存
+    lg2: 阻挡
+    lg3: 完成
+  }
+  class lg0 orange
+  class lg1 blue
+  class lg2 pink
+  class lg3 teal
+  s0: 没有待保存更改
+  s1: 新编辑器已接管
+  s2: 有待保存的草稿
+  s3: 已打开目标页
+  s4: 旧编辑器已清理
+  s5: 离开前等待保存
+  s6: 正在保存草稿
+  s7: 保存失败#65292;留在原页
+  s8: 正在丢弃草稿
+  [*] --> s0
+  s0 --> s1: 切换编辑器
+  s0 --> s2: 编辑草稿
+  s0 --> s3: 打开目标页
+  s1 --> s4: 清理旧编辑器
+  s1 --> s2: 编辑草稿
+  s1 --> s3: 打开目标页
+  s2 --> s5: 请求离开
+  s2 --> s6: 开始保存
+  s4 --> s2: 编辑草稿
+  s4 --> s3: 打开目标页
+  s5 --> s6: 开始保存
+  s6 --> s7: 保存失败
+  s7 --> s2: 编辑草稿
+  s7 --> s6: 开始保存
+  s6 --> s0: 确认本次保存
+  s7 --> s5: 编辑草稿
+  s7 --> s8: 选择丢弃草稿
+  s6 --> s2: 已保存先前版本#65292;保留继续编辑的草稿
+  s8 --> s3: 丢弃草稿并离开
+  s0 --> s5: 编辑草稿
+  s6 --> s5: 已保存先前版本#65292;保留继续编辑的草稿
+  s6 --> s8: 选择丢弃草稿
+  s0 --> s8: 选择丢弃草稿
+  class s2 orange
+  class s3 teal
+  class s5 orange
+  class s6 blue
+  class s7 pink
+  class s8 blue
