@@ -236,11 +236,13 @@ clear、重开与 shutdown 串行执行。
 1. 停止受理新工作，向全部订阅者与 SSE 连接发送 `stopping` 事件，并关闭长期订阅。
 2. 在 3 秒内完成或明确失败在途请求。3 秒是请求与交接的等待上限，不授权跳过清理确认。
 3. 经 `OwnedProcessService` 收拢自有收集与语言分析子进程，确认进程组清理。子进程未在期限内响应时升级为强制终止。
-4. 关闭解析线程池与 HTTP，排空并关闭数据库 Worker，按 token 删除记录与 socket，最后释放服务锁。
+4. 关闭解析线程池与 HTTP，排空并关闭数据库 Worker。
+5. 关闭 Unix 监听：停止接受连接，逐一销毁仍打开的已接受连接，确认监听句柄与这些连接都已关闭。两者确认关闭即视为监听已释放；运行时的关闭回调迟迟不到时不继续等待它，也不跳过上述确认。
+6. 按 token 删除记录与 socket，最后释放服务锁。
 
 进程组清理无法确认或清理挂起时按 CleanupFailed 处理，并报告未完成的清理阶段。
 
-运行记录的 `cleanup` 保存当前关闭阶段 `phase` 与正在等待的 `pid`；阶段为 `requests`、`operations`、`foreground-computation`、`background-computation`、`rpc`、`http`、`cache` 或 `resources`。计算子进程先经 owner 的有界 TERM/KILL 清理，再关闭 RPC 作用域；并发关闭等待同一次清理完成。数据库 Worker 仍等待真实关闭确认与 Worker 退出，不用超时伪装锁释放。
+运行记录的 `cleanup` 保存当前关闭阶段 `phase` 与正在等待的 `pid`；阶段为 `requests`、`operations`、`foreground-computation`、`background-computation`、`rpc`、`http`、`cache`、`resources` 或 `listener`。`listener` 表示正在关闭 Unix 监听，`pid` 为服务自身。计算子进程先经 owner 的有界 TERM/KILL 清理，再关闭 RPC 作用域；并发关闭等待同一次清理完成。数据库 Worker 仍等待真实关闭确认与 Worker 退出，不用超时伪装锁释放。
 
 客户端确认退出最多等待 10 秒。超时的 `CleanupFailed.details` 包含 `phase`、`pid`、`servicePid`、`token` 与记录的 `state`；尚未进入关闭流程的失联持锁实例报告 `handshake`，记录尚未发布时报告 `service-lock`，锁已释放但进程尚未退出时报告 `process-exit`。阶段是观察到的阻断位置，不推断为底层根因。`server status` 只有确认原生服务锁释放且记录中的 PID 已退出才返回 `absent`，活跃实例握手失败返回具名错误。
 
