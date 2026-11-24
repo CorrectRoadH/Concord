@@ -9,9 +9,9 @@ permissions:
 jobs:
   dispatch:
     runs-on: ubuntu-24.04
-    timeout-minutes: 2
+    timeout-minutes: 360
     steps:
-      - name: Run release on the shared default-branch cache scope
+      - name: Dispatch release on the shared cache scope and retry failed jobs once
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -19,4 +19,24 @@ jobs:
           RELEASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           [[ "$RELEASE_TAG" =~ ^(concord-)?v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-          gh workflow run release.yml --ref "$RELEASE_BRANCH" --field "tag=$RELEASE_TAG"
+          run_id="$(gh api --method POST "repos/$GH_REPO/actions/workflows/release.yml/dispatches" \
+            --raw-field "ref=$RELEASE_BRANCH" --raw-field "inputs[tag]=$RELEASE_TAG" \
+            --field return_run_details=true --jq '.workflow_run_id')"
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          echo "Waiting for release run $run_id."
+
+          # GITHUB_TOKEN dispatches do not deliver workflow_run to retry-release.yml.
+          while true; do
+            if observation="$(gh api "repos/$GH_REPO/actions/runs/$run_id" \
+              --jq '[.run_attempt, .status, .conclusion] | join(" ")')"; then
+              read -r attempt status conclusion <<< "$observation"
+              if [[ "$attempt" -gt 1 ]]; then exit 0; fi
+              if [[ "$status" == completed ]]; then
+                if [[ "$attempt" == 1 && "$conclusion" == failure ]]; then
+                  gh run rerun "$run_id" --failed
+                fi
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
