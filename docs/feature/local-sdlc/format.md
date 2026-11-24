@@ -59,7 +59,7 @@ relations:
 statechart 页用围栏语言为 `statechart` 的代码块引用一份 TLA+ 模型和它的检查结果，即[状态图](../../concepts.md#statechart)：
 
 ````markdown
-```statechart spec="./statechart/Recovery.tla" config="./statechart/fixed.cfg" view="./statechart/recovery-view.ts" out="./statechart/out/fixed" digest="sha256:3f…"
+```statechart spec="./tla/Recovery.tla" config="./tla/fixed.cfg" view="./tla/recovery-view.ts" out="./tla/out/fixed" digest="sha256:3f…"
 ```
 ````
 
@@ -74,6 +74,7 @@ statechart 页用围栏语言为 `statechart` 的代码块引用一份 TLA+ 模�
 - 块正文必须为空，模型只由外部文件拥有。一页可以有多个块，例如同一模型的不同规模或修复前后的配置。状态图块只能出现在 statechart 页（单页或种类目录中的页面）。
 - 路径相对 Markdown 文件解析，规则与 [p5 外部入口](../web-workbench/format.md#外部入口)相同：必须位于当前 Git 仓库内，不能是 symlink、隐藏目录、隐藏文件或 `node_modules` 中的文件。
 - `out` 目录必须有 `report.md`，可以有 `chart.mmd` 与 TLC 原始输出。这是 pstack statechart 技能 `--out` 目录的布局；作者也可以用别的工具生成同样布局。Concord 不运行模型检查器，不解析 `report.md` 的内容：`chart.mmd` 按 Mermaid 渲染，`report.md` 按 Markdown 显示。模型超出图的规模上限时工具不写 `chart.mmd`，界面只显示报告。
+- 状态图块 `out` 目录中的文件是产物，不是页面：其中的 Markdown 不参与文档发现、页面种类识别与写作检查。模型目录不要用页面种类的名字，例如不要在已有 `statechart.md` 的文档包里建 `statechart/` 目录，否则单页与种类目录并存；示例使用 `tla/`。
 - `digest` 是 `sha256:` 加 64 位小写十六进制。输入是模型源文件：`spec`、`config`、`view`，以及 `spec` 所在目录中的其它 `.tla` 文件（TLC 从这里解析 `EXTENDS` 的模块）。按仓库相对路径的 UTF-8 字节序排列，每个文件依次拼接 `<路径>\0<字节数的十进制>\0<文件字节>`，对整体求 SHA-256。`out` 目录中的文件不参与摘要。
 - 摘要说明 `out` 对应哪一版模型，用来发现过期，不证明 `out` 由该模型生成。模型改动后，作者重新运行模型检查器，替换整个 `out` 目录，再把 `digest` 改成 `check` 在 `StatechartStale` 中给出的当前摘要。
 - 每条规则在 statechart 页写成带锚点的标题，锚点用模型中对应的 INVARIANT 或 PROPERTY 名，例如 `### 回调最多执行一次 {#AtMostOnce}`。重放反例的测试用 `// @spec docs/feature/<f>/statechart.md#AtMostOnce` 指向它，由 `check` 校验目标与锚点；这类引用不建立测试关联。

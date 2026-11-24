@@ -24,7 +24,7 @@ export default {
 | `testAdapters`、`languageServers`、`feedbackConnections`、`p5`、`docsWork` | 无 | 按需；`docsWork` 见 [Docs Work 配置](../neutral-project-governance/cli.md#docs-work-配置) |
 | `pageKinds` | 无 | 文档包里要放内置种类以外的页面，见[可扩展的页面种类](../extensible-page-kinds/README.md) |
 
-`pageKinds` 的每一项有三个字段，都必需：`name` 是种类名，也是文件名或种类目录名，由小写字母、数字与连字符组成，1 到 64 个字符；`question` 是这一页回答的读者问题，非空，不超过 200 个字符；`category` 是 `behavior` 或 `implementation`，含义与[页面种类](../../document-model.md#页面种类)的类别相同。`name` 不能重复，也不能与内置种类或保留名 `README`、`use-case`、`concepts`、`writing` 相同，否则以 `InvalidData` 拒绝。
+`pageKinds` 的每一项有三个字段，都必需：`name` 是种类名，也是文件名或种类目录名，由小写字母、数字与连字符组成，1 到 64 个字符；`question` 是这一页回答的读者问题，非空，不超过 200 个字符；`category` 是 `behavior` 或 `implementation`，含义与[页面种类](../../document-model.md#页面种类)的类别相同。`name` 不能重复，也不能与内置种类、`show` 已用的种类值（`readme`、`use-case-index`、`unknown`）或保留名 `README`、`use-case`、`concepts`、`writing` 相同，否则以 `InvalidData` 拒绝。
 
 `testAdapters` 只配置原生用例收集，读取 label、身份与来源范围，见[收集协议](../local-sdlc/cli.md#原生测试-adapter)。测试执行由 agent 使用项目工具完成；配置不接受 runner 或测试运行选项。
 

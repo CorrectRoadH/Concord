@@ -55,7 +55,7 @@ Feature、Engineering 与 Roadmap 文档包内的每个 Markdown 页面必须属
 | `StatechartStale` | 模型源文件的当前摘要与 `digest` 不同 | `expected`（块中的值）、`actual`（当前摘要） |
 
 ```json
-{"code": "StatechartStale", "category": "relation", "path": "docs/feature/state/statechart.md", "line": 12, "message": "Statechart result is older than its model: ./statechart/Recovery.tla", "details": {"expected": "sha256:3f…", "actual": "sha256:a9…"}}
+{"code": "StatechartStale", "category": "relation", "path": "docs/feature/state/statechart.md", "line": 12, "message": "Statechart result is older than its model: ./tla/Recovery.tla", "details": {"expected": "sha256:3f…", "actual": "sha256:a9…"}}
 ```
 
 `StatechartStale` 的修复方式是重新生成 `out`，再把 `digest` 改为 `actual`；只改 `digest` 不重新生成会让过期结果冒充当前结果。读不到模型源文件时报告 `StatechartFileNotFound`，不报告过期。

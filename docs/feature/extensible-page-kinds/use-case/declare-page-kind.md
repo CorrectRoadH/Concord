@@ -23,7 +23,7 @@
 
 2. 运行 `concord check`。 {#check}
 
-   `UnknownPageKind` 消失，检查通过。`concord show login` 的 `pages` 列出 `docs/feature/login/threat-model.md`。
+   `UnknownPageKind` 消失，检查通过。`concord show login` 的 `pages` 列出 `docs/feature/login/threat-model.md`，`kind` 为 `threat-model`。
 
 3. 在另一个 Feature 新建 `threat-modle.md` 并运行 `concord check`。 {#typo}
 

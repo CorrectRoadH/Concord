@@ -6,7 +6,7 @@
 
 ## 起始状态
 
-- 仓库已初始化，Feature `state` 有 statechart 页 `docs/feature/state/statechart.md`。页面写了规则“回调最多执行一次 {#AtMostOnce}”，并有一个[状态图块](../../local-sdlc/format.md#状态图块)，引用 `statechart/Recovery.tla`、`statechart/fixed.cfg`、view 模块与输出目录 `statechart/out/fixed`。
+- 仓库已初始化，Feature `state` 有 statechart 页 `docs/feature/state/statechart.md`。页面写了规则“回调最多执行一次 {#AtMostOnce}”，并有一个[状态图块](../../local-sdlc/format.md#状态图块)，引用 `tla/Recovery.tla`、`tla/fixed.cfg`、view 模块与输出目录 `tla/out/fixed`。
 - 输出目录是 agent 用模型检查器生成的，有 `chart.mmd` 与 `report.md`；`digest` 与当前模型一致。
 
 ## 完整路径

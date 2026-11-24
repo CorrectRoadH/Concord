@@ -194,7 +194,7 @@ concord --json new use-case add-item --feature cart --title "加入商品"
 
 ### 查看一个文档包
 
-`show` 一个 Feature、Engineering 或 Roadmap 时，结果另有 `pages`，列出文档包内的全部页面，按路径排序。页面类别由路径直接推导（[路径与识别](../../document-model.md#路径与识别)），不再重复输出 `kind` 字段。以下为预期输出：
+`show` 一个 Feature、Engineering 或 Roadmap 时，结果另有 `pages`，列出文档包内的全部页面，按路径排序。每页的 `kind` 是按[路径与识别](../../document-model.md#路径与识别)得到的页面种类：内置种类名、项目声明的[自定义页面种类](../extensible-page-kinds/README.md)名，或 `unknown`。自定义种类要读配置才能确定，所以由 `show` 直接给出。以下为预期输出：
 
 ```sh
 concord --json show cart
@@ -204,10 +204,10 @@ concord --json show cart
 {
   "operation": "show",
   "pages": [
-    {"path": "docs/feature/cart/README.md", "name": "购物车"},
-    {"path": "docs/feature/cart/architecture.md", "name": "购物车的实现"},
-    {"path": "docs/feature/cart/cli.md", "name": "购物车命令"},
-    {"path": "docs/feature/cart/use-case/add-item.md", "name": "加入商品"}
+    {"path": "docs/feature/cart/README.md", "kind": "readme", "name": "购物车"},
+    {"path": "docs/feature/cart/architecture.md", "kind": "architecture", "name": "购物车的实现"},
+    {"path": "docs/feature/cart/cli.md", "kind": "cli", "name": "购物车命令"},
+    {"path": "docs/feature/cart/use-case/add-item.md", "kind": "use-case", "name": "加入商品"}
   ]
 }
 ```
