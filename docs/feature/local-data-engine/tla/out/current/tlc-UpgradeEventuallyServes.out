@@ -1,0 +1,197 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Warning: Please run the Java VM which executes TLC with a throughput optimized garbage collector by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 0 and seed -4622991727114677949 with 1 worker on 16 cores with 8008MB heap and 64MB offheap memory [pid: 4143157] (Linux 6.18.60 amd64, Eclipse Adoptium 25.0.5.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /home/ctrdh/Code/Concord/docs/feature/local-data-engine/tla/WorkspaceService.tla
+Parsing file /tmp/statechart-EWEMXh/statechart-SJLL2l/tmp-verdict-4/Naturals.tla
+Parsing file /tmp/statechart-EWEMXh/statechart-SJLL2l/tmp-verdict-4/FiniteSets.tla
+Parsing file /tmp/statechart-EWEMXh/statechart-SJLL2l/tmp-verdict-4/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module WorkspaceService
+Starting... (2026-11-24 01:24:01)
+Implied-temporal checking--satisfiability problem has 2 branches.
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-24 01:24:01.
+Progress(23) at 2026-11-24 01:24:01: 201 states generated, 145 distinct states found, 0 states left on queue.
+Checking 2 branches of temporal properties for the complete state space with 290 total distinct states at (2026-11-24 01:24:01)
+Error: Temporal properties were violated.
+
+Error: The following behavior constitutes a counter-example:
+
+State 1: <Initial predicate>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "running", cleanup |-> [phase |-> "none"]]
+/\ hung = FALSE
+/\ command = << [ stage |-> "idle",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ],
+   [ stage |-> "idle",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 0
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "running"
+
+State 2: <InvokeCommand line 30, col 5 to line 34, col 65 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "running", cleanup |-> [phase |-> "none"]]
+/\ hung = FALSE
+/\ command = << [ stage |-> "discovering",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ],
+   [ stage |-> "idle",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 1
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "running"
+
+State 3: <IncompatibleHello line 37, col 5 to line 42, col 73 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "running", cleanup |-> [phase |-> "none"]]
+/\ hung = FALSE
+/\ command = << [ stage |-> "mismatch",
+     observed |-> "Old",
+     replacements |-> 0,
+     servedBy |-> "None" ],
+   [ stage |-> "idle",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 1
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "running"
+
+State 4: <ShutdownWithToken line 45, col 5 to line 52, col 58 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "stopping", cleanup |-> [phase |-> "requests"]]
+/\ hung = FALSE
+/\ command = << [ stage |-> "waiting",
+     observed |-> "Old",
+     replacements |-> 1,
+     servedBy |-> "None" ],
+   [ stage |-> "idle",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 1
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "draining"
+
+State 5: <DrainRequests line 60, col 5 to line 63, col 67 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "stopping", cleanup |-> [phase |-> "cache"]]
+/\ hung = FALSE
+/\ command = << [ stage |-> "waiting",
+     observed |-> "Old",
+     replacements |-> 1,
+     servedBy |-> "None" ],
+   [ stage |-> "idle",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 1
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "closing-cache"
+
+State 6: <PauseOldCleanup line 85, col 5 to line 87, col 76 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "stopping", cleanup |-> [phase |-> "cache"]]
+/\ hung = TRUE
+/\ command = << [ stage |-> "waiting",
+     observed |-> "Old",
+     replacements |-> 1,
+     servedBy |-> "None" ],
+   [ stage |-> "idle",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 1
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "closing-cache"
+
+State 7: <ExitWaitTimesOut line 100, col 5 to line 102, col 73 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "stopping", cleanup |-> [phase |-> "cache"]]
+/\ hung = TRUE
+/\ command = << [ stage |-> "CleanupFailed",
+     observed |-> "Old",
+     replacements |-> 1,
+     servedBy |-> "None" ],
+   [ stage |-> "idle",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 1
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "closing-cache"
+
+State 8: <InvokeCommand line 30, col 5 to line 34, col 65 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "stopping", cleanup |-> [phase |-> "cache"]]
+/\ hung = TRUE
+/\ command = << [ stage |-> "CleanupFailed",
+     observed |-> "Old",
+     replacements |-> 1,
+     servedBy |-> "None" ],
+   [ stage |-> "discovering",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 2
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "closing-cache"
+
+State 9: <WaitForStoppingInstance line 55, col 5 to line 57, col 73 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "stopping", cleanup |-> [phase |-> "cache"]]
+/\ hung = TRUE
+/\ command = << [ stage |-> "CleanupFailed",
+     observed |-> "Old",
+     replacements |-> 1,
+     servedBy |-> "None" ],
+   [ stage |-> "waiting",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 2
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "closing-cache"
+
+State 10: <ExitWaitTimesOut line 100, col 5 to line 102, col 73 of module WorkspaceService>
+/\ instance = "Old"
+/\ record = [token |-> "Old", state |-> "stopping", cleanup |-> [phase |-> "cache"]]
+/\ hung = TRUE
+/\ command = << [ stage |-> "CleanupFailed",
+     observed |-> "Old",
+     replacements |-> 1,
+     servedBy |-> "None" ],
+   [ stage |-> "CleanupFailed",
+     observed |-> "None",
+     replacements |-> 0,
+     servedBy |-> "None" ] >>
+/\ active = 2
+/\ caches = {"Old"}
+/\ locks = {"Old"}
+/\ phase = "closing-cache"
+
+State 11: Stuttering
+Finished checking temporal properties in 00s at 2026-11-24 01:24:01
+201 states generated, 145 distinct states found, 0 states left on queue.
+Finished in 00s at (2026-11-24 01:24:01)
+

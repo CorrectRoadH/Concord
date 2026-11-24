@@ -1,0 +1,76 @@
+---
+title: "工作区服务替换与退出"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: 清理
+    lg1: 当前安装
+    lg2: 阻断
+    lg3: Path to the UpgradeEventuallyServes bug
+    lg4: Repeats forever, so UpgradeEventuallyServes breaks
+  }
+  class lg0 orange
+  class lg1 teal
+  class lg2 pink
+  class lg3 bugPath
+  class lg4 repeats
+  s0: 旧安装正在运行
+  s1: 等待确认旧进程退出且服务锁释放
+  s2: 当前命令检查旧实例
+  s3: 服务由不同安装的实例占用
+  s4: 旧实例排空请求和子进程
+  s5: 已确认进程退出并试取服务锁
+  s6: 旧实例关闭持久缓存
+  s7: 旧实例退出流程挂起
+  s8: 通过当前安装的服务提交请求
+  s9: 第一条命令返回 CleanupFailed
+  s10: 旧实例清理剩余资源
+  s11: 第二条命令发现旧实例挂起
+  s12: 第二条命令等待旧实例退出
+  s13: 第二条命令也返回 CleanupFailed
+  s14: 另一安装占用服务#65288;WorkspaceServerBusy#65289;
+  s15: 当前安装已处理请求
+  [*] --> s0
+  s0 --> s2: 发起下一条需要服务的命令
+  s2 --> s3: 握手并核对运行记录
+  s1 --> s5: 确认进程已退出#65292;试取并释放服务锁
+  s3 --> s4: 按实例 token 请求退出
+  s4 --> s6: 完成在途工作和子进程清理
+  s5 --> s8: 启动当前安装的服务
+  s5 --> s3: 另一安装抢先取得服务锁
+  s6 --> s7: 退出流程挂起
+  s6 --> s10: 确认持久缓存已关闭
+  s7 --> s9: 等待 10 秒后报告清理阶段
+  s9 --> s11: 发起下一条需要服务的命令
+  s9 --> s1: 外部 SIGKILL#65292;系统释放服务锁#65292;运行记录残留
+  s10 --> s1: 清理记录和 socket#65292;释放服务锁
+  s10 --> s7: 剩余资源清理挂起#65292;服务锁仍被持有
+  s11 --> s12: 等待正在退出的实例
+  s12 --> s13: 等待 10 秒后报告清理阶段
+  s3 --> s14: 本命令已发起一次替换
+  s8 --> s15: 完成握手后处理本次业务请求
+  s14 --> s3: 发起下一条需要服务的命令
+  s15 --> s8: 发起下一条需要服务的命令
+  class s0 bugPath
+  class s1 orange
+  class s2 bugPath
+  class s3 bugPath
+  class s4 orange
+  class s4 bugPath
+  class s5 orange
+  class s6 orange
+  class s6 bugPath
+  class s7 pink
+  class s7 bugPath
+  class s8 teal
+  class s9 pink
+  class s9 bugPath
+  class s10 orange
+  class s11 pink
+  class s11 bugPath
+  class s12 pink
+  class s12 bugPath
+  class s13 pink
+  class s13 repeats
+  class s14 pink
+  class s15 teal
