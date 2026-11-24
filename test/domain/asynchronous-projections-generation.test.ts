@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import test from 'node:test';
-import { Effect, Result } from 'effect';
-import { queryContext, queryRequestSatisfied, readQuery, storeQuery } from '../../src/app/index.ts';
+import { Deferred, Effect, Fiber, Result } from 'effect';
+import { QueryRefreshRequest, queryContext, queryRequestSatisfied, readQuery, refreshQuery, storeQuery, type QueryContext } from '../../src/app/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { nativeArtifactRoot } from '../../src/base/installation/index.ts';
+import { acquireFileLease, releaseFileLease } from '../../src/base/publication/index.ts';
+import { Workspace } from '../../src/base/workspace/index.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { createDocument } from '../support/operations.ts';
 import { LocalRepository, runApplication } from '../support/repository.ts';
@@ -46,6 +48,40 @@ test('diagnostic query identity binds configuration appearing after an absent co
     assert.notEqual((await runApplication(queryContext(root, missing.query))).key, missing.key);
     rmSync(join(root, 'concord.config.ts'));
     assert.equal((await runApplication(queryContext(root, missing.query))).key, missing.key);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+// @spec docs/feature/local-data-engine/architecture.md#刷新
+test('a queued diagnostic refresh requests the new identity after the configuration changes', async () => {
+  const root = await createConsumer();
+  try {
+    await runApplication(Effect.scoped(Effect.gen(function*() {
+      const workspace = yield* Workspace;
+      const previous = yield* queryContext(root, ['trace', 'gaps']);
+      const lease = acquireFileLease(root, join(previous.privateDir, 'query-refresh'), previous.key, 'exclusive', 'query-refresh');
+      assert.ok(lease);
+      try {
+        const queued = yield* Deferred.make<void>();
+        const requested: QueryContext[] = [];
+        const pending = yield* Effect.forkChild(refreshQuery(root, previous.query, Date.now()).pipe(
+          Effect.provideService(Workspace, {
+            ...workspace,
+            identify: (...args) => workspace.identify(...args).pipe(Effect.tap(() => Deferred.succeed(queued, undefined))),
+          }),
+          Effect.provideService(QueryRefreshRequest, {
+            request: context => Effect.sync(() => { requested.push(context); }),
+          }),
+        ));
+        yield* Deferred.await(queued);
+        writeProjectConfig(root, { testRoots: [], sourceRoots: [] });
+        const expected = yield* queryContext(root, previous.query);
+        assert.notEqual(expected.key, previous.key);
+        releaseFileLease(lease, 'query-refresh');
+        yield* Fiber.join(pending);
+        assert.deepEqual(requested, [expected]);
+      } finally { releaseFileLease(lease, 'query-refresh'); }
+    })));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
