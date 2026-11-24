@@ -15,6 +15,7 @@ import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts
 import { sourceCli } from '../support/source-consumer.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';
 import { scopedServerLock } from '../../src/base/server-lock/index.ts';
+import { digest } from '../../src/model/index.ts';
 
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
@@ -57,6 +58,59 @@ test('a killed service releases persistent ownership and the next invocation can
     const restarted = await command(root, ['server', 'start']); assert.equal(restarted.status, 0, restarted.stderr);
     assert.notEqual(record(root).token, before.token);
   } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @spec docs/feature/portable-coordination/statechart.md#RecoveryBeforeFirstReply
+test('the replacement service restores an interrupted publication before its first business reply', { timeout: 30_000 }, async () => {
+  const root = await fixture();
+  let killed: ReturnType<typeof record> | undefined;
+  try {
+    const started = await command(root, ['server', 'start']);
+    assert.equal(started.status, 0, started.stderr);
+    const prior = record(root);
+    process.kill(prior.pid, 'SIGKILL');
+    killed = prior;
+
+    const privateDir = join(root, '.git/concord');
+    const journal = join(privateDir, 'journal.json');
+    const configPath = 'concord.config.ts';
+    const configFile = join(root, configPath);
+    const configSource = existsSync(configFile) ? readFileSync(configFile, 'utf8') : '';
+    writeFileSync(join(root, 'docs/feature/reader/architecture.md'), '# Reader architecture\n');
+    const changes = ['docs/feature/reader/README.md', 'docs/feature/reader/architecture.md'].map(path => {
+      const before = readFileSync(join(root, path), 'utf8');
+      const after = `${before}\nInterrupted publication.\n`;
+      return { path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 };
+    });
+    const first = changes[0]!;
+    writeFileSync(join(root, first.path), first.after);
+    writeFileSync(journal, JSON.stringify({ format: 'concord.journal', root, privateDir, operation: 'interrupted', phase: 'prepared', directories: [], changes,
+      scope: { kind: 'documents', configPath, configSource, configDigest: digest(configSource) },
+    }));
+
+    const restarted = await command(root, ['server', 'start']);
+    assert.equal(restarted.status, 0, restarted.stderr);
+    const current = record(root);
+    assert.notEqual(current.token, prior.token);
+    const rpc = await rpcModule();
+    const body = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const connection = yield* rpc.connectWorkspaceSocket(current.socket.path, current.installation, current.token);
+      yield* Effect.promise(() => pollUntil(async () => {
+        const hello = await Effect.runPromise(connection.client.hello({ protocol: rpc.PROTOCOL, installation: current.installation }));
+        return hello.state === 'opening' ? undefined : true;
+      }, { description: 'replacement workspace service finishes opening', timeoutMs: 10_000 }));
+      const read = yield* rpc.requestWorkspace(connection, 'read', { path: first.path, expectedDigest: first.beforeDigest });
+      return read.body;
+    })));
+    assert.equal(body, first.before);
+    assert.equal(existsSync(journal), false);
+    for (const change of changes) assert.equal(readFileSync(join(root, change.path), 'utf8'), change.before);
+  } finally {
+    try {
+      if (!killed || existsSync(recordPath(root)) && record(root).token !== killed.token) await stop(root);
+      else rmSync(killed.socket.path, { force: true });
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
 });
 
 // @feature docs/feature/local-data-engine/README.md

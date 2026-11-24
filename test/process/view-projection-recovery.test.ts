@@ -64,19 +64,23 @@ test('a live publication keeps the first workspace generation pending and refres
   }
 });
 
-// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('an interrupted publication blocks the first workspace generation with a named recovery error', async () => {
+// @spec docs/feature/portable-coordination/statechart.md#RecoveryBeforeFirstReply
+test('startup recovery logs and preserves an external edit before publishing the first workspace generation', async () => {
   const root = (await fixture());
   (await interruptPublication(root));
+  const target = join(root, 'docs/architecture.md');
+  const external = `${readFileSync(target, 'utf8')}\nExternal edit before restart.\n`;
+  writeFileSync(target, external);
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
-    const blocked = await pollUntil(async () => {
-      const response = await fetchFresh(`${base}/api/workspace`);
-      const body = await response.text();
-      return response.status === 503 && body.includes('RecoveryRequired') ? body : undefined;
-    }, { description: 'RecoveryRequired workspace response', timeoutMs: 45_000 });
-    assert.match(blocked, /RecoveryRequired/u);
+    assert.equal(existsSync(join(genericPrivateDirectorySync(root, process.env), 'journal.json')), false);
+    assert.equal(readFileSync(target, 'utf8'), external);
+    await pollUntil(async () => server.stderr.split('\n').some(line => line.includes('"journalStatus":"discarded"') && line.includes('"docs/architecture.md"')) ? true : undefined,
+      { description: 'startup recovery logs the preserved external edit' });
+    const value = await waitForWorkspaceProjection(base);
+    assert.equal(value.projection.status, 'ready');
+    assert.equal(value.projection.lastError, undefined);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
