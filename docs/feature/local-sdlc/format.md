@@ -72,7 +72,7 @@ statechart 页用围栏语言为 `statechart` 的代码块引用一份 TLA+ 模�
 | `digest` | 是 | 生成 `out` 时模型源文件的摘要 |
 
 - 块正文必须为空，模型只由外部文件拥有。一页可以有多个块，例如同一模型的不同规模或修复前后的配置。状态图块只能出现在 statechart 页（单页或种类目录中的页面）。
-- 路径相对 Markdown 文件解析，规则与 [p5 外部入口](../web-workbench/format.md#外部入口)相同：必须位于当前 Git 仓库内，不能是 symlink、隐藏目录、隐藏文件或 `node_modules` 中的文件。
+- 路径相对 Markdown 文件解析，规则与 [p5 外部入口](../web-workbench/format.md#外部入口)相同：必须位于当前 Git 仓库内，不能是 symlink、隐藏目录、隐藏文件或 `node_modules` 中的文件。`docs/` 内的 symlink 在读取文档时就被拒绝（`UnsafePath`），早于状态图块校验；状态图块不为它们另开例外。
 - `out` 目录必须有 `report.md`，可以有 `chart.mmd` 与 TLC 原始输出。这是 pstack statechart 技能 `--out` 目录的布局；作者也可以用别的工具生成同样布局。Concord 不运行模型检查器，不解析 `report.md` 的内容：`chart.mmd` 按 Mermaid 渲染，`report.md` 按 Markdown 显示。模型超出图的规模上限时工具不写 `chart.mmd`，界面只显示报告。
 - 状态图块 `out` 目录中的文件是产物，不是页面：其中的 Markdown 不参与文档发现、页面种类识别与写作检查。模型目录不要用页面种类的名字，例如不要在已有 `statechart.md` 的文档包里建 `statechart/` 目录，否则单页与种类目录并存；示例使用 `tla/`。
 - `digest` 是 `sha256:` 加 64 位小写十六进制。输入是模型源文件：`spec`、`config`、`view`，以及 `spec` 所在目录中的其它 `.tla` 文件（TLC 从这里解析 `EXTENDS` 的模块）。按仓库相对路径的 UTF-8 字节序排列，每个文件依次拼接 `<路径>\0<字节数的十进制>\0<文件字节>`，对整体求 SHA-256。`out` 目录中的文件不参与摘要。
