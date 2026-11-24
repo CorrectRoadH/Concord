@@ -151,7 +151,8 @@
 | --- | --- |
 | 刷新成功 | 以事务替换完整结果 |
 | 刷新失败 | 保留上一代投影；数据库可写时记录具名错误 |
-| 等待同键刷新与扫描合计超过[刷新上限](../performance.md#刷新上限) | 刷新终止，`lastError.code` 为 `QueryRefreshTimedOut`，不声明刷新成功 |
+| 扫描超过[刷新上限](../performance.md#刷新上限) | 刷新终止，`lastError.code` 为 `QueryRefreshTimedOut`，不声明刷新成功 |
+| 等待同键的另一个刷新超过刷新上限 | 本次请求返回 `QueryRefreshTimedOut`，不写投影；正在进行的刷新照常发布自己的结果 |
 | 同一查询的多个刷新请求 | 合并，只合并开始于请求之后的扫描 |
 | 发布阶段数据库被占用 | 最多重试三秒；进程终止后的清理以清理宽限为界，二者不计入刷新上限 |
 | 扫描消息超过 4MiB | 刷新失败，`lastError.code` 为 `QueryRefreshOutputLimit` |
