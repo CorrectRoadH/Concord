@@ -27,19 +27,13 @@
 
 两个写者基于同样的两个文件规划，两个文件既是目标也是依赖；每个文件可能是写入前内容、计划 A、计划 B 或外部内容。一次外部编辑可以落在发布前、发布中、进程退出后或恢复中。最多一次发布中断和一次恢复中断，包括还原已经写入、journal 尚未删除时的第二次中断。新服务从已取得服务锁的时刻开始。四条规则都成立。
 
-模型把“核对目标内容”和“原子替换”写成同一步。真实文件系统做不到：两者之间总有一段很短的窗口，编辑器在这里写入的内容会被替换。实现在每个目标替换前重新核对一次，把窗口缩到最小，但不能消除。
+模型把“核对目标内容”和“原子替换”写成同一步。真实文件系统做不到：两者之间总有一段很短的窗口，编辑器在这里写入的内容会被替换。实现在每个目标实际替换或删除前重新核对一次，把窗口缩到最小，但不能消除。
 
 图隐藏编辑器直接写入、写入 committed 阶段、还原单个目标、过期计划的再次拒绝与终态自循环等不改变图上状态的步骤。
 
-## 实现与模型的差异
+## 按路径重放的测试
 
-按模型的动作逐步重放到真实代码，发现三处与本页规则不符，修复时回归测试用 `@spec` 指向对应规则：
-
-| 情形 | 现在的实现 | 规则 |
-| --- | --- | --- |
-| 最后一个目标已经替换、committed 尚未落盘时退出 | 恢复按 prepared 阶段回滚，两个文件回到写入前内容 | [恢复规则](architecture.md#恢复规则)：已全部匹配计划时按完成处理；见 [RecoveredFilesMatchOneImage](#RecoveredFilesMatchOneImage) |
-| 编辑器在恢复检查之后、还原之前写入 | 还原覆盖外部内容，结果为 rolled-back 且没有告警 | [RecoveryPreservesExternalEdit](#RecoveryPreservesExternalEdit) |
-| 服务启动时有遗留 journal | 服务直接进入 running，查询返回 `RecoveryRequired`，要求另行运行 `concord recover` | [RecoveryBeforeFirstReply](#RecoveryBeforeFirstReply) |
+模型的三条路径都重放到真实代码，测试用 `@spec` 指向对应规则：全部目标已写入、committed 尚未落盘时退出（`test/domain/storage.test.ts`、`test/cli/publication-recovery.test.ts`）；编辑器在还原前写入（`test/domain/storage.test.ts`）；服务启动时有遗留 journal（`test/process/workspace-server-lifecycle.test.ts`）。
 
 ## 动作与代码
 
