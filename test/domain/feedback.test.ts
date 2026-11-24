@@ -272,6 +272,25 @@ test('one feedback fetch merges repeated identities against earlier entries in t
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+// @spec docs/feature/feedback/architecture.md#远端来源
+test('feedback observations order remote versions within the same millisecond', async () => {
+  const root = await fixture();
+  try {
+    const older = issue({ title: 'Older', updated_at: '2026-09-14T00:00:00.100001Z' });
+    const newer = issue({ title: 'Newer', updated_at: '2026-09-14T00:00:00.100002Z' });
+    await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([older]), credential: 'test-token' }));
+    const updated = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([newer]), credential: 'test-token' }));
+    assert.deepEqual(updated.warnings, []);
+    const stale = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([older]), credential: 'test-token' }));
+    assert.deepEqual(stale.warnings, []);
+    await open(root, repo => {
+      const remote = listFeedback(repo)[0]?.remote;
+      assert.equal(remote?.title, 'Newer');
+      assert.equal(remote?.updatedAt, newer.updated_at);
+    });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('feedback cache rejects a damaged HawDB payload and never partially publishes an oversized identity batch', async () => {
   const root = (await fixture());
