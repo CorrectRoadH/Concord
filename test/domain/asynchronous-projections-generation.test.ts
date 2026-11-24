@@ -3,7 +3,8 @@ import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import test from 'node:test';
 import { Deferred, Effect, Fiber, Result } from 'effect';
-import { QueryRefreshRequest, queryContext, queryRequestSatisfied, readQuery, refreshQuery, storeQuery, type QueryContext } from '../../src/app/index.ts';
+import { QueryRefreshRequest, persist, queryContext, queryRequestSatisfied, readQuery, refreshQuery, storeQuery, type QueryContext } from '../../src/app/index.ts';
+import { HawdbFailure, PersistentCache } from '../../src/base/cache/index.ts';
 import { RuntimeEnvironment, makeRuntimeEnvironment } from '../../src/base/environment/index.ts';
 import { nativeArtifactRoot } from '../../src/base/installation/index.ts';
 import { acquireFileLease, releaseFileLease } from '../../src/base/publication/index.ts';
@@ -82,6 +83,44 @@ test('a queued diagnostic refresh requests the new identity after the configurat
         assert.deepEqual(requested, [expected]);
       } finally { releaseFileLease(lease, 'query-refresh'); }
     })));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+// @spec docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#结果
+test('a diagnostic refresh cannot retry publication after its cache retry deadline', async () => {
+  const root = await createConsumer();
+  try {
+    await runApplication(Effect.gen(function*() {
+      const workspace = yield* Workspace;
+      const cache = yield* PersistentCache;
+      const context = yield* queryContext(root, ['trace', 'gaps']);
+      const busy = new HawdbFailure('HawdbBusy', 'Cache occupied by another operation');
+      let blocked = false;
+      const result = yield* persist(context, { kind: 'failure', error: {
+        code: 'TraceInvalid', message: 'Invalid trace', scannedAt: Date.now(), failedAt: new Date().toISOString(),
+      } }).pipe(
+        Effect.provideService(Workspace, {
+          ...workspace,
+          identify: (...args) => blocked
+            ? Effect.sleep('3 seconds').pipe(Effect.andThen(workspace.identify(...args)))
+            : workspace.identify(...args),
+        }),
+        Effect.provideService(PersistentCache, {
+          ...cache,
+          update: (...args) => {
+            if (blocked) return cache.update(...args);
+            blocked = true;
+            return Effect.fail(busy);
+          },
+        }),
+        Effect.result,
+      );
+      const stored = yield* readQuery(context);
+      assert.equal(stored.error, undefined);
+      assert.ok(Result.isFailure(result));
+      assert.equal(result.failure, busy);
+    }));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
