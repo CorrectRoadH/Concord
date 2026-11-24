@@ -15,7 +15,6 @@ const AdapterReady = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int.check
 const ObservationSlot = Schema.fromJsonString(Schema.Struct({ observationSlot: Schema.Struct({ status: Schema.String, pid: Schema.Int, token: Schema.String }) }));
 
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md#release-observation-slot
-// @issue docs/issues/observation-release-artifacts.md
 test('manual release reclaims the report directory of a killed collection', { skip: process.platform === 'win32', timeout: 30_000 }, async t => {
   const root = await fixture(t);
   const ready = join(root, '.git/adapter-ready.json');

@@ -10,7 +10,6 @@ import { fixture } from '../support/publication-ownership-fixture.ts';
 import { runApplication } from '../support/repository.ts';
 
 // @use-case docs/feature/local-sdlc/use-case/recover-local-state.md#release-observation-slot
-// @issue docs/issues/observation-release-receipt.md
 test('manual release reports the released token after another observation claims the slot', async t => {
   const root = await fixture(t);
   const dead = spawnSync('git', ['--version']);
