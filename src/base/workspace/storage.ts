@@ -12,7 +12,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, rmdirSync, writeFileSync, type BigIntStats } from "node:fs";
 import { release } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { Schema } from "effect";
 import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from "../publication/index.ts";
 import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, isObsoleteWorkflowSkillRemoval, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.ts";
@@ -145,6 +145,27 @@ function atomic(path: string, contents: string | Uint8Array, mode = 0o600): void
     fd = openSync(temp, 'wx', mode); fchmodSync(fd, mode); writeFileSync(fd, contents); fsyncSync(fd); closeSync(fd); fd = undefined;
     assertNoSymlink(path); renameSync(temp, path); syncDirectory(dirname(path));
   } finally { if (fd !== undefined) closeSync(fd); if (present(temp)) rmSync(temp); }
+}
+const atomicTemporarySuffix = /\.[1-9][0-9]*\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/u;
+function cleanAtomicTemporaries(targets: readonly string[]): void {
+  const directories = new Map<string, Set<string>>();
+  for (const target of targets) {
+    const directory = dirname(target);
+    let names = directories.get(directory);
+    if (names === undefined) { names = new Set(); directories.set(directory, names); }
+    names.add(basename(target));
+  }
+  for (const [directory, names] of directories) {
+    if (!present(directory)) continue;
+    let removed = false;
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const suffix = atomicTemporarySuffix.exec(entry.name);
+      if (!entry.isFile() || suffix === null || names.has(entry.name) || !names.has(entry.name.slice(0, suffix.index))) continue;
+      rmSync(join(directory, entry.name), { force: true });
+      removed = true;
+    }
+    if (removed) syncDirectory(directory);
+  }
 }
 const JournalChangeSchema = Schema.Struct({ path: Text, before: Schema.NullOr(Schema.String), after: Schema.NullOr(Schema.String), beforeDigest: Schema.NullOr(Text), afterDigest: Schema.NullOr(Text), mode: Schema.Int, encoding: Schema.optional(Schema.Literal('base64')) });
 const JournalScopeSchema = Schema.Union([
@@ -1277,17 +1298,19 @@ export class LocalRepository implements Repository {
     this.validateObservations();
     this.observing = false;
     const warnings: string[] = [];
+    let completed = true;
     for (const change of journal.changes) {
       const current = this.moveImage(change);
-      if (current !== change.before && current !== change.after) {
-        warnings.push(change.path);
-      }
+      if (current === change.after) continue;
+      completed = false;
+      if (current !== change.before) warnings.push(change.path);
     }
+    cleanAtomicTemporaries([path, ...journal.changes.map(change => this.absolute(change.path))]);
     if (warnings.length > 0) {
       rmSync(path); syncDirectory(this.privateDir);
       return { operation: 'recover', status: 'discarded', journalStatus: 'discarded', warnings, changedPaths: [] };
     }
-    if (journal.phase === 'prepared') {
+    if (!completed) {
       invalidateActiveRun(this.root, this.executionEnvironment);
       for (const change of [...journal.changes].reverse()) {
         if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close' || journal.scope.kind === 'document-move') {
@@ -1302,9 +1325,9 @@ export class LocalRepository implements Repository {
         if (present(target)) { try { rmdirSync(target); } catch (cause) { if (!errno(cause, 'ENOTEMPTY')) throw cause; } }
       }
     }
-    if (journal.phase === 'committed') this.pruneMovedRoadmap(journal);
+    if (completed) this.pruneMovedRoadmap(journal);
     rmSync(path); syncDirectory(this.privateDir);
-    const status = journal.phase === 'prepared' ? 'rolled-back' : 'committed';
+    const status = completed ? journal.phase === 'committed' ? 'committed' : 'completed' : 'rolled-back';
     return { operation: 'recover', status, journalStatus: status, warnings: [], changedPaths: journal.changes.map(c => c.path) };
   }
 }
