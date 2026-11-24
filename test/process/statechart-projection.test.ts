@@ -1,4 +1,5 @@
-// Cross-process guarantee: the workspace service discovers changes to statechart dependencies outside its document and source roots.
+// 跨进程保证：文件监听——独立的工作区服务进程在 docs 外的状态图模型或产物变动后刷新投影。
+// 模型变动后，HTTP check action、GET /api/workspace 与 --server existing 返回相同的 StatechartStale；重新生成并更新摘要后，投影清除此 finding。
 import assert from 'node:assert/strict';
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
