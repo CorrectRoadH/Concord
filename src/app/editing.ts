@@ -1,7 +1,7 @@
 import { repositoryRuntime } from '../base/workspace/index.ts';
 import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.ts";
 import { renderTypeScriptConfig } from "../base/workspace/index.ts";
-import { documentRoots, inspectDocumentRecords, parseDocumentRecord } from "../domain/documents/index.ts";
+import { documentRoots, inspectDocumentRecords, outsideStatechartOutputs, parseDocumentRecord, statechartOutputRoots } from "../domain/documents/index.ts";
 import type { LocalRepository } from "../base/workspace/index.ts";
 import { documentDisposition } from "../model/index.ts";
 import type { ViewFile } from "../model/index.ts";
@@ -22,8 +22,10 @@ function projectPage(path: string, source: string): ViewFile {
 
 function markdownPaths(repo: Repository, roots: readonly string[]): readonly string[] {
   const markdown = (prefix: string) => repo.files(prefix).filter(path => path.endsWith('.md') && !sourceForbidden(path));
+  const docs = markdown('docs');
+  const outputs = statechartOutputRoots(repo, docs);
   const outsideDocs = roots.filter(root => root !== 'docs' && !root.startsWith('docs/')).flatMap(markdown);
-  return [...new Set([...markdown('docs'), ...outsideDocs])].sort();
+  return [...new Set([...docs, ...outsideDocs])].filter(path => outsideStatechartOutputs(path, outputs)).sort();
 }
 
 function inspectMarkdown(repo: Repository, path: string, captured?: { source: string; result: ReturnType<typeof inspectDocumentRecords>[number] }): { document?: DocumentRecord; page?: ViewFile; finding?: Finding } {

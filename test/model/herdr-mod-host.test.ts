@@ -131,7 +131,7 @@ class Boundary {
   conceptCatalogs: { path: string; catalog: { title: string } }[] = [];
   concepts: { reference: string; path: string; concept: { id: string; term: string; definition: string } }[] = [];
   relationships: { tests: { file: string; line: number; name: string; contract: string }[]; codeDeclarations: { file: string; line: number; symbol: string; contracts: string[] }[] } = { tests: [], codeDeclarations: [] };
-  findings: { path: string; line?: number; message: string }[] = [];
+  findings: { code?: string; path: string; line?: number; message: string }[] = [];
   colors: Record<string, string> = {};
   resourceFiles = new Map<string, Uint8Array>();
   imagePaths: string[] = [];
@@ -293,7 +293,7 @@ let listLayout = 0;
 const sharedData = new Map<string, unknown>();
 const external = {
   View: class {}, div: () => new Element(), h_flex: () => new Element(), v_flex: () => new Element(),
-  svg: () => new Element(),
+  svg: (path: string) => new Element().id(path),
   v_virtual_list: (id: string, count: number, _height: number, _key: (index: number) => string, render: (range: { start: number; end: number }, cx: Context) => Element[]) => {
     listLayout++;
     try { return new Element().id(id).children(render({ start: 0, end: count }, host.context())); } finally { listLayout--; }
@@ -742,6 +742,147 @@ test('source mod obeys native host invalidation and retained-state boundaries', 
           await b.until(() => b.output.find('concord-error') === undefined);
           assert.ok(b.output.find(`concord-body-${page}`));
         }
+      } finally { await b.close(); }
+    });
+    const modelPage = 'docs/feature/cart/statechart.md';
+    const modelPath = 'docs/feature/cart/statechart/Recovery.tla';
+    const configPath = 'docs/feature/cart/statechart/fixed.cfg';
+    const viewPath = 'docs/feature/cart/statechart/recovery-view.ts';
+    const modelOutput = 'docs/feature/cart/statechart/out/fixed';
+    const modelFence = [
+      '```statechart spec="./statechart/Recovery.tla" config="./statechart/fixed.cfg"',
+      ` view="./statechart/recovery-view.ts" out="./statechart/out/fixed" digest="${digest('model')}"\r\n`,
+      '```',
+    ].join('');
+    const modelHeading = '# Recovery\r\n\r\n### 回调最多执行一次 {#AtMostOnce}\r\n\r\n';
+    const modelSuffix = '\r\n\r\n<!-- Keep these bytes. -->\r\n';
+    const modelReport = '### AtMostOnce\n\n1. Begin → Ready\n2. Retry → Bad';
+    const modelSvg = '<svg xmlns="http://www.w3.org/2000/svg"><rect stroke="red"/></svg>';
+    const modelBlock = {
+      type: 'statechart', source: '', spec: modelPath, config: configPath, view: viewPath, out: modelOutput,
+      stale: false, chart: { svg: modelSvg, digest: digest(modelSvg) }, report: { text: modelReport },
+    } satisfies RenderedPage['blocks'][number];
+    const modelBlockId = `concord-block-${modelPage}-2-statechart-${modelHeading.length}`;
+    function addModelPage(boundary: Boundary, path = modelPage) {
+      boundary.files.set(`/repo/${path}`, modelHeading + modelFence + modelSuffix);
+      boundary.files.set(`/repo/${modelPath}`, '---- MODULE Recovery ----\nAtMostOnce == callbacks <= 1\n====\n');
+      boundary.files.set(`/repo/${configPath}`, 'INVARIANT AtMostOnce\n');
+      boundary.packagePages.push({ path, name: 'Recovery', kind: 'statechart' });
+    }
+    function publishModelChange(boundary: Boundary) {
+      boundary.watches.at(-1)!.result.resolve({ code: 0, stdout: JSON.stringify({ operation: 'workspace-wait', changed: true, sourceDigest: 'model-change' }), stderr: '' });
+    }
+
+    // @use-case docs/feature/herdr-mod/use-case/review-statechart.md
+    await t.test('statechart renders a graph and shortest path, opens model files and copies a discussion prompt', async () => {
+      const loading = pending<void>();
+      const b = await start(boundary => {
+        addModelPage(boundary);
+        boundary.rendered = [modelBlock];
+        boundary.renderGate = loading;
+      });
+      try {
+        b.click('toggle-docs/feature/cart');
+        b.click(`page-${modelPage}`);
+        await b.until(() => b.output.text().includes('正在渲染图表…'));
+        assert.match(b.output.text(), /回调最多执行一次/u);
+        loading.resolve(); b.renderGate = undefined;
+        await b.until(() => b.output.find(modelBlockId) !== undefined);
+        assert.deepEqual([...b.resourceFiles.values()].map(value => Buffer.from(value).toString()), [modelSvg]);
+        const chart = b.output.find(modelBlockId)!;
+        assert.match(chart.text(), /模型\n.*Recovery\.tla\n·\n配置\n.*fixed\.cfg[\s\S]+IMAGE/u);
+        assert.equal(chart.find(`${modelBlockId}-report`)?.text(), modelReport);
+        b.click(`${modelBlockId}-report-toggle`);
+        assert.equal(b.output.find(`${modelBlockId}-report`), undefined);
+        b.click(`${modelBlockId}-report-toggle`);
+        assert.equal(b.output.find(`${modelBlockId}-report`)?.text(), modelReport);
+        for (const [id, path] of [['model', modelPath], ['config', configPath]] as const) {
+          b.click(`${modelBlockId}-${id}`);
+          await b.until(() => b.output.find('concord-source-editor')?.state?.value() === b.files.get(`/repo/${path}`));
+          assert.equal(b.output.find('concord-source-editor')?.state?.readOnly, true);
+          assert.equal(b.output.find('document-editor'), undefined);
+          b.click('close-preview');
+        }
+        b.rightClick(modelBlockId);
+        assert.doesNotMatch(b.output.find('concord-context-menu')!.text(), /复制重新生成请求/u);
+        b.chooseMenu('复制讨论 Prompt');
+        for (const value of ['机器：本机', '/repo', modelPage, modelPath, configPath, viewPath, modelOutput, '结果已过期：否', '按检查报告逐条说明坏状态']) {
+          assert.ok(b.clipboard.includes(value), value);
+        }
+      } finally { loading.resolve(); await b.close(); }
+    });
+
+    // @use-case docs/feature/extensible-page-kinds/use-case/declare-page-kind.md#browse
+    await t.test('the document list uses its ordinary file icon for a project page kind', async () => {
+      const path = 'docs/feature/cart/threat-model.md';
+      const b = await start(boundary => {
+        boundary.files.set(`/repo/${path}`, '# Threat model\n');
+        boundary.packagePages.push({ path, name: 'Threat model', kind: 'threat-model' });
+      });
+      try {
+        b.click('toggle-docs/feature/cart');
+        assert.ok(b.output.find(`page-${path}`)?.find('mods/concord/icons/file-text.svg'));
+      } finally { await b.close(); }
+    });
+
+    // @use-case docs/feature/herdr-mod/use-case/review-statechart.md#regenerate
+    await t.test('statechart refresh retains the graph and report, exposes the stale finding and copies a regeneration request', async () => {
+      const b = await start(boundary => { addModelPage(boundary); boundary.rendered = [modelBlock]; });
+      try {
+        b.click('toggle-docs/feature/cart');
+        b.click(`page-${modelPage}`);
+        await b.until(() => b.output.find(modelBlockId) !== undefined);
+        b.files.set(`/repo/${modelPath}`, 'Changed model');
+        b.rendered = [{ ...modelBlock, stale: true }];
+        b.findings = [{ code: 'StatechartStale', path: modelPage, line: 5, message: 'Statechart result is older than its model' }];
+        publishModelChange(b);
+        await b.until(() => b.output.text().includes('模型在这份结果之后改过，状态图已过期'));
+        assert.match(b.output.find(modelBlockId)!.text(), /IMAGE[\s\S]+Retry → Bad/u);
+        assert.ok(b.output.find('concord-check'));
+        b.click('toggle-check-details');
+        assert.match(b.output.find('finding-0')!.text(), /StatechartStale/u);
+        b.rightClick(modelBlockId); b.chooseMenu('复制重新生成请求');
+        assert.match(b.clipboard, /结果已过期：是[\s\S]+重新运行模型检查器，替换输出目录，更新状态图块的 digest，然后重新运行 concord check/u);
+        b.files.set(`/repo/${modelPage}`, modelHeading + modelFence.replace(digest('model'), digest('Changed model')) + modelSuffix);
+        b.rendered = [modelBlock]; b.findings = [];
+        publishModelChange(b);
+        await b.until(() => b.output.find(modelBlockId) !== undefined && !b.output.text().includes('状态图已过期') && b.output.find('concord-check') === undefined);
+      } finally { await b.close(); }
+    });
+
+    // @use-case docs/feature/herdr-mod/use-case/review-statechart.md#结果
+    await t.test('statechart reports without graphs render and faulty blocks expose editable fenced source', async () => {
+      const { chart: _chart, ...reportOnly } = modelBlock;
+      const b = await start(boundary => { addModelPage(boundary); boundary.rendered = [reportOnly]; });
+      try {
+        b.click('toggle-docs/feature/cart');
+        b.click(`page-${modelPage}`);
+        await b.until(() => b.output.find(modelBlockId) !== undefined);
+        assert.match(b.output.find(modelBlockId)!.text(), /Recovery\.tla[\s\S]+Retry → Bad/u);
+        assert.equal(b.resourceFiles.size, 0);
+        for (const [field, error] of [
+          ['report', 'Statechart report is missing'],
+          ['chart', 'Mermaid parse error on line 5'],
+          ['block', 'InvalidStatechartBlock: config'],
+          ['block', 'Statechart model is missing'],
+        ] as const) {
+          b.rendered = [field === 'block' ? { type: 'statechart', source: '', error } : { ...reportOnly, [field]: { error } }];
+          publishModelChange(b);
+          await b.until(() => b.output.text().includes(error));
+          assert.match(b.output.text(), /spec="\.\/statechart\/Recovery\.tla"/u);
+        }
+        b.click(`preview-block-${modelHeading.length}`);
+        const active = b.output.find('document-editor')!.state!;
+        assert.equal(active.value(), modelFence);
+        const corrected = modelFence.replace('fixed.cfg', 'working.cfg');
+        active.input(corrected, b.context()); b.fire(800);
+        await b.until(() => b.files.get(`/repo/${modelPage}`) === modelHeading + corrected + modelSuffix);
+        active.blur(b.context()); b.fire(0);
+        b.files.set(`/repo/${page}`, modelHeading + modelFence + modelSuffix);
+        b.rendered = [{ type: 'statechart', source: '', error: 'InvalidStatechartPosition: Statechart blocks require a statechart page' }];
+        b.click(`page-${page}`);
+        await b.until(() => b.output.text().includes('InvalidStatechartPosition'));
+        assert.match(b.output.text(), /spec="\.\/statechart\/Recovery\.tla"/u);
       } finally { await b.close(); }
     });
     // @use-case docs/feature/herdr-mod/use-case/read-spec.md

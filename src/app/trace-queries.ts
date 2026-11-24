@@ -5,7 +5,7 @@ import type { AnalysisView } from "../model/index.ts";
 import { findDocument } from "../domain/documents/index.ts";
 import { ConcordError, documentTitle, type DocumentRecord, type Repository } from "../model/index.ts";
 import { packagePageKind } from '../model/index.ts';
-import { packagePagePaths } from '../domain/documents/index.ts';
+import { packagePagePaths, statechartOutputRoots } from '../domain/documents/index.ts';
 import { TASTE_PATH, showTaste } from "../domain/taste/index.ts";
 import type { referenceResolver } from "../domain/documents/index.ts";
 import { extractSteps } from "../domain/documents/index.ts";
@@ -146,9 +146,10 @@ export function traceGapsValue(repo: Repository, trace: Awaited<ReturnType<typeo
       const missing = gap(counts);
       return missing.length === 0 ? [] : [{ path: document.path, title: document.metadata.title, missing, relationships: counts }];
     });
+    const outputs = statechartOutputRoots(repo);
     const cliPages = trace.documents.flatMap(document => {
       if (document.metadata.kind !== 'feature') return [];
-      const paths = packagePagePaths(repo, document.path);
+      const paths = packagePagePaths(repo, document.path, outputs);
       return [...paths].sort().flatMap(path => {
         if (packagePageKind(document.path, path, paths) !== 'cli') return [];
         const counts = pageCounts.get(path) ?? { code: 0, test: 0 };
@@ -188,7 +189,7 @@ export async function documentShow(repo: Repository, selector: string, kind: Doc
     const paths = ['feature', 'engineering', 'roadmap'].includes(kind) ? packagePagePaths(repo, document.path) : new Set<string>();
     const pages = ['feature', 'engineering', 'roadmap'].includes(kind) ? [...paths].filter(path => /\.mdx?$/u.test(path)).sort().map(path => ({
       path,
-      kind: packagePageKind(document.path, path, paths),
+      kind: packagePageKind(document.path, path, paths, repo.config.pageKinds),
       name: documentTitle(path, repo.read(path) ?? ''),
     })) : undefined;
     return { trace, document, useCases, incoming, outgoing, testIds, codeIds, pages };

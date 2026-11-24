@@ -1,9 +1,10 @@
 import { repositoryRuntime } from '../base/workspace/index.ts';
-import { ConcordError, type Finding, type Repository } from "../model/index.ts";
+import { ConcordError, type Repository } from "../model/index.ts";
 import { buildTrace } from "../domain/trace/index.ts";
 import { indexConcepts } from "../domain/concepts/index.ts";
 import { inlineLinks, markdownLinks, relativeMarkdownLink, relativeMarkdownLinkTarget } from "../domain/taste/index.ts";
 import { checkWriting } from "../domain/writing/index.ts";
+import { outsideStatechartOutputs, statechartOutputRoots } from '../domain/documents/index.ts';
 import { canonicalPath } from "../model/index.ts";
 import { inspectWorkflowSkills } from './workflow-skills.ts';
 import { checkExplicitReferences } from './reference-check.ts';
@@ -12,15 +13,18 @@ import { checkExplicitReferences } from './reference-check.ts';
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的合并检查
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 // @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#update
+// @concord-implements docs/feature/documentation-quality/cli.md#状态图
 export async function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
-  const trace = (await buildTrace(repo, cache));
+  const trace = await buildTrace(repo, cache, { includeStatecharts: true });
   const explicitReferences = await checkExplicitReferences(repo);
   const unreadablePaths = new Set<string>();
   const conceptLinks: { code: string; path: string; line: number; message: string; category: 'relation' }[] = [];
   let conceptLinksComplete = true;
   const catalogs = indexConcepts(repo).catalogs;
   const catalogPaths = new Set(catalogs.map(catalog => catalog.path));
-  for (const path of repo.files('docs').filter(path => path.endsWith('.md') && !path.startsWith('docs/_template/'))) {
+  const docs = repo.files('docs');
+  const outputs = statechartOutputRoots(repo, docs);
+  for (const path of docs.filter(path => path.endsWith('.md') && !path.startsWith('docs/_template/') && outsideStatechartOutputs(path, outputs))) {
     let source: string | undefined;
     try { source = repo.read(path); }
     catch (cause) { conceptLinksComplete = false; conceptLinks.push({ category: 'relation', code: cause instanceof ConcordError ? cause.code : 'SourceReadFailed', path, line: 1, message: cause instanceof Error ? cause.message : String(cause) }); continue; }
@@ -35,7 +39,7 @@ export async function checkProject(repo: Repository, cache: 'use' | 'off' | 'reb
   }
   // A stable I/O failure is incomplete input, rather than an edit to retry.
   // Keep the taste scan's own semantics unchanged outside this aggregate.
-  const relationFindings = trace.findings.map(finding => ({ ...finding,
+  const relationFindings = [...trace.findings, ...(trace.statechartFindings ?? [])].map(finding => ({ ...finding,
     code: finding.code === 'SourceChanged' && unreadablePaths.has(finding.path) ? 'SourceReadFailed' : finding.code,
     category: 'relation' as const,
   }));

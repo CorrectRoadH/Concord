@@ -4,7 +4,7 @@ import { createDocument, initialize } from '../support/operations.ts';
 import { runApplication } from '../support/repository.ts';
 import { openWriteRepository } from '../../src/base/workspace/index.ts';
 import { Sources } from '../../src/base/sources/index.ts';
-import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts";
+import { caseDiscriminator, deriveTestReference, StatechartResolution } from "../../src/model/index.ts";
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -13,7 +13,7 @@ import { connect } from 'node:net';
 import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import test from 'node:test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 
 import { LocalRepository } from "../support/repository.ts";
 
@@ -24,6 +24,38 @@ import { type WorkspaceProjection } from "../../src/model/index.ts";
 import { fixture, send, sendRaw, parsed, jsonHeaders, waitForWorkspace } from '../support/view-http-fixture.ts';
 
 const viewJobCase = deriveTestReference('test/view-case.test.js', 'test/view-case.test.js', caseDiscriminator('docs/feature/web/README.md', 0));
+
+// @feature docs/feature/local-sdlc/format.md#状态图块
+test('Web statechart HTTP operation resolves artifacts and exposes only referenced model source', async () => {
+  const { root } = fixture();
+  const owner = 'docs/feature/queue';
+  const document = `${owner}/statechart.md`;
+  const meta = `spec="./tla/Queue.tla" config="./tla/queue.cfg" view="./tla/labels.ts" out="./tla/out" digest="sha256:${'0'.repeat(64)}"`;
+  mkdirSync(join(root, owner, 'tla/out'), { recursive: true });
+  writeFileSync(join(root, owner, 'README.md'), '# Queue\n');
+  writeFileSync(join(root, document), '# Statechart\n\n~~~statechart ' + meta + '\n~~~\n');
+  writeFileSync(join(root, owner, 'tla/Queue.tla'), 'Queue model\n');
+  writeFileSync(join(root, owner, 'tla/queue.cfg'), 'Queue configuration\n');
+  writeFileSync(join(root, owner, 'tla/labels.ts'), 'export {};\n');
+  writeFileSync(join(root, owner, 'tla/unreferenced.tla'), 'Other model\n');
+  writeFileSync(join(root, owner, 'tla/out/report.md'), '# Current report\n');
+  let server: ViewServerHandle | undefined;
+  try {
+    const running = server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    const post = (input: unknown) => send(running, '/api/statechart/resolve', { method: 'POST', headers: jsonHeaders, body: JSON.stringify(input) });
+    const request = { document, code: '', meta };
+    const response = await post(request);
+    assert.equal(response.status, 200, response.body);
+    const value = Schema.decodeUnknownSync(StatechartResolution, { onExcessProperty: 'error' })(parsed(response).value);
+    assert.deepEqual(value, { spec: `${owner}/tla/Queue.tla`, config: `${owner}/tla/queue.cfg`, view: `${owner}/tla/labels.ts`,
+      out: `${owner}/tla/out`, stale: true, report: { text: '# Current report\n' } });
+    const invalid = await post({ ...request, extra: true });
+    assert.equal(parsed(invalid).error, 'InvalidData');
+    const get = (path: string) => send(running, `/api/file?path=${encodeURIComponent(path)}`);
+    assert.equal((await get(`${owner}/tla/Queue.tla`)).status, 200);
+    assert.equal(parsed(await get(`${owner}/tla/unreferenced.tla`)).error, 'FileNotFound');
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
+});
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-scan-keeps-http-responsive

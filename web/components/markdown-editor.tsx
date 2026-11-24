@@ -36,6 +36,7 @@ import { Textarea } from './ui/textarea.tsx';
 import { SourceEditor } from './source-editor.tsx';
 import { P5DocumentContext, p5CodeBlockDescriptor } from './p5-sketch.tsx';
 import { hasMarkdownMath } from './markdown-math.ts';
+import { hasStatechartBlock, replaceMarkdownBlock, type MarkdownSourceRange } from '../lib/markdown-blocks.ts';
 import { MarkdownPreview } from './markdown-preview.tsx';
 import { MermaidDiagram } from './mermaid-diagram.tsx';
 
@@ -48,7 +49,7 @@ interface Props {
   readonly hideSourceHeading?: boolean;
   readonly onSaved?: (file: ViewFile) => void;
   readonly toolbarTarget?: HTMLElement | null;
-  readonly onFollowLink?: (href: string) => boolean;
+  readonly onFollowLink?: (href: string, from?: string) => boolean;
 }
 
 // Stable extensions use CSS variables so theme changes preserve selection and undo history.
@@ -133,6 +134,8 @@ export function MarkdownEditor({ initial, source = false, raw = false, title, so
   const [file, setFile] = useState(initial);
   const [draft, setDraft] = useState(initial.body);
   const mathDocument = useMemo(() => !source && !raw && hasMarkdownMath(file.body), [source, raw, file.body]);
+  const statechartDocument = useMemo(() => !source && hasStatechartBlock(file.body), [source, file.body]);
+  const previewDocument = mathDocument || statechartDocument;
   const [dirty, setLocalDirty] = useState(false);
   const baseline = useRef(initial);
   const currentDraft = useRef(initial.body);
@@ -243,6 +246,7 @@ export function MarkdownEditor({ initial, source = false, raw = false, title, so
   const autoSave = useAutoSave({ dirty, revision: draft, save, discard: () => { replaceWith(baseline.current); setCompareOpen(false); } });
   const saving = autoSave.saving;
   const changeDraft = (value: string) => { currentDraft.current = value; setDraft(value); setLocalDirty(value !== baseline.current.body); };
+  const replaceBlock = (range: MarkdownSourceRange, value: string) => changeDraft(replaceMarkdownBlock(currentDraft.current, range, value));
   const rawEditor = <Textarea
     aria-label={source ? '源码原文' : 'Markdown 原文'}
     className="raw-editor"
@@ -258,9 +262,8 @@ export function MarkdownEditor({ initial, source = false, raw = false, title, so
   </div>;
 
   const followLink = (event: React.MouseEvent<HTMLDivElement>) => {
-    // The math preview resolves links from its own parsed tree. The WYSIWYG
-    // source-link index does not understand TeX and must not intercept it.
-    if (mathDocument) return;
+    // The Markdown preview resolves links from its own parsed tree.
+    if (previewDocument) return;
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const target = event.target;
     const anchor = target instanceof Element ? target.closest('a[href]') : null;
@@ -284,9 +287,9 @@ export function MarkdownEditor({ initial, source = false, raw = false, title, so
     {autoSave.error && <div className="form-error" role="alert">{autoSave.error}</div>}
     {external && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘内容已变化</strong><p>当前草稿没有被覆盖。请比较后保留草稿或重新载入。</p></div></div>}
     {unsupported && <div className="callout callout--warning"><AlertTriangle /><div><strong>已切换为原文编辑</strong><p>WYSIWYG 无法无损解析该语法：{unsupported}。原始字节内容保持不变，只有你的明确编辑才会标记为未保存。</p></div></div>}
-    {source ? <SourceEditor value={draft} path={file.path} readOnly={busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : mathDocument ? <div className="math-document-editor" data-testid="math-document-editor">
+    {source ? <SourceEditor value={draft} path={file.path} readOnly={busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : previewDocument ? <div className="math-document-editor" data-testid={statechartDocument ? 'statechart-document-editor' : 'math-document-editor'}>
       <details className="math-document-source"><summary>编辑原文</summary>{rawEditor}</details>
-      <MarkdownPreview markdown={draft} documentPath={file.path} onFollowLink={onFollowLink} />
+      <MarkdownPreview markdown={draft} documentPath={file.path} onFollowLink={onFollowLink} readOnly={busy} onReplaceBlock={replaceBlock} />
     </div> : raw || hasFrontmatter || unsupported ? rawEditor : <MarkdownErrorBoundary
       fallback={rawEditor}
       onError={error => setUnsupported(error.message)}

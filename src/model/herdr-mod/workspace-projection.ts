@@ -12,6 +12,6 @@ export const ModWorkspaceSnapshot = Schema.Struct({
   cases: Schema.Array(Schema.Struct({ file: Path, line: Schema.Int, name: Schema.String, contract: Schema.String })),
   codes: Schema.Array(Schema.Struct({ file: Path, line: Schema.Int, symbol: Schema.optional(Schema.String), contracts: Schema.Array(Schema.String) })),
   edges: Schema.Array(Schema.Struct({ from: Schema.String, to: Schema.String, relation: Schema.String })),
-  findings: Schema.Array(Schema.Struct({ path: Schema.String, line: Schema.optional(Schema.Int), message: Schema.String })),
+  findings: Schema.Array(Schema.Struct({ code: Schema.optional(Schema.String), path: Schema.String, line: Schema.optional(Schema.Int), message: Schema.String })),
 });
 export const ModWorkspaceProjection = Schema.Struct({ snapshot: ModWorkspaceSnapshot, projection: Schema.Struct({ sourceDigest: Schema.String, current: Schema.Literal(false) }) });

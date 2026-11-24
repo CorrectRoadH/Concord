@@ -11,7 +11,7 @@ import { readWritingPolicy } from "./writing-policy.ts";
 import type { BannedTerm, WritingPolicy } from "../../model/index.ts";
 import { analyzeCatalogs, effectiveConcepts, spellingKey, spellingPositions } from "../concepts/index.ts";
 import { applies, discovered, scopeOf, snapshotDigest, under } from "../../model/index.ts";
-import { extractSteps } from "../documents/index.ts";
+import { extractSteps, outsideStatechartOutputs, statechartOutputRoots } from "../documents/index.ts";
 import { readWritingFindings, writeWritingFindings } from "../../base/cache/index.ts";
 // @concord-begin
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
@@ -171,7 +171,10 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
       inputs.set(path, source);
       return source;
     };
-    const docsMembers = repo.files('docs');
+    const allDocsMembers = repo.files('docs');
+    const outputs = statechartOutputRoots(repo, allDocsMembers);
+    const availableForWriting = (members: readonly string[]) => members.filter(path => outsideStatechartOutputs(path, outputs));
+    const docsMembers = availableForWriting(allDocsMembers);
     const policyPaths = discovered('policy', docsMembers);
     const catalogPaths = discovered('catalog', docsMembers);
     const policySources = new Map(policyPaths.map(path => [path, read(path)]));
@@ -190,12 +193,14 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const selected = (path: string): boolean => selectedRoots.some(root => under(path, root));
     const files = new Set<string>();
     for (const root of selectedRoots) {
-      const available = root === 'docs' ? docsMembers : repo.files(root);
-      if (paths.length && available.length === 0) throw new ConcordError('WritingInputNotFound', `Missing writing selection: ${root}`);
+      const raw = root === 'docs' ? allDocsMembers : repo.files(root);
+      if (paths.length && raw.length === 0) throw new ConcordError('WritingInputNotFound', `Missing writing selection: ${root}`);
+      const available = root === 'docs' ? docsMembers : availableForWriting(raw);
       const members = available.filter(path => /\.(?:md|mdx|svg)$/iu.test(path) && (!paths.length || projectRoots.some(scope => under(path, scope)))).sort();
-      if (paths.length && members.length === 0) throw new ConcordError('WritingInputOutOfScope', `Selection is outside the configured writing scope or contains no Markdown or SVG text: ${root}`);
+      const containsOnlyArtifacts = raw.length > 0 && available.length === 0;
+      if (paths.length && members.length === 0 && !containsOnlyArtifacts) throw new ConcordError('WritingInputOutOfScope', `Selection is outside the configured writing scope or contains no Markdown or SVG text: ${root}`);
       memberships.set(root, members);
-      if (!members.length && root !== 'docs') throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
+      if (!members.length && root !== 'docs' && !containsOnlyArtifacts) throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
       members.forEach(file => files.add(file));
     }
     const documents = new Map<string, string>();
@@ -208,7 +213,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const cached = persistentCache ? readWritingFindings(repo, cacheIdentity) : undefined;
     const findings: WritingFinding[] = cached ?? [];
     if (cached === undefined) {
-      for (const legacyPath of repo.files('docs').filter(path => path === 'docs/concord-writing.json' || path.endsWith('/concord-writing.json')).filter(path => !paths.length || selected(path))) {
+      for (const legacyPath of docsMembers.filter(path => path === 'docs/concord-writing.json' || path.endsWith('/concord-writing.json')).filter(path => !paths.length || selected(path))) {
         findings.push({ file: legacyPath, line: 1, rule: 'LegacyWritingPolicy', message: 'Legacy concord-writing.json detected; convert rules to docs/writing.md', context: legacyPath });
       }
       for (const [catalogPath, catSource] of sourceCatalogs) {
@@ -258,9 +263,9 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
       }
     }
     for (const [path, before] of inputs) if (repo.read(path) !== (path === 'concord.config.ts' && before === '' ? undefined : before)) throw new ConcordError('SourceChanged', `${path} changed during writing checks`);
-    const currentDocsMembers = repo.files('docs');
+    const currentDocsMembers = availableForWriting(repo.files('docs'));
     for (const [root, before] of memberships) {
-      const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx|svg)$/iu.test(path) && (!paths.length || projectRoots.some(scope => under(path, scope)))).sort();
+      const after = (root === 'docs' ? currentDocsMembers : availableForWriting(repo.files(root))).filter(path => /\.(?:md|mdx|svg)$/iu.test(path) && (!paths.length || projectRoots.some(scope => under(path, scope)))).sort();
       if (JSON.stringify(after) !== JSON.stringify(before)) throw new ConcordError('SourceChanged', `${root} membership changed during writing checks`);
     }
     if (JSON.stringify(discovered('policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered('catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('SourceChanged', 'Writing owner membership changed during checks');

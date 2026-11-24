@@ -14,31 +14,33 @@ export interface SourceLocation {
 }
 
 export function SourceDrawer({ location, editable = false, onClose }: {
-  readonly location: SourceLocation | null;
+  readonly location: SourceLocation | Pick<SourceLocation, 'path'> | null;
   readonly editable?: boolean;
   readonly onClose: () => void;
 }) {
   const { api } = useWorkspace();
   const [file, setFile] = useState<ViewFile | null>(null);
   const [error, setError] = useState('');
+  const path = location?.path;
+  const lines = location && 'line' in location ? location : undefined;
   useEffect(() => {
     const controller = new AbortController();
     setFile(null); setError('');
-    if (location) void api.file(location.path, controller.signal).then(value => {
+    if (path) void api.file(path, controller.signal).then(value => {
       if (!controller.signal.aborted) setFile(value);
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
     });
     return () => controller.abort();
-  }, [api, location]);
+  }, [api, path]);
   return <DetailDrawer open={location !== null} onClose={onClose} fullscreen model={{
     title: location?.path ?? '源码',
-    description: location ? `第 ${location.line}–${location.endLine} 行` : '源码位置',
+    description: lines ? `第 ${lines.line}–${lines.endLine} 行` : '源码',
   }}>
     {error ? <p role="alert">源码读取失败：{error}</p> : file && location && file.path === location.path
       ? editable
-        ? <MarkdownEditor key={file.path} initial={file} source sourceLocation={location} hideSourceHeading />
-        : <SourceEditor key={file.path} value={file.body} path={file.path} readOnly extensions={codeMirrorExtensions} location={location} onChange={() => undefined} />
+        ? <MarkdownEditor key={file.path} initial={file} source sourceLocation={lines} hideSourceHeading />
+        : <SourceEditor key={file.path} value={file.body} path={file.path} readOnly extensions={codeMirrorExtensions} location={lines} onChange={() => undefined} />
       : <p role="status">正在读取源码…</p>}
   </DetailDrawer>;
 }

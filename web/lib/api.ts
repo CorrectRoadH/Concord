@@ -1,4 +1,5 @@
-import type { GitDiff, GitStatus, ViewAction, ViewFailure, ViewFile, ViewResponse, WorkspaceProjection } from '../../src/model/index.ts';
+import { Schema } from 'effect';
+import { StatechartResolution, type GitDiff, type GitStatus, type ViewAction, type ViewFailure, type ViewFile, type ViewResponse, type WorkspaceProjection } from '../../src/model/index.ts';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -86,6 +87,10 @@ export class ConcordApi {
   async file(path: string, signal?: AbortSignal): Promise<ViewFile> {
     const endpoint = `/api/file?path=${encodeURIComponent(path)}`;
     return this.read(() => this.retryBusy(() => this.request<ViewFile>(endpoint, { signal }), signal));
+  }
+  async statechart(input: { document: string; code: string; meta: string }, signal: AbortSignal): Promise<StatechartResolution> {
+    const value = await this.request<unknown>('/api/statechart/resolve', { method: 'POST', body: JSON.stringify(input), signal });
+    return Schema.decodeUnknownSync(StatechartResolution, { onExcessProperty: 'error' })(value);
   }
   action(action: ViewAction, signal?: AbortSignal): Promise<unknown> {
     const request = () => this.request('/api/action', { method: 'POST', body: JSON.stringify(action), signal });

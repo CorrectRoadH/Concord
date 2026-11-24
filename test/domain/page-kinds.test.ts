@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { LocalRepository } from '../support/repository.ts';
 import { checkProject } from '../../src/app/project-check.ts';
 import { documentShow, traceGaps } from '../../src/app/trace-queries.ts';
+import { ConcordError } from '../../src/model/index.ts';
 
 async function fixture(run: (repo: LocalRepository, write: (path: string, source?: string) => void) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-page-kinds-'));
@@ -20,6 +21,63 @@ async function fixture(run: (repo: LocalRepository, write: (path: string, source
     await run(repo, write);
   } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
 }
+
+// @use-case docs/feature/extensible-page-kinds/use-case/declare-page-kind.md
+test('configuration recognizes declared package pages, reports their misspellings and restores diagnostics after deletion', async () => fixture(async (repo, write) => {
+  const config = [{ name: 'threat-model', question: 'What should we defend?', category: 'behavior' }, { name: 'runbook', question: 'How is it operated?', category: 'implementation' }];
+  const path = 'docs/feature/cart/threat-model.md';
+  write(path);
+  const load = async (pageKinds: unknown) => {
+    write('concord.config.ts', `export default ${JSON.stringify({ pageKinds })};\n`);
+    return LocalRepository.open(repo.root);
+  };
+  const initial = await checkProject(repo, 'off');
+  assert.deepEqual(initial.findings.filter(finding => finding.code === 'UnknownPageKind').map(finding => finding.path), [path]);
+  const declared = await load(config);
+  try {
+    assert.equal((await checkProject(declared, 'off')).ok, true);
+    assert.equal((await documentShow(declared, 'cart', 'feature', 'off')).pages?.find(page => page.path === path)?.kind, 'threat-model');
+    write('docs/feature/another/README.md', '# Another\n');
+    const typo = 'docs/feature/another/threat-modle.md';
+    write(typo);
+    const finding = (await checkProject(declared, 'off')).findings.find(candidate => candidate.path === typo);
+    assert.deepEqual(finding && 'details' in finding ? finding.details : undefined, { suggestions: ['threat-model'] });
+    rmSync(join(repo.root, typo));
+    write('docs/feature/another/threat-model.md');
+    write('docs/engineering/build/README.md', '# Build\n');
+    write('docs/engineering/build/runbook/README.md');
+    write('docs/roadmap/next/README.md', '# Next\n');
+    write('docs/roadmap/next/runbook.md');
+    assert.equal((await checkProject(declared, 'off')).ok, true);
+    write('docs/engineering/build/runbook.md');
+    assert.deepEqual((await checkProject(declared, 'off')).findings.filter(finding => finding.code === 'UnknownPageKind').map(finding => finding.path), ['docs/engineering/build/runbook.md']);
+  } finally { declared.close(); }
+  const undeclared = await load(undefined);
+  try {
+    const unknown = (await checkProject(undeclared, 'off')).findings.filter(finding => finding.code === 'UnknownPageKind');
+    assert.equal(unknown.length, 5);
+    assert.ok(unknown.some(finding => finding.path === path));
+  } finally { undeclared.close(); }
+}));
+
+// @use-case docs/feature/extensible-page-kinds/use-case/declare-page-kind.md
+test('page kind configuration rejects malformed, conflicting and duplicate declarations', async () => fixture(async (repo, write) => {
+  const declaration = { name: 'runbook', question: 'How?', category: 'behavior' };
+  const invalid = [
+    ...['architecture', 'README', 'readme', 'use-case', 'use-case-index', 'unknown', 'concepts', 'writing', 'statechart', 'Invalid_Name', '', 'a'.repeat(65)].map(name => [{ ...declaration, name }]),
+    [declaration, declaration], [{ ...declaration, question: '' }], [{ ...declaration, question: 'a'.repeat(201) }],
+    [{ ...declaration, category: 'other' }], [{ ...declaration, extra: true }], [{ name: 'runbook', question: 'How?' }],
+  ];
+  for (const pageKinds of invalid) {
+    write('concord.config.ts', `export default ${JSON.stringify({ pageKinds })};\n`);
+    await assert.rejects(async () => { (await LocalRepository.open(repo.root)).close(); },
+      cause => cause instanceof ConcordError && cause.code === 'InvalidData' && cause.message.includes('pageKinds'), JSON.stringify(pageKinds));
+  }
+  for (const name of ['architecture', 'README', 'statechart', 'use-case-index', 'unknown']) {
+    write('concord.config.ts', `export default ${JSON.stringify({ pageKinds: [{ ...declaration, name }] })};\n`);
+    await assert.rejects(async () => { (await LocalRepository.open(repo.root)).close(); }, cause => cause instanceof ConcordError && cause.message.includes(name));
+  }
+}));
 
 // @feature docs/feature/documentation-quality/cli.md#页面种类
 test('unknown package pages fail relations with suggestions while readable input remains complete', async () => (await fixture(async (repo, write) => {
@@ -62,6 +120,7 @@ test('page kinds inherit directories and prioritize use cases and scoped project
     ['architecture/checkout-flow.md', 'architecture'], ['architecture/concepts.md', 'concepts'],
     ['architecture/deep/writing.md', 'writing'], ['api.md', 'api'], ['format.md', 'format'],
     ['ui.md', 'ui'], ['performance.md', 'performance'], ['data-model.md', 'data-model'],
+    ['statechart/README.md', 'statechart'], ['statechart/recovery.md', 'statechart'],
     ['cli.md', 'unknown'], ['cli/README.md', 'cli'], ['cli/options.md', 'cli'],
   ];
   for (const [path] of expected) write(`${root}${path}`);

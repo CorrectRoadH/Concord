@@ -13,7 +13,7 @@ import { exec, focused, panes, spaces, run, closeOverlay, home, props as hostPro
 import { ModSession, ModFailure, ModDisconnected, failure, isCliMissing, markdownTarget } from './session.ts';
 import { pageSource, type PageSource, type RenderedPage, type SourceBlock } from '../../model/herdr-mod/index.ts';
 import { RenderAssets, type RenderLease } from './render-assets.ts';
-import { codeMarkdown, livePreviewElements } from './rendered-page.ts';
+import { codeMarkdown, livePreviewElements, type ResolvedStatechart } from './rendered-page.ts';
 import { contextMenuCard, clickableRow, color, heading, icon, mono, row, text, type IconName } from './ui.ts';
 
 const runEffect = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect, { scheduler: new Scheduler.MixedScheduler('sync') });
@@ -86,6 +86,7 @@ export default class ConcordMod extends View {
   private renderToken = {};
   private renderKey = '';
   private renderedPath = '';
+  private collapsedReports = new Set<string>();
   private rendering = false;
   private renderError = '';
   private expanded = new Set<string>();
@@ -573,19 +574,20 @@ export default class ConcordMod extends View {
     this.editorFocus = cx.timer.after(0, () => { this.editorFocus = undefined; if (this.editor === editor) state.focus(); });
   }
 
-  private location(path: string, line: number, cx: Context): void {
+  private location(path: string, line: number | undefined, cx: Context): void {
     this.closePreview();
     const session = this.session, token = this.previewToken;
     const current = () => !this.closed && !session.closed && session === this.session && token === this.previewToken;
-    this.previewLabel = `${path}:${line}`; this.previewLoading = true;
+    this.previewLabel = line === undefined ? path : `${path}:${line}`; this.previewLoading = true;
     cx.notify();
     this.run(cx, Effect.tryPromise({ try: async () => {
       try {
         const source = await runEffect(session.read(path));
         if (!current()) return;
-        const start = Math.max(0, line - 4);
-        const excerpt = (source ?? '文件不存在').split('\n').slice(start, line + 20).map((value, index) => `${start + index + 1}  ${value}`).join('\n');
-        this.preview = EditorState.new({ language: path.split('.').at(-1) ?? 'text', value: excerpt, readonly: true, font_family: settings().font_family, font_size: 12 });
+        const body = source ?? '文件不存在';
+        const start = line === undefined ? 0 : Math.max(0, line - 4);
+        const value = line === undefined ? body : body.split('\n').slice(start, line + 20).map((value, index) => `${start + index + 1}  ${value}`).join('\n');
+        this.preview = EditorState.new({ language: path.split('.').at(-1) ?? 'text', value, readonly: true, font_family: settings().font_family, font_size: 12 });
       } catch (cause) {
         if (current()) this.previewError = failure(cause).message;
       } finally { if (current()) this.previewLoading = false; }
@@ -599,10 +601,10 @@ export default class ConcordMod extends View {
 
   private closeConcept(): void { this.conceptToken = {}; this.conceptText = undefined; }
 
-  private clearDetails(): void { this.closePreview(); this.closeConcept(); }
+  private clearDetails(): void { this.closePreview(); this.closeConcept(); this.collapsedReports.clear(); }
 
-  private link(target: string, cx: Context): void {
-    const path = markdownTarget(this.session.selected ?? 'docs/README.md', target);
+  private link(target: string, cx: Context, from = this.session.selected ?? 'docs/README.md'): void {
+    const path = markdownTarget(from, target);
     if (!path) return;
     const anchor = target.split('#')[1];
     const concept = this.session.concepts.find(item => item.path === path && item.concept.id === anchor);
@@ -736,6 +738,26 @@ export default class ConcordMod extends View {
       { label: '复制 Markdown 链接', text: `[${title}](${path})` },
       { label: '复制讨论 Prompt', text: `请基于 ${path} 的 Spec 要求进行实现与核验。` },
       ...(path === this.session.selected && !this.pendingPage ? [{ label: '复制文档内容', text: this.session.draft ?? this.session.source }] : []),
+    ]);
+  }
+
+  // @concord-code
+  // @concord-implements docs/feature/herdr-mod/use-case/review-statechart.md#discuss-statechart
+  // @concord-implements docs/feature/herdr-mod/use-case/review-statechart.md#regenerate
+  private statechartMenu(element: Element, id: string, block: ResolvedStatechart): Element {
+    const context = [
+      `机器：${this.session.machine ?? '本机'}`,
+      `仓库：${this.session.root}`,
+      `页面：${this.session.selected}`,
+      `模型：${block.spec}`,
+      `配置：${block.config}`,
+      ...(block.view ? [`视图：${block.view}`] : []),
+      `输出目录：${block.out}`,
+      `结果已过期：${block.stale ? '是' : '否'}`,
+    ].join('\n');
+    return this.menu(element, id, [
+      { label: '复制讨论 Prompt', text: `${context}\n\n请按检查报告逐条说明坏状态、打破的规则及到达坏状态的路径。` },
+      ...(block.stale ? [{ label: '复制重新生成请求', text: `${context}\n\n请重新运行模型检查器，替换输出目录，更新状态图块的 digest，然后重新运行 concord check。` }] : []),
     ]);
   }
 
@@ -900,7 +922,9 @@ export default class ConcordMod extends View {
   private checkElements(): Element[] {
     const session = this.session;
     if (session.checking || !session.check || session.check.ok) return [];
-    const findings = session.check.findings;
+    const findings = session.check.findings.map(finding => ({
+      ...finding, message: finding.code === 'StatechartStale' ? `[${finding.code}] ${finding.message}` : finding.message,
+    }));
     const request = `Concord 在 ${this.locationLabel(session.root, session.machine)} 检查发现 ${findings.length} 个问题。\n请按项目 Spec 修复这些问题，并重新运行 concord check 确认结果。\n\n完整问题列表：\n${findings.map(finding => `${finding.path}:${finding.line ?? 1} ${finding.message}`).join('\n')}`;
     return [v_flex().id('concord-check').flex_none().min_w(0).px(12).py(8).gap(6).border_b(1).border_color(color('border')).children([
       text(`仓库有 ${findings.length} 个检查问题`).min_w(0).truncate().text_color(color('blocked')),
@@ -977,6 +1001,16 @@ export default class ConcordMod extends View {
       session.selected, this.renderedPage, this.renderedBlocks, this.pageLease?.paths ?? new Map(),
       this.editor ? { block: this.editor.block, element: Textarea.new(this.editor.state).id('document-editor').min_w(0).font_family(settings().font_family ?? '').text_size(13) } : undefined,
       (block, cx) => this.edit(block, cx), (url, cx) => this.link(url, cx),
+      {
+        source: (path, cx) => this.location(path, undefined, cx),
+        link: (report, url, cx) => this.link(url, cx, report),
+        menu: (element, id, block) => this.statechartMenu(element, id, block),
+        collapsed: id => this.collapsedReports.has(id),
+        toggle: (id, cx) => {
+          if (!this.collapsedReports.delete(id)) this.collapsedReports.add(id);
+          cx.notify();
+        },
+      },
       this.rendering, this.renderError,
     )), ...this.relationshipElements());
     if (this.previewLabel) body.push(v_flex().id('concord-source-preview').gap(6).border_t(1).border_color(color('border')).py(12).children([

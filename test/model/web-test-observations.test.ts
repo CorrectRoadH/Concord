@@ -19,7 +19,7 @@ test('HTTP exposes no test job endpoints while ordinary actions remain available
   try {
     execFileSync('git', ['init', '-q', root]);
     server = await startHostedViewServer({ root, webRoot: root, port: 0 }, {
-      verify: async () => {}, workspace: unused, refresh: unused, read: unused, git: unused, diff: unused, compile: unused,
+      verify: async () => {}, workspace: unused, refresh: unused, read: unused, git: unused, diff: unused, compile: unused, statechart: unused,
       action: async input => { actions.push(input); return { available: true }; }, subscribe: unused, sse: unused,
     }, makeRuntimeEnvironment(root, process.env), () => true);
     for (const [method, path] of [['GET', '/api/jobs'], ['POST', '/api/jobs'], ['DELETE', '/api/jobs/ccjob_00000000-0000-0000-0000-000000000000']] as const) {

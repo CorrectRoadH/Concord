@@ -9,7 +9,7 @@ import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/ind
 import { markdownBody } from "../../model/index.ts";
 import { documentMarkdown, documentMarkdownProjection } from "../documents/index.ts";
 import { inspectDocumentRecords } from "../documents/index.ts";
-import { makeDocumentProjectionCache } from '../documents/index.ts';
+import { makeDocumentProjectionCache, outsideStatechartOutputs, statechartOutputRoots } from '../documents/index.ts';
 import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
 import { repositoryRuntime } from '../../base/workspace/index.ts';
 
@@ -186,7 +186,9 @@ export function scanTasteLinks(repo: Repository, index: ReadonlyMap<string, { re
     const references: (TasteReference & { target: string })[] = [], broken: { path: string; line: number; id: string }[] = [], findings: Finding[] = [];
     let complete = true;
     const candidates: { path: string; source?: string; finding?: Finding }[] = [];
-    for (const path of repo.files('docs').filter(inScope).sort()) {
+    const docs = repo.files('docs');
+    const outputs = statechartOutputRoots(repo, docs);
+    for (const path of docs.filter(path => inScope(path) && outsideStatechartOutputs(path, outputs)).sort()) {
       let source: string | undefined;
       try { source = read(path); }
       catch (cause) { candidates.push({ path, finding: { code: cause instanceof ConcordError ? cause.code : 'SourceChanged', path, message: cause instanceof Error ? cause.message : String(cause) } }); continue; }

@@ -1,7 +1,7 @@
 import { nativeBindings, readNativeObservations } from '../domain/tests/index.ts';
 import { RuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../base/environment/index.ts';
 import { renderPage } from './page-render.ts';
-import { workspaceSourceDigest } from './workspace-source.ts';
+import { workspaceSourceDigest, workspaceSourceSnapshot } from './workspace-source.ts';
 import type { Installation } from '../base/installation/index.ts';
 import type { Publication } from "../base/publication/index.ts";
 import { openReadRepository, openWriteRepository, Workspace } from "../base/workspace/index.ts";
@@ -33,7 +33,7 @@ import { ConcordError, decode, digest, failure } from "../model/index.ts";
 import type { LocalRepository } from "../base/workspace/index.ts";
 import { discoverRoot, git } from "../base/workspace/index.ts";
 import { initialize } from "./initialize.ts";
-import { listTemplates, templateBody } from "../domain/documents/index.ts";
+import { listTemplates, readStatechartSource, templateBody } from "../domain/documents/index.ts";
 import { buildTrace } from "../domain/trace/index.ts";
 import { renderReview, traceShow } from "./trace-queries.ts";
 import { readWritingPolicy } from "../domain/writing/index.ts";
@@ -170,16 +170,18 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
     let codeFiles: Awaited<ReturnType<typeof scanCode>>['files'];
     let edges: Awaited<ReturnType<typeof buildTrace>>['edges'] = [];
     let findings = [...inspected.findings];
+    let complete = false;
     let diagnostics: unknown;
     try {
-      const compile = async () => buildTrace(repo, cache, { timing, inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
+      const compile = async () => buildTrace(repo, cache, { timing, includeStatecharts: true, inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
       const trace = await (timing === undefined ? compile() : timing.async('view.buildTrace', compile));
       timing?.cache(trace.codeCache, 'code');
       cases = trace.annotations;
       codes = trace.codeDeclarations;
       codeFiles = trace.codeFiles;
       edges = trace.edges;
-      findings = [...trace.findings];
+      findings = [...trace.findings, ...(trace.statechartFindings ?? [])];
+      complete = trace.findings.length === 0;
       diagnostics = await doctor(repo, trace, cache);
     } catch (cause) {
       if (observe !== undefined && cause instanceof ConcordError && ['UnsafePath', 'RecoveryRequired', 'InvalidFile'].includes(cause.code)) throw cause;
@@ -189,13 +191,14 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       codes = code.codes;
       codeFiles = code.files;
       findings = [...inspected.findings, ...cases.findings, ...code.findings];
+      complete = false;
       const error = failure(cause);
       findings.push({ code: error.code, path: '.', message: error.message });
       diagnostics = { ok: false, error: error.code, message: error.message, details: error.details };
     }
     return {
       root: repo.root,
-      complete: findings.length === 0,
+      complete,
       project: repo.config,
       configDigest: digest(currentConfigSource),
       documents: inspected.documents,
@@ -229,10 +232,10 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
 export const getWorkspaceSnapshot = (root: string, cache: 'use' | 'off' = 'off', timing?: RequestTiming) => compileWorkspace(root, cache, timing);
 export const observeWorkspaceProjection = Effect.fn('view.observeWorkspaceProjection')(function*(root: string, timing?: RequestTiming) {
   let drift = { files: [] as string[], directories: [] as string[], publicationChanged: false };
-  const sourceDigest = yield* workspaceSourceDigest(root);
+  const { sourceDigest, statechartWatch } = yield* workspaceSourceSnapshot(root);
   const snapshot = yield* compileWorkspace(root, 'off', timing, value => { drift = value; });
   if ((yield* workspaceSourceDigest(root)) !== sourceDigest) drift = { ...drift, files: [...new Set([...drift.files, '.'])] };
-  return { snapshot, drift, sourceDigest };
+  return { snapshot, drift, sourceDigest, statechartWatch };
 });
 // @concord-end
 
@@ -284,6 +287,8 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
         }
         return { path: source.path, body: source.body, digest: source.digest };
       }
+      const model = readStatechartSource(repo, path);
+      if (model !== undefined) return model;
       if (path === repo.configSnapshot.path) {
         return { path, body: repo.configSnapshot.source, digest: repo.configSnapshot.digest, project: repo.configSnapshot.config };
       }

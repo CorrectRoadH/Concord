@@ -1,5 +1,5 @@
 import { repositoryRuntime } from '../../base/workspace/index.ts';
-import { makeDocumentProjectionCache } from '../documents/index.ts';
+import { inspectStatechart, makeDocumentProjectionCache, outsideStatechartOutputs, statechartOutputRoots } from '../documents/index.ts';
 import type { TraceEdge } from "../../model/index.ts";
 
 
@@ -7,22 +7,30 @@ import { scanAnnotations } from "../tests/index.ts";
 import { scanCode } from "../code/index.ts";
 import type { CodeDeclaration } from "../../model/index.ts";
 import { checkDocuments, diagnoseDocuments, inspectDocumentRecords, type DocumentInventory } from "../documents/index.ts";
-import { ConcordError, type AnnotatedCase, type Finding, type Repository } from "../../model/index.ts";
+import { ConcordError, statechartBlocks, type AnnotatedCase, type Finding, type Repository } from "../../model/index.ts";
 import { TASTE_PATH, inspectTaste } from "../taste/index.ts";
 import { measureScan, measureScanAsync, type ScanTiming } from "../../base/sources/index.ts";
 import { referenceResolver } from "../documents/index.ts";
 import { resolveCommit } from "../../base/git/index.ts";
 import { extractSteps } from "../documents/index.ts";
+interface TraceOptions {
+  readonly includeCode?: boolean;
+  readonly includeStatecharts?: boolean;
+  readonly inventory?: DocumentInventory;
+  readonly timing?: ScanTiming;
+  readonly annotationSourceMode?: 'overlay';
+}
+
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
-export async function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' } = {}) {
+export async function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: TraceOptions = {}) {
   const read = async () => (await buildUnderSnapshot(repo, cache, options)).trace;
   return repo.snapshot === undefined ? (await read()) : repo.snapshot(read);
 }
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 // @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
-export async function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' }) {
+export async function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: TraceOptions) {
   const runtime = repositoryRuntime(repo);
   const contentCache = makeDocumentProjectionCache(runtime);
   try {
@@ -37,11 +45,20 @@ export async function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' 
     if (page.cause !== undefined) throw page.cause;
     return page.source;
   };
-  const docPaths = repo.files('docs').filter(path => path.endsWith('.md'));
+  const docs = repo.files('docs');
+  const outputs = statechartOutputRoots(repo, docs);
+  const docPaths = docs.filter(path => path.endsWith('.md') && outsideStatechartOutputs(path, outputs));
   const markdown: { path: string; source: string }[] = [];
   for (const path of docPaths) {
     try { const source = readPage(path); if (source !== undefined) markdown.push({ path, source }); }
     catch { /* The normal diagnostic pass below retains each read failure. */ }
+  }
+  const statechartFindings: (Finding & { readonly category: 'relation' })[] = [];
+  if (options.includeStatecharts) for (const { path, source } of markdown) {
+    if (path.startsWith('docs/_template/')) continue;
+    for (const block of statechartBlocks(path, source)) {
+      for (const finding of inspectStatechart(repo, block).findings) statechartFindings.push({ ...finding, category: 'relation' });
+    }
   }
   // Managed owners and supporting pages share one bounded memory-cache batch.
   // This also covers root pages and templates outside the owner inventory.
@@ -49,7 +66,7 @@ export async function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' 
   const taste = measureScan(options.timing, 'trace.taste', () => inspectTaste(repo, readPage));
   const tasteFindings = taste.findings;
   const advisories = tasteFindings.filter((finding) => finding.code === 'TasteMissing');
-  const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents)), ...annotations.findings, ...tasteFindings.filter((finding) => finding.code !== 'TasteMissing')];
+  const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents, outputs)), ...annotations.findings, ...tasteFindings.filter((finding) => finding.code !== 'TasteMissing')];
   // Taste list IDs are paragraphs, not Use Case steps.
   for (const path of docPaths.filter(path => path !== TASTE_PATH)) {
     try { const source = readPage(path); if (source !== undefined) findings.push(...extractSteps(path, source, runtime, contentCache).findings); }
@@ -101,7 +118,9 @@ export async function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' 
     } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
   findings.push(...measureScan(options.timing, 'trace.verifyReferences', () => references.verify()));
-  const trace = { documents, annotations, tasteReferences: taste.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.every(finding => finding.code === 'UnknownPageKind'), inventoryComplete: inventory.complete, advisories, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
+  const trace = { documents, annotations, tasteReferences: taste.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings,
+    ...(options.includeStatecharts ? { statechartFindings } : {}),
+    complete: inventory.complete && findings.every(finding => finding.code === 'UnknownPageKind'), inventoryComplete: inventory.complete, advisories, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
   return { trace, references };
   } finally { contentCache.close(); }
 }

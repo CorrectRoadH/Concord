@@ -1,9 +1,9 @@
 import { watch, type FSWatcher } from "node:fs";
 import { lstat, readdir } from "node:fs/promises";
-import { isAbsolute, join, normalize, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { Effect } from "effect";
 import { assertLeasePath } from "../publication/index.ts";
-import { ConcordError, type shared_ProjectConfig as ProjectConfig } from "../../model/index.ts";
+import { ConcordError, type shared_ProjectConfig as ProjectConfig, type StatechartWatch } from "../../model/index.ts";
 import { excludedSourcePath } from "../../model/index.ts";
 
 
@@ -21,6 +21,8 @@ export class NodeSourceWatch {
   private scopes: readonly string[] = [];
   private sourceScopes: readonly string[] = [];
   private strictScopes: readonly string[] = [];
+  private modelDirectories: ReadonlySet<string> = new Set();
+  private modelDirectoryAncestors: ReadonlySet<string> = new Set();
   private sourceIgnore: readonly string[] = [];
   private stopped = false;
   private failure: ConcordError | undefined;
@@ -34,36 +36,49 @@ export class NodeSourceWatch {
     this.failed = failed;
   }
 
-  reconcile(project: ProjectConfig | null, sources: readonly { readonly path: string }[] = []): Effect.Effect<boolean, ConcordError> {
-    return Effect.tryPromise({ try: () => this.update(project, sources), catch: unavailable });
+  reconcile(project: ProjectConfig | null, sources: readonly { readonly path: string }[] = [], statechart?: StatechartWatch): Effect.Effect<boolean, ConcordError> {
+    return Effect.tryPromise({ try: () => this.update(project, sources, statechart), catch: unavailable });
   }
 
   private relevant(path: string): boolean {
-    return this.scopes.some(scope => scope === '' || path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`));
+    return this.scopes.some(scope => scope === '' || path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`))
+      || this.modelDirectoryAncestors.has(path);
+  }
+
+  private modelModule(path: string): boolean {
+    return this.modelDirectories.size > 0 && path.endsWith('.tla') && !basename(path).startsWith('.') && this.modelDirectories.has(dirname(path));
   }
 
   private excluded(path: string): boolean {
     const parts = path.split(sep);
     if (parts.some(part => ignored.has(part))) return true;
+    if (this.modelModule(path) || this.modelDirectoryAncestors.has(path)) return false;
     const sources = this.sourceScopes.filter(scope => path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`));
     return sources.length > 0
       && sources.every(scope => excludedSourcePath(path.split(sep).join('/'), scope.split(sep).join('/'), this.sourceIgnore))
       && !this.strictScopes.some(scope => path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`));
   }
 
-  private async update(project: ProjectConfig | null, sources: readonly { readonly path: string }[]): Promise<boolean> {
+  private async update(project: ProjectConfig | null, sources: readonly { readonly path: string }[], statechart?: StatechartWatch): Promise<boolean> {
     if (this.stopped) return false;
     this.failure = undefined;
     this.sourceIgnore = project?.sourceIgnore ?? [];
     this.sourceScopes = [...(project?.sourceRoots ?? []), ...(project?.testRoots ?? [])].map(path => normalize(path));
-    this.strictScopes = ['concord.config.ts', 'docs', ...['memory'], ...sources.map(source => source.path)].map(path => normalize(path));
-    const scopes = ['concord.config.ts', 'docs', ...(project?.sourceRoots ?? []), ...(project?.testRoots ?? []),
-      ...['memory'], ...sources.map(source => source.path)];
-    this.scopes = [...new Set(scopes.map(path => {
+    const checkedScope = (path: string) => {
       const value = normalize(path);
       if (isAbsolute(value) || value === '..' || value.startsWith(`..${sep}`)) throw new ConcordError('UnsafePath', 'Watch source must stay inside the worktree');
-      return value === '.' ? '' : value;
-    }))].filter(path => !path.split(sep).some(part => ignored.has(part)));
+      return value;
+    };
+    const strict = ['concord.config.ts', 'docs', 'memory', ...sources.map(source => source.path), ...(statechart?.files ?? [])];
+    this.strictScopes = strict.map(checkedScope);
+    this.modelDirectories = new Set((statechart?.modelDirectories ?? []).map(checkedScope));
+    const ancestors = new Set<string>();
+    for (const dir of this.modelDirectories) {
+      for (let path = dir; path !== '.'; path = dirname(path)) ancestors.add(path);
+    }
+    this.modelDirectoryAncestors = ancestors;
+    const scopes = [...this.strictScopes, ...this.sourceScopes];
+    this.scopes = [...new Set(scopes.map(path => path === '.' ? '' : path))].filter(path => !path.split(sep).some(part => ignored.has(part)));
     for (const [path, value] of this.directories) {
       if (path !== this.root && !this.relevant(relative(this.root, path))) { value.handle.close(); this.directories.delete(path); }
     }
@@ -92,7 +107,7 @@ export class NodeSourceWatch {
           if (this.stopped) return;
           if (filename === null) { this.changed(); return; }
           const eventPath = relative(this.root, join(path, filename.toString()));
-          if (!this.excluded(eventPath) && this.relevant(eventPath)) this.changed();
+          if (!this.excluded(eventPath) && (this.relevant(eventPath) || this.modelModule(eventPath))) this.changed();
         });
         handle.on('error', cause => {
           handle.close();

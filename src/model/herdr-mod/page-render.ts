@@ -8,12 +8,18 @@ const Markdown = Schema.Struct({ type: Schema.Literal('markdown'), text: Schema.
 const ImageFields = { type: Schema.Literal('image'), source: Schema.String, alt: Schema.String };
 const MermaidFields = { type: Schema.Literal('mermaid'), source: Schema.String };
 const P5Fields = { type: Schema.Literal('p5'), source: Schema.String, description: Schema.String };
+const StatechartFields = { type: Schema.Literal('statechart'), source: Schema.String };
+const StatechartChart = Schema.Union([Schema.Struct({ svg: Schema.String, digest: Digest }), Schema.Struct({ error: Schema.String })]);
+const StatechartReport = Schema.Union([Schema.Struct({ text: Schema.String }), Schema.Struct({ error: Schema.String })]);
 export const RenderBlock = Schema.Union([
   Markdown,
   Schema.Struct({ ...ImageFields, mediaType: Schema.Literals(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']), data: Schema.String, digest: Digest }),
   Schema.Struct({ ...ImageFields, error: Schema.String }),
   Schema.Struct({ ...MermaidFields, svg: Schema.String, digest: Digest }),
   Schema.Struct({ ...MermaidFields, error: Schema.String }),
+  Schema.Struct({ ...StatechartFields, spec: Schema.String, config: Schema.String, view: Schema.optional(Schema.String),
+    out: Schema.String, stale: Schema.Boolean, chart: Schema.optional(StatechartChart), report: StatechartReport }),
+  Schema.Struct({ ...StatechartFields, error: Schema.String }),
   Schema.Struct({ ...P5Fields, html: Schema.String }),
   Schema.Struct({ ...P5Fields, error: Schema.String }),
 ]);

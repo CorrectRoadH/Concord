@@ -8,7 +8,7 @@ import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../mode
 
 const TEMPLATE_NAMES = [
   'feature', 'roadmap', 'design', 'engineering', 'use-case', 'memory', 'issue',
-  'library', 'cli', 'api', 'format', 'ui', 'performance', 'architecture', 'data-model', 'use-case-index',
+  'library', 'cli', 'api', 'format', 'ui', 'performance', 'architecture', 'data-model', 'statechart', 'use-case-index',
   'project-index', 'concepts', 'project-architecture', 'taste', 'project-design',
 ] as const;
 

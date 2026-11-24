@@ -607,8 +607,8 @@ function DocumentFiles({
     }
     update({ file: path })
   }
-  const followMarkdownLink = (href: string) => {
-    const target = relativeMarkdownTarget(selectedPath, href)
+  const followMarkdownLink = (href: string, from = selectedPath) => {
+    const target = relativeMarkdownTarget(from, href)
     if (!target) return false
     const targetFile = snapshot.pages.find(item => item.path === target.path)
     const targetDocument = snapshot.documents.find(item => item.path === target.path)

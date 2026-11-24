@@ -7,7 +7,7 @@ import { Effect } from 'effect';
 import { runGit } from '../base/git/index.ts';
 import type { LocalRepository } from '../base/workspace/index.ts';
 import { repositoryRuntime } from '../base/workspace/index.ts';
-import { loadDocuments, relocateMarkdown, decodeDocumentSource, moveOwnerTargets } from '../domain/documents/index.ts';
+import { loadDocuments, relocateMarkdown, decodeDocumentSource, moveOwnerTargets, outsideStatechartOutputs, statechartOutputRoots } from '../domain/documents/index.ts';
 import { moveTestTargets } from '../domain/tests/index.ts';
 import { moveCodeTargets } from '../domain/code/index.ts';
 import { ConcordError, canonicalPath, objectDigest, ownerKind, documentPlacementError, packagePageKind, inRepositorySnapshot, failure, type Repository, type DocumentMoveChange, type DocumentMovePlan } from '../model/index.ts';
@@ -39,35 +39,38 @@ export async function planDocumentMove(repo: Repository, request: { readonly fro
   };
   const documents = loadDocuments(repo);
   const records = new Map(documents.map(doc => [doc.path, doc]));
-  const targetPaths = new Set(repo.files(packageDirectory(to)).filter(path => !mapping.has(path)));
-  moves.forEach(move => targetPaths.add(move.to));
+  const docs = repo.files('docs');
+  const outputs = statechartOutputRoots(repo, docs);
+  const authored = (path: string) => outsideStatechartOutputs(path, outputs);
+  const targetPaths = new Set(repo.files(packageDirectory(to)).filter(path => !mapping.has(path) && authored(path)));
+  moves.forEach(move => { if (authored(move.from)) targetPaths.add(move.to); });
   for (const move of moves) {
     repo.absolute(move.from); repo.absolute(move.to);
     if (repo.readBytes?.(move.to) !== undefined || repo.read(move.to) !== undefined) throw new ConcordError('DocumentExists', move.to);
-    if (!move.from.endsWith('.md')) continue;
-    const originalKind = packagePageKind(`${packageDirectory(from)}/README.md`, move.from, new Set(sources));
+    if (!move.from.endsWith('.md') || !authored(move.from)) continue;
+    const originalKind = packagePageKind(`${packageDirectory(from)}/README.md`, move.from, new Set(sources), repo.config.pageKinds);
     if (directory && move.from.endsWith('/README.md') && move.from !== `${from}/README.md` && originalKind === 'unknown') throw new ConcordError('NestedOwner', move.from);
     const source = repo.read(move.from);
     if (source === undefined) throw new ConcordError('FileChangedSinceRead', move.from);
     const kind = ownerKind(move.to);
     const placement = kind === undefined ? undefined : documentPlacementError(kind, move.to, kind === 'use-case' ? `${packageDirectory(to)}/README.md` : undefined);
-    if (placement !== undefined || packagePageKind(`${packageDirectory(to)}/README.md`, move.to, targetPaths) === 'unknown') throw new ConcordError('InvalidPlacement', placement ?? move.to);
+    if (placement !== undefined || packagePageKind(`${packageDirectory(to)}/README.md`, move.to, targetPaths, repo.config.pageKinds) === 'unknown') throw new ConcordError('InvalidPlacement', placement ?? move.to);
     decodeDocumentSource(move.to, source, repositoryRuntime(repo));
   }
-  const remainingPaths = new Set(repo.files(packageDirectory(from)).filter(path => !mapping.has(path)));
+  const remainingPaths = new Set(repo.files(packageDirectory(from)).filter(path => !mapping.has(path) && authored(path)));
   const packagePaths = new Set([...targetPaths, ...remainingPaths]);
   for (const path of packagePaths) {
     if (!path.endsWith('.md')) continue;
-    if (packagePageKind(`${packageDirectory(path)}/README.md`, path, packagePaths) === 'unknown') throw new ConcordError('InvalidPlacement', path);
+    if (packagePageKind(`${packageDirectory(path)}/README.md`, path, packagePaths, repo.config.pageKinds) === 'unknown') throw new ConcordError('InvalidPlacement', path);
   }
   const testFiles = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].sort();
   const codeFiles = [...new Set((repo.config.sourceRoots ?? []).flatMap(root => repo.files(root, 'source')))].sort();
-  const paths = [...new Set([...repo.files('docs'), ...repo.files('memory'), ...testFiles, ...codeFiles, ...sources])].sort();
+  const paths = [...new Set([...docs, ...repo.files('memory'), ...testFiles, ...codeFiles, ...sources])].sort();
   const changes: DocumentMoveChange[] = [];
   const inputs: [string, string][] = [];
   for (const path of paths) {
     const moved = mapping.get(path);
-    const markdown = (path.startsWith('docs/') || path.startsWith('memory/')) && path.endsWith('.md');
+    const markdown = (path.startsWith('docs/') || path.startsWith('memory/')) && path.endsWith('.md') && authored(path);
     if (!markdown && !moved && !testFiles.includes(path) && !codeFiles.includes(path)) continue;
     if (moved && !markdown) {
       const bytes = repo.readBytes?.(path);

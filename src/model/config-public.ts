@@ -28,6 +28,7 @@ export interface ProjectConfig {
   readonly languageServers?: readonly LanguageServer[];
   /** Repository-relative files or directory subtrees excluded from automatic code/test discovery; no globs. */
   readonly sourceIgnore?: readonly string[];
+  readonly pageKinds?: readonly { readonly name: string; readonly question: string; readonly category: 'behavior' | 'implementation' }[];
   readonly p5?: { readonly libraries: readonly string[] };
   readonly testAdapters?: readonly TestAdapter[];
   readonly docsWork?: {

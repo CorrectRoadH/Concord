@@ -47,8 +47,8 @@ export function ProjectDocsPage() {
 
   const listed = pages.find(page => page.path === selectedPath);
   const title = projectDocTitle(listed ?? { path: selectedPath });
-  const follow = (href: string) => {
-    const target = relativeMarkdownTarget(selectedPath, href);
+  const follow = (href: string, from = selectedPath) => {
+    const target = relativeMarkdownTarget(from, href);
     if (!target) return false;
     if (pages.some(page => page.path === target.path)) {
       navigate(`${projectDocHref(target.path)}${target.hash}`);

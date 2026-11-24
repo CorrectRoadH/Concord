@@ -27,7 +27,7 @@ import { OwnedProcess, OwnedProcessLive, ProcessEventsLive, makeProcessGroupCpuR
 import { existsSync } from 'node:fs';
 import { channel } from 'node:diagnostics_channel';
 import { join } from 'node:path';
-import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection, type GitBaselineCache, closeGitBaselineCache } from '../../app/index.ts';
+import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, resolveStatechart, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection, type GitBaselineCache, closeGitBaselineCache } from '../../app/index.ts';
 import { ConcordError, failure, objectDigest } from '../../model/index.ts';
 import { Computation, ComputationReply, ComputeRpcs } from './computation.ts';
 import { makeComputationProtocol } from './computation-protocol.ts';
@@ -176,14 +176,15 @@ const compute = Effect.fn('workspace.compute')(function*(root: string, operation
     case 'query': return yield* executeQuery(root, operation.request, operation.cache);
     case 'scan': {
       const builtFrom = new Date(yield* Clock.currentTimeMillis).toISOString();
-      const { snapshot, drift, sourceDigest } = yield* observeWorkspaceProjection(root);
-      return yield* Effect.try({ try: () => makeWorkspaceProjectionCandidate(snapshot, drift, builtFrom, sourceDigest), catch: failure });
+      const { snapshot, drift, sourceDigest, statechartWatch } = yield* observeWorkspaceProjection(root);
+      return yield* Effect.try({ try: () => makeWorkspaceProjectionCandidate(snapshot, drift, builtFrom, sourceDigest, statechartWatch), catch: failure });
     }
     case 'read': return yield* getViewFile(root, operation.path);
     case 'read-bytes': return yield* getWorkspaceRead(root, operation.path);
     case 'git-status': return yield* getViewGitStatus(root, serverBaselineCache);
     case 'git-diff': return yield* getGitDiff(root, operation.path, operation.area);
     case 'p5-compile': return yield* compileP5(root, operation.input);
+    case 'statechart-resolve': return yield* resolveStatechart(root, operation.input);
   }
 });
 export const runComputeMain = (root: string | undefined): void => {
@@ -384,7 +385,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       foregroundPending: admission.pending,
       cachePermit,
       exists: Effect.sync(() => existsSync(root) && existsSync(privateDir)),
-      reconcile: candidate => watch ? watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources) : Effect.succeed(false),
+      reconcile: candidate => watch ? watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources, candidate.statechartWatch) : Effect.succeed(false),
     }).pipe(Effect.provideContext(stateContext));
     yield* Effect.forkScoped(cache.failed.pipe(Effect.andThen(service.stop)));
     if (commandScope) {
@@ -430,6 +431,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         git: () => runAdmitted(service.execute({ kind: 'git-status' })),
         diff: (path, area) => runAdmitted(service.execute({ kind: 'git-diff', path, area })),
         compile: input => runAdmitted(service.execute({ kind: 'p5-compile', input: Schema.decodeUnknownSync(Schema.Json)(input) })),
+        statechart: input => runAdmitted(service.execute({ kind: 'statechart-resolve', input })),
         action: async (input, signal) => {
           const action = decodeViewAction(input);
           const maintenance: Effect.Effect<unknown, unknown> | undefined = action.action === 'cache.status' ? service.maintain(cache.status)

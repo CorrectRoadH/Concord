@@ -16,7 +16,7 @@ import { ConcordError, digest, failure } from "../model/index.ts";
 import type { WorkspaceProjection, WorkspaceSnapshot } from "../model/index.ts";
 
 const key = 'workspace';
-import { type WorkspaceProjectionCandidate, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord, decodeWorkspaceProjectionCandidate } from "../model/index.ts";
+import { type StatechartWatch, type WorkspaceProjectionCandidate, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord, decodeWorkspaceProjectionCandidate } from "../model/index.ts";
 
 export const assertWorkspacePublicationReady = Effect.fn('workspaceProjection.publicationReady')(function*(context: WorkspaceProjectionContext) {
   const pending = yield* (yield* Sources).pendingPublications(context.privateDir);
@@ -38,7 +38,7 @@ export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext'
 
 
 /** Explicit construction, followed by strict decoding, keeps source bodies out of persistent storage. */
-export function makeWorkspaceProjectionCandidate(snapshot: WorkspaceSnapshot, drift: { files: readonly string[]; directories: readonly string[]; publicationChanged: boolean }, builtFrom: string, sourceDigest: string): WorkspaceProjectionCandidate {
+export function makeWorkspaceProjectionCandidate(snapshot: WorkspaceSnapshot, drift: { files: readonly string[]; directories: readonly string[]; publicationChanged: boolean }, builtFrom: string, sourceDigest: string, statechartWatch?: StatechartWatch): WorkspaceProjectionCandidate {
   const remote = <T extends { readonly body: string }>(value: T) => { const { body: _body, ...rest } = value; return rest; };
   const document = (value: WorkspaceSnapshot['documents'][number]) => ({ path: value.path, digest: value.digest,
     metadata: value.metadata.kind === 'issue' && value.metadata.source ? { ...value.metadata, source: remote(value.metadata.source) } : value.metadata });
@@ -53,6 +53,7 @@ export function makeWorkspaceProjectionCandidate(snapshot: WorkspaceSnapshot, dr
     ? { ...('ok' in diagnostics ? { ok: diagnostics.ok } : {}), error: diagnostics.error, message: 'message' in diagnostics ? diagnostics.message : '' }
     : diagnostics;
   return decodeWorkspaceProjectionCandidate({ ...(consistent ? { sourceDigest } : {}), builtAt: builtUntil, builtFrom, builtUntil,
+    ...(statechartWatch === undefined ? {} : { statechartWatch }),
     complete: snapshotComplete, changedPaths, unknownRelations: !snapshotComplete,
     snapshot: { ...snapshot, complete: snapshotComplete, diagnostics: diagnostic, conceptCatalogs: directory.catalogs, findings: [...snapshot.findings, ...directory.findings],
       documents: snapshot.documents.map(document),
@@ -105,7 +106,8 @@ export const storeWorkspaceProjection = Effect.fn('storeWorkspaceProjection')(fu
     let prior: typeof Envelope.Type | undefined;
     if (payload) { try { const parsed = decodeEnvelope(JSON.parse(payload)); if (parsed.identity === context.identity) prior = parsed; } catch { /* Invalid payload is replaced, never served. */ } }
     const next = candidate === undefined ? undefined : decodeWorkspaceProjectionCandidate(candidate);
-    const record = next?.sourceDigest !== undefined ? decodeWorkspaceProjectionRecord(next) : prior?.record;
+    const { statechartWatch: _watch, ...projection } = next ?? { sourceDigest: undefined };
+    const record = projection.sourceDigest !== undefined ? decodeWorkspaceProjectionRecord(projection) : prior?.record;
     const lastAttempt = attempt ?? (next ? { at: next.builtUntil, complete: next.sourceDigest !== undefined && next.complete, changedPaths: next.changedPaths } : prior?.lastAttempt);
     const discarded = attempt !== undefined || next !== undefined && next.sourceDigest === undefined;
     const refreshError = error ? { failedAt: new Date().toISOString(), code: error.code, message: error.message.slice(0, 4096) } : discarded ? prior?.error : undefined;

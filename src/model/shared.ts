@@ -6,6 +6,7 @@ import { TestAdapterSchema, validAdapters } from "./test-adapter-config.ts";
 import { validSourceIgnore } from "./source-discovery.ts";
 import { DOCUMENT_NAME_PATTERN } from "./document-name.ts";
 import { FeedbackConnectionsSchema, FeedbackSourceSchema } from "./feedback-schema.ts";
+import { CustomPageKinds } from './page-kinds.ts';
 
 
 
@@ -53,6 +54,7 @@ export const ProjectSchema = Schema.Struct({
   sourceRoots: Schema.optional(Schema.Array(Text)),
   languageServers: Schema.optional(LanguageServersSchema),
   sourceIgnore: Schema.optional(Schema.Array(Text.check(Schema.makeFilter(validSourceIgnore)))),
+  pageKinds: Schema.optionalKey(CustomPageKinds),
   p5: Schema.optional(Schema.Struct({
     libraries: Schema.Array(Text).check(Schema.isMaxLength(16), Schema.makeFilter(values => new Set(values).size === values.length)),
   })),
@@ -91,6 +93,7 @@ export interface Repository {
   runtimeInputs?(command: string, envNames: readonly string[]): { readonly executable: { readonly path: string; readonly digest: string }; readonly env: Readonly<Record<string, string | undefined>>; readonly implementation: string; readonly version: string };
   environment?(names?: readonly string[]): Readonly<Record<string, string | undefined>>;
   files(prefix: string, scope?: 'source'): string[];
+  directoryMembers?(path: string): readonly string[];
   absolute(path: string): string;
   publish(operation: string, changes: readonly Change[], dryRun?: boolean): Promise<MutationReceipt>;
 }
@@ -138,7 +141,7 @@ export interface DocumentRecord { readonly path: string; readonly metadata: Docu
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#标记规则
-export interface Finding { readonly code: string; readonly path: string; readonly message: string; readonly line?: number; readonly details?: Schema.Json }
+export interface Finding { readonly code: string; readonly path: string; readonly message: string; readonly line?: number; readonly details?: Schema.Json; readonly category?: 'relation' | 'writing' }
 export const AnnotatedCaseSchema = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(/^neref_[0-9a-f]{32}$/u)), file: Text, line: Schema.Int, name: Text,
   contract: Text, contractKind: Schema.Literals(['feature', 'use-case']), issues: Strings,

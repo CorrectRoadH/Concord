@@ -42,7 +42,7 @@ test('feedback action filters the original source while a newer cached remote ob
     // fail if called, and no browser, workspace daemon or frontend is started.
     const unused = (): never => { throw new Error('Unexpected non-action HTTP port'); };
     const server = await startHostedViewServer({ root, port: 0, webRoot: root }, {
-      verify: async () => {}, workspace: unused, refresh: unused, read: unused, git: unused, diff: unused, compile: unused,
+      verify: async () => {}, workspace: unused, refresh: unused, read: unused, git: unused, diff: unused, compile: unused, statechart: unused,
       action: input => runApplication(executeViewAction(root, input)),
       subscribe: unused, sse: unused,
     }, makeRuntimeEnvironment(process.cwd(), process.env), () => true);

@@ -1,7 +1,7 @@
 import { selectEffectiveConcepts, splitConceptReference } from '../../model/index.ts';
 import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.ts";
 import { fromMarkdown } from "../../model/index.ts";
-import { documentMarkdown, makeDocumentProjectionCache } from "../documents/index.ts";
+import { documentMarkdown, makeDocumentProjectionCache, outsideStatechartOutputs, statechartOutputRoots } from "../documents/index.ts";
 import type { RuntimeEnvironmentSnapshot } from '../../base/environment/index.ts';
 import { repositoryRuntime } from '../../base/workspace/index.ts';
 import { parseConceptCatalog, conceptSpellingKey, type ConceptCatalog, type ConceptDefinition } from "../../model/index.ts";
@@ -46,7 +46,9 @@ export function readConceptCatalog(source: string, path: string | undefined, run
 export interface CatalogRecord { path: string; scope: string; digest: string; catalog: ConceptCatalog }
 export interface ConceptDiagnostic { code: string; message: string; sources: readonly string[]; scope?: string }
 export function catalogSources(repo: Repository): Map<string, string> {
-  return new Map(discovered('catalog', repo.files('docs')).map(path => [path, repo.read(path) ?? '']));
+  const docs = repo.files('docs');
+  const outputs = statechartOutputRoots(repo, docs);
+  return new Map(discovered('catalog', docs).filter(path => outsideStatechartOutputs(path, outputs)).map(path => [path, repo.read(path) ?? '']));
 }
 export function analyzeCatalogs(sources: Map<string, string>, runtime: RuntimeEnvironmentSnapshot) {
   const catalogs: CatalogRecord[] = [];

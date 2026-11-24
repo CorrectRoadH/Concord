@@ -21,7 +21,8 @@ const Metadata = Schema.Union([FeatureSchema, UseCaseSchema, DesignSchema, Roadm
 
 const Document = Schema.Struct({ path: Schema.String, digest: Schema.String, metadata: Metadata });
 
-const Finding = Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int), details: Schema.optional(Schema.Json) });
+const Finding = Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int), details: Schema.optional(Schema.Json),
+  category: Schema.optionalKey(Schema.Literals(['relation', 'writing'])) });
 
 const ErrorFields = { code: Schema.String, message: Schema.String };
 
@@ -58,7 +59,11 @@ export const WorkspaceProjectionRecordSchema = Schema.Struct({ sourceDigest: Sch
   value.changedPaths.length === 0 && value.complete === (value.snapshot.complete === true)
   && value.unknownRelations === !value.complete && Date.parse(value.builtFrom) <= Date.parse(value.builtUntil)));
 /** A drifting computation is an attempt, with no result identity or publication authority. */
-export const WorkspaceProjectionCandidateSchema = Schema.Struct({ sourceDigest: Schema.optional(Schema.String), ...RecordFields }).check(Schema.makeFilter(value =>
+const StatechartWatch = Schema.Struct({ files: Schema.Array(Schema.String), modelDirectories: Schema.Array(Schema.String) });
+export type StatechartWatch = typeof StatechartWatch.Type;
+export const WorkspaceProjectionCandidateSchema = Schema.Struct({
+  sourceDigest: Schema.optional(Schema.String), ...RecordFields, statechartWatch: Schema.optionalKey(StatechartWatch),
+}).check(Schema.makeFilter(value =>
   (value.sourceDigest !== undefined) === (value.changedPaths.length === 0)
   && value.complete === (value.snapshot.complete === true) && value.unknownRelations === !value.complete
   && Date.parse(value.builtFrom) <= Date.parse(value.builtUntil)));

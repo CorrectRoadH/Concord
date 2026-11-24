@@ -3,7 +3,7 @@
 import { Schema } from 'effect';
 import { Rpc, RpcGroup } from 'effect/rpc';
 import { QueryRequest } from '../../app/index.ts';
-import { CacheDerivationBatch } from '../../model/index.ts';
+import { CacheDerivationBatch, StatechartRequest } from '../../model/index.ts';
 import { CallerCwd, Packet, QueryEnvironment, strict, WorkspaceServerError } from './protocol.ts';
 
 export { Snapshot } from './operation-protocol.ts';
@@ -18,6 +18,7 @@ export const Computation = Schema.Union([
   strict(Schema.Struct({ kind: Schema.Literal('git-status') })),
   strict(Schema.Struct({ kind: Schema.Literal('git-diff'), path: Schema.String, area: Schema.Literals(['staged', 'unstaged', 'untracked']) })),
   strict(Schema.Struct({ kind: Schema.Literal('p5-compile'), input: Schema.Json })),
+  strict(Schema.Struct({ kind: Schema.Literal('statechart-resolve'), input: StatechartRequest })),
 ]);
 export type Computation = typeof Computation.Type;
 export const ComputeRpcs = RpcGroup.make(Rpc.make('snapshot', {

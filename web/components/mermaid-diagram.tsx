@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 import { useEffect, useId, useState, type ReactNode } from 'react';
 
-export function MermaidDiagram({ code, children }: { readonly code: string; readonly children: ReactNode }) {
+export function MermaidDiagram({ code, children }: { readonly code: string; readonly children?: ReactNode }) {
   const id = useId().replaceAll(':', '');
   const [svg, setSvg] = useState('');
   const [error, setError] = useState('');
@@ -28,9 +28,9 @@ export function MermaidDiagram({ code, children }: { readonly code: string; read
     <div aria-label="Mermaid 图表预览" className="mermaid-preview">
       {svg ? <div className="mermaid-svg" dangerouslySetInnerHTML={{ __html: svg }} /> : error ? <pre role="alert" className="mermaid-error">{error}</pre> : <span role="status">正在渲染图表…</span>}
     </div>
-    <details className="mermaid-source">
+    {children !== undefined && <details className="mermaid-source">
       <summary>编辑 Mermaid 源码</summary>
       {children}
-    </details>
+    </details>}
   </div>;
 }

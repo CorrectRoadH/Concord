@@ -20,6 +20,7 @@ import { inspectDocumentProjections, projectionRecord, makeDocumentProjectionCac
 
 import { DOCUMENT_ROOTS, documentDisposition, documentPlacementError, matchingOwners } from "../../model/index.ts";
 import { packagePageKind, pageKindSuggestions } from '../../model/index.ts';
+import { outsideStatechartOutputs, statechartOutputRoots } from './statechart.ts';
 import { packagePagePaths } from './package-pages.ts';
 
 
@@ -92,8 +93,10 @@ function documentInputs(repo: Repository, kinds?: readonly DocumentKind[]): { pa
   for (const root of roots) {
     for (const path of repo.files(root)) if (path.endsWith('.md')) paths.add(path);
   }
+  const outputs = statechartOutputRoots(repo, paths);
   const inputs: { path: string; source: string }[] = [];
   for (const path of [...paths].sort()) {
+    if (!outsideStatechartOutputs(path, outputs)) continue;
     const source = repo.read(path);
     if (source === undefined) continue;
     inputs.push({ path, source });
@@ -223,15 +226,16 @@ function checkRef(
   catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidReference', owner.path, `${label}: ${cause instanceof Error ? cause.message : String(cause)}`); return undefined; }
 }
 
-export function checkDocuments(repo: Repository, documents: readonly DocumentRecord[]): Finding[] {
+export function checkDocuments(repo: Repository, documents: readonly DocumentRecord[], outputs?: ReadonlySet<string>): Finding[] {
   return inRepositorySnapshot(repo, () => {
   const findings: Finding[] = [];
+  outputs ??= statechartOutputRoots(repo);
   for (const owner of documents.filter(document => ['feature', 'engineering', 'roadmap'].includes(document.metadata.kind))) {
     const root = owner.path.slice(0, -'README.md'.length);
-    const paths = packagePagePaths(repo, owner.path);
-    for (const path of paths) if (/\.mdx?$/u.test(path) && packagePageKind(owner.path, path, paths) === 'unknown') {
+    const paths = packagePagePaths(repo, owner.path, outputs);
+    for (const path of paths) if (/\.mdx?$/u.test(path) && packagePageKind(owner.path, path, paths, repo.config.pageKinds) === 'unknown') {
       const relative = path.slice(root.length);
-      findings.push({ code: 'UnknownPageKind', path, message: `Page kind is unknown: ${relative}`, details: { suggestions: [...pageKindSuggestions(relative)] } });
+      findings.push({ code: 'UnknownPageKind', path, message: `Page kind is unknown: ${relative}`, details: { suggestions: [...pageKindSuggestions(relative, repo.config.pageKinds)] } });
     }
   }
   const identities = new Map<string, DocumentRecord[]>();

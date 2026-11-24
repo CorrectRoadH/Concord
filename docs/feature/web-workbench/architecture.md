@@ -96,6 +96,12 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 编译结果只在当前浏览器使用，不生成文件 owner 或持久缓存。`/p5-frame` 提供随包的 p5 运行时，iframe 与响应 CSP 同时设置无同源权限的沙箱。子页面使用独立 CSP，父工作台不开放内联脚本；API 和其他页面拒绝 frame 导航。来源窗口与消息 Schema 共同限制控制消息，沙箱不拥有读取仓库的消息接口。
 
+## 状态图块 {#状态图块}
+
+`POST /api/statechart/resolve` 严格解码 `{ document, code, meta }`，由工作区计算进程按[状态图块](../local-sdlc/format.md#状态图块)解析：校验属性与路径、计算摘要、读取 `chart.mmd` 与 `report.md`。响应的 `value` 是严格 Schema `StatechartResolution`，与 `check` 的状态图 finding 和 Concord mod 的 `page.render` 同源，浏览器用 `chart` 原文走已有 Mermaid 渲染。
+
+`/api/file` 为此只多放开一类读取：已保存的状态图块实际引用、且符合路径规则的 `spec`、`config` 与 `view` 文件，只读。未被引用的模型文件、越出仓库与 symlink 仍被拒绝；未保存草稿里新写的引用不授予读取。
+
 仅 p5 子页面允许动态函数生成，以兼容核心校验器与 shader 功能；该权限不扩展到父工作台，也不授予同源、网络或仓库访问能力。
 
 CSS 与静态资源进入当前图块的编译结果。项目配置的 `p5.libraries` 拥有库选择与加载顺序，Markdown 不覆盖该集合。内建扩展按固定名称和版本选择，本地扩展相对项目根解析，自定义逻辑模块以相对文件导入；联网和设备权限不随绘图库 API 自动开放。运行停止或组件卸载时移除 iframe，释放该浏览上下文的资源。图块语法、支持范围和预算由 [p5 图块格式](format.md#p5-图块)拥有。

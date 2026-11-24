@@ -270,6 +270,7 @@ export class LocalRepository implements Repository {
   private readonly observedIdentities = new Map<string, string | undefined>();
   private observedRootFiles: string | undefined;
   private readonly observedDirectories = new Map<string, { path: string; scope: 'source' | undefined; observation: string; files: readonly string[] }>();
+  private readonly observedDirectoryMembers = new Map<string, readonly string[]>();
   private readonly rootAnchor: readonly RootAnchor[];
   private rootFd: number | undefined;
   private readonly listings = new Map<string, Buffer[]>();
@@ -493,6 +494,27 @@ export class LocalRepository implements Repository {
     if (this.observing && !prior) this.observedDirectories.set(key, { path: prefix, scope, observation: scanned.observation, files: [...scanned.files] });
     return scanned.files;
   }
+  directoryMembers(path: string): readonly string[] {
+    const read = () => {
+      const members = this.currentDirectoryMembers(path);
+      if (this.observing && !this.observedDirectoryMembers.has(path)) this.observedDirectoryMembers.set(path, members);
+      return members;
+    };
+    return this.snapshotDepth === 0 ? this.underLease(read) : read();
+  }
+  private currentDirectoryMembers(path: string): readonly string[] {
+    // Observe immediate names without opening children outside the requested file set.
+    if (path === '.') { this.checkRoot(); return readdirSync(this.root).sort(); }
+    const { target, stat } = this.readablePath(path);
+    return stat?.isDirectory() ? readdirSync(target).sort().map(name => `${path}/${name}`) : [];
+  }
+  private clearSourceObservations(): void {
+    this.observedFiles.clear();
+    this.observedBytes.clear();
+    this.observedDirectories.clear();
+    this.observedRootFiles = undefined;
+    this.observedDirectoryMembers.clear();
+  }
   private sourcePath(path: string, roots: readonly string[]): void {
     canonicalPath(path);
     if (!SOURCE_EXTENSION.test(path) || forbiddenSourcePart(path)) throw new ConcordError('InvalidSourcePath', `Source must be a JavaScript or TypeScript file in a configured source root: ${path}`);
@@ -528,7 +550,7 @@ export class LocalRepository implements Repository {
   // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   snapshot<A>(read: () => A): A {
-    if (this.snapshotDepth === 0) { this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear(); }
+    if (this.snapshotDepth === 0) this.clearSourceObservations();
     return this.underLease(read);
   }
   /** Historical navigation only. Current queries and publications still verify strictly. */
@@ -548,7 +570,7 @@ export class LocalRepository implements Repository {
   }
   beginProjection(reclaimDead = true): void {
     if (this.snapshotDepth !== 0 || !this.optimistic) throw new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot');
-    this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear();
+    this.clearSourceObservations();
     this.beginSnapshot(reclaimDead);
   }
   projectionDrift(): { files: string[]; directories: string[]; publicationChanged: boolean } {
@@ -623,7 +645,7 @@ export class LocalRepository implements Repository {
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   beginSnapshot(reclaimDead = true): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
-    if (this.access === 'read') { this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear(); }
+    if (this.access === 'read') this.clearSourceObservations();
     try {
       const acquire = this.recovering || !reclaimDead ? acquireFileLease : acquireRecoverablePublicationLease;
       if (!this.optimistic) this.traceLease = acquire(this.root, this.coordinationDirectory, PUBLICATION_LEASE, 'exclusive', 'snapshot', !this.previewWithoutState);
@@ -818,6 +840,7 @@ export class LocalRepository implements Repository {
       });
       if (this.observedRootFiles !== undefined) verify('.', directories, () => { if (JSON.stringify(this.currentRootFiles()) !== this.observedRootFiles) throw new ObservationChanged('.'); });
       for (const { path, scope, observation } of this.observedDirectories.values()) verify(path, directories, () => { if (this.scanDirectory(path, scope).observation !== observation) throw new ObservationChanged(path); });
+      for (const [path, members] of this.observedDirectoryMembers) verify(path, directories, () => { if (canonical(this.currentDirectoryMembers(path)) !== canonical(members)) throw new ObservationChanged(path); });
       return { files: [...files].sort(), directories: [...directories].sort() };
     } finally { this.verifyListings = undefined; }
   }
@@ -953,7 +976,7 @@ export class LocalRepository implements Repository {
         const nextConfig = configChange?.after == null ? undefined : await snapshot('concord.config.ts', configChange.after, this.persistentCache === 'off' ? undefined : this.privateDir, false, this.runtime, this.configContentCache);
         const receipt = await this.publishUnderLease(journal, dryRun);
         if (!receipt.dryRun) {
-          this.observedFiles.clear(); this.observedBytes.clear(); this.observedDirectories.clear(); this.observedRootFiles = undefined;
+          this.clearSourceObservations();
           if (nextConfig !== undefined) {
             this.configSnapshot = nextConfig;
             this.config = resolveProjectConfig(this.root, nextConfig.config);
@@ -1023,7 +1046,7 @@ export class LocalRepository implements Repository {
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#写入保护
   private async preflight(journal: Journal, recovering = false): Promise<void> {
-    this.observedFiles.clear(); this.observedBytes.clear(); this.observedDirectories.clear(); this.observedRootFiles = undefined;
+    this.clearSourceObservations();
     this.clearPathObservations();
     this.observing = true;
     const fail = (message: string): never => { throw new ConcordError(recovering ? journal.scope.kind === 'issue-close' ? 'RecoveryRequired' : 'RecoveryConflict' : 'FileChangedSinceRead', message); };

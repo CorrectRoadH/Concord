@@ -45,3 +45,4 @@ export { authorBody } from './documents.ts';
 
 export { templateCatalog } from './templates.ts';
 export { packagePagePaths } from './package-pages.ts';
+export { inspectStatechart, isStatechartPage, loadStatechartArtifacts, outsideStatechartOutputs, readStatechartSource, statechartOutputRoots, statechartProjectionInputs } from './statechart.ts';

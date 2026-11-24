@@ -1,6 +1,8 @@
 export { DocsConflictError } from './repo-docs-errors.ts';
 export { WORKSPACE_PROTOCOL } from './workspace-protocol.ts';
-export { packagePageKind, pageKindSuggestions, PACKAGE_PAGE_KINDS, SPLIT_PAGE_KINDS } from './page-kinds.ts';
+export { packagePageKind, pageKindSuggestions, splitPageKinds, PACKAGE_PAGE_KINDS, SPLIT_PAGE_KINDS } from './page-kinds.ts';
+export { parseStatechart, statechartBlocks, statechartDigest, statechartFinding, statechartOwner, statechartPaths, StatechartFiles, StatechartResolution, StatechartRequest, StatechartText } from './statechart.ts';
+export type { StatechartBlock, StatechartOptions, StatechartPath } from './statechart.ts';
 export type { PackagePageKind } from './page-kinds.ts';
 export { DocsDecodeError } from './repo-docs-errors.ts';
 export type { DocsDomainError } from './repo-docs-errors.ts';
@@ -384,7 +386,7 @@ export type { PolicySource } from './writing-limits.ts';
 export { parseWritingPolicy, renderWritingPolicy } from './writing-format.ts';
 
 export { decodeWorkspaceProjectionCandidate } from './workspace-projection.ts';
-export type { WorkspaceProjectionCandidate } from './workspace-projection.ts';
+export type { WorkspaceProjectionCandidate, StatechartWatch } from './workspace-projection.ts';
 export { InitializationReceiptSchema } from './initialization.ts';
 export type { InitializationReceipt } from './initialization.ts';
 export { WORKFLOW_SKILL_TOPICS, workflowSkillPaths, isWorkflowSkillPath, isManagedWorkflowSkill, isObsoleteWorkflowSkillRemoval, SkillsInstallReceiptSchema } from './workflow-skills.ts';

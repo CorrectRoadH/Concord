@@ -9,7 +9,7 @@ import { gzipSync } from "node:zlib";
 import { Schema } from "effect";
 import { decodeViewAction, validateViewRoot } from "../../app/index.ts";
 import type { GitArea } from "../../model/index.ts";
-import { ConcordError, decode, digest, failure } from "../../model/index.ts";
+import { ConcordError, decode, digest, failure, StatechartRequest, StatechartResolution } from "../../model/index.ts";
 import type { ViewFailure, ViewResponse } from "../../model/index.ts";
 import { ViewRequestLog } from "./view-request-log.ts";
 import type { RequestTiming } from "../../app/index.ts";
@@ -23,6 +23,7 @@ export interface HostedViewPorts {
   readonly git: () => Promise<unknown>;
   readonly diff: (path: string, area: GitArea) => Promise<unknown>;
   readonly compile: (input: unknown) => Promise<unknown>;
+  readonly statechart: (input: typeof StatechartRequest.Type) => Promise<unknown>;
   readonly action: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
   readonly subscribe: (listener: (event: unknown) => void | Promise<void>) => () => void;
   readonly sse: (delta: number) => void;
@@ -370,6 +371,12 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
     mutationJson(request);
     const input = await readJson(request);
     return respond(await hosted.compile(input));
+  }
+  if (method === 'POST' && url.pathname === '/api/statechart/resolve') {
+    exactQuery(url, []);
+    mutationJson(request);
+    const input = decode(StatechartRequest, await readJson(request), 'statechart request');
+    return respond(decode(StatechartResolution, await hosted.statechart(input), 'statechart response'));
   }
   if (method === 'POST' && url.pathname === '/api/action') {
     exactQuery(url, []);

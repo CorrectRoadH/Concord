@@ -12,9 +12,9 @@ import { ScanRequest, ScanMessage } from "../../model/index.ts";
 const scan = (root: string, id: number) => Effect.gen(function*() {
   const timing = new RequestTiming(performance.now());
   const builtFrom = new Date().toISOString();
-  const { snapshot, drift, sourceDigest } = yield* observeWorkspaceProjection(root, timing);
+  const { snapshot, drift, sourceDigest, statechartWatch } = yield* observeWorkspaceProjection(root, timing);
   timing.workspace(snapshot);
-  const value = yield* Effect.try({ try: () => makeWorkspaceProjectionCandidate(snapshot, drift, builtFrom, sourceDigest), catch: failure });
+  const value = yield* Effect.try({ try: () => makeWorkspaceProjectionCandidate(snapshot, drift, builtFrom, sourceDigest, statechartWatch), catch: failure });
   const body = JSON.stringify(value);
   if (Buffer.byteLength(body, 'utf8') > WORKSPACE_PROJECTION_LIMIT) return yield* Effect.fail(new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds 8 MiB'));
   return { kind: 'success' as const, body, phases: timing.result(), observations: [...timing.observations], caches: timing.caches };

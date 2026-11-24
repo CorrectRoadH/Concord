@@ -1,39 +1,47 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Markdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkFrontmatter from 'remark-frontmatter';
-import remarkMath from 'remark-math';
-import { fromMarkdown } from 'mdast-util-from-markdown';
-import type { Root, RootContent } from 'mdast';
+import { diagramBlocks, markdownRemarkPlugins, type MarkdownSourceRange } from '../lib/markdown-blocks.ts';
 import { P5Sketch } from './p5-sketch.tsx';
 import { MermaidDiagram } from './mermaid-diagram.tsx';
 import { RecordDetails } from './content-layout.tsx';
-import { rehypeSafeMath, remarkMathNodes } from './markdown-math.ts';
+import { rehypeSafeMath } from './markdown-math.ts';
+import { StatechartBlock } from './statechart-block.tsx';
 
-/** Read-only rendering never round-trips source bytes through an editor. */
-function diagramBlocks(markdown: string): ReadonlyMap<number, { language: string; code: string; meta: string }> {
-  const blocks = new Map<number, { language: string; code: string; meta: string }>();
-  const visit = (node: Root | RootContent): void => {
-    if (node.type === 'code' && (node.lang === 'p5' || node.lang?.toLowerCase() === 'mermaid') && node.position?.start.offset !== undefined) {
-      blocks.set(node.position.start.offset, { language: node.lang.toLowerCase(), code: node.value, meta: node.meta ?? '' });
-    }
-    if ('children' in node) for (const child of node.children) visit(child);
-  };
-  visit(fromMarkdown(markdown));
-  return blocks;
-}
+type FollowLink = (href: string, from?: string) => boolean;
 
-export function MarkdownPreview({ markdown, documentPath, onFollowLink }: { markdown: string; documentPath?: string; onFollowLink?: (href: string) => boolean }) {
+const DiagramContext = createContext<{
+  readonly diagrams: ReturnType<typeof diagramBlocks>;
+  readonly documentPath?: string;
+  readonly embedded: boolean;
+  readonly readOnly: boolean;
+  readonly onFollowLink?: FollowLink;
+  readonly onReplaceBlock?: (range: MarkdownSourceRange, value: string) => void;
+}>({ diagrams: new Map(), embedded: false, readOnly: true });
+
+const MarkdownPre: NonNullable<Components['pre']> = ({ children, node, ...props }) => {
+  const { diagrams, documentPath, embedded, readOnly, onFollowLink, onReplaceBlock } = useContext(DiagramContext);
+  const offset = node?.position?.start.offset;
+  const block = offset === undefined ? undefined : diagrams.get(offset);
+  if (block?.language === 'p5') return <P5Sketch code={block.code} meta={block.meta} document={documentPath} />;
+  if (block?.language === 'mermaid') return <MermaidDiagram code={block.code}><pre><code>{block.code}</code></pre></MermaidDiagram>;
+  if (block?.language === 'statechart' && documentPath && !embedded) return <StatechartBlock
+    document={documentPath} code={block.code} meta={block.meta} source={block.source} readOnly={readOnly}
+    onEdit={onReplaceBlock && (value => onReplaceBlock(block, value))}
+    renderReport={(text, path) => <MarkdownPreview markdown={text} documentPath={path} onFollowLink={onFollowLink} embedded />}
+  />;
+  return <pre {...props}>{children}</pre>;
+};
+
+export function MarkdownPreview({ markdown, documentPath, onFollowLink, onReplaceBlock, embedded = false, readOnly = true }: {
+  readonly markdown: string;
+  readonly documentPath?: string;
+  readonly onFollowLink?: FollowLink;
+  readonly onReplaceBlock?: (range: MarkdownSourceRange, value: string) => void;
+  readonly embedded?: boolean;
+  readonly readOnly?: boolean;
+}) {
   const diagrams = useMemo(() => diagramBlocks(markdown), [markdown]);
-  const renderPre = useMemo<Components['pre']>(() => ({ children, ...props }) => {
-    const offset = props.node?.position?.start.offset;
-    const diagram = offset === undefined ? undefined : diagrams.get(offset);
-    if (diagram?.language === 'p5') return <P5Sketch code={diagram.code} meta={diagram.meta} document={documentPath} />;
-    if (diagram?.language === 'mermaid') return <MermaidDiagram code={diagram.code}><pre><code>{diagram.code}</code></pre></MermaidDiagram>;
-    const { node: _node, ...attributes } = props;
-    return <pre {...attributes}>{children}</pre>;
-  }, [diagrams, documentPath]);
   const article = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -46,10 +54,10 @@ export function MarkdownPreview({ markdown, documentPath, onFollowLink }: { mark
     const target = article.current?.querySelector(`[id="${CSS.escape(`user-content-${id}`)}"]`);
     target?.scrollIntoView();
   }, [hash, markdown]);
-  return <>
+  return <DiagramContext.Provider value={{ diagrams, documentPath, embedded, readOnly, onFollowLink, onReplaceBlock }}>
     <article ref={article} className="wysiwyg__content min-h-0" data-testid="markdown-preview">
-      <Markdown remarkPlugins={[remarkGfm, remarkFrontmatter, remarkMath, remarkMathNodes]} rehypePlugins={[rehypeSafeMath]} components={{
-        pre: renderPre,
+      <Markdown remarkPlugins={markdownRemarkPlugins} rehypePlugins={[rehypeSafeMath]} components={{
+        pre: MarkdownPre,
         a: ({ node: _node, href, children, ...props }) => <a {...props} href={href} onClick={event => {
           if (!href || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
           if (href.startsWith('#')) {
@@ -59,10 +67,10 @@ export function MarkdownPreview({ markdown, documentPath, onFollowLink }: { mark
             const target = article.current?.querySelector(`[id="${CSS.escape(`user-content-${id}`)}"]`);
             target?.scrollIntoView();
             navigate({ pathname: location.pathname, search: location.search, hash: href });
-          } else if (onFollowLink?.(href)) event.preventDefault();
+          } else if (onFollowLink?.(href, documentPath)) event.preventDefault();
         }}>{children}</a>,
       }}>{markdown}</Markdown>
     </article>
-    <RecordDetails title="查看原文与元数据"><pre>{markdown}</pre></RecordDetails>
-  </>;
+    {!embedded && <RecordDetails title="查看原文与元数据"><pre>{markdown}</pre></RecordDetails>}
+  </DiagramContext.Provider>;
 }

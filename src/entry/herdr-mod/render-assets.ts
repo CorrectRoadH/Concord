@@ -90,10 +90,13 @@ export class RenderAssets {
     const files = new Map<string, Uint8Array>();
     for (const [index, block] of page.blocks.entries()) {
       if (block.type === 'markdown' || 'error' in block) continue;
-      const bytes = block.type === 'image' ? Buffer.from(block.data, 'base64') : Buffer.from(block.type === 'mermaid' ? block.svg : block.html, 'utf8');
+      const asset = block.type === 'statechart' ? block.chart : block;
+      if (!asset || 'error' in asset) continue;
+      const bytes = 'data' in asset ? Buffer.from(asset.data, 'base64') : Buffer.from('svg' in asset ? asset.svg : asset.html, 'utf8');
       const digest = hash(bytes);
-      if (block.type !== 'p5' && block.digest !== `sha256:${digest}`) throw new ModFailure({ message: 'Concord 渲染资源的摘要不一致' });
-      const ext = block.type === 'p5' ? 'html' : block.type === 'mermaid' ? 'svg' : ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg' } as const)[block.mediaType];
+      if ('digest' in asset && asset.digest !== `sha256:${digest}`) throw new ModFailure({ message: 'Concord 渲染资源的摘要不一致' });
+      const ext = 'html' in asset ? 'html' : 'data' in asset
+        ? ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg' } as const)[asset.mediaType] : 'svg';
       const name = `${digest}.${ext}`;
       files.set(name, bytes);
       const absolute = `${this.directory}/${name}`.replaceAll('\\', '/');

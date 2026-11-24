@@ -4,7 +4,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 // @concord-implements docs/feature/herdr-mod/use-case/use-on-remote-machine.md
 import { Context, Effect, Schema } from 'effect';
-import { ModWorkspaceProjection, type ModWorkspaceSnapshot, RenderedPage, WorkspaceWait, pageSource, type PageSource } from '../../model/herdr-mod/index.ts';
+import { ModWorkspaceProjection, ModWorkspaceSnapshot, RenderedPage, WorkspaceWait, pageSource, type PageSource } from '../../model/herdr-mod/index.ts';
 
 export interface ModHost {
   readonly exec: (command: string, args: string[], options: { cwd?: string; on: string | null }) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -21,7 +21,7 @@ const Page = Schema.Struct({ path: Path, kind: Schema.String, name: Schema.Strin
 const Case = Schema.Struct({ file: Path, line: Schema.Int, name: Schema.String, contract: Schema.String });
 const Code = Schema.Struct({ file: Path, line: Schema.Int, symbol: Schema.optional(Schema.String), contracts: Schema.Array(Schema.String) });
 const Show = Schema.Struct({ tests: Schema.optional(Schema.Array(Case)), codeDeclarations: Schema.optional(Schema.Array(Code)), pages: Schema.optional(Schema.Array(Page)) });
-const Check = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String, line: Schema.optional(Schema.Int), message: Schema.String })) });
+const Check = Schema.Struct({ ok: Schema.Boolean, findings: ModWorkspaceSnapshot.fields.findings });
 const Initialization = Schema.Struct({ createdPaths: Schema.Array(Path) });
 const ErrorReply = Schema.Struct({ error: Schema.String, message: Schema.String });
 const ServerStatus = Schema.Union([

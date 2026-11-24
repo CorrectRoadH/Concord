@@ -10,6 +10,7 @@ import { snapshotBytes, snapshotMetadata } from '../base/sources/index.ts';
 import { ConcordError, digest, failure } from '../model/index.ts';
 import { WorkbenchThemeSchema, p5StandaloneDocument, type WorkbenchTheme } from '../model/p5/index.ts';
 import { pageSource, type RenderBlock } from '../model/herdr-mod/index.ts';
+import { inspectStatechart, loadStatechartArtifacts } from '../domain/documents/index.ts';
 import { getViewFile } from './application.ts';
 import { compileP5WithDescription } from './p5-compiler.ts';
 
@@ -47,6 +48,23 @@ function concreteSvg(svg: string, theme: WorkbenchTheme): string {
   }
   return svg;
 }
+
+const renderMermaid = Effect.fn('page.renderMermaid')(function*(source: string, theme: WorkbenchTheme, blocked?: string) {
+  const rendered = yield* Effect.result(Effect.tryPromise({ try: () => renderAsync(source, { links: false, images: false }), catch: cause => cause }));
+  if (rendered._tag === 'Failure') {
+    const cause = rendered.failure;
+    const line = cause instanceof PeleError && cause.line > 0 ? cause.line : 1;
+    return { error: `第 ${line} 行：${cause instanceof Error ? cause.message : String(cause)}` };
+  }
+  let svg = concreteSvg(rendered.success.svg, theme);
+  if (blocked !== undefined) {
+    // Pele emits authored classDef styles inline. The outline follows the host theme.
+    const rules = `.breaks > rect { stroke: ${blocked} !important; stroke-width: 2.5px !important; stroke-dasharray: none !important; }
+.mayBreak > rect { stroke: ${blocked} !important; stroke-width: 2.5px !important; stroke-dasharray: 6 3 !important; }`;
+    svg = svg.replace(/^<svg\b[^>]*>/u, tag => `${tag}<style>${rules}</style>`);
+  }
+  return { svg, digest: digest(svg) };
+});
 
 export const renderPage = Effect.fn('page.render')(function*(root: string, path: string, colors: Readonly<Record<string, string>>) {
   const environment = yield* RuntimeEnvironment;
@@ -96,14 +114,21 @@ export const renderPage = Effect.fn('page.render')(function*(root: string, path:
       }, catch: failure }));
       yield* add(read._tag === 'Success' ? read.success : { ...base, error: read.failure.message });
     } else if (node.lang === 'mermaid') {
-      const rendered = yield* Effect.result(Effect.tryPromise({ try: () => renderAsync(source, { links: false, images: false }), catch: cause => cause }));
-      if (rendered._tag === 'Success') {
-        const svg = concreteSvg(rendered.success.svg, theme);
-        yield* add({ type: 'mermaid', source, svg, digest: digest(svg) });
+      yield* add({ type: 'mermaid', source, ...(yield* renderMermaid(source, theme)) });
+    } else if (node.lang === 'statechart') {
+      const raw = file.body.slice(start, end);
+      const statechart = yield* Effect.try({ try: () => repo.snapshot(() => loadStatechartArtifacts(repo,
+        inspectStatechart(repo, { document: file.path, line: node.position?.start.line ?? 1, code: source, meta: node.meta ?? '' }).result)), catch: failure });
+      if ('error' in statechart) {
+        yield* add({ type: 'statechart', source: raw, error: statechart.error.message });
       } else {
-        const cause = rendered.failure;
-        const line = cause instanceof PeleError && cause.line > 0 ? cause.line : 1;
-        yield* add({ type: 'mermaid', source, error: `第 ${line} 行：${cause instanceof Error ? cause.message : String(cause)}` });
+        const { chart, ...fields } = statechart;
+        const blocked = yield* Effect.try({
+          try: () => Schema.decodeUnknownSync(WorkbenchThemeSchema.fields['--concord-fg'])(colors.blocked ?? '#b4232a'),
+          catch: cause => new ConcordError('InvalidInput', `Invalid blocked theme color: ${String(cause)}`),
+        });
+        const rendered = chart && 'text' in chart ? yield* renderMermaid(chart.text, theme, blocked) : chart;
+        yield* add({ type: 'statechart', source: raw, ...fields, ...(rendered === undefined ? {} : { chart: rendered }) });
       }
     } else {
       let description = '';

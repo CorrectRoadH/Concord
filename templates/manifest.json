@@ -102,6 +102,11 @@
       "path": "data-model.md"
     },
     {
+      "name": "statechart",
+      "description": "statechart page: rules, model scope, code mapping, current statechart, and omissions.",
+      "path": "statechart.md"
+    },
+    {
       "name": "use-case-index",
       "description": "use-case/README.md navigation page; each journey is its own file.",
       "path": "use-case-index.md"

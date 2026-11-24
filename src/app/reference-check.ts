@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md
 import { git, repositoryRuntime } from '../base/workspace/index.ts';
 import { specReferenceTokens } from '../domain/code/index.ts';
-import { documentMarkdownProjection, makeDocumentProjectionCache } from '../domain/documents/index.ts';
+import { documentMarkdownProjection, makeDocumentProjectionCache, outsideStatechartOutputs, statechartOutputRoots } from '../domain/documents/index.ts';
 import { markdownLinks } from '../domain/taste/index.ts';
 import { ConcordError, parseReference, type Finding, type Repository } from '../model/index.ts';
 
@@ -34,8 +34,9 @@ export async function checkExplicitReferences(repo: Repository): Promise<{ reado
     }
   };
   try {
-    const docs = repo.files('docs').filter(path => path.endsWith('.md'));
-    const candidates = docs.flatMap(path => {
+    const docs = repo.files('docs');
+    const outputs = statechartOutputRoots(repo, docs);
+    const candidates = docs.filter(path => path.endsWith('.md') && outsideStatechartOutputs(path, outputs)).flatMap(path => {
       const source = repo.read(path);
       return source === undefined || !source.includes('github.com') ? [] : markdownLinks(source, { references: true }).map(link => ({ ...link, path }));
     });

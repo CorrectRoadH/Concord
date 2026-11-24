@@ -37,7 +37,7 @@ export function pageSource(source: string): PageSource {
   if (!blocks.length) blocks.push({ start: 0, end: source.length, literal: false });
   const special: SpecialSource[] = [];
   visit(root, node => {
-    if (node.type !== 'image' && node.type !== 'imageReference' && !(node.type === 'code' && (node.lang === 'mermaid' || node.lang === 'p5'))) return;
+    if (node.type !== 'image' && node.type !== 'imageReference' && !(node.type === 'code' && (node.lang === 'mermaid' || node.lang === 'p5' || node.lang === 'statechart'))) return;
     const start = node.position?.start.offset, end = node.position?.end.offset;
     if (start === undefined || end === undefined || start < frontmatter) return;
     const value = node.type === 'image' ? node.url : node.type === 'imageReference' ? definitions.get(node.identifier.toLowerCase())?.url ?? node.identifier : node.value;
