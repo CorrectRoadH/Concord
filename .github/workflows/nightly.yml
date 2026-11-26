@@ -1,0 +1,50 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '19 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    uses: ./.github/workflows/test.yml
+    with:
+      ref: ${{ github.sha }}
+
+  report:
+    if: failure() || (success() && needs.tests.result == 'success')
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      TEST_RESULT: ${{ needs.tests.result }}
+    steps:
+      - name: Update Nightly status issue
+        run: |
+          title='Nightly CI failing'
+          issues="$(gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
+            --jq '.[] | select(.title == "Nightly CI failing" and (has("pull_request") | not)) | .number')"
+          issue="$(sed -n '1p' <<< "$issues")"
+
+          if [[ "$TEST_RESULT" == failure ]]; then
+            if [[ -n "$issue" ]]; then
+              gh issue comment "$issue" --body "Nightly CI failed: $RUN_URL"
+            else
+              gh issue create --title "$title" --body "Nightly CI failed: $RUN_URL"
+            fi
+          elif [[ -n "$issue" ]]; then
+            gh issue close "$issue" --comment "Nightly CI passed: $RUN_URL"
+          fi
