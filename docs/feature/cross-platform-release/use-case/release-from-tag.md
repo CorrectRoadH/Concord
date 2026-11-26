@@ -98,6 +98,14 @@ Concord mod 的仓库分发目录按[独立交付](../../../engineering/build/us
 | 缺少通知凭据或通知重试耗尽 | 通知步骤非零退出，保留已上传的不可变资产；源码 Release 存在不表示渠道完成 |
 | 重跑失败的发版任务 | 复用相同资产，识别已有的渠道完成记录 |
 
+### Nightly 预发布
+
+`nightly.yml` 每天 UTC 04:19 读取默认分支 HEAD，也可在默认分支手动运行。当 HEAD 与最近一个 Nightly 标签指向同一提交时跳过。否则，以版本号最大的正式标签为基准递增 patch，创建 `v<major>.<minor>.<patch>-nightly.<run_number>`，再用 `gh workflow run` 在默认分支触发 `release.yml`，传入标签和 `nightly=true`。
+
+Nightly 运行与正式发版相同的完整测试和归档构建。通过后创建 GitHub 预发布，供用户按版本下载。正式 Latest、Homebrew 和 Nix 渠道只接收正式发版。发版工作流失败时创建或更新 `Nightly release failing` issue。后续成功发版时评论并关闭该 issue。打标签或触发失败时，在 Nightly 运行记录查看错误。
+
+如果标签已推送但发布失败，同一个 HEAD 的后续 Nightly 会跳过。可在 `release.yml` 的手动入口传入已有 Nightly 标签并设置 `nightly=true`，重跑完整测试和发布。
+
 ### 渠道通知与恢复
 
 Concord Actions Secret `HOMEBREW_TAP_WORKFLOW_TOKEN` 使用仅授权 homebrew-tap、Actions 读写的 fine-grained token。发版后主动请求同步；主动通知失败时仍可由定时任务发现新版本，不承诺五分钟延迟。

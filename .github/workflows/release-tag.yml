@@ -4,6 +4,7 @@ on:
     tags:
       - 'v[0-9]*.[0-9]*.[0-9]*'
       - 'concord-v*'
+      - '!v*-nightly.*'
 permissions:
   actions: write
 jobs:

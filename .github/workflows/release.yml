@@ -10,6 +10,11 @@ on:
         description: Existing release tag to verify and publish; leave empty for validation only
         required: false
         type: string
+      nightly:
+        description: Report the outcome of a Nightly release
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: concord-release
@@ -88,7 +93,15 @@ jobs:
       - name: Prepare package version from release tag
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-        run: bun --no-env-file --config=/dev/null scripts/prepare-release.ts
+        run: |
+          if [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-nightly\.[1-9][0-9]*$ ]]; then
+            # Keep dependency and toolchain validation in the existing preparation script.
+            RELEASE_TAG='' bun --no-env-file --config=/dev/null scripts/prepare-release.ts
+            jq --arg version "${RELEASE_TAG#v}" '.version = $version' package.json > package.json.tmp
+            mv package.json.tmp package.json
+          else
+            bun --no-env-file --config=/dev/null scripts/prepare-release.ts
+          fi
       - uses: actions/download-artifact@v8.0.2
         with:
           name: concord-hawdb-${{ matrix.native }}
@@ -164,6 +177,12 @@ jobs:
         run: |
           version="${RELEASE_TAG#concord-}"
           version="${version#v}"
+          prerelease=false
+          channel_args=()
+          if [[ "$version" == *-nightly.* ]]; then
+            prerelease=true
+            channel_args=(--prerelease --latest=false)
+          fi
           cd release
           sha256sum --check SHA256SUMS
           expected=("concord-$version-linux-x64.tar.gz" "concord-$version-darwin-arm64.tar.gz" install.sh)
@@ -172,19 +191,24 @@ jobs:
             test "$(awk -v name="$name" '$2 == name && length($1) == 64 { print $1 }' SHA256SUMS | wc -l)" -eq 1
           done
           if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > ../existing-release.json 2> ../release-api-error; then
-            jq -e --arg tag "$RELEASE_TAG" --arg commit "$RELEASE_COMMIT" '.tag_name == $tag and .target_commitish == $commit and (.draft == false) and (.prerelease == false) and (.assets | length == 4)' ../existing-release.json
+            jq -e --arg tag "$RELEASE_TAG" --arg commit "$RELEASE_COMMIT" --argjson prerelease "$prerelease" '.tag_name == $tag and .target_commitish == $commit and (.draft == false) and (.prerelease == $prerelease) and (.assets | length == 4)' ../existing-release.json
             for name in "${expected[@]}" SHA256SUMS; do
               digest="$(sha256sum "$name" | cut -d' ' -f1)"
               jq -e --arg name "$name" --arg digest "sha256:$digest" '.assets | any(.name == $name and .digest == $digest)' ../existing-release.json
             done
-            echo "Existing release has the same immutable assets; continuing channel notification." >> "$GITHUB_STEP_SUMMARY"
+            echo "Existing release has the same immutable assets." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           if ! grep -q 'HTTP 404' ../release-api-error; then cat ../release-api-error >&2; exit 1; fi
+          notes="Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives. Archives built on Ubuntu 24.04 and macOS 15; the same tag commit passed repository tests and static checks."
+          if [[ "$prerelease" == false ]]; then
+            notes+=" Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
+          fi
           gh release create "$RELEASE_TAG" "${expected[@]}" SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --verify-tag --target "$RELEASE_COMMIT" --title "Concord $version" \
-            --notes "Self-contained Apple Silicon macOS 15+ and Linux x64/glibc 2.39+ archives. Archives built on Ubuntu 24.04 and macOS 15; the same tag commit passed repository tests and static checks. Channel synchronization: https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG ."
+            "${channel_args[@]}" --notes "$notes"
       - name: Notify Homebrew tap of the published release
+        if: "!contains(inputs.tag, '-nightly.')"
         env:
           GH_TOKEN: ${{ github.token }}
           TAP_WORKFLOW_TOKEN: ${{ secrets.HOMEBREW_TAP_WORKFLOW_TOKEN }}
@@ -210,3 +234,35 @@ jobs:
           echo "::error::Homebrew tap notification failed for $RELEASE_TAG"
           echo "Homebrew tap notification failed for $RELEASE_TAG; scheduled sync remains available." >> "$GITHUB_STEP_SUMMARY"
           exit 1
+
+  report:
+    if: >-
+      always() && inputs.nightly && !cancelled() &&
+      (contains(needs.*.result, 'failure') || needs.publish.result == 'success')
+    needs: [tests, native, candidate, package, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      RELEASE_RESULT: ${{ needs.publish.result }}
+    steps:
+      - name: Update Nightly release status issue
+        run: |
+          title='Nightly release failing'
+          issues="$(gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
+            --jq '.[] | select(.title == "Nightly release failing" and (has("pull_request") | not)) | .number')"
+          issue="$(sed -n '1p' <<< "$issues")"
+
+          if [[ "$RELEASE_RESULT" != success ]]; then
+            if [[ -n "$issue" ]]; then
+              gh issue comment "$issue" --body "Nightly release failed: $RUN_URL"
+            else
+              gh issue create --title "$title" --body "Nightly release failed: $RUN_URL"
+            fi
+          elif [[ -n "$issue" ]]; then
+            gh issue close "$issue" --comment "Nightly release passed: $RUN_URL"
+          fi

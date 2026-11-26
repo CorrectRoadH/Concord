@@ -13,38 +13,60 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  tests:
+  prepare:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    uses: ./.github/workflows/test.yml
-    with:
-      ref: ${{ github.sha }}
-
-  report:
-    if: failure() || (success() && needs.tests.result == 'success')
-    needs: tests
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      issues: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      TEST_RESULT: ${{ needs.tests.result }}
+      contents: write
+    outputs:
+      skip: ${{ steps.tag.outputs.skip }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - name: Update Nightly status issue
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/heads/${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - name: Tag the default branch HEAD
+        id: tag
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          title='Nightly CI failing'
-          issues="$(gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
-            --jq '.[] | select(.title == "Nightly CI failing" and (has("pull_request") | not)) | .number')"
-          issue="$(sed -n '1p' <<< "$issues")"
-
-          if [[ "$TEST_RESULT" == failure ]]; then
-            if [[ -n "$issue" ]]; then
-              gh issue comment "$issue" --body "Nightly CI failed: $RUN_URL"
-            else
-              gh issue create --title "$title" --body "Nightly CI failed: $RUN_URL"
-            fi
-          elif [[ -n "$issue" ]]; then
-            gh issue close "$issue" --comment "Nightly CI passed: $RUN_URL"
+          head="$(git rev-parse HEAD)"
+          tags="$(git tag --list)"
+          last_nightly="$(awk '/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-nightly\.[1-9][0-9]*$/' <<< "$tags" |
+            sort -t . -k 4,4nr | sed -n '1p')"
+          if [[ -n "$last_nightly" && "$(git rev-parse "${last_nightly}^{commit}")" == "$head" ]]; then
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          stable="$(awk '/^(concord-)?v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ { sub(/^(concord-)?v/, ""); print }' <<< "$tags" |
+            sort -t . -k 1,1nr -k 2,2nr -k 3,3nr | sed -n '1p')"
+          if [[ -z "$stable" ]]; then
+            echo '::error::No stable Concord release tag found'
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<< "$stable"
+          tag="v$major.$minor.$((patch + 1))-nightly.$RUN_NUMBER"
+          git push origin "$head:refs/tags/$tag"
+          {
+            echo 'skip=false'
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+  dispatch:
+    needs: prepare
+    if: needs.prepare.outputs.skip == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch Nightly release on the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh workflow run release.yml --ref "$RELEASE_BRANCH" -f nightly=true -f "tag=$RELEASE_TAG"

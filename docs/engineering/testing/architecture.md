@@ -46,7 +46,7 @@ agent 直接使用项目测试工具复现和验证，报告命令、范围与�
 
 ## CI 任务
 
-PR 与 `master` 的 branch push 由 `check.yml` 执行四项类型检查和 lint。Nightly 每天 UTC 04:19 在默认分支运行，也可在默认分支手动触发。Nightly 与发布都调用完整的 `test.yml`。
+PR 与 `master` 的 branch push 由 `check.yml` 执行四项类型检查和 lint。完整测试由发版工作流通过 `test.yml` 执行，覆盖正式发版、Nightly 预发布和仅验证候选归档的手动运行。
 
 `test.yml` 分别执行静态工具与测试，任务之间只传递经校验的官方原生产物。源码测试使用与发行相同的官方字节，不注入替代的二进制配置；事务失败、提交结果未知、取消排空与锁竞争通过真实库和产品边界构造。准备任务将 ref 解析为提交 SHA，其余任务检出同一 SHA（[复用已有计算](../../taste.md#t-7)）。
 
@@ -57,7 +57,7 @@ PR 与 `master` 的 branch push 由 `check.yml` 执行四项类型检查和 lint
 | `test` | 十六个源码分片分别调用 `bun run test --shard`，保存官方报告 |
 | `darwin` | 在 macOS 宿主用固定 Bun 与该宿主官方原生库执行 Darwin 大小写路径守护、原生事务、恢复与锁互操作测试 |
 
-Nightly 失败时创建或更新 `Nightly CI failing` issue，并附上运行链接。后续成功时评论并关闭该 issue。Benchmark 根据受影响场景单独运行。
+Benchmark 根据受影响场景单独运行。
 
 ## 架构守护
 
